@@ -367,9 +367,17 @@ if (!_rawStorage.__esApi){
   };
 }
 
+const TITULO_BASE = "Generador de Contratos — SDG RH Management";
+
 function setPropiedadActual(id){
   currentPropiedadId = id;
   try{ localStorage.setItem("gcw:propiedad-actual", id); }catch(e){}
+
+  // La propiedad se refleja en la pestaña, no en el <title> del HTML: así
+  // quien tiene varias pestañas abiertas sabe cuál es cuál, y el enlace
+  // compartido sigue mostrando el título neutral.
+  const prop = getPropiedadActual();
+  document.title = prop ? TITULO_BASE + " · " + prop.nombre : TITULO_BASE;
 }
 function getPropiedadActual(){
   return PROPIEDADES_MAESTRAS.find(p => p.id === currentPropiedadId) || null;
