@@ -1,0 +1,19 @@
+{
+  "name": "sdg-generador-contratos",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Generador de Contratos SDG — front + API con Postgres, para Railway",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "migrar": "node -e \"require('./src/db').migrar().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}

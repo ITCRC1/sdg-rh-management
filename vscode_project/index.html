@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1B3226">
+<title>Generador de Contratos — SDG RH Management · Corcovado Wilderness Lodge</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
+<!-- Capa de datos contra el backend. Define window.storage y window.sdgApi, y
+     DEBE ir antes de app.js. Si se quita, la app cae a localStorage y al
+     selector manual de propiedad — útil para probar sin servidor. -->
+<script src="storage-api.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231B3226'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='%23C9A66B' font-family='Georgia,serif'%3E%F0%9F%8C%BF%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231B3226'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='%23C9A66B' font-family='Georgia,serif'%3E%F0%9F%8C%BF%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+
+<style id="dynamic-page-style"></style>
+</head>
+<body>
+
+<div class="app-header">
+  <div onclick="showTab('inicio')" style="cursor:pointer;" title="Ir al Inicio">
+    <div class="brand-tag" id="brand-tag">🏠 SDG RH Management · Osa Peninsula</div>
+    <h1>Generador de Contratos de Trabajo</h1>
+  </div>
+  <div id="propiedad-actual-badge-wrap"></div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%;"></div></div>
+  <div class="progress-label" id="progress-label">0 de 0 campos completados</div>
+</div>
+
+<div class="tabs navbar-dropdowns" id="main-navbar">
+  <div class="nav-dd">
+    <button class="nav-dd-btn active" id="navbtn-contratos" onclick="toggleNavMenu('contratos')">🗂️ Contratos <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-contratos">
+      <button onclick="navCloseAndRun(function(){ showTab('contracts'); })">🗂️ Ver contratos guardados</button>
+      <button onclick="navCloseAndRun(function(){ showTab('form'); })">📝 Formulario</button>
+      <button onclick="navCloseAndRun(function(){ showTab('empresas'); })">🏨 Empresas</button>
+      <button onclick="navCloseAndRun(function(){ showTab('puestos'); })">🐾 Puestos</button>
+      <button onclick="navCloseAndRun(function(){ showTab('propiedades'); })">🌴 Propiedades</button>
+      <button onclick="navCloseAndRun(function(){ showTab('preview'); })">📜 Vista previa</button>
+      <button onclick="navCloseAndRun(function(){ verConstanciaActual(); })">📋 Constancia Handbook</button>
+    </div>
+  </div>
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-empleados" onclick="toggleNavMenu('empleados')">👥 Empleados <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-empleados">
+      <button onclick="navCloseAndRun(function(){ showTab('empleados'); setTimeout(function(){ document.getElementById('empleados-file-input').click(); }, 200); })">📥 Agregar empleados (Excel/CSV)</button>
+      <button onclick="navCloseAndRun(function(){ showTab('empleados'); })">📋 Lista de empleados</button>
+      <button onclick="navCloseAndRun(function(){ showTab('archivo'); })">🗄️ Archivo (salidas)</button>
+      <button onclick="navCloseAndRun(function(){ showTab('colillas'); })">🧾 Importación de colillas de pago</button>
+    </div>
+  </div>
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-documentos" onclick="toggleNavMenu('documentos')">📑 Documentos <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-documentos">
+      <div class="nav-dd-sep">Despidos</div>
+      <button onclick="navCloseAndRun(function(){ prepararDespidoTipo('con_responsabilidad'); })">⚖️ Despido — Con responsabilidad</button>
+      <button onclick="navCloseAndRun(function(){ prepararDespidoTipo('sin_responsabilidad'); })">⚖️ Despido — Sin responsabilidad</button>
+      <div class="nav-dd-sep">Recomendación laboral</div>
+      <button onclick="navCloseAndRun(function(){ showTab('recomform'); })">📝 Nueva recomendación</button>
+      <div class="nav-dd-sep">Permiso sin goce salarial</div>
+      <button onclick="navCloseAndRun(function(){ showTab('permisoform'); })">🗓️ Nueva acción de personal</button>
+    </div>
+  </div>
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-datos" onclick="toggleNavMenu('datos')">📤 Datos <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-datos">
+      <div class="nav-dd-sep">Extraer datos</div>
+      <button onclick="navCloseAndRun(function(){ exportarContratos(); })">🗂️ Extraer Contratos</button>
+      <button onclick="navCloseAndRun(function(){ exportarEmpleados(); })">👥 Extraer Empleados</button>
+      <div class="nav-dd-sep">Ingreso de información</div>
+      <button onclick="navCloseAndRun(function(){ showTab('empleados'); setTimeout(function(){ document.getElementById('empleados-file-input').click(); }, 200); })">👥 Empleados (importar)</button>
+      <button onclick="navCloseAndRun(function(){ showTab('colillas'); })">🧾 Colillas (importar)</button>
+    </div>
+  </div>
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-ajustes" onclick="toggleNavMenu('ajustes')">🔧 Ajustes <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-ajustes">
+      <button onclick="navCloseAndRun(function(){ showTab('format'); })">🎨 Formato de la hoja (PDF)</button>
+      <button onclick="navCloseAndRun(function(){ showTab('reporte'); })">📊 Reporte mensual</button>
+      <button onclick="navCloseAndRun(function(){ showTab('faq'); })">❓ Preguntas de ley laboral</button>
+      <div class="nav-dd-sep">Propiedad</div>
+      <button onclick="navCloseAndRun(function(){ abrirPropiedadGate(); })">🏨 Cambiar de propiedad</button>
+      <div class="nav-dd-sep" id="nav-sep-cuenta" style="display:none;">Cuenta</div>
+      <button id="nav-btn-logout" style="display:none;" onclick="navCloseAndRun(function(){ hacerLogoutTrabajador(); })">🔒 Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<div class="toolbar" id="form-toolbar" style="display:none;">
+  <button class="btn primary" id="update-btn" onclick="updateContract()" style="display:none;">🔄 Actualizar</button>
+  <button class="btn" onclick="saveAsContract()">💾 Guardar como…</button>
+  <button class="btn gold" onclick="descargarPDFConNombre()">⬇️ Descargar PDF</button>
+</div>
+<div class="toolbar" id="despidoform-toolbar" style="display:none;">
+  <button class="btn gold" onclick="mostrarSoloDespido(); descargarDespidoPDF();">⚖️ Descargar carta de despido</button>
+</div>
+<div class="toolbar" id="recomform-toolbar" style="display:none;">
+  <button class="btn gold" onclick="descargarRecomendacionPDF()">📝 Descargar recomendación</button>
+</div>
+<div class="toolbar" id="permisoform-toolbar" style="display:none;">
+  <button class="btn gold" onclick="descargarPermisoPDF()">🗓️ Descargar acción de personal</button>
+</div>
+<div class="status-msg" id="status-msg"></div>
+<div class="toast" id="toast"></div>
+<div class="modal-overlay" id="modal-incompletos" onclick="if(event.target===this) cerrarModalIncompletos();">
+  <div class="modal-box">
+    <div class="modal-head"><span>👁️ Datos incompletos por empleado</span><button onclick="cerrarModalIncompletos()">×</button></div>
+    <div class="modal-body" id="modal-incompletos-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-archivar" onclick="if(event.target===this) cerrarModalArchivar();">
+  <div class="modal-box">
+    <div class="modal-head"><span>🗄️ Archivar empleado</span><button onclick="cerrarModalArchivar()">×</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Tipo de salida</label>
+        <select id="archivar-tipo-salida">
+          <option>Renuncia voluntaria</option>
+          <option>Despido con responsabilidad patronal</option>
+          <option>Despido sin responsabilidad patronal</option>
+          <option>Fin de contrato por tiempo determinado</option>
+          <option>Otro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Carta de renuncia o despido firmada (PDF, opcional)</label>
+        <button type="button" class="btn" style="width:100%;" onclick="document.getElementById('archivar-pdf-input').click()">📎 Elegir PDF firmado</button>
+        <input type="file" id="archivar-pdf-input" accept="application/pdf" style="display:none;" onchange="onArchivarPdfSelected(this)">
+        <div id="archivar-pdf-label" style="font-size:12px; color:var(--leaf); font-weight:700; margin-top:4px;"></div>
+        <div class="hint">Puedes archivar sin el PDF y subirlo después desde el perfil del empleado.</div>
+      </div>
+      <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarArchivarEmpleado()">🗄️ Archivar empleado</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="handbook-pdf-input" accept="application/pdf" style="display:none;" onchange="onHandbookPdfSelected(this)">
+<input type="file" id="generic-pdf-input" accept="application/pdf" style="display:none;" onchange="onGenericPdfSelected(this)">
+
+<div class="propiedad-gate" id="login-gate">
+  <div class="propiedad-gate-inner" style="max-width:340px;">
+    <div class="propiedad-gate-title">🔑 Iniciar sesión</div>
+    <div class="propiedad-gate-sub">Acceso solo para usuarios Trabajadores autorizados por el Empleador.</div>
+    <div class="field" style="text-align:left;">
+      <label>Correo</label>
+      <input type="email" id="login-email" placeholder="tu.correo@empresa.com" autocomplete="username">
+    </div>
+    <div class="field" style="text-align:left;">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn primary" style="width:100%;" onclick="hacerLoginTrabajador()">Iniciar sesión</button>
+    <div id="login-trabajador-msg" style="margin-top:10px; font-size:12px;"></div>
+  </div>
+</div>
+
+<div class="propiedad-gate" id="propiedad-gate">
+  <div class="propiedad-gate-inner">
+    <div class="propiedad-gate-title">🏨 ¿Con qué propiedad vas a trabajar?</div>
+    <div class="propiedad-gate-sub">Cada propiedad tiene sus propios empleados, contratos y documentos — nunca se mezclan entre sí.</div>
+    <div class="propiedad-gate-grid" id="propiedad-gate-grid"></div>
+  </div>
+</div>
+
+<main>
+  <div id="inicio-panel" style="display:none;"></div>
+  <div id="contracts-panel" style="display:none;">
+    <div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
+      <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
+        💡 Si la persona ya está en <b>Empleados</b>, es más rápido crear su contrato desde ahí (Acciones → Crear contrato) — ya trae su nombre, cédula y puesto listos. Usa el botón de aquí abajo solo para contratos que deben firmarse <b>antes</b> de que alguien ingrese como empleado activo (ej. una oferta laboral).
+      </div>
+    </div>
+    <button class="btn primary" style="width:100%; padding:14px; font-size:14.5px; margin-bottom:16px;" onclick="createNewFromTab()">🌱 Crear contrato nuevo (sin empleado previo)</button>
+    <div id="solicitudes-list"></div>
+    <div id="contracts-list"></div>
+  </div>
+  <div id="form-panel" style="display:none;"></div>
+  <div id="despidoform-panel" style="display:none;"></div>
+  <div id="recomform-panel" style="display:none;"></div>
+  <div id="permisoform-panel" style="display:none;"></div>
+
+  <div id="empresas-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="puestos-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="propiedades-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="empleados-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="archivo-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="perfil-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="reporte-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="faq-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="colillas-panel" class="catalog-panel" style="display:none;"></div>
+
+  <div id="preview-wrap" style="display:none;">
+    <div class="section-card firma-panel" style="margin-bottom:12px; border-color:var(--gold);">
+      <div class="section-head" style="background:#F1E6D2;">✍️ Sobre la firma digital</div>
+      <div class="section-body">
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 6px;">En Costa Rica, la firma digital con validez legal (Ley N.° 8454) requiere un <b>certificado digital certificado</b> emitido por una entidad autorizada (BCCR/CA SINPE, Banco Nacional, BAC, etc.), guardado en una tarjeta inteligente o token USB. No se dibuja en pantalla.</p>
+        <p style="font-size:12px;color:var(--ink-soft);margin:0;">Este PDF ya deja un <b>espacio reservado y delimitado</b> para EL PATRONO y EL TRABAJADOR al final del documento. Para firmarlo con validez legal: descarga el PDF, ábrelo en <b>Adobe Acrobat Reader</b>, y usa la opción "Agregar firma digital" con tu tarjeta o token conectado.</p>
+      </div>
+    </div>
+    <div class="doc-scroll"><div class="doc" id="doc-root"></div></div>
+    <div class="doc-footer-note">Generado con el Generador de Contratos SDG. Revisa siempre la versión final con Recursos Humanos y Legal antes de firmar.</div>
+  </div>
+
+  <div id="constancia-wrap" style="display:none;">
+    <div class="toolbar"><button class="btn gold" onclick="descargarConstanciaPDF()">⬇️ Descargar Constancia PDF</button></div>
+    <div class="doc-scroll"><div class="doc" id="constancia-root"></div></div>
+  </div>
+
+  <div id="despido-wrap" style="display:none;">
+    <div class="doc-scroll"><div class="doc" id="despido-root"></div></div>
+  </div>
+
+  <div id="recomendacion-wrap" style="display:none;">
+    <div class="toolbar"><button class="btn gold" onclick="descargarRecomendacionPDF()">⬇️ Descargar Recomendación PDF</button></div>
+    <div class="doc-scroll"><div class="doc" id="recomendacion-root"></div></div>
+  </div>
+
+  <div id="permiso-wrap" style="display:none;">
+    <div class="toolbar"><button class="btn gold" onclick="descargarPermisoPDF()">⬇️ Descargar Acción de Personal PDF</button></div>
+    <div class="doc-scroll"><div id="permiso-root"></div></div>
+  </div>
+
+  <div id="format-panel" style="display:none;">
+    <div class="section-card">
+      <div class="section-head">Formato de la hoja final (PDF)</div>
+      <div class="section-body">
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 4px;">Estos ajustes cambian cómo se ve la Vista previa y, por lo tanto, el PDF que descargas (el botón usa la impresión del navegador, así que lo que ves aquí es lo que se imprime).</p>
+        <div class="field">
+          <label>Tipografía del documento</label>
+          <select id="cfg-font" onchange="setPdfConfig('font', this.value)">
+            <option value="Georgia, 'Times New Roman', serif">Georgia (clásica)</option>
+            <option value="'Times New Roman', Times, serif">Times New Roman</option>
+            <option value="Cambria, Georgia, serif">Cambria</option>
+            <option value="Arial, Helvetica, sans-serif">Arial (sin serifa)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tamaño de letra</label>
+          <select id="cfg-fontsize" onchange="setPdfConfig('fontSize', this.value)">
+            <option value="12">Pequeño (12px)</option>
+            <option value="13.5">Normal (13.5px)</option>
+            <option value="15">Grande (15px)</option>
+            <option value="16.5">Extra grande (16.5px)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Interlineado</label>
+          <select id="cfg-lineheight" onchange="setPdfConfig('lineHeight', this.value)">
+            <option value="1.15">Compacto (espaciado sencillo)</option>
+            <option value="1.3">Normal</option>
+            <option value="1.5">Amplio</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Márgenes de página</label>
+          <select id="cfg-margin" onchange="setPdfConfig('margin', this.value)">
+            <option value="0.4in">Angostos</option>
+            <option value="0.75in">Normales</option>
+            <option value="1.1in">Amplios</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tamaño de papel</label>
+          <select id="cfg-pagesize" onchange="setPdfConfig('pageSize', this.value)">
+            <option value="letter">Carta</option>
+            <option value="a4">A4</option>
+            <option value="legal">Legal / Oficio</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Colores de revisión (rojo = falta, azul = completado)</label>
+          <div class="sino-toggle">
+            <button type="button" id="cfg-clean-off" onclick="setPdfConfig('cleanMode', false)">Mostrar (para revisar)</button>
+            <button type="button" id="cfg-clean-on" onclick="setPdfConfig('cleanMode', true)">Ocultar (documento final)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn" onclick="resetPdfConfig()" style="margin-bottom:20px;">↩️ Restaurar valores por defecto</button>
+    <p style="font-size:11.5px;color:var(--ink-soft); padding:0 4px 12px;">El PDF se genera exactamente igual a como se ve en la Vista previa (mismas columnas, colores y saltos de página). Si necesitas números de página automáticos, actívalos con la casilla "Encabezados y pies de página" del propio diálogo de impresión del navegador.</p>
+
+    <div class="section-card" style="border-color:var(--gold); margin-top:8px;">
+      <div class="section-head" style="background:#F1E6D2;">Copia de seguridad de tus datos</div>
+      <div class="section-body">
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 4px;">Empresas, puestos, líderes, propiedades y contratos guardados viven solo en este navegador. Exporta un archivo de respaldo para llevarlos a otra copia de la app (por ejemplo, si descargas una versión nueva).</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn primary" onclick="exportarDatos()">⬇️ Exportar todos los datos</button>
+          <button class="btn" onclick="document.getElementById('import-file-input').click()">⬆️ Importar datos</button>
+          <input type="file" id="import-file-input" accept="application/json" style="display:none;" onchange="importarDatosFile(this)">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-card" style="border-color:var(--leaf); margin-top:8px;">
+      <div class="section-head" style="background:#E7F0E9;">Actualizar datos de referencia (puestos, funciones, responsabilidades)</div>
+      <div class="section-body">
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 4px;">Esta es la lista de puestos del Ministerio de Trabajo y sus funciones/responsabilidades sugeridas — el contenido que cambia con el tiempo. Con esto puedes actualizarlo <b>sin descargar una copia nueva de la app entera</b>: exporta el archivo actual, edítalo (o pídele a Claude que te lo edite), y vuelve a importarlo aquí.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn primary" onclick="exportarDatosReferencia()">⬇️ Exportar datos de referencia</button>
+          <button class="btn" onclick="document.getElementById('import-reference-input').click()">⬆️ Importar actualización</button>
+          <input type="file" id="import-reference-input" accept="application/json" style="display:none;" onchange="importarDatosReferenciaFile(this)">
+        </div>
+        <p style="font-size:11px;color:var(--ink-soft);margin:8px 0 0;">La importación solo actualiza o agrega puestos/funciones — no borra ni cambia el texto legal del contrato ni tus contratos guardados.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

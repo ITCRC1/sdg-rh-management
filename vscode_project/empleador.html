@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Empleador — Administración de usuarios | SDG RH Management</title>
+
+<!-- Capa de sesión y API contra el backend (Postgres). -->
+<script src="storage-api.js"></script>
+
+<style>
+  :root{
+    --navy-deep:#3C2B23; --gold:#C2A15A; --leaf:#4C5D39; --paper:#F6F3EC;
+    --paper-line:#E4DBC8; --ink:#3C2B23; --ink-soft:#8C8478;
+    --field-bg:#FBF8F2; --field-border:#D9C9A8;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--paper); color:var(--ink); }
+  .header{ background:var(--navy-deep); color:#fff; padding:18px 20px; }
+  .header h1{ margin:0; font-size:18px; }
+  .header .sub{ font-size:12px; opacity:.85; margin-top:2px; }
+  .wrap{ max-width:640px; margin:0 auto; padding:18px; }
+  .card{ background:#fff; border:1px solid var(--paper-line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  .card h2{ font-size:14px; margin:0 0 10px; }
+  label{ display:block; font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px; margin:10px 0 4px; }
+  input, select{
+    width:100%; padding:10px 12px; border:1.5px solid var(--field-border); border-radius:10px;
+    background:var(--field-bg); font-size:14px; color:var(--ink);
+  }
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:11px 16px; border-radius:10px; border:none; font-weight:700; font-size:13.5px;
+    cursor:pointer; margin-top:12px;
+  }
+  .btn-primary{ background:var(--leaf); color:#fff; width:100%; }
+  .btn-gold{ background:var(--gold); color:var(--navy-deep); width:100%; }
+  .btn-danger{ background:#B34A3C; color:#fff; padding:6px 10px; font-size:11.5px; margin:0; }
+  .btn-mini{ background:var(--paper); color:var(--ink); border:1px solid var(--paper-line); padding:6px 10px; font-size:11.5px; margin:0; }
+  .msg{ font-size:12.5px; margin-top:10px; padding:8px 10px; border-radius:8px; }
+  .msg.ok{ background:#e7f0e2; color:var(--leaf); }
+  .msg.err{ background:#f7e3df; color:#963527; }
+  .user-row{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--paper-line); }
+  .user-row:last-child{ border-bottom:none; }
+  .user-name{ font-weight:700; font-size:13.5px; }
+  .user-meta{ font-size:11.5px; color:var(--ink-soft); }
+  .badge-inactivo{ background:#eee; color:#888; border-radius:6px; padding:1px 6px; font-size:10px; margin-left:6px; }
+  .badge-rol{ border-radius:6px; padding:1px 6px; font-size:10px; margin-left:6px; font-weight:600; }
+  .badge-admin{ background:#e6ddf0; color:#5b3f7a; }
+  .badge-gerente{ background:#e7f0e2; color:#4C5D39; }
+  .badge-colaborador{ background:#f0ece0; color:#8a7a52; }
+  .select-rol{ font-size:11.5px; padding:4px 6px; border-radius:7px; width:auto; }
+  .hint{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
+  #app{ display:none; }
+  #login-screen{ display:flex; }
+  #setup-warning{ display:none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🏢 Empleador</h1>
+  <div class="sub">Administración de usuarios de Trabajadores — SDG RH Management</div>
+</div>
+
+<div class="wrap">
+
+  <div class="card" id="login-screen" style="display:none;">
+    <h2>🔑 Iniciar sesión como Empleador</h2>
+    <label>Correo</label>
+    <input type="email" id="login-email" placeholder="correo@empresa.com" autocomplete="username">
+    <label>Contraseña</label>
+    <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn btn-primary" onclick="hacerLogin()">Iniciar sesión</button>
+    <div id="login-msg"></div>
+    <div class="hint">
+      Solo las cuentas con rol de administrador pueden entrar aquí. La primera se crea
+      sola al arrancar el servidor con las variables <code>ADMIN_EMAIL</code> y
+      <code>ADMIN_PASSWORD</code> (ver DESPLIEGUE_RAILWAY.md).
+    </div>
+  </div>
+
+  <div class="card" id="cambio-password" style="display:none;">
+    <h2>🔒 Cambia tu contraseña</h2>
+    <div class="hint">Tu contraseña es temporal. Define una propia para continuar.</div>
+    <label>Contraseña temporal</label>
+    <input type="password" id="cp-actual" autocomplete="current-password">
+    <label>Nueva contraseña</label>
+    <input type="password" id="cp-nueva" autocomplete="new-password">
+    <label>Repite la nueva contraseña</label>
+    <input type="password" id="cp-repetir" autocomplete="new-password">
+    <button class="btn btn-primary" onclick="guardarPasswordNueva()">Guardar y entrar</button>
+    <div id="cp-msg"></div>
+    <div class="hint">Mínimo 10 caracteres, combinando letras y números.</div>
+  </div>
+
+  <div id="app">
+    <div class="card">
+      <h2>👤 Sesión activa</h2>
+      <div id="sesion-info" class="hint"></div>
+      <button class="btn btn-mini" style="width:100%;" onclick="hacerLogout()">Cerrar sesión</button>
+    </div>
+
+    <div class="card">
+      <h2>➕ Crear nuevo usuario</h2>
+      <label>Nombre completo</label>
+      <input type="text" id="new-nombre" placeholder="Ej. Juana Pérez Solano">
+      <label>Correo</label>
+      <input type="email" id="new-email" placeholder="correo@empresa.com">
+      <label>Cédula</label>
+      <input type="text" id="new-cedula" placeholder="Ej. 1-1234-5678">
+      <label>Contraseña temporal</label>
+      <input type="text" id="new-pass" placeholder="Mínimo 10 caracteres, letras y números">
+      <label>Rol</label>
+      <select id="new-rol" onchange="alCambiarRol()">
+        <option value="colaborador">Colaborador — solo lectura</option>
+        <option value="gerente">Gerente — lee, edita y sube archivos</option>
+        <option value="admin">Administrador — todo lo anterior + gestiona usuarios</option>
+      </select>
+      <div class="hint" id="rol-explica"></div>
+      <label>Propiedad asignada</label>
+      <select id="new-propiedad"></select>
+      <label>Puesto / rol</label>
+      <input type="text" id="new-puesto" placeholder="Ej. Gerente Operativo" value="Gerente Operativo">
+      <button class="btn btn-gold" onclick="crearTrabajador()">Crear usuario</button>
+      <div id="crear-msg"></div>
+      <div class="hint">
+        La persona deberá cambiar esa contraseña la primera vez que entre. Compártesela
+        por un canal seguro (no por este mismo panel).
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>👥 Usuarios</h2>
+      <div id="lista-usuarios"><div class="hint">Cargando…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Bitácora de accesos</h2>
+      <div class="hint">Últimos ingresos, salidas e intentos fallidos.</div>
+      <div id="lista-bitacora"><div class="hint">Cargando…</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// =====================================================================
+// Panel de administración. Todo pasa por la API: este archivo no tiene
+// ninguna llave ni candado propio. Que solo un admin pueda listar o crear
+// usuarios lo hace el servidor (requiereAdmin) — esconder botones aquí es
+// comodidad visual, no seguridad.
+// =====================================================================
+const api = window.sdgApi;
+let propiedadesCache = [];
+
+function mostrarMsg(elId, texto, ok){
+  const el = document.getElementById(elId);
+  el.innerHTML = `<div class="msg ${ok ? "ok" : "err"}">${String(texto).replace(/</g,"&lt;")}</div>`;
+}
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+    { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]
+  ));
+}
+
+function mostrarPantalla(cual){
+  document.getElementById("login-screen").style.display = cual === "login" ? "flex" : "none";
+  document.getElementById("cambio-password").style.display = cual === "password" ? "block" : "none";
+  document.getElementById("app").style.display = cual === "app" ? "block" : "none";
+}
+
+// storage-api.js llama a esto si la sesión expira mientras se usa el panel.
+// Sin esta función, la capa de datos no tendría dónde devolver al usuario.
+window.mostrarPantallaLogin = function(mensaje){
+  mostrarPantalla("login");
+  if (mensaje) mostrarMsg("login-msg", mensaje, false);
+};
+
+// ---------------------------------------------------------------------
+// Sesión
+// ---------------------------------------------------------------------
+async function hacerLogin(){
+  const email = document.getElementById("login-email").value.trim();
+  const pass = document.getElementById("login-pass").value;
+  if (!email || !pass){ mostrarMsg("login-msg", "Completa correo y contraseña.", false); return; }
+  mostrarMsg("login-msg", "Verificando…", true);
+  try{
+    await api.login(email, pass);
+    document.getElementById("login-pass").value = "";
+    await arrancar();
+  }catch(e){
+    mostrarMsg("login-msg", e.message || "No se pudo iniciar sesión.", false);
+  }
+}
+
+function hacerLogout(){ api.logout(); }
+
+async function guardarPasswordNueva(){
+  const actual = document.getElementById("cp-actual").value;
+  const nueva = document.getElementById("cp-nueva").value;
+  const repetir = document.getElementById("cp-repetir").value;
+  if (nueva !== repetir){
+    mostrarMsg("cp-msg", "Las dos contraseñas nuevas no coinciden.", false);
+    return;
+  }
+  mostrarMsg("cp-msg", "Guardando…", true);
+  try{
+    await api.cambiarPassword(actual, nueva);
+    location.reload();
+  }catch(e){
+    mostrarMsg("cp-msg", e.message || "No se pudo cambiar la contraseña.", false);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Usuarios
+// ---------------------------------------------------------------------
+const ROLES = {
+  admin:       { nombre: "Administrador", desc: "Lee, edita, sube archivos y administra usuarios." },
+  gerente:     { nombre: "Gerente",       desc: "Lee, edita y sube archivos. No puede crear ni modificar usuarios." },
+  colaborador: { nombre: "Colaborador",   desc: "Solo lectura: puede consultar y descargar, pero no modificar nada." },
+};
+
+function alCambiarRol(){
+  const rol = document.getElementById("new-rol").value;
+  // Un admin no está atado a una propiedad; los demás roles siempre lo están.
+  document.getElementById("new-propiedad").disabled = (rol === "admin");
+  document.getElementById("rol-explica").textContent = ROLES[rol] ? ROLES[rol].desc : "";
+}
+
+async function cargarPropiedades(){
+  propiedadesCache = await api.propiedades();
+  const sel = document.getElementById("new-propiedad");
+  sel.innerHTML = propiedadesCache
+    .map(p => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`)
+    .join("");
+}
+
+function nombrePropiedad(id){
+  const p = propiedadesCache.find(x => x.id === id);
+  return p ? p.nombre : (id || "—");
+}
+
+async function crearTrabajador(){
+  const rol = document.getElementById("new-rol").value;
+  const datos = {
+    nombre: document.getElementById("new-nombre").value.trim(),
+    email: document.getElementById("new-email").value.trim(),
+    cedula: document.getElementById("new-cedula").value.trim(),
+    password: document.getElementById("new-pass").value,
+    puesto: document.getElementById("new-puesto").value.trim(),
+    rol,
+    propiedadId: rol === "admin" ? null : document.getElementById("new-propiedad").value,
+  };
+  if (!datos.nombre || !datos.email || !datos.password){
+    mostrarMsg("crear-msg", "Nombre, correo y contraseña temporal son obligatorios.", false);
+    return;
+  }
+  mostrarMsg("crear-msg", "Creando…", true);
+  try{
+    await api.usuarios.crear(datos);
+    mostrarMsg("crear-msg", "Usuario creado. Deberá cambiar la contraseña al entrar.", true);
+    ["new-nombre","new-email","new-cedula","new-pass"].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    await cargarUsuarios();
+  }catch(e){
+    mostrarMsg("crear-msg", e.message || "No se pudo crear el usuario.", false);
+  }
+}
+
+async function cargarUsuarios(){
+  const cont = document.getElementById("lista-usuarios");
+  try{
+    const usuarios = await api.usuarios.listar();
+    if (!usuarios.length){ cont.innerHTML = `<div class="hint">Todavía no hay usuarios.</div>`; return; }
+    cont.innerHTML = usuarios.map(u => `
+      <div class="user-row">
+        <div style="min-width:0;">
+          <div class="user-name">
+            ${esc(u.nombre)}
+            <span class="badge-rol badge-${esc(u.rol)}">${esc(ROLES[u.rol] ? ROLES[u.rol].nombre : u.rol)}</span>
+            ${u.activo ? "" : '<span class="badge-inactivo">inactivo</span>'}
+          </div>
+          <div class="user-meta">
+            ${esc(u.email)} · ${u.rol === "admin" ? "todas las propiedades" : esc(nombrePropiedad(u.propiedadId))}
+            ${u.ultimoAcceso ? " · último acceso " + new Date(u.ultimoAcceso).toLocaleString("es-CR") : " · nunca ha entrado"}
+          </div>
+          <div style="margin-top:6px;">
+            <select class="select-rol" onchange="cambiarRol('${esc(u.id)}', this.value, '${esc(u.rol)}')">
+              ${Object.keys(ROLES).map(r =>
+                `<option value="${r}" ${r === u.rol ? "selected" : ""}>${ROLES[r].nombre}</option>`
+              ).join("")}
+            </select>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px; flex-shrink:0;">
+          <button class="btn btn-mini" onclick="resetearPassword('${esc(u.id)}','${esc(u.email)}')">Resetear</button>
+          <button class="btn ${u.activo ? "btn-danger" : "btn-mini"}"
+                  onclick="cambiarActivo('${esc(u.id)}', ${u.activo ? "false" : "true"})">
+            ${u.activo ? "Desactivar" : "Reactivar"}
+          </button>
+        </div>
+      </div>`).join("");
+  }catch(e){
+    cont.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+  }
+}
+
+async function cambiarActivo(id, activar){
+  const verbo = activar ? "reactivar" : "desactivar";
+  // Desactivar corta las sesiones vivas de inmediato: es el efecto que se
+  // necesita cuando alguien sale de la empresa.
+  if (!confirm("¿Seguro que quieres " + verbo + " esta cuenta?")) return;
+  try{
+    await api.usuarios.actualizar(id, { activo: activar });
+    await cargarUsuarios();
+  }catch(e){
+    alert(e.message || "No se pudo actualizar.");
+  }
+}
+
+async function cambiarRol(id, nuevoRol, rolAnterior){
+  if (nuevoRol === rolAnterior) return;
+  const r = ROLES[nuevoRol];
+  if (!confirm("¿Cambiar a " + r.nombre + "?\n\n" + r.desc)){
+    await cargarUsuarios(); // devuelve el desplegable a su valor real
+    return;
+  }
+  try{
+    // Al pasar a un rol con propiedad, el servidor exige que tenga una; si no
+    // la tenía (venía de admin), se le asigna la primera para no dejarlo en un
+    // estado inválido que la API rechazaría.
+    const cambios = { rol: nuevoRol };
+    const usuarios = await api.usuarios.listar();
+    const u = usuarios.find(x => x.id === id);
+    if (nuevoRol !== "admin" && u && !u.propiedadId && propiedadesCache.length){
+      cambios.propiedadId = propiedadesCache[0].id;
+    }
+    await api.usuarios.actualizar(id, cambios);
+    await cargarUsuarios();
+  }catch(e){
+    alert(e.message || "No se pudo cambiar el rol.");
+    await cargarUsuarios();
+  }
+}
+
+async function resetearPassword(id, email){
+  const nueva = prompt("Nueva contraseña temporal para " + email + "\n(mínimo 10 caracteres, con letras y números):");
+  if (!nueva) return;
+  try{
+    await api.usuarios.actualizar(id, { password: nueva });
+    alert("Contraseña actualizada. Esa persona deberá cambiarla al entrar, y sus sesiones abiertas se cerraron.");
+    await cargarUsuarios();
+  }catch(e){
+    alert(e.message || "No se pudo actualizar.");
+  }
+}
+
+async function cargarBitacora(){
+  const cont = document.getElementById("lista-bitacora");
+  try{
+    const eventos = await api.usuarios.bitacora(40);
+    if (!eventos.length){ cont.innerHTML = `<div class="hint">Sin registros.</div>`; return; }
+    cont.innerHTML = eventos.map(ev => `
+      <div class="user-row">
+        <div>
+          <div class="user-name" style="font-weight:600;">
+            ${esc(ev.email || "—")}
+            <span style="color:${ev.exito ? "#4C5D39" : "#963527"};">${ev.exito ? "✓" : "✕"}</span>
+          </div>
+          <div class="user-meta">
+            ${esc(ev.evento)}${ev.detalle ? " · " + esc(ev.detalle) : ""}
+            ${ev.ip ? " · " + esc(ev.ip) : ""}
+          </div>
+        </div>
+        <div class="user-meta" style="flex-shrink:0;">
+          ${new Date(ev.creado_en).toLocaleString("es-CR")}
+        </div>
+      </div>`).join("");
+  }catch(e){
+    cont.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+  }
+}
+
+// ---------------------------------------------------------------------
+// Arranque
+// ---------------------------------------------------------------------
+async function arrancar(){
+  const info = await api.me();
+  if (!info){ mostrarPantalla("login"); return; }
+
+  const u = info.usuario;
+  if (u.debeCambiarPassword){ mostrarPantalla("password"); return; }
+
+  if (u.rol !== "admin"){
+    mostrarPantalla("login");
+    mostrarMsg("login-msg",
+      "Tu cuenta no tiene permisos de administrador. Usa la app de contratos en /index.html", false);
+    return;
+  }
+
+  document.getElementById("sesion-info").innerHTML =
+    `Conectado como <strong>${esc(u.nombre)}</strong> (${esc(u.email)}) — Administrador`;
+  mostrarPantalla("app");
+  alCambiarRol();
+  await cargarPropiedades();
+  await cargarUsuarios();
+  await cargarBitacora();
+}
+
+document.getElementById("login-pass").addEventListener("keydown", ev => {
+  if (ev.key === "Enter") hacerLogin();
+});
+
+arrancar();
+</script>
+
+</body>
+</html>
+

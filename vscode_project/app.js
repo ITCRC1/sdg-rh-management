@@ -1,0 +1,5268 @@
+const CONTRACT_ROWS = [{"es": [{"bullet": false, "html": "<b>CONTRATO INDIVIDUAL DE TRABAJO POR TIEMPO </b><b>«TIPO_CONTRATO_LABEL»</b>"}], "en": [{"bullet": false, "html": "<b>INDIVIDUAL EMPLOYMENT CONTRACT FOR </b><b>«TIPO_CONTRATO_LABEL»</b><b> TERM</b>"}]}, {"es": [{"bullet": false, "html": "Entre nosotros, «REPRESENTANTE_LEGAL», ciudadano («NACIONALIDAD_REPRESENTANTE»), con Documento de Identidad «TIPO_IDENTIFICACION_REPRESENTANTE» número («IDENTIFICACION_REPRESENTANTE»), vecino de «DIRECCION_REPRESENTANTE_LEGAL», en mi condición de «PUESTO_REPRESENTANTE_LEGAL» y representante legal con facultades de Apoderado Generalísimo sin límite de suma y suficientes para este acto de la empresa «EMPRESA», SOCIEDAD DE RESPONSABILIDAD LIMITADA, cédula «TIPO_CEDULA_EMPRESA» número «CEDULA_JURIDICA_EMPRESA», domiciliada en «DIRECCION_EMPRESA»; en adelante denominada EL PATRONO;"}, {"bullet": false, "html": "y (El /La) señor(a) «NOMBRE_TRABAJADOR», ciudadana «NACIONALIDAD», con número de «TIPO_IDENTIFICACION» de identidad («IDENTIFICACION»), mayor, «ESTADO_CIVIL», profesional en «ESPECIALIZACION», vecina de «DIRECCION_TRABAJADOR»; en adelante denominada/o EL TRABAJADOR;"}, {"bullet": false, "html": "encontrándonos ambos en el libre ejercicio de nuestros derechos y facultades, asegurando el primero tener la representación legal relacionada, hemos convenido en celebrar el presente CONTRATO INDIVIDUAL DE TRABAJO POR TIEMPO «TIPO_CONTRATO_LABEL», el cual se regirá por el Código de Trabajo de Costa Rica (en adelante “CT”), las leyes conexas aplicables, y en especial por las siguientes cláusulas:"}], "en": [{"bullet": false, "html": "Between us, «REPRESENTANTE_LEGAL», a citizen of («NACIONALIDAD_REPRESENTANTE»), holder of «TIPO_IDENTIFICACION_REPRESENTANTE» identification number («IDENTIFICACION_REPRESENTANTE»), resident of «DIRECCION_REPRESENTANTE_LEGAL», in my capacity as «PUESTO_REPRESENTANTE_LEGAL» and legal representative with powers of General Attorney-in-Fact (Apoderado Generalísimo) without limit of amount and sufficient for this act of the company «EMPRESA», LIMITED LIABILITY COMPANY, «TIPO_CEDULA_EMPRESA» identification number «CEDULA_JURIDICA_EMPRESA», domiciled at «DIRECCION_EMPRESA»; hereinafter referred to as THE EMPLOYER;"}, {"bullet": false, "html": "and (Mr./Ms.) «NOMBRE_TRABAJADOR», a citizen of («NACIONALIDAD»), holder of «TIPO_IDENTIFICACION» identification number («IDENTIFICACION»), of legal age, «ESTADO_CIVIL», professional in «ESPECIALIZACION», resident of «DIRECCION_TRABAJADOR»; hereinafter referred to as THE EMPLOYEE;"}, {"bullet": false, "html": "both of us being in the free exercise of our rights and powers, the first party warranting that it holds the aforementioned legal representation, we have agreed to enter into this INDIVIDUAL EMPLOYMENT CONTRACT FOR «TIPO_CONTRATO_LABEL» TERM, which shall be governed by the Labor Code of Costa Rica (hereinafter “LC”), the applicable related laws, and in particular by the following clauses:"}]}, {"es": [{"bullet": false, "html": "<b>PRIMERA – SOBRE LA EMPRESA</b>"}, {"bullet": false, "html": "EL TRABAJADOR prestará sus servicios para «EMPRESA», con oficinas centrales en la provincia de «DIRECCION_EMPRESA». «EMPRESA» es una empresa de «ACTIVIDAD_EMPRESA». El portafolio «PROPIEDADES»"}], "en": [{"bullet": false, "html": "<b>ONE – ABOUT THE COMPANY</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall render services for «EMPRESA», with head offices in the province of «DIRECCION_EMPRESA». «EMPRESA» is a company engaged in «ACTIVIDAD_EMPRESA». The portfolio «PROPIEDADES»"}]}, {"es": [{"bullet": false, "html": "<b>SEGUNDA – PUESTO Y RESPONSABILIDADES</b>"}, {"bullet": false, "html": "EL TRABAJADOR se desempeñará en el puesto de «PUESTO» para «PROPIEDADES». Dicha labor la realizará bajo la dirección y dependencia del «JEFE_INMEDIATO» designado por EL PATRONO, así como de su «LIDER_DIRECTOR». Los servicios se prestarán para las siguientes propiedades, sin limitarse a ellas:"}, {"bullet": true, "html": "«PROPIEDADES_LIST»"}, {"bullet": false, "html": "El portafolio anterior podrá ampliarse o modificarse mediante la incorporación o salida de propiedades administradas por EL PATRONO, siempre que las funciones asignadas continúen siendo compatibles con la naturaleza del puesto contratado y ello no implique una modificación sustancial de las condiciones esenciales de trabajo."}, {"bullet": false, "html": "Adicionalmente, dado que «EMPRESA» actúa como «ACTIVIDAD_EMPRESA», EL TRABAJADOR podrá ser asignada para realizar visitas de “scouting” o inspecciones a propiedades externas, cuando el puesto lo requiera. En estos casos se reconocerán los gastos de movilización y viáticos conforme a la política interna vigente."}, {"bullet": false, "html": "LOCALIZACIÓN DE LAS LABORES: Las labores se realizarán de manera remota desde la casa de habitación de EL TRABAJADOR, conforme a lo establecido en la CLÁUSULA SÉPTIMA del presente contrato sobre Teletrabajo. Sin perjuicio de lo anterior, EL TRABAJADOR deberá contar con disponibilidad para atender reuniones presenciales, visitar hoteles, asistir a eventos, ferias, producciones de contenido y otras actividades que sean requeridas razonablemente por EL PATRONO."}], "en": [{"bullet": false, "html": "<b>TWO – POSITION AND RESPONSIBILITIES</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall serve in the position of «PUESTO» for «PROPIEDADES». Such work shall be carried out under the direction and dependence of the «JEFE_INMEDIATO» designated by THE EMPLOYER, as well as of its «LIDER_DIRECTOR». The services shall be rendered for the following properties, without being limited to them:"}, {"bullet": true, "html": "«PROPIEDADES_LIST»"}, {"bullet": false, "html": "The foregoing portfolio may be expanded or modified through the incorporation or withdrawal of properties managed by THE EMPLOYER, provided that the assigned functions remain compatible with the nature of the contracted position and this does not entail a substantial modification of the essential working conditions."}, {"bullet": false, "html": "Additionally, since «EMPRESA» acts as «ACTIVIDAD_EMPRESA», THE EMPLOYEE may be assigned to carry out “scouting” visits or inspections at external properties when the position so requires. In such cases, transportation and travel expenses shall be recognized in accordance with the internal policy in force."}, {"bullet": false, "html": "LOCATION OF THE WORK: The work shall be performed remotely from THE EMPLOYEE’s residence, in accordance with the provisions of CLAUSE SEVEN of this contract regarding Telework. Notwithstanding the foregoing, THE EMPLOYEE must be available to attend in-person meetings, visit hotels, attend events, fairs, content productions, and other activities reasonably required by THE EMPLOYER."}]}, {"es": [{"bullet": false, "html": "<b>TERCERA – OBLIGACIONES DEL TRABAJADOR</b>"}, {"bullet": false, "html": "EL TRABAJADOR estará obligado a:"}, {"bullet": true, "html": "Seguir los lineamientos establecidos en el Manual Interno de la institución y en el Manual de Puestos, los cuales le serán suministrados al inicio de la relación laboral. Su consentimiento con dichos documentos será manifestado por escrito."}, {"bullet": true, "html": "Apoyar al «JEFE_INMEDIATO» en «TAREAS_APOYO» y operaciones comerciales del portafolio."}, {"bullet": true, "html": "Cumplir con las responsabilidades detalladas en el Anexo 2 adjunto al presente contrato (Job Description del puesto)."}, {"bullet": true, "html": "Mantener comunicación activa con su jefatura directa y reportar el avance de sus tareas conforme a los procedimientos internos."}, {"bullet": true, "html": "Utilizar de forma adecuada los equipos, sistemas y recursos que EL PATRONO ponga a su disposición para el desempeño de sus funciones."}], "en": [{"bullet": false, "html": "<b>THREE – OBLIGATIONS OF THE EMPLOYEE</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be obligated to:"}, {"bullet": true, "html": "Follow the guidelines established in the institution’s Internal Manual and in the Job Manual, which shall be provided at the beginning of the employment relationship. Consent to said documents shall be expressed in writing."}, {"bullet": true, "html": "Support the «JEFE_INMEDIATO» in «TAREAS_APOYO» and the commercial operations of the portfolio."}, {"bullet": true, "html": "Comply with the responsibilities detailed in Annex 2 attached to this contract (Job Description of the position)."}, {"bullet": true, "html": "Maintain active communication with the direct supervisor and report the progress of tasks in accordance with internal procedures."}, {"bullet": true, "html": "Properly use the equipment, systems, and resources that THE EMPLOYER makes available for the performance of the functions."}]}, {"es": [{"bullet": false, "html": "<b>CUARTA – EXCLUSIVIDAD. </b><b>«EXCLUSIVIDAD_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "Durante la vigencia del presente contrato, EL TRABAJADOR deberá garantizar la exclusividad en el desempeño de sus labores relacionadas con el portafolio de «EMPRESA», incluyendo actividades «ACTIVIDADES_EXCLUSIVIDAD» EL TRABAJADOR se abstendrá de prestar servicios equivalentes a competidores directos sin la autorización previa y por escrito de EL PATRONO. Esta cláusula no impide a EL TRABAJADOR realizar actividades personales ajenas al giro comercial de la empresa."}], "en": [{"bullet": false, "html": "<b>FOUR – EXCLUSIVITY. </b><b>«EXCLUSIVIDAD_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "During the term of this contract, THE EMPLOYEE shall guarantee exclusivity in the performance of duties related to the portfolio of «EMPRESA», including «ACTIVIDADES_EXCLUSIVIDAD» activities. THE EMPLOYEE shall refrain from rendering equivalent services to direct competitors without the prior written authorization of THE EMPLOYER. This clause does not prevent THE EMPLOYEE from carrying out personal activities unrelated to the company’s line of business."}]}, {"es": [{"bullet": false, "html": "<b>QUINTA – CONFIDENCIALIDAD Y PROPIEDAD INTELECTUAL</b>"}, {"bullet": false, "html": "<b>5.1 CONFIDENCIALIDAD: </b>EL TRABAJADOR deberá mantener absoluta confidencialidad sobre los productos, operativa, procedimientos y políticas internas, precios, estrategias comerciales, contenido, proyectos y demás información de carácter confidencial de EL PATRONO y de sus clientes, tanto durante la vigencia del contrato como durante los dos (2) años posteriores a su terminación, por cualquier causa. La violación de esta cláusula facultará a EL PATRONO a ejercer las acciones legales correspondientes."}, {"bullet": false, "html": "<b>5.2 PROPIEDAD INTELECTUAL: </b>Todos los materiales, contenidos, diseños, campañas, estrategias, bases de datos, artes, textos y demás obras creadas por EL TRABAJADOR en el ejercicio de sus funciones y con recursos de EL PATRONO serán propiedad exclusiva de EL PATRONO, conforme a la Ley de Derechos de Autor y Derechos Conexos N.° 6683 y sus reformas. EL TRABAJADOR cede desde ya todos los derechos patrimoniales sobre dichas creaciones a favor de EL PATRONO sin costo adicional. Esto aplica inclusive para mercadeo digital, campañas publicitarias, contenido audiovisual, fotografías, videos, contenido para redes sociales, material audiovisual, contenido generado mediante herramientas digitales, plataformas tecnológicas o sistemas de inteligencia artificial utilizados durante la relación laboral, entre otros afines."}, {"bullet": false, "html": "<b>5.3 DEVOLUCIÓN DE ACTIVOS: </b>A la terminación del contrato, EL TRABAJADOR deberá devolver de inmediato todos los activos, documentos, archivos digitales, accesos y credenciales de EL PATRONO que obren en su poder."}, {"bullet": false, "html": "<b>5.4 USO DE IMAGEN CORPORATIVA: </b>EL TRABAJADOR autoriza a EL PATRONO, durante la vigencia de la relación laboral, a utilizar fotografías, grabaciones de audio, video o material audiovisual en que aparezca su imagen, voz o nombre, siempre que hayan sido obtenidos en actividades relacionadas con el trabajo y sean utilizados para fines institucionales, publicitarios, promocionales, educativos o corporativos relacionados con las actividades de EL PATRONO o de las empresas del grupo. Esta autorización cesará con la terminación de la relación laboral respecto de nuevas publicaciones, sin perjuicio del material previamente divulgado legítimamente durante la vigencia del contrato."}, {"bullet": false, "html": "<b>5.5 DATOS PERSONALES: </b>EL TRABAJADOR se compromete a tratar los datos personales de huéspedes, clientes, proveedores, colaboradores y terceros únicamente para fines propios de sus funciones, observando las políticas internas de EL PATRONO y la Ley N.° 8968 de Protección de la Persona frente al Tratamiento de sus Datos Personales."}], "en": [{"bullet": false, "html": "<b>FIVE – CONFIDENTIALITY AND INTELLECTUAL PROPERTY</b>"}, {"bullet": false, "html": "<b>5.1 CONFIDENTIALITY: </b>THE EMPLOYEE shall maintain absolute confidentiality regarding the products, operations, procedures and internal policies, prices, commercial strategies, content, projects, and other confidential information of THE EMPLOYER and its clients, both during the term of the contract and for the two (2) years following its termination for any cause. Violation of this clause shall entitle THE EMPLOYER to pursue the corresponding legal actions."}, {"bullet": false, "html": "<b>5.2 INTELLECTUAL PROPERTY: </b>All materials, content, designs, campaigns, strategies, databases, artwork, texts, and other works created by THE EMPLOYEE in the exercise of the functions and with THE EMPLOYER’s resources shall be the exclusive property of THE EMPLOYER, in accordance with the Copyright and Related Rights Law No. 6683 and its amendments. THE EMPLOYEE hereby assigns all economic rights over such creations in favor of THE EMPLOYER at no additional cost. This applies including to digital marketing, advertising campaigns, audiovisual content, photographs, videos, social media content, audiovisual material, and content generated through digital tools, technological platforms, or artificial intelligence systems used during the employment relationship, among other related matters."}, {"bullet": false, "html": "<b>5.3 RETURN OF ASSETS: </b>Upon termination of the contract, THE EMPLOYEE shall immediately return all assets, documents, digital files, access, and credentials of THE EMPLOYER in the EMPLOYEE’s possession."}, {"bullet": false, "html": "<b>5.4 USE OF CORPORATE IMAGE: </b>THE EMPLOYEE authorizes THE EMPLOYER, during the term of the employment relationship, to use photographs, audio recordings, video, or audiovisual material in which the EMPLOYEE’s image, voice, or name appears, provided they were obtained in work-related activities and used for institutional, advertising, promotional, educational, or corporate purposes related to the activities of THE EMPLOYER or the group companies. This authorization shall cease upon termination of the employment relationship with respect to new publications, without prejudice to material previously and legitimately disclosed during the term of the contract."}, {"bullet": false, "html": "<b>5.5 PERSONAL DATA: </b>THE EMPLOYEE undertakes to process the personal data of guests, clients, suppliers, coworkers, and third parties solely for purposes proper to the functions, observing THE EMPLOYER’s internal policies and Law No. 8968 on the Protection of the Person against the Processing of Personal Data."}]}, {"es": [{"bullet": false, "html": "<b>SEXTA – CUMPLIMIENTO DE NORMATIVA INTERNA</b>"}, {"bullet": false, "html": "Al inicio de la relación laboral se proporcionará a EL TRABAJADOR el documento denominado “HANDBOOK PARA MIEMBROS DEL EQUIPO”, el cual contiene, entre otros:"}, {"bullet": true, "html": "Declaración de bienvenida, historia y valores organizacionales."}, {"bullet": true, "html": "Código de conducta de la empresa."}, {"bullet": true, "html": "Políticas de salud ocupacional."}, {"bullet": true, "html": "Código de vestimenta, uniforme y presentación personal."}, {"bullet": true, "html": "Iniciativas e incentivos del grupo."}, {"bullet": true, "html": "Sostenibilidad, impacto ambiental y social."}, {"bullet": true, "html": "Programas de mentoría."}, {"bullet": false, "html": "EL TRABAJADOR firmará un acuse de recibo de los documentos anteriores y se compromete a conocer y cumplir su contenido. EL PATRONO podrá actualizar dichos documentos, notificando a EL TRABAJADOR con al menos diez (10) días hábiles de anticipación."}, {"bullet": false, "html": "Ninguna modificación al Handbook podrá interpretarse como modificación de las condiciones esenciales del contrato de trabajo ni de los derechos adquiridos de TRABAJADOR."}], "en": [{"bullet": false, "html": "<b>SIX – COMPLIANCE WITH INTERNAL REGULATIONS</b>"}, {"bullet": false, "html": "At the beginning of the employment relationship, THE EMPLOYEE shall be provided with the document titled “HANDBOOK FOR TEAM MEMBERS”, which contains, among others:"}, {"bullet": true, "html": "Welcome statement, history, and organizational values."}, {"bullet": true, "html": "Company code of conduct."}, {"bullet": true, "html": "Occupational health policies."}, {"bullet": true, "html": "Dress code, uniform, and personal presentation."}, {"bullet": true, "html": "Group initiatives and incentives."}, {"bullet": true, "html": "Sustainability, environmental and social impact."}, {"bullet": true, "html": "Mentoring programs."}, {"bullet": false, "html": "THE EMPLOYEE shall sign an acknowledgment of receipt of the foregoing documents and undertakes to know and comply with their content. THE EMPLOYER may update said documents, notifying THE EMPLOYEE at least ten (10) business days in advance."}, {"bullet": false, "html": "No modification to the Handbook may be interpreted as a modification of the essential conditions of the employment contract or of the acquired rights of THE EMPLOYEE."}]}, {"es": [{"bullet": false, "html": "<b>SÉPTIMA – MODALIDAD DE TELETRABAJO </b><b>(LEY N.° 9738). Aplica: «TELETRABAJO_SI_NO»</b>"}, {"bullet": false, "html": "La prestación de servicios se desarrollará principalmente bajo la modalidad de teletrabajo, de conformidad con la Ley para Regular el Teletrabajo N.° 9738 del 14 de febrero de 2020 y su Reglamento. Se establecen las siguientes condiciones:"}, {"bullet": true, "html": "<b>LUGAR DE TELETRABAJO: </b>EL TRABAJADOR realizará sus funciones desde su casa de habitación ubicada en «DIRECCION_TELETRABAJO». Cualquier cambio de domicilio deberá notificarse a EL PATRONO con al menos cinco (5) días hábiles de anticipación."}, {"bullet": true, "html": "<b>EQUIPOS Y HERRAMIENTAS: </b>EL PATRONO proveerá directamente a EL TRABAJADOR los equipos tecnológicos, software y accesos necesarios para el desempeño de sus funciones o, previo acuerdo escrito entre las partes, reconocerá el uso de equipos propiedad de EL TRABAJADOR mediante la compensación o modalidad que se establezca en cada caso. EL TRABAJADOR deberá mantener una conexión a internet adecuada para el cumplimiento de sus labores. La entrega de equipos, dispositivos, licencias de software o cualquier otro activo propiedad de EL PATRONO se documentará mediante un acta de entrega firmada por ambas partes, en la cual se detallará el estado de los bienes y las obligaciones de custodia y devolución por parte de EL TRABAJADOR."}, {"bullet": true, "html": "<b>GASTOS OPERATIVOS: </b>EL PATRONO pagará una compensación mensual de [«COMPENSACION_TELETRABAJO»] por concepto de gastos de electricidad e internet derivados del teletrabajo, sujeto a revisión anual. Dicho monto no constituye salario en especie."}, {"bullet": true, "html": "<b>CONTROL Y SUPERVISIÓN: </b>EL PATRONO podrá implementar mecanismos de supervisión de las labores, siempre que respeten los derechos fundamentales y la privacidad de EL TRABAJADOR. No se utilizarán cámaras de vigilancia en el domicilio de EL TRABAJADOR sin su consentimiento expreso."}, {"bullet": true, "html": "<b>REVERSIBILIDAD: </b>Cualquiera de las partes podrá solicitar la reversión a la modalidad presencial con un preaviso mínimo de quince (15) días calendario, sujeto a la disponibilidad de espacio físico en las instalaciones de EL PATRONO."}, {"bullet": true, "html": "<b>SEGURIDAD DE LA INFORMACIÓN: </b>EL TRABAJADOR se compromete a cumplir con las políticas de seguridad informática de EL PATRONO, incluyendo el uso de contraseñas seguras, VPN cuando se requiera, y la prohibición de acceder a información confidencial desde redes públicas sin las medidas de seguridad correspondientes."}, {"bullet": true, "html": "<b>SALUD OCUPACIONAL EN TELETRABAJO: </b>EL TRABAJADOR es responsable de mantener un espacio de trabajo ergonómico y seguro en su domicilio. EL PATRONO podrá realizar verificaciones del espacio de trabajo, con consentimiento previo de EL TRABAJADOR."}], "en": [{"bullet": false, "html": "<b>SEVEN – TELEWORK MODALITY </b><b>(LAW No. 9738). Applies: «TELETRABAJO_SI_NO»</b>"}, {"bullet": false, "html": "The rendering of services shall be carried out mainly under the telework modality, in accordance with the Law to Regulate Telework No. 9738 of February 14, 2020, and its Regulations. The following conditions are established:"}, {"bullet": true, "html": "<b>TELEWORK LOCATION: </b>THE EMPLOYEE shall perform the functions from the residence located at «DIRECCION_TELETRABAJO». Any change of address must be notified to THE EMPLOYER at least five (5) business days in advance."}, {"bullet": true, "html": "<b>EQUIPMENT AND TOOLS: </b>THE EMPLOYER shall directly provide THE EMPLOYEE with the technological equipment, software, and access necessary for the performance of the functions or, upon prior written agreement between the parties, shall recognize the use of equipment owned by THE EMPLOYEE through the compensation or modality established in each case. THE EMPLOYEE must maintain an adequate internet connection for the fulfillment of the duties. The delivery of equipment, devices, software licenses, or any other asset owned by THE EMPLOYER shall be documented by means of a delivery record signed by both parties, detailing the condition of the goods and THE EMPLOYEE’s custody and return obligations."}, {"bullet": true, "html": "<b>OPERATING EXPENSES: </b>THE EMPLOYER shall pay a monthly compensation of [«COMPENSACION_TELETRABAJO»] for electricity and internet expenses derived from telework, subject to annual review. Said amount does not constitute salary in kind."}, {"bullet": true, "html": "<b>MONITORING AND SUPERVISION: </b>THE EMPLOYER may implement mechanisms to supervise the work, provided they respect the fundamental rights and privacy of THE EMPLOYEE. Surveillance cameras shall not be used in THE EMPLOYEE’s home without express consent."}, {"bullet": true, "html": "<b>REVERSIBILITY: </b>Either party may request reversion to the in-person modality with a minimum notice of fifteen (15) calendar days, subject to the availability of physical space at THE EMPLOYER’s facilities."}, {"bullet": true, "html": "<b>INFORMATION SECURITY: </b>THE EMPLOYEE undertakes to comply with THE EMPLOYER’s IT security policies, including the use of secure passwords, VPN when required, and the prohibition of accessing confidential information from public networks without the corresponding security measures."}, {"bullet": true, "html": "<b>OCCUPATIONAL HEALTH IN TELEWORK: </b>THE EMPLOYEE is responsible for maintaining an ergonomic and safe workspace at the residence. THE EMPLOYER may carry out workspace inspections, with THE EMPLOYEE’s prior consent."}]}, {"es": [{"bullet": false, "html": "<b>OCTAVA – JORNADA LABORAL</b>"}, {"bullet": false, "html": "La jornada ordinaria de trabajo será de «JORNADA_DESCRIPCION», de conformidad con el artículo 136 del Código de Trabajo. Dado que EL TRABAJADOR desempeña un puesto de confianza dentro de la organización, la jornada tendrá la flexibilidad prevista en el artículo 143 del CT, tomando como referencia el horario general de oficinas de «EMPRESA»: de las 8:00 a.m. a las 5:00 p.m., de lunes a viernes. La referencia al artículo 143 del Código de Trabajo únicamente será aplicable cuando el puesto desempeñado reúna efectivamente las características legales de un puesto de dirección, administración o de confianza, conforme a la legislación laboral vigente."}, {"bullet": false, "html": "Las horas extraordinarias serán reconocidas conforme al artículo 139 del CT (recargo del 50% sobre el salario ordinario), previa autorización escrita de la jefatura directa. Para puestos de confianza, el tiempo adicional se referenciará a la jornada mínima legal aplicable."}], "en": [{"bullet": false, "html": "<b>EIGHT – WORKING HOURS</b>"}, {"bullet": false, "html": "The ordinary working schedule shall be «JORNADA_DESCRIPCION», in accordance with article 136 of the Labor Code. Given that THE EMPLOYEE holds a position of trust within the organization, the schedule shall have the flexibility provided in article 143 of the LC, taking as reference the general office hours of «EMPRESA»: from 8:00 a.m. to 5:00 p.m., Monday to Friday. The reference to article 143 of the Labor Code shall only be applicable when the position effectively meets the legal characteristics of a management, administration, or trust position, in accordance with the labor law in force."}, {"bullet": false, "html": "Overtime shall be recognized in accordance with article 139 of the LC (a 50% surcharge over the ordinary salary), subject to prior written authorization from the direct supervisor. For trust positions, additional time shall be referenced to the applicable minimum legal workday."}]}, {"es": [{"bullet": false, "html": "<b>NOVENA – HORARIOS DE TRABAJO OPERATIVO</b>"}, {"bullet": false, "html": "Para el personal operativo en sitio, los horarios serán establecidos por los coordinadores de turno designados por EL PATRONO, quienes informarán a EL TRABAJADOR con al menos una semana de anticipación. Los cambios extraordinarios de horario se comunicarán con la anticipación razonable posible, considerando la naturaleza de la industria hotelera y de hospitalidad."}], "en": [{"bullet": false, "html": "<b>NINE – OPERATIONAL WORK SCHEDULES</b>"}, {"bullet": false, "html": "For on-site operational staff, schedules shall be established by the shift coordinators designated by THE EMPLOYER, who shall inform THE EMPLOYEE at least one week in advance. Extraordinary schedule changes shall be communicated with as much reasonable notice as possible, considering the nature of the hotel and hospitality industry."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA – DÍAS DE DESCANSO Y FERIADOS</b>"}, {"bullet": false, "html": "De conformidad con los artículos 152 y 148 del Código de Trabajo, EL TRABAJADOR tendrá derecho a un día de descanso semanal remunerado y a los días feriados de pago obligatorio establecidos en el artículo 148 CT. Para EL TRABAJADOR, en su calidad de personal de oficina en puesto de dirección, los días de descanso corresponden al sábado y domingo de cada semana, salvo acuerdo previo en contrario."}, {"bullet": false, "html": "Cuando las necesidades operacionales requieran laborar en día de descanso o feriado, EL PATRONO deberá contar con la anuencia de EL TRABAJADOR, o mediar causa legal suficiente, y compensar dicho trabajo conforme al artículo 152 del CT (doble del salario ordinario), o mediante día compensatorio, cuando ello sea legalmente procedente y exista acuerdo entre las partes."}], "en": [{"bullet": false, "html": "<b>TEN – REST DAYS AND HOLIDAYS</b>"}, {"bullet": false, "html": "In accordance with articles 152 and 148 of the Labor Code, THE EMPLOYEE shall be entitled to one paid weekly rest day and to the mandatory paid holidays established in article 148 of the LC. For THE EMPLOYEE, in the capacity of office staff in a management position, the rest days correspond to Saturday and Sunday of each week, unless otherwise agreed in advance."}, {"bullet": false, "html": "When operational needs require work on a rest day or holiday, THE EMPLOYER must have THE EMPLOYEE’s consent, or a sufficient legal cause must exist, and shall compensate such work in accordance with article 152 of the LC (double the ordinary salary), or by means of a compensatory day, when legally permissible and there is agreement between the parties."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA PRIMERA – VACACIONES</b>"}, {"bullet": false, "html": "EL TRABAJADOR tendrá derecho a disfrutar de vacaciones remuneradas conforme al artículo 153 del Código de Trabajo: dos semanas por cada cincuenta semanas de servicio continuo (equivalente a un día por cada mes laborado durante el primer año). Las vacaciones son acumulables por un período no mayor a doce (12) meses, y su disfrute se coordinará con la jefatura directa."}, {"bullet": false, "html": "El goce anticipado de vacaciones, previo al cumplimiento del período mínimo legal, queda sujeto a acuerdo mutuo entre EL TRABAJADOR y EL PATRONO. En caso de terminación de la relación laboral, EL PATRONO pagará el período proporcional de vacaciones no disfrutadas, conforme al artículo 156 del CT."}], "en": [{"bullet": false, "html": "<b>ELEVEN – VACATION</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be entitled to paid vacation in accordance with article 153 of the Labor Code: two weeks for every fifty weeks of continuous service (equivalent to one day for each month worked during the first year). Vacation may be accumulated for a period no longer than twelve (12) months, and its use shall be coordinated with the direct supervisor."}, {"bullet": false, "html": "Advance use of vacation, prior to completing the minimum legal period, is subject to mutual agreement between THE EMPLOYEE and THE EMPLOYER. In the event of termination of the employment relationship, THE EMPLOYER shall pay the proportional period of unused vacation, in accordance with article 156 of the LC."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA SEGUNDA – SALARIO</b>"}, {"bullet": false, "html": "Por concepto de la jornada ordinaria de trabajo, EL PATRONO pagará a EL TRABAJADOR la suma de «SALARIO_BRUTO_LETRAS» «MONEDA» «SALARIO_BRUTO_NUM» brutos mensuales, equivalentes aproximadamente a «SALARIO_NETO_LETRAS» «MONEDA» «SALARIO_NETO_NUM» netos, una vez aplicadas las deducciones obreras de ley. El pago se realizará en «MONEDA_TEXTO» (Acrónimo de la moneda), moneda que las partes acuerdan expresamente como unidad de cuenta y de pago, conforme al artículo 164 del Código de Trabajo."}, {"bullet": false, "html": "La modalidad de pago será mensual, efectuándose un adelanto del cincuenta por ciento (50%) el día quince (15) de cada mes, o el siguiente día hábil si éste fuera feriado o fin de semana, y el saldo restante más horas extras, feriados, comisiones y otros rubros aplicables a más tardar el último día hábil del mes. El pago se realizará mediante transferencia bancaria a la cuenta que EL TRABAJADOR indique, preferiblemente en el Banco Nacional de Costa Rica; si EL TRABAJADOR no contara con dicha cuenta, deberá abrirla dentro de los primeros quince (15) días calendario de la relación laboral."}, {"bullet": false, "html": "El salario establecido no será inferior al salario mínimo legal fijado semestralmente por el Consejo Nacional de Salarios para la categoría correspondiente. Cualquier ajuste salarial por ascenso, revisión o cambio de condiciones se documentará mediante acción de personal firmada por ambas partes."}], "en": [{"bullet": false, "html": "<b>TWELVE – SALARY</b>"}, {"bullet": false, "html": "For the ordinary working schedule, THE EMPLOYER shall pay THE EMPLOYEE the sum of «SALARIO_BRUTO_LETRAS» «MONEDA» «SALARIO_BRUTO_NUM» gross per month, approximately equivalent to «SALARIO_NETO_LETRAS» «MONEDA» «SALARIO_NETO_NUM» net, once the statutory employee deductions are applied. Payment shall be made in «MONEDA_TEXTO» (Currency acronym), a currency that the parties expressly agree upon as the unit of account and payment, in accordance with article 164 of the Labor Code."}, {"bullet": false, "html": "The payment modality shall be monthly, with an advance of fifty percent (50%) made on the fifteenth (15th) of each month, or the next business day if it falls on a holiday or weekend, and the remaining balance plus overtime, holidays, commissions, and other applicable items no later than the last business day of the month. Payment shall be made by bank transfer to the account indicated by THE EMPLOYEE, preferably at Banco Nacional de Costa Rica; if THE EMPLOYEE does not have such an account, one must be opened within the first fifteen (15) calendar days of the employment relationship."}, {"bullet": false, "html": "The established salary shall not be lower than the minimum legal wage set semiannually by the National Wage Council for the corresponding category. Any salary adjustment due to promotion, review, or change of conditions shall be documented by means of a personnel action signed by both parties."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA TERCERA – COMPENSACIONES ADICIONALES (COMISIONES). </b><b>«COMISION_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "«COMISION_DETALLE_BLOCK»"}], "en": [{"bullet": false, "html": "<b>THIRTEEN – ADDITIONAL COMPENSATION (COMMISSIONS). </b><b>«COMISION_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "«COMISION_DETALLE_BLOCK»"}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA CUARTA – PERÍODO DE PRUEBA</b>"}, {"bullet": false, "html": "De conformidad con el artículo 26 del Código de Trabajo, se establece un período de prueba de tres (3) meses contados a partir de la fecha de inicio de la relación laboral. Durante este período, cualquiera de las partes podrá dar por terminado el contrato sin responsabilidad patronal ni laboral, salvo el pago proporcional de vacaciones y aguinaldo devengados. Superado el período de prueba sin que ninguna de las partes haya ejercido este derecho, el contrato adquirirá plena vigencia indefinida."}], "en": [{"bullet": false, "html": "<b>FOURTEEN – PROBATIONARY PERIOD</b>"}, {"bullet": false, "html": "In accordance with article 26 of the Labor Code, a probationary period of three (3) months is established, counted from the start date of the employment relationship. During this period, either party may terminate the contract without employer or employee liability, except for the proportional payment of accrued vacation and Christmas bonus. Once the probationary period has passed without either party having exercised this right, the contract shall acquire full indefinite force."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA QUINTA – PREAVISO</b>"}, {"bullet": false, "html": "De conformidad con el artículo 28 del Código de Trabajo, la parte que desee dar por terminado el contrato sin justa causa deberá comunicarlo a la otra con el siguiente preaviso mínimo:"}, {"bullet": true, "html": "Menos de tres (3) meses de servicio: una (1) semana de anticipación."}, {"bullet": true, "html": "De tres (3) meses a menos de seis (6) meses: dos (2) semanas de anticipación."}, {"bullet": true, "html": "De seis (6) meses a menos de un (1) año: un (1) mes de anticipación."}, {"bullet": true, "html": "Más de un (1) año de servicio: un (1) mes de anticipación, con derecho a un día libre por semana durante el preaviso para buscar nueva colocación."}, {"bullet": false, "html": "La parte que omita el preaviso o lo reduzca deberá pagar a la otra una suma equivalente al salario correspondiente al plazo omitido. EL TRABAJADOR deberá presentar renuncia por escrito indicando la fecha de salida y el preaviso correspondiente."}], "en": [{"bullet": false, "html": "<b>FIFTEEN – NOTICE OF TERMINATION</b>"}, {"bullet": false, "html": "In accordance with article 28 of the Labor Code, the party wishing to terminate the contract without just cause must notify the other with the following minimum notice:"}, {"bullet": true, "html": "Less than three (3) months of service: one (1) week’s notice."}, {"bullet": true, "html": "From three (3) months to less than six (6) months: two (2) weeks’ notice."}, {"bullet": true, "html": "From six (6) months to less than one (1) year: one (1) month’s notice."}, {"bullet": true, "html": "More than one (1) year of service: one (1) month’s notice, with the right to one day off per week during the notice period to seek new employment."}, {"bullet": false, "html": "The party that omits or reduces the notice shall pay the other a sum equivalent to the salary corresponding to the omitted period. THE EMPLOYEE must submit the resignation in writing, indicating the departure date and the corresponding notice."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA SEXTA – TERMINACIÓN DEL CONTRATO Y AUXILIO DE CESANTÍA</b>"}, {"bullet": false, "html": "<b>16.1 </b>El auxilio de cesantía se calculará conforme al Código de Trabajo y sus reformas."}, {"bullet": false, "html": "El salario base para el cálculo de la cesantía será el promedio de los últimos seis (6) meses de salario ordinario, incluyendo los componentes que la ley ordene incluir."}, {"bullet": false, "html": "<b>16.2 LIQUIDACIÓN: </b>Al finalizar la relación laboral, EL PATRONO cancelará a EL TRABAJADOR los extremos laborales que legalmente correspondan según la forma de terminación del contrato, incluyendo, cuando proceda, salarios pendientes, vacaciones no disfrutadas, aguinaldo proporcional, preaviso, auxilio de cesantía y cualquier otro derecho reconocido por la legislación laboral vigente."}], "en": [{"bullet": false, "html": "<b>SIXTEEN – TERMINATION OF THE CONTRACT AND SEVERANCE PAY</b>"}, {"bullet": false, "html": "<b>16.1 </b>Severance pay shall be calculated in accordance with the Labor Code and its amendments."}, {"bullet": false, "html": "The base salary for calculating severance shall be the average of the last six (6) months of ordinary salary, including the components that the law requires to be included."}, {"bullet": false, "html": "<b>16.2 SETTLEMENT: </b>Upon termination of the employment relationship, THE EMPLOYER shall pay THE EMPLOYEE the labor entitlements that legally correspond according to the manner of termination of the contract, including, where applicable, pending salaries, unused vacation, proportional Christmas bonus, notice, severance pay, and any other right recognized by the labor law in force."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA SÉPTIMA – SEGUROS SOCIALES Y RIESGOS DEL TRABAJO</b>"}, {"bullet": false, "html": "EL TRABAJADOR quedará asegurado ante la Caja Costarricense del Seguro Social (CCSS) desde el primer día de la relación laboral, conforme a la Ley Constitutiva de la CCSS y sus reglamentos. Las cuotas obrero-patronales serán deducidas y remitidas mensualmente a la CCSS por EL PATRONO."}, {"bullet": false, "html": "Adicionalmente, EL PATRONO contratará y mantendrá vigente una póliza de Riesgos del Trabajo ante el Instituto Nacional de Seguros (INS), conforme a la Ley de Riesgos del Trabajo N.° 6727. Esta cobertura aplicará incluso cuando EL TRABAJADOR realice sus labores bajo la modalidad de teletrabajo, conforme al artículo 13 de la Ley N.° 9738."}], "en": [{"bullet": false, "html": "<b>SEVENTEEN – SOCIAL SECURITY AND OCCUPATIONAL RISKS</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be insured with the Costa Rican Social Security Fund (CCSS) from the first day of the employment relationship, in accordance with the Constitutive Law of the CCSS and its regulations. The employee-employer contributions shall be deducted and remitted monthly to the CCSS by THE EMPLOYER."}, {"bullet": false, "html": "Additionally, THE EMPLOYER shall contract and keep in force an Occupational Risk insurance policy with the National Insurance Institute (INS), in accordance with the Occupational Risks Law No. 6727. This coverage shall apply even when THE EMPLOYEE performs the duties under the telework modality, in accordance with article 13 of Law No. 9738."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA OCTAVA – DEDUCCIONES OBRERAS DE LEY</b>"}, {"bullet": false, "html": "EL PATRONO retendrá y remitirá a las instituciones correspondientes las siguientes deducciones obreras, conforme a la legislación vigente:"}, {"bullet": true, "html": "Cuotas obreras de la CCSS (seguro de salud, pensión y maternidad), según los porcentajes vigentes."}, {"bullet": true, "html": "Contribución al Fondo de Capitalización Laboral (FCL), conforme a la Ley de Protección al Trabajador N.° 7983."}, {"bullet": true, "html": "Contribución al Régimen Obligatorio de Pensiones Complementarias (ROPC), según corresponda."}, {"bullet": false, "html": "Los porcentajes de ley se ajustarán automáticamente conforme lo dispongan las autoridades competentes, sin necesidad de modificar el presente contrato."}], "en": [{"bullet": false, "html": "<b>EIGHTEEN – STATUTORY EMPLOYEE DEDUCTIONS</b>"}, {"bullet": false, "html": "THE EMPLOYER shall withhold and remit to the corresponding institutions the following employee deductions, in accordance with the law in force:"}, {"bullet": true, "html": "CCSS employee contributions (health, pension, and maternity insurance), according to the percentages in force."}, {"bullet": true, "html": "Contribution to the Labor Capitalization Fund (FCL), in accordance with the Worker Protection Law No. 7983."}, {"bullet": true, "html": "Contribution to the Mandatory Supplementary Pension Regime (ROPC), as applicable."}, {"bullet": false, "html": "The statutory percentages shall be adjusted automatically as determined by the competent authorities, without the need to modify this contract."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA NOVENA – RETENCIÓN DEL IMPUESTO SOBRE LA RENTA</b>"}, {"bullet": false, "html": "Conforme al artículo 33 de la Ley del Impuesto sobre la Renta N.° 7092 y la normativa del Ministerio de Hacienda, EL PATRONO retendrá mensualmente el Impuesto sobre las Rentas del Trabajo Personal Dependiente cuando el salario bruto de EL TRABAJADOR supere los tramos exentos establecidos anualmente. Dicha retención será declarada y remitida al Ministerio de Hacienda en los plazos legales correspondientes."}], "en": [{"bullet": false, "html": "<b>NINETEEN – INCOME TAX WITHHOLDING</b>"}, {"bullet": false, "html": "In accordance with article 33 of the Income Tax Law No. 7092 and the regulations of the Ministry of Finance, THE EMPLOYER shall withhold monthly the Tax on Dependent Personal Employment Income when THE EMPLOYEE’s gross salary exceeds the exempt brackets established annually. Said withholding shall be declared and remitted to the Ministry of Finance within the corresponding legal deadlines."}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA – AGUINALDO</b>"}, {"bullet": false, "html": "De conformidad con la ley No. 2412, EL TRABAJADOR tendrá derecho al pago de aguinaldo equivalente a la doceava parte del total de salarios ordinarios y extraordinarios devengados durante el período comprendido entre el 1.° de diciembre de un año y el 30 de noviembre del siguiente. El aguinaldo deberá pagarse dentro de los primeros veinte (20) días del mes de diciembre de cada año. En caso de terminación de la relación laboral antes de completarse el período, EL TRABAJADOR recibirá el aguinaldo proporcional correspondiente."}], "en": [{"bullet": false, "html": "<b>TWENTY – CHRISTMAS BONUS (AGUINALDO)</b>"}, {"bullet": false, "html": "In accordance with Law No. 2412, THE EMPLOYEE shall be entitled to the payment of a Christmas bonus equivalent to one-twelfth of the total ordinary and extraordinary salaries earned during the period from December 1 of one year to November 30 of the following year. The Christmas bonus must be paid within the first twenty (20) days of December each year. In the event of termination of the employment relationship before the period is completed, THE EMPLOYEE shall receive the corresponding proportional Christmas bonus."}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA PRIMERA – LICENCIAS Y PERMISOS</b>"}, {"bullet": false, "html": "EL TRABAJADOR tendrá derecho a los permisos y licencias establecidos en el Código de Trabajo y legislación conexa, incluyendo:"}, {"bullet": true, "html": "<b>Incapacidad por enfermedad o accidente: </b>Con el pago correspondiente por parte de la CCSS (a partir del cuarto día), según el artículo 79 del CT."}, {"bullet": true, "html": "<b>Licencia de maternidad: </b>Cuatro (4) meses de licencia remunerada (un mes antes y tres meses después del parto), conforme al artículo 95 del CT, con la protección de fuero especial establecida en el artículo 94 CT."}, {"bullet": true, "html": "<b>Período de lactancia: </b>Se procederá conforme a lo estipulado por el CT."}, {"bullet": true, "html": "<b>Licencia por fallecimiento de familiar: </b>Tres (3) días hábiles de licencia remunerada por el fallecimiento de parientes en primer grado de consanguinidad o afinidad, así como en los demás supuestos previstos por la ley para convivientes en unión de hecho y procesos de adopción. Asimismo, tendrá derecho a un (1) día hábil de licencia remunerada por el fallecimiento de parientes en segundo y tercer grado de consanguinidad o afinidad, todo ello sin perjuicio de lo dispuesto en normas especiales."}, {"bullet": true, "html": "Otros permisos contemplados en el Código de Trabajo o legislación especial aplicable."}], "en": [{"bullet": false, "html": "<b>TWENTY-ONE – LEAVES AND PERMITS</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be entitled to the permits and leaves established in the Labor Code and related legislation, including:"}, {"bullet": true, "html": "<b>Sick or accident leave: </b>With the corresponding payment by the CCSS (from the fourth day), according to article 79 of the LC."}, {"bullet": true, "html": "<b>Maternity leave: </b>Four (4) months of paid leave (one month before and three months after childbirth), in accordance with article 95 of the LC, with the special protection (“<i><b>fuero”</b></i>) established in article 94 of the LC."}, {"bullet": true, "html": "<b>Breastfeeding period: </b>Handled in accordance with the provisions of the LC."}, {"bullet": true, "html": "<b>Leave for death of a family member: </b>Three (3) business days of paid leave upon the death of a first-degree relative by consanguinity or affinity, as well as in the other cases provided by law for common-law spouses and adoption proceedings. THE EMPLOYEE shall also be entitled to one (1) business day of paid leave upon the death of second- or third-degree relatives by consanguinity or affinity, all without prejudice to any additional rights established under applicable special legislation."}, {"bullet": true, "html": "Other permits contemplated in the Labor Code or applicable special legislation."}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA SEGUNDA – PLAZO DEL CONTRATO</b>"}, {"bullet": false, "html": "«PLAZO_CONTRATO_TEXTO»"}], "en": [{"bullet": false, "html": "<b>TWENTY-TWO – TERM OF THE CONTRACT</b>"}, {"bullet": false, "html": "«PLAZO_CONTRATO_TEXTO»"}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA TERCERA – DISPOSICIONES GENERALES</b>"}, {"bullet": false, "html": "<b>23.1 LEGISLACIÓN APLICABLE: </b>El presente contrato se regirá por las disposiciones del Código de Trabajo de Costa Rica, la ley 2412, Ley de Pago de Aguinaldo a los Servidores de la Empresa Privada, y la legislación laboral vigente. Los derechos contenidos en este contrato no podrán interpretarse en perjuicio de los derechos mínimos e irrenunciables establecidos por ley."}, {"bullet": false, "html": "<b>23.2 RESOLUCIÓN DE CONFLICTOS: </b>Cualquier discrepancia derivada del presente contrato se resolverá en primera instancia mediante diálogo entre las partes. De no llegarse a acuerdo, las partes se someterán a la jurisdicción de los Juzgados de Trabajo de la República de Costa Rica."}, {"bullet": false, "html": "<b>23.3 MODIFICACIONES: </b>Cualquier modificación al presente contrato requerirá el acuerdo escrito de ambas partes y no podrá implicar disminución de los derechos adquiridos por EL TRABAJADOR."}, {"bullet": false, "html": "<b>23.4 EJEMPLARES: </b>El presente contrato se suscribe en tres (3) ejemplares originales: uno para EL PATRONO, uno para EL TRABAJADOR y uno para el expediente de Recursos Humanos."}, {"bullet": false, "html": "Las partes hemos leído, comprendemos y aceptamos íntegramente el contenido del presente Contrato Individual de Trabajo por Tiempo «TIPO_CONTRATO_LABEL», y lo suscribimos en «DISTRITO_FIRMA» de «CANTON_FIRMA», «PROVINCIA_FIRMA», el «FECHA_FIRMA_TEXTO»."}], "en": [{"bullet": false, "html": "<b>TWENTY-THREE – GENERAL PROVISIONS</b>"}, {"bullet": false, "html": "<b>23.1 APPLICABLE LAW: </b>This contract shall be governed by the provisions of the Labor Code of Costa Rica, Law 2412, the Law on Payment of the Christmas Bonus to Private-Sector Employees, and current labor legislation. The rights contained in this contract may not be interpreted to the detriment of the minimum and non-waivable rights established by law."}, {"bullet": false, "html": "<b>23.2 DISPUTE RESOLUTION: </b>Any discrepancy arising from this contract shall be resolved in the first instance through dialogue between the parties. If no agreement is reached, the parties shall submit to the jurisdiction of the Labor Courts of the Republic of Costa Rica."}, {"bullet": false, "html": "<b>23.3 MODIFICATIONS: </b>Any modification to this contract shall require the written agreement of both parties and may not entail a reduction of the rights acquired by THE EMPLOYEE."}, {"bullet": false, "html": "<b>23.4 COUNTERPARTS: </b>This contract is executed in three (3) original counterparts: one for THE EMPLOYER, one for THE EMPLOYEE, and one for the Human Resources file."}, {"bullet": false, "html": "The parties have read, understand, and fully accept the content of this Individual Employment Contract for «TIPO_CONTRATO_LABEL» Term, and we execute it in «DISTRITO_FIRMA» of «CANTON_FIRMA», «PROVINCIA_FIRMA», on the «FECHA_FIRMA_TEXTO»."}]}, {"es": [{"bullet": false, "html": "«FIRMA_BLOCK»"}], "en": [{"bullet": false, "html": "«FIRMA_BLOCK»"}]}, {"es": [{"bullet": false, "html": "<b>ANEXOS DEL CONTRATO</b>"}, {"bullet": false, "html": "<b>Anexo 1: </b>Manual del Trabajador – «EMPRESA» (HANDBOOK PARA MIEMBROS DEL EQUIPO)."}, {"bullet": false, "html": "<b>Anexo 2: </b>Descripción detallada del puesto (Job Description) para «PUESTO»."}], "en": [{"bullet": false, "html": "<b>CONTRACT ANNEXES</b>"}, {"bullet": false, "html": "<b>Annex 1: </b>Employee Manual – «EMPRESA» (HANDBOOK FOR TEAM MEMBERS)."}, {"bullet": false, "html": "<b>Annex 2: </b>Detailed job description (Job Description) for «PUESTO»."}]}, {"es": [{"bullet": false, "html": "<b>ANEXO 2 – RESPONSABILIDADES DEL PUESTO: </b><b>«PUESTO»</b>"}, {"bullet": true, "html": "«RESPONSABILIDADES_LIST»"}, {"bullet": false, "html": "<i>Nota: El presente Anexo 2 forma parte integral del Contrato Individual de Trabajo. Cualquier modificación al esquema de comisiones o a las demás condiciones previstas en este Anexo requerirá el acuerdo expreso y por escrito de ambas partes.</i>"}], "en": [{"bullet": false, "html": "<b>ANNEX 2 – RESPONSIBILITIES OF THE POSITION: </b><b>«PUESTO»</b>"}, {"bullet": true, "html": "«RESPONSABILIDADES_LIST»"}, {"bullet": false, "html": "<i>Note: This Annex 2 forms an integral part of the Individual Employment Contract. Any modification to the commission scheme or to the other conditions provided in this Annex shall require the express written agreement of both parties.</i>"}]}];
+const FIELDS_META = [["grp", "Idioma del contrato"], ["IDIOMA_CONTRATO", "select_idioma", "Idioma del contrato", ""], ["grp", "Tipo de contrato"], ["TIPO_CONTRATO", "select_tipo_contrato", "Tipo de contrato", ""], ["grp", "Datos del trabajador"], ["NOMBRE_TRABAJADOR", "text", "Nombre completo", ""], ["TIPO_IDENTIFICACION", "select_tipo_identificacion", "Tipo de identificación", ""], ["IDENTIFICACION", "text", "Número de identificación", ""], ["NACIONALIDAD", "select_nacionalidad", "Nacionalidad", ""], ["ESTADO_CIVIL", "select_estado_civil", "Estado civil", ""], ["ESPECIALIZACION", "text", "Especialización / experiencia de campo", ""], ["DIRECCION_TRABAJADOR", "textarea", "Dirección completa (Provincia, Cantón, Distrito, Señas)", ""], ["grp", "Fecha de ingreso"], ["DIA_INICIO", "number", "Día de inicio", "1-31"], ["MES_INICIO", "select_month", "Mes de inicio", ""], ["ANIO_INICIO", "number", "Año de inicio", "Ej. 2026"], ["grp", "Fecha de finalización"], ["DIA_FIN", "number", "Día de finalización", "1-31"], ["MES_FIN", "select_month", "Mes de finalización", ""], ["ANIO_FIN", "number", "Año de finalización", "Ej. 2027"], ["grp", "Portafolio y exclusividad"], ["PROPIEDADES", "text", "Propiedades / portafolio administrado (o usa la pestaña Propiedades / Empresas)", ""], ["EXCLUSIVIDAD_SI_NO", "select_sino", "¿Aplica la cláusula de exclusividad?", ""], ["ACTIVIDADES_EXCLUSIVIDAD", "textarea", "Actividades incluidas en la cláusula de exclusividad (se sugieren solas según el puesto)", "Actividad A, actividad B, actividad C..."], ["grp", "Salario"], ["SALARIO_BRUTO_NUM", "text", "Salario bruto mensual (número)", "Ej. 1,500.00"], ["SALARIO_BRUTO_LETRAS", "text", "Salario bruto en letras", "Ej. mil quinientos"], ["SALARIO_NETO_NUM", "text", "Salario neto aproximado (número)", "Se calcula automático (Bruto − 10.83% CCSS) — editable si lo necesitas"], ["SALARIO_NETO_LETRAS", "text", "Salario neto en letras", "Se calcula automático — editable si lo necesitas"], ["MONEDA", "select_moneda", "Moneda (acrónimo)", ""], ["MONEDA_TEXTO", "text", "Moneda en letras", "Ej. dólares, colones"], ["grp", "Comisiones"], ["COMISION_SI_NO", "select_sino", "¿Aplica comisión?", ""], ["DEPARTAMENTO_COMISION", "select_departamento_comision", "Departamento / tipo de comisión", ""], ["PORCENTAJE_COMISION", "text", "Porcentaje de comisión (solo si elegiste \"Eventos y viajes de grupo\")", "Ej. 5.0%"], ["PORCENTAJE_COMISION_LETRAS", "text", "Porcentaje en letras", "Ej. cinco por ciento"], ["grp", "Teletrabajo"], ["TELETRABAJO_SI_NO", "select_sino", "¿Aplica teletrabajo?", ""], ["DIRECCION_TELETRABAJO", "textarea", "Dirección de teletrabajo", ""], ["COMPENSACION_TELETRABAJO", "text", "Compensación mensual de teletrabajo", ""], ["grp", "Carta de despido (opcional)"], ["TIPO_DESPIDO", "select_tipo_despido", "Tipo de despido", ""], ["CAUSAL_DESPIDO", "select_causal_despido", "Causal (Art. 81 CT)", ""], ["DESCRIPCION_HECHOS", "textarea", "Descripción específica de los hechos (fecha, lugar, testigos, evidencia)", "Sea puntual y detallado: solo lo escrito aquí podrá alegarse después ante un juez."], ["DIA_DESPIDO", "number", "Día de la terminación", "1-31"], ["MES_DESPIDO", "select_month", "Mes de la terminación", ""], ["ANIO_DESPIDO", "number", "Año de la terminación", "Ej. 2026"], ["MOTIVO_DESPIDO_CON", "select_motivo_despido_con", "Motivo (solo si es con responsabilidad)", ""], ["grp", "Recomendación laboral (opcional)"], ["NOMBRE_RECOM", "text", "Nombre completo del colaborador", ""], ["CEDULA_RECOM", "text", "Cédula del colaborador", ""], ["PUESTO_RECOM", "text", "Puesto que desempeñó", ""], ["DEPARTAMENTO_RECOM", "text", "Departamento / área", ""], ["FECHA_INICIO_RECOM", "text", "Fecha de inicio laboral", "Ej. 25 de noviembre del 2024"], ["FECHA_FIN_RECOM", "text", "Fecha de salida", "Ej. 22 de septiembre del 2025"], ["RAZON_SALIDA_RECOM", "text", "Razón de la salida", "Ej. Renuncia voluntaria, despido por reestructuración"], ["DESEMPENO_RECOM", "textarea", "Descripción del desempeño", "Ej. desempeñando una gran labor con responsabilidad y entrega"], ["CUALIDADES_RECOM", "text", "Cualidades personales a destacar", "Ej. respetuoso(a) y responsable"], ["LUGAR_FIRMA_RECOM", "text", "Lugar de la firma", "Ej. Sierpe de Osa"], ["FECHA_FIRMA_RECOM", "text", "Fecha de la firma", "Ej. 25 de septiembre del 2025"], ["grp", "Permiso sin goce salarial (opcional)"], ["NOMBRE_PERMISO", "text", "Nombre completo del colaborador", ""], ["CEDULA_PERMISO", "text", "Cédula del colaborador", ""], ["PUESTO_PERMISO", "text", "Puesto", ""], ["DEPARTAMENTO_PERMISO", "text", "Departamento / área", ""], ["DIA_INICIO_PERMISO", "number", "Día de inicio del permiso", "1-31"], ["MES_INICIO_PERMISO", "select_month", "Mes de inicio del permiso", ""], ["ANIO_INICIO_PERMISO", "number", "Año de inicio del permiso", "Ej. 2026"], ["DIA_FIN_PERMISO", "number", "Día de fin del permiso", "1-31"], ["MES_FIN_PERMISO", "select_month", "Mes de fin del permiso", ""], ["ANIO_FIN_PERMISO", "number", "Año de fin del permiso", "Ej. 2026"], ["TOTAL_DIAS_PERMISO", "text", "Total de días (se calcula automático)", "Se calcula de las fechas — editable si lo necesitas"]];
+const MINISTERIO_PUESTOS = [{"puestoEs": "GUÍA DE AVENTURAS", "puestoEn": "ADVENTURE GUIDE", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Guía de turismo", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "INSTRUCTOR DE BUCEO", "puestoEn": "DIVE MASTER", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Guía de turismo", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "GUÍA NATURISTA", "puestoEn": "NATURE GUIDE", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Guía de turismo", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "CAPITÁN DE EMABRCACIÖN", "puestoEn": "BOAT CAPTAIN", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Capitán de embarcación", "sigla": "TOE", "significado": "Trabajador en Ocupación Especializada", "salarioMin": 487335.0}, {"puestoEs": "SUPERVISOR CAPITÁN DE EMABRCACIÖN", "puestoEn": "BOAT CAPTAIN SUPERVISOR", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Capitán de embarcación", "sigla": "TOE", "significado": "Trabajador en Ocupación Especializada", "salarioMin": 487335.0}, {"puestoEs": "PANADERO", "puestoEn": "BAKER", "departamento": "COCINA", "ocupacion": "Panadero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "COCINERO A", "puestoEn": "COOK A", "departamento": "COCINA", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "COCINERO A SUPERVISOR", "puestoEn": "COOK A-SUPERVISOR", "departamento": "COCINA", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "COCINERO B", "puestoEn": "COOK B", "departamento": "COCINA", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "LAVAPLATOS/ASISTENTE DE COCINA", "puestoEn": "STEWARD", "departamento": "COCINA", "ocupacion": "Ayudante de cocina", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "COCINERO DE EMPLEADOS (COCINERO B)", "puestoEn": "STATION COOK 2 (COCINERO B)", "departamento": "COMEDOR DE EMPLEADOS", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "EMPLEADO DE COMPRAS", "puestoEn": "PURCHASING CLERK", "departamento": "COMPRAS", "ocupacion": "Bodeguero (Encargado) *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "GESTOR DE BODEGA", "puestoEn": "WAREHOUSE CLERK", "departamento": "COMPRAS", "ocupacion": "Bodeguero (Encargado) *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "BOTONES(TRANSPORTISTA INTERNO)", "puestoEn": "BELLMAN", "departamento": "CONCIERGE", "ocupacion": "Conductor de vehículo liviano", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "DIRECTOR DE OPERACIONES", "puestoEn": "OPERATIONS DIRECTOR", "departamento": "DIRECCIÓN", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "EJECUTIVO CONTABLE", "puestoEn": "ACCOUNTING EXECUTIVE", "departamento": "FINANZAS", "ocupacion": "Contador privado *", "sigla": "Bach.", "significado": "Bachiller Universitario", "salarioMin": 664078.07}, {"puestoEs": "AUDITOR DE INGRESOS", "puestoEn": "INCOME AUDITOR", "departamento": "FINANZAS", "ocupacion": "Contador privado *", "sigla": "Bach.", "significado": "Bachiller Universitario", "salarioMin": 664078.07}, {"puestoEs": "CONTRALOR FINANCIERO", "puestoEn": "FINANCE CONTROLLER", "departamento": "FINANZAS", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "ASISTENTE DE PASILLO (CORREDOR DE PLANTA)", "puestoEn": "CORRIDOR ATTENDANT (FLOOR RUNNER)", "departamento": "LIMPIEZA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "SUPERVISOR DE LIMPIEZA", "puestoEn": "HOUSEKEEPING SUPERVISOR", "departamento": "LIMPIEZA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "ASISTENTE DE HABITACIÓN", "puestoEn": "ROOM ATTENDANT", "departamento": "LIMPIEZA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "AUXILIAR DE CONSTRUCCIÓN", "puestoEn": "CONTRUCTION HELPER", "departamento": "MANTENIMIENTO", "ocupacion": "Ayudante de operario, construcción", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "MECÁNICO", "puestoEn": "MECHANIC", "departamento": "MANTENIMIENTO", "ocupacion": "Mecánico general", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "JARDINERO", "puestoEn": "GARDENER", "departamento": "MANTENIMIENTO", "ocupacion": "Jardinero (diseña jardines)", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "SUPERVISOR DE MANTENIMIENTO", "puestoEn": "MAINTENANCE SUPERVISOR", "departamento": "MANTENIMIENTO", "ocupacion": "Mantenimiento de edificios", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "APOYO DE PROPIEDADES", "puestoEn": "PROPERTY SUPPORT", "departamento": "MANTENIMIENTO", "ocupacion": "Mantenimiento de edificios", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "OPERADOR DE SALAS Y ÁREAS PÚBLICAS", "puestoEn": "ROOMS AND PUBLIC AREAS OPERATOR", "departamento": "MANTENIMIENTO", "ocupacion": "Mantenimiento de edificios", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "ENCARGADO DE LA LAVANDERÍA", "puestoEn": "LAUNDRY ATTENDANT", "departamento": "OPERACIONES DE LAVANDERÍA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "AGENTE DE RECEPCIÓN", "puestoEn": "FRONT DESK AGENT", "departamento": "RECEPCIÓN", "ocupacion": "Recepcionista *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "SUPERVISOR DE AGENTES DE RECEPCIÓN", "puestoEn": "FRONT DESK AGENT SUPERVISOR", "departamento": "RECEPCIÓN", "ocupacion": "Recepcionista *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "ASISTENTE DE GESTIÓN DE PROPIEDAD", "puestoEn": "PROPERTY ASSISTANT MANAGER", "departamento": "RECEPCIÓN", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "ADMINISTRADOR DE PROPIEDAD", "puestoEn": "PROPERTY MANAGER", "departamento": "RECEPCIÓN", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "AGENTE DE RESERVAS", "puestoEn": "RESERVATIONS AGENT", "departamento": "RESERVA", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}, {"puestoEs": "SUPERVISOR DE AGENTE DE RESERVAS", "puestoEn": "RESERVATIONS AGENT SUPERVISOR", "departamento": "RESERVA", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}, {"puestoEs": "SUPERVISOR DE ALIMENTOS Y BEBIDAS", "puestoEn": "F&B SUPERVISOR", "departamento": "RESTAURANTE", "ocupacion": "Coctelero (Bartender o Barwoman)", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "SALONERO", "puestoEn": "SERVER", "departamento": "RESTAURANTE", "ocupacion": "Salonero", "sigla": "TONC", "significado": "Trabajador en Ocupación No Calificada", "salarioMin": 373092.3}, {"puestoEs": "SUPERVISOR DE SALONEROS", "puestoEn": "SERVER CAPTAIN", "departamento": "RESTAURANTE", "ocupacion": "Salonero", "sigla": "TONC", "significado": "Trabajador en Ocupación No Calificada", "salarioMin": 373092.3}, {"puestoEs": "OFICIAL DE SEGURIDAD", "puestoEn": "SECURITY OFFICER", "departamento": "SEGURIDAD", "ocupacion": "Agente de seguridad *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "SUPERVISOR DE OFICIAL DE SEGURIDAD", "puestoEn": "SECURITY OFFICER SUPERVISOR", "departamento": "SEGURIDAD", "ocupacion": "Agente de seguridad *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "SOPORTE TECNOLOGÍAS E INFORMACIÓN", "puestoEn": "IT SUPPORT", "departamento": "SISTEMA DE INFORMACIÓN", "ocupacion": "Mantenimiento correctivo de cómputo", "sigla": "TOE", "significado": "Trabajador en Ocupación Especializada", "salarioMin": 487335.0}, {"puestoEs": "TERAPEUTA PRINCIPAL DE BIENESTAR", "puestoEn": "LEAD WELLNESS THERAPIST", "departamento": "SPA", "ocupacion": "Masajista", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "TERAPEUTA DE SPA", "puestoEn": "SPA THERAPIST", "departamento": "SPA", "ocupacion": "Masajista", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "CONDCUTOR EXTERNO", "puestoEn": "DRIVER", "departamento": "TRANSPORTE", "ocupacion": "Conductor de vehículo liviano", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "COORDINADOR DE VENTAS DE GRUPOS", "puestoEn": "GROUP SALES COORDINATOR", "departamento": "VENTAS Y MARKETING", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}, {"puestoEs": "GESTOR DE INGRESOS", "puestoEn": "REVENUE MANAGER", "departamento": "VENTAS Y MARKETING", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}];
+const EXCLUSIVIDAD_POR_DEPTO = {"ACTIVIDADES-TOURS": "guianza y venta directa de tours o actividades de aventura por cuenta propia, prestación de servicios de guía para operadores turísticos competidores y divulgación de rutas, contactos de proveedores o ubicaciones específicas de especies silvestres protegidas a terceros, conforme a la Ley de Conservación de la Vida Silvestre N.° 7317 y la Ley de Biodiversidad N.° 7788.", "COCINA": "preparación o venta de alimentos y bebidas por cuenta propia o para terceros, consultoría culinaria para restaurantes u hoteles competidores y divulgación de recetas o costos del negocio.", "COMEDOR DE EMPLEADOS": "prestación de servicios de catering o preparación de alimentos para terceros, trabajo para negocios de alimentación competidores y divulgación de procesos internos de cocina.", "COMPRAS": "negociación de compras o adquisiciones para empresas competidoras, intermediación comercial con proveedores del sector y divulgación de condiciones comerciales o listas de proveedores.", "CONCIERGE": "prestación de servicios de transporte o conserjería a huéspedes por cuenta propia, recomendación remunerada de servicios turísticos de terceros y intermediación en reservas para operadores competidores.", "DIRECCIÓN": "participación en la dirección u operación de hoteles o lodges competidores, asesoría estratégica a empresas del sector y divulgación de información comercial o financiera confidencial.", "FINANZAS": "prestación de servicios contables o financieros a empresas competidoras, divulgación de información financiera confidencial y participación en auditorías para negocios del mismo sector.", "LIMPIEZA": "prestación de servicios de limpieza u hospedaje por cuenta propia, trabajo para empresas de housekeeping competidoras y divulgación de estándares o procedimientos internos de limpieza.", "MANTENIMIENTO": "prestación de servicios de mantenimiento o construcción a hoteles competidores, uso del conocimiento técnico de las instalaciones para beneficio de terceros y trabajos de mantenimiento remunerados fuera del patrono.", "OPERACIONES DE LAVANDERÍA": "prestación de servicios de lavandería a terceros, trabajo para empresas de lavandería competidoras y divulgación de procesos o proveedores utilizados por EL PATRONO.", "RECEPCIÓN": "atención de reservas o huéspedes por cuenta propia, trabajo para hoteles o plataformas de reservas competidoras y divulgación de tarifas o información de huéspedes.", "RESERVA": "gestión de reservas para hoteles competidores, intermediación con agencias o plataformas de reservas por cuenta propia y divulgación de tarifas o estrategias comerciales.", "RESTAURANTE": "prestación de servicios de meseria, coctelería o eventos para terceros, trabajo para restaurantes o bares competidores y divulgación de recetas, costos o proveedores del restaurante.", "SEGURIDAD": "prestación de servicios de seguridad privada a terceros, trabajo para empresas de seguridad competidoras y divulgación de protocolos o información sensible de seguridad.", "SISTEMA DE INFORMACIÓN": "prestación de servicios de soporte técnico o desarrollo a empresas competidoras, divulgación de sistemas o accesos confidenciales y consultoría en tecnología para negocios del sector.", "SPA": "prestación de servicios de masajes o terapias de bienestar por cuenta propia, trabajo para spas o centros de bienestar competidores y venta de productos o servicios similares fuera del patrono.", "TRANSPORTE": "prestación de servicios de transporte turístico por cuenta propia, trabajo para empresas de transporte competidoras y divulgación de rutas, tarifas o contactos de clientes.", "VENTAS Y MARKETING": "gestión de ventas o campañas de marketing para empresas competidoras, divulgación de estrategias comerciales o bases de datos de clientes e intermediación comercial por cuenta propia."};
+const PUESTOS_LIDERAZGO_EN = ["Boat Captain Supervisor", "Cook A - Supervisor", "Housekeeping Supervisor", "Maintenance Supervisor", "Front Desk Agent Supervisor", "Property Assistant Manager", "Property Manager", "Reservations Agent Supervisor", "Server Captain", "Security Officer Supervisor", "Lead Wellness Therapist", "Tourism Guide Supervisor", "Lead Naturalist Guide"];
+const TIPO_CEDULA_EN = {"jurídica": "legal entity", "física": "individual"};
+const TIPO_IDENTIFICACION_EN = {
+  "cédula de identidad": "National ID",
+  "cedula de identidad": "National ID",
+  "dimex": "DIMEX",
+  "pasaporte": "Passport",
+  "cédula jurídica": "Legal Entity ID",
+  "cedula juridica": "Legal Entity ID",
+  "cédula de residencia": "Residency ID",
+  "cedula de residencia": "Residency ID",
+};
+const ESTADO_CIVIL_EN = {
+  "soltero": "Single", "soltera": "Single", "soltero(a)": "Single",
+  "casado": "Married", "casada": "Married", "casado(a)": "Married",
+  "divorciado": "Divorced", "divorciada": "Divorced", "divorciado(a)": "Divorced",
+  "viudo": "Widowed", "viuda": "Widowed", "viudo(a)": "Widowed",
+  "unión de hecho": "Domestic partnership", "union de hecho": "Domestic partnership",
+};
+const NACIONALIDAD_EN = {
+  "costarricense": "Costa Rican",
+  "estadounidense": "American",
+  "nicaragüense": "Nicaraguan", "nicaraguense": "Nicaraguan",
+  "panameño": "Panamanian", "panameno": "Panamanian", "panameña": "Panamanian",
+  "colombiano": "Colombian", "colombiana": "Colombian",
+  "mexicano": "Mexican", "mexicana": "Mexican",
+  "venezolano": "Venezuelan", "venezolana": "Venezuelan",
+  "canadiense": "Canadian",
+  "español": "Spanish", "española": "Spanish",
+  "hondureño": "Honduran", "hondureno": "Honduran", "hondureña": "Honduran",
+  "salvadoreño": "Salvadoran", "salvadoreno": "Salvadoran",
+  "guatemalteco": "Guatemalan", "guatemalteca": "Guatemalan",
+};
+const MONEDA_TEXTO_EN = { "dólares": "dollars", "dolares": "dollars", "colones": "colones", "euros": "euros" };
+const RESPONSABILIDADES_SUGERIDAS = {"GUÍA DE AVENTURAS": "Conducir y coordinar actividades de aventura (senderismo, cascadas, avistamiento) siguiendo los protocolos de seguridad del lodge.\nVerificar el estado del equipo de seguridad y primeros auxilios antes de cada salida.\nBrindar información precisa sobre flora, fauna y senderos de la zona de Corcovado a los huéspedes.\nReportar de inmediato cualquier incidente, accidente o condición de riesgo a la jefatura inmediata.\nMantener confidencialidad de los datos personales y de salud de los huéspedes recopilados durante los tours, conforme a la Ley N.° 8968.\nGuardar reserva profesional sobre información operativa e incidentes, conforme al Reglamento de Guías de Turismo (Decreto N.° 41369-MEIC-TUR).\nNo divulgar a terceros los itinerarios de huéspedes ni información comercial de los tours.", "INSTRUCTOR DE BUCEO": "Planificar y dirigir las salidas de buceo verificando condiciones del mar y clima antes de cada inmersión.\nRevisar y dar mantenimiento básico al equipo de buceo (tanques, reguladores, chalecos) antes de cada uso.\nVerificar la certificación y experiencia de cada buzo antes de la salida.\nAplicar protocolos de seguridad y primeros auxilios en caso de emergencia acuática.\nMantener confidencialidad de los datos de salud y certificaciones de buceo de los huéspedes, conforme a la Ley N.° 8968.\nGuardar reserva profesional sobre incidentes conocidos en el ejercicio de sus funciones, conforme al Reglamento de Guías de Turismo.\nNo divulgar a terceros los sitios de buceo exclusivos ni información comercial de los tours.", "GUÍA NATURISTA": "Conducir recorridos de observación de flora y fauna explicando los ecosistemas de Corcovado a los huéspedes.\nReportar avistamientos relevantes e incidentes a la jefatura inmediata.\nRevisar el equipo de guiado (binoculares, radios, botiquín) antes de cada salida.\nPromover prácticas de turismo responsable y mínimo impacto ambiental entre los huéspedes.\nMantener confidencialidad de los datos personales y de salud de los huéspedes recopilados durante los tours, conforme a la Ley N.° 8968.\nGuardar reserva profesional sobre información operativa e incidentes, conforme al Reglamento de Guías de Turismo.\nNo divulgar a terceros ubicaciones específicas de especies protegidas, itinerarios de huéspedes ni información comercial de los tours, conforme a la Ley de Conservación de la Vida Silvestre N.° 7317.", "CAPITÁN DE EMABRCACIÖN": "Operar la embarcación siguiendo las normas de seguridad marítima vigentes.\nVerificar el estado mecánico y de seguridad de la embarcación antes de cada salida.\nConfirmar las condiciones climáticas y del mar antes de zarpar.\nGarantizar el uso correcto del equipo de flotación por parte de los pasajeros.\nReportar incidentes, averías o emergencias a la jefatura inmediata de forma inmediata.\nMantener actualizada la bitácora de navegación y mantenimiento de la embarcación.\nGuardar confidencialidad sobre rutas exclusivas e información comercial de los tours marítimos.", "SUPERVISOR CAPITÁN DE EMABRCACIÖN": "Supervisar a los capitanes y tripulación de las embarcaciones del hotel.\nCoordinar el mantenimiento preventivo y correctivo de la flota.\nVerificar el cumplimiento de los protocolos de seguridad marítima por parte del equipo.\nProgramar las salidas y asignar embarcaciones según la demanda de tours.\nCapacitar al personal nuevo en procedimientos de seguridad y atención al huésped.\nReportar a la jefatura el estado de la flota y necesidades de mantenimiento o repuestos.\nGuardar confidencialidad sobre rutas exclusivas, tarifas e información comercial de los tours marítimos.", "PANADERO": "Preparar panes, bollería y productos de panadería según las recetas y estándares del hotel.\nPlanificar la producción diaria según el consumo esperado y eventos programados.\nVerificar la calidad e inocuidad de los insumos utilizados.\nMantener el área de panadería limpia y organizada conforme a normas de manipulación de alimentos.\nControlar el inventario de insumos de panadería y reportar necesidades de reabastecimiento.\nCoordinar con cocina la producción para el restaurante, eventos y room service.\nGuardar confidencialidad sobre recetas y costos de producción del negocio.", "COCINERO A": "Preparar los alimentos del menú siguiendo los estándares de calidad y presentación del hotel.\nVerificar la frescura e inocuidad de los insumos antes de su uso.\nMantener la limpieza y organización de su estación de trabajo conforme a normas de higiene.\nCoordinar con el resto del equipo de cocina para asegurar tiempos de entrega adecuados.\nControlar las porciones y mermas para optimizar el uso de insumos.\nReportar a la jefatura cualquier necesidad de insumos o equipo.\nGuardar confidencialidad sobre recetas, costos y proveedores del restaurante.", "COCINERO A SUPERVISOR": "Supervisar la preparación de alimentos del equipo de cocina, asegurando calidad y presentación.\nCoordinar los turnos y asignación de estaciones del personal de cocina.\nVerificar el cumplimiento de normas de higiene y manipulación de alimentos.\nControlar el inventario y mermas de insumos de cocina.\nCapacitar al personal nuevo en procedimientos y recetas del hotel.\nReportar a la jefatura el desempeño del equipo y necesidades operativas.\nGuardar confidencialidad sobre recetas, costos y proveedores del restaurante.", "COCINERO B": "Apoyar en la preparación de alimentos según las indicaciones del Cocinero A o la jefatura.\nRealizar el mise en place (corte, porcionado) de ingredientes antes del servicio.\nMantener limpia y organizada su estación de trabajo conforme a normas de higiene.\nApoyar en la recepción y almacenamiento correcto de insumos de cocina.\nSeguir las recetas y estándares de presentación establecidos por el hotel.\nReportar a la jefatura cualquier incidente o necesidad de insumos.\nGuardar confidencialidad sobre recetas y procesos internos de cocina.", "LAVAPLATOS/ASISTENTE DE COCINA": "Lavar y desinfectar utensilios, ollas y equipo de cocina conforme a normas de higiene.\nMantener limpias las áreas de cocina, incluyendo pisos y superficies de trabajo.\nApoyar en tareas básicas de preparación de alimentos según se le indique.\nManejar correctamente los desechos y reciclaje de la cocina.\nReportar a la jefatura cualquier daño o falta de insumos de limpieza.\nColaborar con el equipo de cocina en tareas operativas durante el servicio.\nSeguir los protocolos de seguridad e higiene ocupacional del área de cocina.", "COCINERO DE EMPLEADOS (COCINERO B)": "Preparar los alimentos del comedor de empleados siguiendo un menú balanceado y variado.\nVerificar la frescura e inocuidad de los insumos utilizados.\nMantener la limpieza e higiene del comedor y área de cocina de empleados.\nControlar las porciones y horarios de servicio del comedor.\nCoordinar con compras el abastecimiento de insumos para el comedor de empleados.\nReportar a la jefatura cualquier incidente o necesidad del área.\nAplicar las normas de manipulación de alimentos vigentes en Costa Rica.", "EMPLEADO DE COMPRAS": "Gestionar las solicitudes de compra de los distintos departamentos del hotel.\nCotizar y negociar precios con proveedores autorizados.\nVerificar la calidad y cantidad de los productos recibidos contra la orden de compra.\nMantener actualizado el registro de proveedores y condiciones comerciales.\nCoordinar los tiempos de entrega según las necesidades operativas del hotel.\nReportar a la jefatura variaciones de precios o problemas con proveedores.\nGuardar confidencialidad sobre condiciones comerciales, precios y proveedores del hotel.", "GESTOR DE BODEGA": "Recibir, verificar y almacenar correctamente los productos e insumos del hotel.\nMantener actualizado el inventario de bodega mediante entradas y salidas registradas.\nRealizar conteos periódicos de inventario y reportar diferencias.\nDistribuir los insumos a los departamentos según las solicitudes autorizadas.\nVerificar las fechas de vencimiento y rotación adecuada de los productos.\nMantener la bodega organizada y en condiciones de higiene y seguridad.\nGuardar confidencialidad sobre niveles de inventario, costos y proveedores.", "BOTONES(TRANSPORTISTA INTERNO)": "Recibir y trasladar el equipaje de los huéspedes a sus habitaciones con cuidado.\nTransportar a los huéspedes dentro de la propiedad de forma segura.\nBrindar información básica sobre las instalaciones y servicios del hotel.\nVerificar el estado y limpieza de los vehículos internos antes de cada uso.\nReportar a la jefatura cualquier incidente o daño durante los traslados.\nCoordinar con recepción y concierge las necesidades de traslado de huéspedes.\nGuardar confidencialidad sobre la identidad y actividades de los huéspedes.", "DIRECTOR DE OPERACIONES": "Supervisar el funcionamiento diario de todos los departamentos operativos del hotel.\nDefinir y dar seguimiento a los estándares de calidad y servicio al huésped.\nElaborar y controlar el presupuesto operativo de la propiedad.\nCoordinar con los jefes de departamento la planificación de personal y recursos.\nRepresentar al hotel ante autoridades, proveedores y socios comerciales.\nAnalizar indicadores de desempeño operativo y proponer mejoras.\nGuardar confidencialidad sobre información estratégica, financiera y comercial del hotel.", "EJECUTIVO CONTABLE": "Registrar y controlar las transacciones contables diarias del hotel.\nConciliar cuentas bancarias y estados financieros mensuales.\nPreparar reportes financieros para la jefatura y la administración.\nVerificar el cumplimiento de obligaciones tributarias y de la CCSS.\nGestionar cuentas por pagar y por cobrar del hotel.\nApoyar en la preparación de auditorías internas y externas.\nGuardar confidencialidad absoluta sobre la información financiera del hotel.", "AUDITOR DE INGRESOS": "Verificar diariamente que los ingresos reportados coincidan con las transacciones del sistema.\nAuditar las tarifas aplicadas y descuentos otorgados a los huéspedes.\nRevisar la correcta facturación de habitaciones, alimentos y bebidas.\nDetectar y reportar discrepancias o irregularidades en los ingresos.\nPreparar el reporte diario de ingresos para la gerencia.\nCoordinar con recepción y contabilidad la corrección de errores detectados.\nGuardar confidencialidad absoluta sobre la información financiera y de ingresos del hotel.", "CONTRALOR FINANCIERO": "Supervisar la contabilidad general y los estados financieros del hotel.\nControlar el cumplimiento del presupuesto y analizar variaciones.\nGarantizar el cumplimiento de las obligaciones fiscales y laborales vigentes en Costa Rica.\nSupervisar al equipo de finanzas y contabilidad.\nPreparar informes financieros para la dirección y los propietarios.\nCoordinar auditorías internas y externas.\nGuardar confidencialidad absoluta sobre la información financiera y estratégica del hotel.", "ASISTENTE DE PASILLO (CORREDOR DE PLANTA)": "Mantener limpios y ordenados los pasillos, escaleras y áreas comunes del hotel.\nAbastecer a las camaristas con blancos, amenities y suministros de limpieza.\nApoyar en el traslado de mobiliario y equipo pesado cuando se requiera.\nReportar daños o necesidades de mantenimiento detectadas en su recorrido.\nManejar correctamente los desechos y ropa sucia del área de habitaciones.\nCumplir con los protocolos de seguridad e higiene del hotel.\nGuardar confidencialidad sobre la privacidad de los huéspedes y sus pertenencias.", "SUPERVISOR DE LIMPIEZA": "Supervisar la limpieza y preparación de habitaciones según los estándares del hotel.\nInspeccionar habitaciones antes de reportarlas como listas para nuevos huéspedes.\nCoordinar los turnos y asignación de habitaciones del personal de limpieza.\nControlar el inventario de blancos, amenities y productos de limpieza.\nCapacitar al personal nuevo en procedimientos de limpieza del hotel.\nReportar a la jefatura necesidades de mantenimiento detectadas en las habitaciones.\nGuardar confidencialidad sobre la privacidad de los huéspedes y sus pertenencias.", "ASISTENTE DE HABITACIÓN": "Limpiar y preparar las habitaciones siguiendo los estándares del hotel.\nReponer amenities, blancos y suministros de las habitaciones.\nReportar daños, objetos olvidados o necesidades de mantenimiento a la jefatura.\nManejar adecuadamente los productos de limpieza conforme a normas de seguridad.\nMantener actualizado el estado de las habitaciones (limpia, ocupada, fuera de servicio).\nRespetar la privacidad y pertenencias de los huéspedes en todo momento.\nGuardar confidencialidad sobre la privacidad de los huéspedes y sus pertenencias.", "AUXILIAR DE CONSTRUCCIÓN": "Apoyar en trabajos de construcción y reparación de infraestructura del hotel.\nTrasladar materiales y herramientas según las indicaciones del supervisor.\nCumplir con las normas de seguridad ocupacional en obra.\nMantener organizada y limpia el área de trabajo.\nReportar necesidades de materiales o herramientas a la jefatura.\nColaborar con otros oficios (electricidad, plomería) según se requiera.\nGuardar confidencialidad sobre proyectos de construcción o remodelación en curso.", "MECÁNICO": "Dar mantenimiento preventivo y correctivo a vehículos, embarcaciones y equipo mecánico del hotel.\nDiagnosticar fallas mecánicas y realizar las reparaciones necesarias.\nMantener un registro del mantenimiento realizado a cada equipo o vehículo.\nGestionar el inventario de repuestos y herramientas del taller.\nCumplir con las normas de seguridad ocupacional al operar maquinaria y herramientas.\nReportar a la jefatura necesidades de repuestos o reemplazo de equipo.\nGuardar confidencialidad sobre el estado y costos de mantenimiento de la flota.", "JARDINERO": "Mantener los jardines, senderos y áreas verdes del hotel en óptimas condiciones.\nPodar, regar y fertilizar plantas conforme a un calendario de mantenimiento.\nControlar plagas y enfermedades de las plantas utilizando métodos apropiados.\nDiseñar y proponer mejoras paisajísticas acordes al entorno natural de Corcovado.\nCuidar y dar mantenimiento a las herramientas y equipo de jardinería.\nReportar a la jefatura necesidades de insumos o daños en áreas verdes.\nAplicar prácticas de jardinería sostenible acordes a la zona protegida de la Península de Osa.", "SUPERVISOR DE MANTENIMIENTO": "Supervisar al equipo de mantenimiento y coordinar las tareas diarias.\nProgramar el mantenimiento preventivo de las instalaciones y equipo del hotel.\nAtender y priorizar las solicitudes de reparación reportadas por otros departamentos.\nVerificar el cumplimiento de las normas de seguridad ocupacional del equipo.\nCoordinar con proveedores externos trabajos especializados cuando se requiera.\nControlar el inventario de herramientas, repuestos y materiales de mantenimiento.\nGuardar confidencialidad sobre el estado de la infraestructura y costos de mantenimiento.", "APOYO DE PROPIEDADES": "Realizar reparaciones menores y mantenimiento general en las instalaciones del hotel.\nAtender solicitudes de mantenimiento reportadas por huéspedes o personal.\nVerificar periódicamente el buen funcionamiento de instalaciones eléctricas, de agua y gas.\nApoyar en el mantenimiento de piscinas, senderos y áreas comunes.\nCumplir con las normas de seguridad ocupacional en todas sus labores.\nReportar a la jefatura daños mayores que requieran atención especializada.\nGuardar confidencialidad sobre el estado de la infraestructura del hotel.", "OPERADOR DE SALAS Y ÁREAS PÚBLICAS": "Dar mantenimiento y limpieza técnica a las áreas públicas y salones del hotel.\nPreparar los espacios para eventos, reuniones o actividades según se solicite.\nVerificar el funcionamiento de equipo audiovisual y mobiliario de las salas.\nReportar daños o necesidades de mantenimiento en áreas públicas.\nCoordinar con otros departamentos la logística de montaje y desmontaje de eventos.\nCumplir con las normas de seguridad ocupacional en sus labores.\nGuardar confidencialidad sobre eventos privados y la identidad de los asistentes.", "ENCARGADO DE LA LAVANDERÍA": "Lavar, secar y planchar blancos, uniformes y ropa de huéspedes según los estándares del hotel.\nClasificar la ropa según tipo de tela y nivel de suciedad antes de su lavado.\nControlar el inventario de blancos y uniformes del hotel.\nReportar prendas dañadas o manchas difíciles a la jefatura.\nMantener el área de lavandería limpia y organizada conforme a normas de higiene.\nManejar correctamente los productos químicos de lavandería conforme a normas de seguridad.\nGuardar confidencialidad sobre la ropa y pertenencias de los huéspedes.", "AGENTE DE RECEPCIÓN": "Realizar el check-in y check-out de los huéspedes siguiendo los procedimientos del hotel.\nBrindar información sobre servicios, tarifas y actividades disponibles.\nGestionar reservas, cambios de habitación y solicitudes especiales de los huéspedes.\nCoordinar con housekeeping y mantenimiento el estado de las habitaciones.\nManejar el sistema de reservas (PMS) y el control de llaves y caja chica.\nAtender y resolver inquietudes o reclamos de los huéspedes con cortesía.\nGuardar confidencialidad sobre los datos personales y de estadía de los huéspedes, conforme a la Ley N.° 8968.", "SUPERVISOR DE AGENTES DE RECEPCIÓN": "Supervisar las operaciones diarias del equipo de recepción.\nCoordinar los turnos y asegurar cobertura adecuada en la recepción.\nResolver situaciones o reclamos de huéspedes que requieran mayor autoridad.\nVerificar la correcta facturación y cierre de caja de los agentes de recepción.\nCapacitar al personal nuevo en los procedimientos y sistema de reservas del hotel.\nCoordinar con otros departamentos para asegurar una experiencia fluida al huésped.\nGuardar confidencialidad sobre los datos personales y de estadía de los huéspedes, conforme a la Ley N.° 8968.", "ASISTENTE DE GESTIÓN DE PROPIEDAD": "Apoyar en la supervisión de las operaciones diarias de la propiedad.\nCoordinar entre los distintos departamentos para asegurar el buen funcionamiento del hotel.\nAtender situaciones o reclamos de huéspedes que requieran seguimiento especial.\nApoyar en la elaboración de reportes operativos para la administración.\nSupervisar el cumplimiento de los estándares de servicio del hotel.\nApoyar en la gestión de personal y horarios de los distintos departamentos.\nGuardar confidencialidad sobre información operativa, comercial y de huéspedes de la propiedad.", "ADMINISTRADOR DE PROPIEDAD": "Dirigir y supervisar la operación integral de la propiedad.\nGarantizar el cumplimiento de los estándares de calidad y servicio del hotel.\nGestionar el presupuesto operativo y los recursos humanos de la propiedad.\nRepresentar a la propiedad ante huéspedes, proveedores y autoridades locales.\nSupervisar a los jefes de departamento y dar seguimiento a sus indicadores.\nVelar por el cumplimiento de la normativa laboral, turística y ambiental vigente.\nGuardar confidencialidad absoluta sobre información estratégica, financiera y de huéspedes de la propiedad.", "AGENTE DE RESERVAS": "Gestionar las solicitudes de reserva recibidas por teléfono, correo o plataformas en línea.\nVerificar disponibilidad, tarifas y políticas antes de confirmar una reserva.\nRegistrar correctamente los datos y preferencias de los huéspedes en el sistema.\nCoordinar con recepción y ventas cambios o cancelaciones de reservas.\nInformar a los huéspedes sobre políticas de depósito, cancelación y check-in.\nDar seguimiento a reservas pendientes de confirmación o pago.\nGuardar confidencialidad sobre los datos personales, tarifas y estrategias comerciales del hotel.", "SUPERVISOR DE AGENTE DE RESERVAS": "Supervisar al equipo de reservas y asegurar el cumplimiento de los procedimientos del hotel.\nRevisar la correcta aplicación de tarifas, promociones y políticas de reserva.\nCoordinar con ventas y marketing la disponibilidad para grupos y eventos.\nCapacitar al personal nuevo en el sistema de reservas y atención al cliente.\nAnalizar el reporte de ocupación y disponibilidad para la toma de decisiones.\nResolver situaciones de reservas que requieran mayor autoridad o negociación.\nGuardar confidencialidad sobre tarifas, estrategias comerciales y datos de huéspedes.", "SUPERVISOR DE ALIMENTOS Y BEBIDAS": "Supervisar el servicio de restaurante, bar y room service del hotel.\nVerificar el cumplimiento de los estándares de servicio y presentación.\nCoordinar con cocina los tiempos de preparación y entrega de alimentos.\nControlar el inventario de bebidas, insumos y cristalería del área.\nCapacitar al personal de servicio en procedimientos y estándares del hotel.\nAtender y resolver inquietudes o reclamos de los huéspedes relacionados con el servicio.\nGuardar confidencialidad sobre costos, proveedores y estrategias comerciales del restaurante.", "SALONERO": "Atender a los huéspedes en el restaurante, bar o eventos, tomando y sirviendo sus pedidos.\nConocer el menú, ingredientes y recomendaciones para asesorar a los huéspedes.\nPreparar y organizar las mesas antes y después del servicio.\nCoordinar con cocina y bar los tiempos de entrega de los pedidos.\nManejar correctamente el sistema de punto de venta (POS) y cobros.\nMantener el área de servicio limpia y ordenada conforme a normas de higiene.\nGuardar confidencialidad sobre las preferencias y consumo de los huéspedes.", "SUPERVISOR DE SALONEROS": "Supervisar al equipo de saloneros durante los turnos de servicio.\nAsignar mesas y estaciones de trabajo según la ocupación del restaurante.\nVerificar el cumplimiento de los estándares de servicio y presentación.\nCoordinar con cocina y bar los tiempos de entrega durante el servicio.\nCapacitar al personal nuevo en los procedimientos de servicio del hotel.\nAtender y resolver reclamos de huéspedes relacionados con el servicio de mesa.\nGuardar confidencialidad sobre las preferencias y consumo de los huéspedes.", "OFICIAL DE SEGURIDAD": "Vigilar las instalaciones del hotel para garantizar la seguridad de huéspedes y colaboradores.\nControlar el acceso de personas y vehículos a la propiedad.\nRealizar rondas periódicas de vigilancia en las distintas áreas del hotel.\nReportar de inmediato cualquier incidente, emergencia o situación sospechosa.\nAplicar los protocolos de emergencia (incendio, evacuación, primeros auxilios) cuando se requiera.\nLlevar el registro de novedades e incidentes ocurridos durante su turno.\nGuardar confidencialidad sobre los protocolos de seguridad e información sensible del hotel.", "SUPERVISOR DE OFICIAL DE SEGURIDAD": "Supervisar al equipo de seguridad y coordinar los turnos de vigilancia.\nVerificar el cumplimiento de los protocolos de seguridad de la propiedad.\nCoordinar la respuesta ante emergencias, incidentes o situaciones de riesgo.\nCapacitar al personal de seguridad en procedimientos y uso de equipo.\nMantener actualizado el registro de incidentes y reportes de seguridad.\nCoordinar con autoridades locales cuando la situación lo requiera.\nGuardar confidencialidad sobre los protocolos de seguridad e información sensible del hotel.", "SOPORTE TECNOLOGÍAS E INFORMACIÓN": "Brindar soporte técnico a los sistemas informáticos y de comunicación del hotel.\nDar mantenimiento preventivo y correctivo a equipos de cómputo y redes.\nAdministrar el sistema de reservas (PMS) y demás plataformas tecnológicas.\nGarantizar la conectividad de internet y Wi-Fi para huéspedes y colaboradores.\nAplicar medidas de seguridad informática y respaldo de la información del hotel.\nCapacitar al personal en el uso correcto de los sistemas tecnológicos.\nGuardar confidencialidad sobre los sistemas, accesos y datos digitales del hotel.", "TERAPEUTA PRINCIPAL DE BIENESTAR": "Supervisar la operación diaria del spa y coordinar al equipo de terapeutas.\nRealizar tratamientos de masaje y bienestar siguiendo los protocolos del hotel.\nDiseñar y actualizar el menú de tratamientos según tendencias y temporada.\nCapacitar al personal nuevo en técnicas y estándares de servicio del spa.\nControlar el inventario de productos e insumos del spa.\nRealizar consultas y evaluaciones a los huéspedes antes de cada tratamiento.\nGuardar confidencialidad sobre la información de salud y tratamientos de los huéspedes.", "TERAPEUTA DE SPA": "Realizar masajes y tratamientos de bienestar siguiendo los protocolos establecidos.\nConsultar con el huésped sus necesidades y condiciones de salud antes del tratamiento.\nMantener limpia y preparada la sala de tratamiento antes y después de cada sesión.\nRecomendar tratamientos y productos adecuados a cada huésped.\nControlar el inventario de productos utilizados en cada tratamiento.\nCumplir con los protocolos de higiene y bioseguridad del spa.\nGuardar confidencialidad sobre la información de salud y tratamientos de los huéspedes.", "CONDCUTOR EXTERNO": "Trasladar a los huéspedes de forma segura entre el hotel y los puntos acordados (aeropuerto, tours, etc.).\nVerificar el estado mecánico y de seguridad del vehículo antes de cada viaje.\nConocer las rutas y tiempos de traslado en la zona de Corcovado y la Península de Osa.\nCumplir con las normas de tránsito y seguridad vial vigentes en Costa Rica.\nBrindar un trato cortés y profesional a los huéspedes durante el traslado.\nReportar a la jefatura cualquier incidente, avería o retraso durante el trayecto.\nGuardar confidencialidad sobre la identidad, itinerarios y actividades de los huéspedes.", "COORDINADOR DE VENTAS DE GRUPOS": "Gestionar las solicitudes de reserva de grupos, bodas y eventos especiales.\nElaborar propuestas y cotizaciones para clientes corporativos y de grupo.\nCoordinar con los departamentos operativos los requerimientos de cada evento.\nDar seguimiento a los contratos y condiciones comerciales de cada grupo.\nMantener actualizada la base de datos de clientes y agencias.\nParticipar en ferias, actividades de promoción y visitas comerciales.\nGuardar confidencialidad sobre tarifas, contratos y estrategias comerciales del hotel.", "GESTOR DE INGRESOS": "Analizar la ocupación, tarifas y demanda para maximizar los ingresos del hotel.\nAjustar las tarifas y disponibilidad en los distintos canales de venta.\nElaborar pronósticos de ocupación e ingresos para la toma de decisiones.\nMonitorear las tarifas de la competencia y tendencias del mercado.\nCoordinar con ventas y reservas las estrategias comerciales y promocionales.\nPreparar reportes de desempeño comercial para la dirección.\nGuardar confidencialidad absoluta sobre tarifas, estrategias comerciales y datos financieros del hotel."};
+
+const TAREAS_APOYO_SUGERIDAS = {"GUÍA DE AVENTURAS": "la coordinación y ejecución de las actividades de aventura asignadas, la verificación diaria del equipo de seguridad, y el reporte de incidentes a la jefatura", "INSTRUCTOR DE BUCEO": "la coordinación de las salidas de buceo, la revisión del equipo y tanques antes de cada salida, y el reporte de condiciones del mar e incidentes a la jefatura", "GUÍA NATURISTA": "la coordinación diaria de los recorridos de observación de flora y fauna, el reporte de avistamientos e incidentes a la jefatura, y la revisión del equipo de guiado antes de cada salida", "CAPITÁN DE EMABRCACIÖN": "la preparación y revisión diaria de la embarcación, el reporte de condiciones del mar e incidentes a la jefatura, y la coordinación de horarios de salida", "SUPERVISOR CAPITÁN DE EMABRCACIÖN": "la coordinación de horarios y asignación de embarcaciones, el reporte del estado de la flota a la jefatura, y la capacitación del equipo de capitanes", "PANADERO": "la coordinación de la producción diaria con la jefatura de cocina, el control del inventario de insumos de panadería, y el reporte de necesidades de reabastecimiento", "COCINERO A": "la coordinación de tiempos de preparación con la jefatura de cocina, el control de porciones e insumos, y el reporte de necesidades de la estación", "COCINERO A SUPERVISOR": "la coordinación de turnos y asignación de estaciones del equipo de cocina, el reporte del desempeño del equipo a la jefatura, y el control del inventario de insumos", "COCINERO B": "el apoyo en la preparación de alimentos según indicaciones de la jefatura, el mise en place diario, y el reporte de necesidades de insumos", "LAVAPLATOS/ASISTENTE DE COCINA": "el apoyo en tareas de limpieza y preparación según indicaciones de la jefatura, el manejo de desechos de cocina, y el reporte de faltantes de insumos de limpieza", "COCINERO DE EMPLEADOS (COCINERO B)": "la coordinación del menú y horarios de servicio con la jefatura, el control de porciones, y el reporte de necesidades de abastecimiento", "EMPLEADO DE COMPRAS": "la coordinación de solicitudes de compra con la jefatura, el seguimiento de órdenes y tiempos de entrega, y el reporte de variaciones de precios", "GESTOR DE BODEGA": "el reporte periódico de inventario a la jefatura, la coordinación de entregas a los departamentos, y el control de fechas de vencimiento", "BOTONES(TRANSPORTISTA INTERNO)": "la coordinación de traslados con recepción y concierge, el reporte de incidentes durante los traslados, y la verificación diaria de los vehículos internos", "DIRECTOR DE OPERACIONES": "la coordinación con los jefes de departamento, el seguimiento a indicadores operativos, y el reporte de resultados a la propiedad", "EJECUTIVO CONTABLE": "la coordinación de cierres contables con la jefatura, el seguimiento de cuentas por pagar y cobrar, y el reporte de variaciones financieras", "AUDITOR DE INGRESOS": "el reporte diario de ingresos a la jefatura, la coordinación con recepción para corregir discrepancias, y el seguimiento a tarifas aplicadas", "CONTRALOR FINANCIERO": "la coordinación con la dirección en temas presupuestarios, el seguimiento a obligaciones fiscales, y el reporte de indicadores financieros", "ASISTENTE DE PASILLO (CORREDOR DE PLANTA)": "el abastecimiento de blancos y amenities a la jefatura de limpieza, el reporte de daños detectados, y el apoyo en traslado de mobiliario", "SUPERVISOR DE LIMPIEZA": "la coordinación de turnos y asignación de habitaciones, el reporte de necesidades de mantenimiento a la jefatura, y el control del inventario de blancos", "ASISTENTE DE HABITACIÓN": "el reporte del estado de las habitaciones a la jefatura, la solicitud oportuna de suministros, y la comunicación de objetos olvidados o daños", "AUXILIAR DE CONSTRUCCIÓN": "el apoyo en tareas asignadas por el supervisor, el traslado de materiales y herramientas, y el reporte de necesidades de insumos", "MECÁNICO": "el reporte del estado de la flota a la jefatura, la coordinación de reparaciones prioritarias, y el control del inventario de repuestos", "JARDINERO": "la coordinación del calendario de mantenimiento con la jefatura, el reporte de daños en áreas verdes, y la solicitud de insumos de jardinería", "SUPERVISOR DE MANTENIMIENTO": "la coordinación de solicitudes de reparación con otros departamentos, el reporte del estado de la infraestructura a la jefatura, y la programación del mantenimiento preventivo", "APOYO DE PROPIEDADES": "la atención de solicitudes de mantenimiento reportadas por la jefatura, la verificación periódica de instalaciones, y el reporte de daños mayores", "OPERADOR DE SALAS Y ÁREAS PÚBLICAS": "la coordinación de montaje de eventos con la jefatura, el reporte de daños en áreas públicas, y la verificación de equipo audiovisual", "ENCARGADO DE LA LAVANDERÍA": "el control del inventario de blancos y uniformes, el reporte de prendas dañadas a la jefatura, y la coordinación de tiempos de entrega", "AGENTE DE RECEPCIÓN": "la coordinación con housekeeping y mantenimiento sobre el estado de habitaciones, el reporte de solicitudes especiales a la jefatura, y el manejo de caja chica", "SUPERVISOR DE AGENTES DE RECEPCIÓN": "la coordinación de turnos del equipo de recepción, el reporte de incidencias a la jefatura, y la verificación de cierres de caja", "ASISTENTE DE GESTIÓN DE PROPIEDAD": "la coordinación entre departamentos según indicaciones de la jefatura, el apoyo en reportes operativos, y el seguimiento a situaciones de huéspedes", "ADMINISTRADOR DE PROPIEDAD": "la coordinación con los jefes de departamento, el seguimiento a indicadores de servicio, y el reporte de resultados a la dirección", "AGENTE DE RESERVAS": "la coordinación con recepción y ventas sobre cambios de reserva, el reporte de reservas pendientes a la jefatura, y el registro de preferencias de huéspedes", "SUPERVISOR DE AGENTE DE RESERVAS": "la coordinación con ventas y marketing sobre disponibilidad, el reporte de ocupación a la jefatura, y la capacitación del equipo de reservas", "SUPERVISOR DE ALIMENTOS Y BEBIDAS": "la coordinación con cocina sobre tiempos de servicio, el reporte de inventario de bebidas a la jefatura, y la capacitación del equipo de servicio", "SALONERO": "la coordinación con cocina y bar sobre tiempos de entrega, el reporte de incidencias del servicio a la jefatura, y el manejo del sistema de punto de venta", "SUPERVISOR DE SALONEROS": "la asignación de mesas y estaciones según ocupación, el reporte de incidencias de servicio a la jefatura, y la coordinación con cocina y bar", "OFICIAL DE SEGURIDAD": "el reporte de novedades e incidentes a la jefatura, las rondas periódicas de vigilancia, y el control de acceso de personas y vehículos", "SUPERVISOR DE OFICIAL DE SEGURIDAD": "la coordinación de turnos de vigilancia, el reporte de incidentes a la jefatura y autoridades, y la capacitación del equipo de seguridad", "SOPORTE TECNOLOGÍAS E INFORMACIÓN": "el soporte técnico a los departamentos según prioridad de la jefatura, el reporte de fallas en sistemas críticos, y el respaldo periódico de información", "TERAPEUTA PRINCIPAL DE BIENESTAR": "la coordinación del equipo de terapeutas, el reporte de necesidades de insumos a la jefatura, y la capacitación del personal nuevo", "TERAPEUTA DE SPA": "la coordinación de horarios de tratamientos con la jefatura, el reporte de necesidades de insumos, y el registro de preferencias de los huéspedes", "CONDCUTOR EXTERNO": "la coordinación de horarios de traslado con la jefatura, el reporte de incidentes o retrasos, y la verificación diaria del vehículo", "COORDINADOR DE VENTAS DE GRUPOS": "la coordinación con los departamentos operativos sobre requerimientos de eventos, el reporte de contratos a la jefatura, y el seguimiento a cotizaciones enviadas", "GESTOR DE INGRESOS": "la coordinación con ventas y reservas sobre estrategias comerciales, el reporte de pronósticos a la jefatura, y el monitoreo de tarifas de la competencia"};const RESPONSABILIDADES_SUGERIDAS_EN = {"GUÍA DE AVENTURAS": "Lead and coordinate adventure activities (hiking, waterfalls, wildlife watching) following the lodge's safety protocols.\nCheck the condition of safety and first-aid equipment before each outing.\nProvide guests with accurate information about the flora, fauna, and trails of the Corcovado area.\nImmediately report any incident, accident, or hazardous condition to the immediate supervisor.\nMaintain confidentiality of guests' personal and health data collected during tours, in accordance with Law No. 8968.\nMaintain professional confidentiality regarding operational information and incidents, in accordance with the Tour Guide Regulations (Executive Decree No. 41369-MEIC-TUR).\nDo not disclose guest itineraries or commercial tour information to third parties.", "INSTRUCTOR DE BUCEO": "Plan and lead dive outings, checking sea and weather conditions before each dive.\nInspect and perform basic maintenance on diving equipment (tanks, regulators, vests) before each use.\nVerify each diver's certification and experience before the outing.\nApply safety and first-aid protocols in the event of a water-related emergency.\nMaintain confidentiality of guests' health data and diving certifications, in accordance with Law No. 8968.\nMaintain professional confidentiality regarding incidents known in the course of duties, in accordance with the Tour Guide Regulations.\nDo not disclose exclusive dive sites or commercial tour information to third parties.", "GUÍA NATURISTA": "Lead wildlife and flora observation tours, explaining Corcovado's ecosystems to guests.\nReport relevant sightings and incidents to the immediate supervisor.\nCheck guiding equipment (binoculars, radios, first-aid kit) before each outing.\nPromote responsible tourism and minimum environmental impact practices among guests.\nMaintain confidentiality of guests' personal and health data collected during tours, in accordance with Law No. 8968.\nMaintain professional confidentiality regarding operational information and incidents, in accordance with the Tour Guide Regulations.\nDo not disclose to third parties the specific locations of protected species, guest itineraries, or commercial tour information, in accordance with the Wildlife Conservation Law No. 7317.", "CAPITÁN DE EMABRCACIÖN": "Operate the vessel in accordance with applicable maritime safety regulations.\nCheck the vessel's mechanical condition and safety equipment before each outing.\nConfirm weather and sea conditions before departure.\nEnsure passengers correctly use flotation equipment.\nImmediately report incidents, breakdowns, or emergencies to the immediate supervisor.\nKeep the vessel's navigation and maintenance log up to date.\nMaintain confidentiality regarding exclusive routes and commercial information for maritime tours.", "SUPERVISOR CAPITÁN DE EMABRCACIÖN": "Supervise the hotel's boat captains and crews.\nCoordinate preventive and corrective maintenance of the fleet.\nVerify the team's compliance with maritime safety protocols.\nSchedule outings and assign vessels according to tour demand.\nTrain new staff in safety procedures and guest service.\nReport the fleet's condition and maintenance or parts needs to the leadership.\nMaintain confidentiality regarding exclusive routes, rates, and commercial information for maritime tours.", "PANADERO": "Prepare bread, pastries, and bakery products according to the hotel's recipes and standards.\nPlan daily production based on expected consumption and scheduled events.\nVerify the quality and safety of the ingredients used.\nKeep the bakery area clean and organized in accordance with food handling standards.\nControl bakery inventory and report restocking needs.\nCoordinate production with the kitchen for the restaurant, events, and room service.\nMaintain confidentiality regarding recipes and production costs of the business.", "COCINERO A": "Prepare menu items following the hotel's quality and presentation standards.\nVerify the freshness and safety of ingredients before use.\nKeep the work station clean and organized in accordance with hygiene standards.\nCoordinate with the rest of the kitchen team to ensure proper delivery times.\nControl portions and waste to optimize the use of ingredients.\nReport any need for supplies or equipment to the leadership.\nMaintain confidentiality regarding recipes, costs, and suppliers of the restaurant.", "COCINERO A SUPERVISOR": "Supervise food preparation by the kitchen team, ensuring quality and presentation.\nCoordinate shifts and station assignments for kitchen staff.\nVerify compliance with hygiene and food handling standards.\nControl kitchen inventory and waste.\nTrain new staff in the hotel's procedures and recipes.\nReport the team's performance and operational needs to the leadership.\nMaintain confidentiality regarding recipes, costs, and suppliers of the restaurant.", "COCINERO B": "Assist with food preparation as directed by the Cook A or the leadership.\nPerform mise en place (cutting, portioning) of ingredients before service.\nKeep the work station clean and organized in accordance with hygiene standards.\nAssist with proper receiving and storage of kitchen supplies.\nFollow the recipes and presentation standards set by the hotel.\nReport any incident or supply need to the leadership.\nMaintain confidentiality regarding recipes and internal kitchen processes.", "LAVAPLATOS/ASISTENTE DE COCINA": "Wash and disinfect utensils, pots, and kitchen equipment in accordance with hygiene standards.\nKeep kitchen areas clean, including floors and work surfaces.\nAssist with basic food preparation tasks as instructed.\nProperly handle kitchen waste and recycling.\nReport any damage or shortage of cleaning supplies to the leadership.\nCollaborate with the kitchen team on operational tasks during service.\nFollow the kitchen area's occupational safety and hygiene protocols.", "COCINERO DE EMPLEADOS (COCINERO B)": "Prepare meals for the staff cafeteria following a balanced and varied menu.\nVerify the freshness and safety of the ingredients used.\nMaintain cleanliness and hygiene in the staff cafeteria and kitchen area.\nControl portions and service hours of the cafeteria.\nCoordinate with purchasing the supply of ingredients for the staff cafeteria.\nReport any incident or need of the area to the leadership.\nApply the food handling standards in effect in Costa Rica.", "EMPLEADO DE COMPRAS": "Manage purchase requests from the hotel's various departments.\nObtain quotes and negotiate prices with authorized suppliers.\nVerify the quality and quantity of products received against the purchase order.\nKeep the supplier registry and commercial terms up to date.\nCoordinate delivery times according to the hotel's operational needs.\nReport price variations or supplier issues to the leadership.\nMaintain confidentiality regarding the hotel's commercial terms, prices, and suppliers.", "GESTOR DE BODEGA": "Receive, verify, and properly store the hotel's products and supplies.\nKeep the warehouse inventory up to date through recorded inflows and outflows.\nPerform periodic inventory counts and report discrepancies.\nDistribute supplies to departments according to authorized requests.\nVerify expiration dates and proper rotation of products.\nKeep the warehouse organized and in hygienic, safe condition.\nMaintain confidentiality regarding inventory levels, costs, and suppliers.", "BOTONES(TRANSPORTISTA INTERNO)": "Receive and carefully carry guests' luggage to their rooms.\nSafely transport guests within the property.\nProvide guests with basic information about the hotel's facilities and services.\nCheck the condition and cleanliness of internal vehicles before each use.\nReport any incident or damage during transfers to the leadership.\nCoordinate guest transfer needs with front desk and concierge.\nMaintain confidentiality regarding guests' identity and activities.", "DIRECTOR DE OPERACIONES": "Oversee the daily operation of all of the hotel's operational departments.\nDefine and follow up on quality and guest service standards.\nPrepare and control the property's operating budget.\nCoordinate staffing and resource planning with department heads.\nRepresent the hotel before authorities, suppliers, and business partners.\nAnalyze operational performance indicators and propose improvements.\nMaintain confidentiality regarding the hotel's strategic, financial, and commercial information.", "EJECUTIVO CONTABLE": "Record and control the hotel's daily accounting transactions.\nReconcile bank accounts and monthly financial statements.\nPrepare financial reports for the leadership and management.\nVerify compliance with tax and CCSS (social security) obligations.\nManage the hotel's accounts payable and receivable.\nAssist in preparing internal and external audits.\nMaintain absolute confidentiality regarding the hotel's financial information.", "AUDITOR DE INGRESOS": "Verify daily that reported revenue matches the system's transactions.\nAudit rates applied and discounts granted to guests.\nReview the correct billing of rooms, food, and beverages.\nDetect and report discrepancies or irregularities in revenue.\nPrepare the daily revenue report for management.\nCoordinate with front desk and accounting to correct detected errors.\nMaintain absolute confidentiality regarding the hotel's financial and revenue information.", "CONTRALOR FINANCIERO": "Oversee the hotel's general accounting and financial statements.\nMonitor budget compliance and analyze variances.\nEnsure compliance with applicable tax and labor obligations in Costa Rica.\nSupervise the finance and accounting team.\nPrepare financial reports for management and the owners.\nCoordinate internal and external audits.\nMaintain absolute confidentiality regarding the hotel's financial and strategic information.", "ASISTENTE DE PASILLO (CORREDOR DE PLANTA)": "Keep the hotel's hallways, stairways, and common areas clean and tidy.\nSupply room attendants with linens, amenities, and cleaning supplies.\nAssist with moving furniture and heavy equipment when required.\nReport any damage or maintenance needs found during rounds.\nProperly handle waste and soiled linens from the guest room area.\nComply with the hotel's safety and hygiene protocols.\nMaintain confidentiality regarding guests' privacy and belongings.", "SUPERVISOR DE LIMPIEZA": "Supervise the cleaning and preparation of rooms according to the hotel's standards.\nInspect rooms before reporting them as ready for new guests.\nCoordinate shifts and room assignments for the housekeeping staff.\nControl the inventory of linens, amenities, and cleaning products.\nTrain new staff in the hotel's cleaning procedures.\nReport maintenance needs found in rooms to the leadership.\nMaintain confidentiality regarding guests' privacy and belongings.", "ASISTENTE DE HABITACIÓN": "Clean and prepare rooms following the hotel's standards.\nRestock amenities, linens, and room supplies.\nReport damage, lost items, or maintenance needs to the leadership.\nProperly handle cleaning products in accordance with safety standards.\nKeep room status up to date (clean, occupied, out of service).\nRespect guests' privacy and belongings at all times.\nMaintain confidentiality regarding guests' privacy and belongings.", "AUXILIAR DE CONSTRUCCIÓN": "Assist with construction and infrastructure repair work at the hotel.\nMove materials and tools as directed by the supervisor.\nComply with occupational safety standards on the job site.\nKeep the work area organized and clean.\nReport material or tool needs to the leadership.\nCollaborate with other trades (electrical, plumbing) as needed.\nMaintain confidentiality regarding ongoing construction or renovation projects.", "MECÁNICO": "Perform preventive and corrective maintenance on the hotel's vehicles, vessels, and mechanical equipment.\nDiagnose mechanical failures and carry out necessary repairs.\nKeep a maintenance record for each piece of equipment or vehicle.\nManage the workshop's inventory of parts and tools.\nComply with occupational safety standards when operating machinery and tools.\nReport parts or equipment replacement needs to the leadership.\nMaintain confidentiality regarding the fleet's condition and maintenance costs.", "JARDINERO": "Keep the hotel's gardens, trails, and green areas in optimal condition.\nPrune, water, and fertilize plants according to a maintenance schedule.\nControl plant pests and diseases using appropriate methods.\nDesign and propose landscaping improvements consistent with Corcovado's natural setting.\nMaintain and care for gardening tools and equipment.\nReport supply needs or damage to green areas to the leadership.\nApply sustainable gardening practices consistent with the protected Osa Peninsula area.", "SUPERVISOR DE MANTENIMIENTO": "Supervise the maintenance team and coordinate daily tasks.\nSchedule preventive maintenance for the hotel's facilities and equipment.\nAttend to and prioritize repair requests reported by other departments.\nVerify the team's compliance with occupational safety standards.\nCoordinate specialized work with outside contractors when required.\nControl the inventory of maintenance tools, parts, and materials.\nMaintain confidentiality regarding the condition of the infrastructure and maintenance costs.", "APOYO DE PROPIEDADES": "Perform minor repairs and general maintenance at the hotel's facilities.\nAttend to maintenance requests reported by guests or staff.\nPeriodically check the proper functioning of electrical, water, and gas installations.\nAssist with the maintenance of pools, trails, and common areas.\nComply with occupational safety standards in all tasks.\nReport major damage requiring specialized attention to the leadership.\nMaintain confidentiality regarding the condition of the hotel's infrastructure.", "OPERADOR DE SALAS Y ÁREAS PÚBLICAS": "Perform maintenance and technical cleaning of the hotel's public areas and function rooms.\nSet up spaces for events, meetings, or activities as requested.\nCheck the operation of audiovisual equipment and furniture in the function rooms.\nReport damage or maintenance needs in public areas.\nCoordinate event setup and breakdown logistics with other departments.\nComply with occupational safety standards in all tasks.\nMaintain confidentiality regarding private events and attendees' identity.", "ENCARGADO DE LA LAVANDERÍA": "Wash, dry, and iron linens, uniforms, and guest clothing according to the hotel's standards.\nSort laundry by fabric type and soil level before washing.\nControl the hotel's inventory of linens and uniforms.\nReport damaged items or stubborn stains to the leadership.\nKeep the laundry area clean and organized in accordance with hygiene standards.\nProperly handle laundry chemicals in accordance with safety standards.\nMaintain confidentiality regarding guests' clothing and belongings.", "AGENTE DE RECEPCIÓN": "Perform guest check-in and check-out following the hotel's procedures.\nProvide information about services, rates, and available activities.\nManage reservations, room changes, and special guest requests.\nCoordinate room status with housekeeping and maintenance.\nOperate the reservation system (PMS) and manage keys and petty cash.\nCourteously handle and resolve guest concerns or complaints.\nMaintain confidentiality regarding guests' personal and stay data, in accordance with Law No. 8968.", "SUPERVISOR DE AGENTES DE RECEPCIÓN": "Supervise the front desk team's daily operations.\nCoordinate shifts and ensure adequate front desk coverage.\nResolve guest situations or complaints requiring higher authority.\nVerify proper billing and cash closing by front desk agents.\nTrain new staff in the hotel's procedures and reservation system.\nCoordinate with other departments to ensure a smooth guest experience.\nMaintain confidentiality regarding guests' personal and stay data, in accordance with Law No. 8968.", "ASISTENTE DE GESTIÓN DE PROPIEDAD": "Assist in supervising the property's daily operations.\nCoordinate among the various departments to ensure the hotel's smooth operation.\nAttend to guest situations or complaints requiring special follow-up.\nAssist in preparing operational reports for management.\nSupervise compliance with the hotel's service standards.\nAssist with staffing and scheduling across departments.\nMaintain confidentiality regarding the property's operational, commercial, and guest information.", "ADMINISTRADOR DE PROPIEDAD": "Direct and supervise the property's overall operation.\nEnsure compliance with the hotel's quality and service standards.\nManage the property's operating budget and human resources.\nRepresent the property before guests, suppliers, and local authorities.\nSupervise department heads and follow up on their performance indicators.\nEnsure compliance with applicable labor, tourism, and environmental regulations.\nMaintain absolute confidentiality regarding the property's strategic, financial, and guest information.", "AGENTE DE RESERVAS": "Manage reservation requests received by phone, email, or online platforms.\nVerify availability, rates, and policies before confirming a reservation.\nCorrectly record guests' data and preferences in the system.\nCoordinate reservation changes or cancellations with front desk and sales.\nInform guests about deposit, cancellation, and check-in policies.\nFollow up on reservations pending confirmation or payment.\nMaintain confidentiality regarding guests' personal data, rates, and the hotel's commercial strategies.", "SUPERVISOR DE AGENTE DE RESERVAS": "Supervise the reservations team and ensure compliance with the hotel's procedures.\nReview the correct application of rates, promotions, and reservation policies.\nCoordinate with sales and marketing on availability for groups and events.\nTrain new staff in the reservation system and customer service.\nAnalyze the occupancy and availability report for decision-making.\nResolve reservation situations requiring higher authority or negotiation.\nMaintain confidentiality regarding rates, commercial strategies, and guest data.", "SUPERVISOR DE ALIMENTOS Y BEBIDAS": "Supervise the hotel's restaurant, bar, and room service.\nVerify compliance with service and presentation standards.\nCoordinate food preparation and delivery times with the kitchen.\nControl the inventory of beverages, supplies, and glassware for the area.\nTrain service staff in the hotel's procedures and standards.\nAttend to and resolve guest concerns or complaints related to service.\nMaintain confidentiality regarding the restaurant's costs, suppliers, and commercial strategies.", "SALONERO": "Attend to guests in the restaurant, bar, or events, taking and serving their orders.\nKnow the menu, ingredients, and recommendations to advise guests.\nSet up and organize tables before and after service.\nCoordinate order delivery times with the kitchen and bar.\nProperly operate the point-of-sale (POS) system and handle payments.\nKeep the service area clean and tidy in accordance with hygiene standards.\nMaintain confidentiality regarding guests' preferences and consumption.", "SUPERVISOR DE SALONEROS": "Supervise the wait staff team during service shifts.\nAssign tables and work stations according to restaurant occupancy.\nVerify compliance with service and presentation standards.\nCoordinate delivery times with the kitchen and bar during service.\nTrain new staff in the hotel's service procedures.\nAttend to and resolve guest complaints related to table service.\nMaintain confidentiality regarding guests' preferences and consumption.", "OFICIAL DE SEGURIDAD": "Monitor the hotel's facilities to ensure the safety of guests and staff.\nControl the access of people and vehicles to the property.\nConduct periodic security rounds in the hotel's various areas.\nImmediately report any incident, emergency, or suspicious situation.\nApply emergency protocols (fire, evacuation, first aid) as needed.\nKeep a log of events and incidents occurring during the shift.\nMaintain confidentiality regarding the hotel's security protocols and sensitive information.", "SUPERVISOR DE OFICIAL DE SEGURIDAD": "Supervise the security team and coordinate watch shifts.\nVerify the property's compliance with security protocols.\nCoordinate the response to emergencies, incidents, or risk situations.\nTrain security staff in procedures and equipment use.\nKeep the incident log and security reports up to date.\nCoordinate with local authorities when the situation requires it.\nMaintain confidentiality regarding the hotel's security protocols and sensitive information.", "SOPORTE TECNOLOGÍAS E INFORMACIÓN": "Provide technical support for the hotel's computer and communication systems.\nPerform preventive and corrective maintenance on computer equipment and networks.\nAdminister the reservation system (PMS) and other technology platforms.\nEnsure internet and Wi-Fi connectivity for guests and staff.\nApply information security measures and back up the hotel's data.\nTrain staff in the proper use of technology systems.\nMaintain confidentiality regarding the hotel's systems, access credentials, and digital data.", "TERAPEUTA PRINCIPAL DE BIENESTAR": "Supervise the spa's daily operation and coordinate the team of therapists.\nPerform massage and wellness treatments following the hotel's protocols.\nDesign and update the treatment menu according to trends and season.\nTrain new staff in the spa's techniques and service standards.\nControl the spa's inventory of products and supplies.\nConduct consultations and assessments with guests before each treatment.\nMaintain confidentiality regarding guests' health information and treatments.", "TERAPEUTA DE SPA": "Perform massages and wellness treatments following established protocols.\nConsult with the guest about their needs and health conditions before treatment.\nKeep the treatment room clean and prepared before and after each session.\nRecommend treatments and products appropriate for each guest.\nControl the inventory of products used in each treatment.\nComply with the spa's hygiene and biosafety protocols.\nMaintain confidentiality regarding guests' health information and treatments.", "CONDCUTOR EXTERNO": "Safely transport guests between the hotel and agreed-upon points (airport, tours, etc.).\nCheck the vehicle's mechanical condition and safety before each trip.\nKnow the routes and travel times within the Corcovado and Osa Peninsula area.\nComply with applicable traffic and road safety regulations in Costa Rica.\nTreat guests courteously and professionally during transfers.\nReport any incident, breakdown, or delay during the trip to the leadership.\nMaintain confidentiality regarding guests' identity, itineraries, and activities.", "COORDINADOR DE VENTAS DE GRUPOS": "Manage reservation requests for groups, weddings, and special events.\nPrepare proposals and quotes for corporate and group clients.\nCoordinate each event's requirements with the operational departments.\nFollow up on contracts and commercial terms for each group.\nKeep the client and agency database up to date.\nParticipate in trade shows, promotional activities, and sales visits.\nMaintain confidentiality regarding the hotel's rates, contracts, and commercial strategies.", "GESTOR DE INGRESOS": "Analyze occupancy, rates, and demand to maximize the hotel's revenue.\nAdjust rates and availability across the various sales channels.\nPrepare occupancy and revenue forecasts for decision-making.\nMonitor competitors' rates and market trends.\nCoordinate commercial and promotional strategies with sales and reservations.\nPrepare commercial performance reports for management.\nMaintain absolute confidentiality regarding the hotel's rates, commercial strategies, and financial data."};
+const TAREAS_APOYO_SUGERIDAS_EN = {"GUÍA DE AVENTURAS": "coordinating and carrying out assigned adventure activities, the daily inspection of safety equipment, and reporting incidents to the leadership", "INSTRUCTOR DE BUCEO": "coordinating dive outings, inspecting equipment and tanks before each outing, and reporting sea conditions and incidents to the leadership", "GUÍA NATURISTA": "the daily coordination of flora and fauna observation tours, reporting sightings and incidents to the leadership, and inspecting guiding equipment before each outing", "CAPITÁN DE EMABRCACIÖN": "the daily preparation and inspection of the vessel, reporting sea conditions and incidents to the leadership, and coordinating departure schedules", "SUPERVISOR CAPITÁN DE EMABRCACIÖN": "coordinating schedules and vessel assignments, reporting the fleet's condition to the leadership, and training the team of captains", "PANADERO": "coordinating daily production with the kitchen leadership, controlling bakery supply inventory, and reporting restocking needs", "COCINERO A": "coordinating preparation times with the kitchen leadership, controlling portions and supplies, and reporting the station's needs", "COCINERO A SUPERVISOR": "coordinating shifts and station assignments for the kitchen team, reporting the team's performance to the leadership, and controlling supply inventory", "COCINERO B": "assisting with food preparation as directed by the leadership, daily mise en place, and reporting supply needs", "LAVAPLATOS/ASISTENTE DE COCINA": "assisting with cleaning and preparation tasks as directed by the leadership, handling kitchen waste, and reporting shortages of cleaning supplies", "COCINERO DE EMPLEADOS (COCINERO B)": "coordinating the menu and service hours with the leadership, controlling portions, and reporting supply needs", "EMPLEADO DE COMPRAS": "coordinating purchase requests with the leadership, following up on orders and delivery times, and reporting price variations", "GESTOR DE BODEGA": "periodic inventory reporting to the leadership, coordinating deliveries to departments, and controlling expiration dates", "BOTONES(TRANSPORTISTA INTERNO)": "coordinating transfers with front desk and concierge, reporting incidents during transfers, and the daily inspection of internal vehicles", "DIRECTOR DE OPERACIONES": "coordinating with department heads, following up on operational indicators, and reporting results to the property", "EJECUTIVO CONTABLE": "coordinating accounting closings with the leadership, following up on accounts payable and receivable, and reporting financial variances", "AUDITOR DE INGRESOS": "daily revenue reporting to the leadership, coordinating with front desk to correct discrepancies, and following up on rates applied", "CONTRALOR FINANCIERO": "coordinating with management on budgetary matters, following up on tax obligations, and reporting financial indicators", "ASISTENTE DE PASILLO (CORREDOR DE PLANTA)": "supplying linens and amenities to the housekeeping leadership, reporting damage found, and assisting with furniture transport", "SUPERVISOR DE LIMPIEZA": "coordinating shifts and room assignments, reporting maintenance needs to the leadership, and controlling linen inventory", "ASISTENTE DE HABITACIÓN": "reporting room status to the leadership, timely requesting of supplies, and communicating lost items or damage", "AUXILIAR DE CONSTRUCCIÓN": "assisting with tasks assigned by the supervisor, moving materials and tools, and reporting supply needs", "MECÁNICO": "reporting the fleet's condition to the leadership, coordinating priority repairs, and controlling parts inventory", "JARDINERO": "coordinating the maintenance calendar with the leadership, reporting damage to green areas, and requesting gardening supplies", "SUPERVISOR DE MANTENIMIENTO": "coordinating repair requests with other departments, reporting the infrastructure's condition to the leadership, and scheduling preventive maintenance", "APOYO DE PROPIEDADES": "attending to maintenance requests reported by the leadership, periodically inspecting facilities, and reporting major damage", "OPERADOR DE SALAS Y ÁREAS PÚBLICAS": "coordinating event setup with the leadership, reporting damage in public areas, and checking audiovisual equipment", "ENCARGADO DE LA LAVANDERÍA": "controlling linen and uniform inventory, reporting damaged items to the leadership, and coordinating delivery times", "AGENTE DE RECEPCIÓN": "coordinating with housekeeping and maintenance on room status, reporting special requests to the leadership, and handling petty cash", "SUPERVISOR DE AGENTES DE RECEPCIÓN": "coordinating front desk team shifts, reporting incidents to the leadership, and verifying cash closings", "ASISTENTE DE GESTIÓN DE PROPIEDAD": "coordinating between departments as directed by the leadership, assisting with operational reports, and following up on guest situations", "ADMINISTRADOR DE PROPIEDAD": "coordinating with department heads, following up on service indicators, and reporting results to management", "AGENTE DE RESERVAS": "coordinating with front desk and sales on reservation changes, reporting pending reservations to the leadership, and recording guest preferences", "SUPERVISOR DE AGENTE DE RESERVAS": "coordinating with sales and marketing on availability, reporting occupancy to the leadership, and training the reservations team", "SUPERVISOR DE ALIMENTOS Y BEBIDAS": "coordinating with the kitchen on service times, reporting beverage inventory to the leadership, and training the service team", "SALONERO": "coordinating with the kitchen and bar on delivery times, reporting service issues to the leadership, and operating the point-of-sale system", "SUPERVISOR DE SALONEROS": "assigning tables and stations according to occupancy, reporting service issues to the leadership, and coordinating with the kitchen and bar", "OFICIAL DE SEGURIDAD": "reporting events and incidents to the leadership, periodic security rounds, and controlling the access of people and vehicles", "SUPERVISOR DE OFICIAL DE SEGURIDAD": "coordinating watch shifts, reporting incidents to the leadership and authorities, and training the security team", "SOPORTE TECNOLOGÍAS E INFORMACIÓN": "technical support to departments according to the leadership's priorities, reporting critical system failures, and periodic data backups", "TERAPEUTA PRINCIPAL DE BIENESTAR": "coordinating the team of therapists, reporting supply needs to the leadership, and training new staff", "TERAPEUTA DE SPA": "coordinating treatment schedules with the leadership, reporting supply needs, and recording guest preferences", "CONDCUTOR EXTERNO": "coordinating transfer schedules with the leadership, reporting incidents or delays, and the daily inspection of the vehicle", "COORDINADOR DE VENTAS DE GRUPOS": "coordinating with the operational departments on event requirements, reporting contracts to the leadership, and following up on quotes sent", "GESTOR DE INGRESOS": "coordinating with sales and reservations on commercial strategies, reporting forecasts to the leadership, and monitoring competitors' rates"};
+const CAUSALES_DESPIDO_81 = [{"id": "a", "articulo": "81 inciso a)", "tipo": "directa", "resumen": "Conducta abiertamente inmoral durante las labores, o injuria, calumnia o vías de hecho contra el patrono."}, {"id": "b", "articulo": "81 inciso b)", "tipo": "directa", "resumen": "Injuria, calumnia o vías de hecho contra un compañero de trabajo durante las labores, alterando gravemente la disciplina e interrumpiendo el trabajo."}, {"id": "c", "articulo": "81 inciso c)", "tipo": "directa", "resumen": "Injuria, calumnia o vías de hecho contra el patrono o sus representantes fuera del lugar y horario de trabajo, sin provocación previa, que hagan imposible la convivencia laboral."}, {"id": "d", "articulo": "81 inciso d)", "tipo": "directa", "resumen": "Delito o falta contra la propiedad del patrono, o daño material intencional a máquinas, herramientas o materias primas relacionadas con el trabajo."}, {"id": "e", "articulo": "81 inciso e)", "tipo": "directa", "resumen": "Revelar secretos técnicos o comerciales de la empresa."}, {"id": "f", "articulo": "81 inciso f)", "tipo": "directa", "resumen": "Comprometer por imprudencia o descuido inexcusable la seguridad del lugar de trabajo o de las personas presentes."}, {"id": "g", "articulo": "81 inciso g)", "tipo": "directa", "resumen": "Ausentarse del trabajo sin permiso ni causa justificada durante dos días consecutivos, o más de dos días alternos dentro del mismo mes calendario."}, {"id": "h", "articulo": "81 inciso h)", "tipo": "directa", "resumen": "Negarse de forma manifiesta y reiterada a seguir las medidas preventivas de seguridad, o a acatar instrucciones claras de trabajo."}, {"id": "i", "articulo": "81 inciso i) en relación con el 72", "tipo": "progresiva", "resumen": "Reincidir, después de un apercibimiento previo por escrito, en alguna de las conductas prohibidas del artículo 72 (incisos a-e). Requiere amonestación previa documentada."}, {"id": "j", "articulo": "81 inciso j)", "tipo": "directa", "resumen": "Haber inducido a error al patrono al contratarse (cualidades, condiciones o referencias falsas), o demostrar clara incapacidad para las labores contratadas."}, {"id": "k", "articulo": "81 inciso k)", "tipo": "directa", "resumen": "Sufrir prisión por sentencia firme (ejecutoria)."}, {"id": "l", "articulo": "81 inciso l)", "tipo": "directa", "resumen": "Cualquier otra falta grave a las obligaciones que impone el contrato de trabajo."}, {"id": "m", "articulo": "81 inciso m)", "tipo": "directa", "resumen": "Incumplir el plan de servicios mínimos durante un período de huelga."}, {"id": "n", "articulo": "81 inciso n)", "tipo": "directa", "resumen": "Incurrir en conductas discriminatorias contra otra persona trabajadora con VIH."}];
+const LOGO_HOTEL_B64 = "data:image/png;base64,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";
+const COMISIONES_POR_DEPARTAMENTO = {
+  "Bar": {
+    motivo: "El puesto de Bar tiene contacto directo con los huéspedes en el punto de venta de alimentos y bebidas, e incide directamente en la decisión de compra mediante la recomendación y el servicio brindado.",
+    motivoEn: "The Bar position has direct contact with guests at the point of sale of food and beverages, and directly influences the purchase decision through recommendation and service.",
+    reglas: [
+      { concepto: "venta de alimentos", conceptoEn: "food sales", tipo: "porcentaje", valor: 8 },
+      { concepto: "venta de bebidas", conceptoEn: "beverage sales", tipo: "porcentaje", valor: 10 },
+    ],
+  },
+  "Cocina": {
+    motivo: "El puesto de Cocina contribuye directamente a la calidad, presentación y variedad de los alimentos ofrecidos, factores que inciden en la decisión de compra y en el volumen de venta de dichos productos.",
+    motivoEn: "The Kitchen position directly contributes to the quality, presentation, and variety of the food offered, factors that influence the purchase decision and the sales volume of those products.",
+    reglas: [
+      { concepto: "venta de alimentos", conceptoEn: "food sales", tipo: "porcentaje", valor: 2 },
+    ],
+  },
+  "Limpieza y Lavandería": {
+    motivo: "El puesto de Limpieza y Lavandería tiene acceso directo y diario a las habitaciones de los huéspedes, lo que le permite promover y facilitar el consumo de los productos del minibar durante la atención de la habitación.",
+    motivoEn: "The Housekeeping and Laundry position has direct, daily access to guest rooms, which allows it to promote and facilitate the consumption of minibar products during room service.",
+    reglas: [
+      { concepto: "venta de bebidas de minibar", conceptoEn: "minibar beverage sales", tipo: "porcentaje", valor: 2 },
+    ],
+  },
+  "Recepción / Front Desk": {
+    motivo: "El puesto de Recepción / Front Desk tiene contacto directo con el huésped durante el check-in, el check-out y a lo largo de su estadía, siendo un punto clave para la venta de tours y actividades ofrecidas por la propiedad.",
+    motivoEn: "The Front Desk position has direct contact with the guest during check-in, check-out, and throughout the stay, making it a key point for selling tours and activities offered by the property.",
+    reglas: [
+      { concepto: "cada tour vendido en la propiedad", conceptoEn: "each tour sold on the property", tipo: "fijo", valor: 3, moneda: "USD" },
+    ],
+  },
+  "Spa / Bienestar": {
+    motivo: "El puesto de Spa / Bienestar realiza la venta directa de los tratamientos ofrecidos a los huéspedes durante la prestación del servicio, siendo determinante en la decisión de compra de dichos tratamientos.",
+    motivoEn: "The Spa / Wellness position carries out the direct sale of the treatments offered to guests while providing the service, playing a determining role in the guest's decision to purchase those treatments.",
+    reglas: [
+      { concepto: "cada tratamiento vendido", conceptoEn: "each treatment sold", tipo: "fijo", valor: 3, moneda: "USD" },
+    ],
+  },
+  "Reservas": {
+    motivo: "El puesto de Reservas tiene contacto directo con el huésped durante el proceso de reservación, siendo responsable de la venta adicional de servicios, mejoras y reservaciones ofrecidas por la propiedad.",
+    motivoEn: "The Reservations position has direct contact with the guest during the booking process, being responsible for the additional sale of services, upgrades, and reservations offered by the property.",
+    reglas: [
+      { concepto: "cada reserva vendida", conceptoEn: "each reservation sold", tipo: "fijo", valor: 3, moneda: "USD" },
+    ],
+  },
+};
+const LOGO_OXYGEN_B64 = "data:image/png;base64,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";
+const LOGO_OJOCHAL_B64 = "data:image/png;base64,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VquVjxo16hVBENqXLl36fyrwampqBM65A8DwPbv2XOlwOCguLk696MIL3gEgWiwWAtA3YULmJ2FhYay3txd79+y5lYjMbrf7d7HwyF9pwAcgtKu7a1pvby/MZjMNS03tcDqduilTpgAANP5xut4Jxpg6//L5f0tMSFCJgNLSUt1b//735TNnzpRtNpuAE9DwQOvnNHYKAKDX632yLIsPPvjgS5njxxdaLBad3W6X8/PzngQwzOv1+np6en7VXGRlZREAbjQavUNThrqIiBy9Dt2nn34632gyen766ScqLi7+XVLaT0ro06dP5wCwdeuWLKfTSQLnkk6n/2nOnDk78vPzDZrJ82sxTwkJCd79+/dzALXDhg3drNfrmcfjoaKiojFcENDf3687XoBqIISGhjIAEJl4XIulrKyMAVA//uDjMQ6HQ88YYxGREY6bb711Lfx7Mn4LklWbzeYbMmSIDoAjLW3kWyaTiXm8XjTZm6YDCC8qKtIXFRVJAKi7qyui+lB1utfrhdVqRerQ1LcBkMPh8A7Gajg9oIpEJJWWloorVqzQr1692pCTk3Pc64svvjDu2bNHAiAGApCDASJi69at02dlZbFP8z+9pOrAgWGCICA8PPzQDUuWfF1eXm6eNm1ab1FRkbho0aIvwsPDd5nNZlZZWRn80vPPXygIAq1du9Y00Hf7/xIWLFjAAAifrV07qbOjwySJIo+Oiu6788471ymKIqxateqk+1aOhoC7+OhrMM/W1NSIqamp9MxTz8yvPlRt0ul0LCk5adOUs88uys3NZUlJSW4A/M677/5vdHR0p9vtRkND48TPP/989tixY112u/2UXFjM7yDWLV26VMzJyRFzcnLEvLw8nRaH5NOnTxcZY3THHXd4vl6//qKy0tIUWZbVsLAwNm78+B8BiFOmTPEAwLJly04VVcfvF2Pq9OnTxfnz52+02Ww/6PU60evxYOOmzRNUVZW+++67YyoijDGAVOZyucylpaU6AIKWtSQCEKdPny4G/g98Xr16tSEvL8+oxbhOQJc/m0KhsLBQvfe++24eOnRoLxHR/vL9kbfedMtTiYmJ3oqKCt3RDwxy3EpOTg73+XxIiI9fFxQUxLp7un3btv5055sr37xl7ty5PZmZmUJeXp5x165dIY3+zZynpeDjyQiHsrKyqLCwkF96yaWJLpeLmcxm6CRp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";
+const LOGO_AMARENA_B64 = "data:image/png;base64,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";
+
+const PROPIEDADES_MAESTRAS = [
+  { id: "corcovado", nombre: "SCP Corcovado Wilderness Lodge", logo: LOGO_HOTEL_B64 },
+  { id: "oxygen", nombre: "Oxygen Jungle Villas", logo: LOGO_OXYGEN_B64 },
+  { id: "ojochal", nombre: "Ojochal Garden Villas", logo: LOGO_OJOCHAL_B64 },
+  { id: "amarena", nombre: "Amarena Canvas Beach Hotel", logo: LOGO_AMARENA_B64 },
+];
+
+// ---------- storage compatibility shim ----------
+// window.storage only exists when this page runs inside Claude as an artifact.
+// Once downloaded and opened as a plain file (or hosted on Netlify/GitHub Pages/etc.),
+// that API is not present — so we fall back to the browser's own localStorage with
+// the exact same get/set/delete/list shape, and every call site keeps working unchanged.
+if (!window.storage){
+  const LS_PREFIX = "gcw:";
+  window.storage = {
+    async set(key, value, shared){
+      try{ localStorage.setItem(LS_PREFIX + key, value); return { key, value, shared }; }
+      catch(e){ return null; }
+    },
+    async get(key, shared){
+      const v = localStorage.getItem(LS_PREFIX + key);
+      if (v === null) throw new Error("Key not found: " + key);
+      return { key, value: v, shared };
+    },
+    async delete(key, shared){
+      localStorage.removeItem(LS_PREFIX + key);
+      return { key, deleted: true, shared };
+    },
+    async list(prefix, shared){
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        if (k && k.startsWith(LS_PREFIX)){
+          const short = k.slice(LS_PREFIX.length);
+          if (!prefix || short.startsWith(prefix)) keys.push(short);
+        }
+      }
+      return { keys, prefix, shared };
+    }
+  };
+}
+
+// ---------- multi-property scoping ----------
+// Wraps whatever window.storage already is (the real Claude artifact API, or the
+// localStorage shim above) so every call automatically keeps each property/hotel's
+// data completely separate — employees, contracts and documents never mix between
+// SCP Corcovado, Oxygen, Ojochal Gardens and Amarena. No other part of the app needs
+// to know this is happening; every existing storage.get/set/list/delete call works unchanged.
+const _rawStorage = window.storage;
+let currentPropiedadId = null;
+try{ currentPropiedadId = localStorage.getItem("gcw:propiedad-actual"); }catch(e){}
+
+// ---------- Sesión del Trabajador ----------
+// El login vive en el backend (Postgres). CON_BACKEND es true cuando
+// storage-api.js está cargado; si no lo está (carpeta estática suelta, sin
+// servidor), la app cae al selector manual de propiedad como siempre.
+const CON_BACKEND = !!(window.sdgApi && window.storage && window.storage.__esApi);
+let trabajadorActual = null; // { nombre, cedula, puesto, propiedad, email } una vez dentro
+
+async function hacerLoginTrabajador(){
+  const email = document.getElementById("login-email").value.trim();
+  const pass = document.getElementById("login-pass").value;
+  const msgEl = document.getElementById("login-trabajador-msg");
+  if (!email || !pass){ msgEl.innerHTML = `<span style="color:#963527;">Completa correo y contraseña.</span>`; return; }
+  msgEl.innerHTML = `<span style="color:var(--ink-soft);">Verificando…</span>`;
+  try{
+    await window.sdgApi.login(email, pass);
+    document.getElementById("login-pass").value = "";
+    await entrarConSesion();
+  }catch(e){
+    msgEl.innerHTML = `<span style="color:#963527;">${String(e.message||"No se pudo iniciar sesión.").replace(/</g,"")}</span>`;
+  }
+}
+
+function hacerLogoutTrabajador(){
+  if (CON_BACKEND){ window.sdgApi.logout(); return; }
+  try{ localStorage.removeItem("gcw:propiedad-actual"); }catch(e){}
+  location.reload();
+}
+
+// Muestra la pantalla de login. storage-api.js la llama si la sesión expira
+// a media faena, para no dejar al usuario ante una app que ya no guarda nada.
+window.mostrarPantallaLogin = function(mensaje){
+  const gate = document.getElementById("login-gate");
+  if (gate) gate.classList.add("open");
+  const msgEl = document.getElementById("login-trabajador-msg");
+  if (msgEl && mensaje) msgEl.innerHTML = `<span style="color:#963527;">${String(mensaje).replace(/</g,"")}</span>`;
+};
+
+// Con sesión ya validada: fija la propiedad y arranca la app.
+async function entrarConSesion(){
+  const info = await window.sdgApi.me();
+  if (!info){ window.mostrarPantallaLogin("No se pudo validar la sesión."); return; }
+
+  const u = info.usuario;
+  trabajadorActual = {
+    nombre: u.nombre || u.email,
+    cedula: u.cedula || "",
+    puesto: u.puesto || "Gerente Operativo",
+    propiedad: u.propiedadId,
+    email: u.email,
+  };
+
+  if (u.debeCambiarPassword){ mostrarCambioPasswordObligatorio(); return; }
+
+  document.getElementById("login-gate").classList.remove("open");
+  const logoutBtn = document.getElementById("nav-btn-logout");
+  const logoutSep = document.getElementById("nav-sep-cuenta");
+  if (logoutBtn) logoutBtn.style.display = "block";
+  if (logoutSep) logoutSep.style.display = "block";
+
+  // La propiedad la manda el servidor según la cuenta; el cliente solo la
+  // refleja en la interfaz. Un admin sin propiedad asignada sí la elige.
+  if (u.propiedadId) setPropiedadActual(u.propiedadId);
+  aplicarModoSegunRol(u.rol);
+  await continuarInicioApp();
+}
+
+// Ajusta la interfaz al rol. Es comodidad visual: quien manipule la petición
+// igual choca contra el permiso del servidor, que es el que de verdad manda.
+function aplicarModoSegunRol(rol){
+  const soloLectura = rol === "colaborador";
+  document.body.classList.toggle("solo-lectura", soloLectura);
+
+  const etiquetas = { admin: "Administrador", gerente: "Gerente", colaborador: "Colaborador" };
+  let barra = document.getElementById("barra-rol");
+  if (!barra){
+    barra = document.createElement("div");
+    barra.id = "barra-rol";
+    document.body.insertBefore(barra, document.body.firstChild);
+  }
+  barra.className = soloLectura ? "barra-rol solo-lectura" : "barra-rol";
+  barra.textContent = soloLectura
+    ? "👁️ Modo solo lectura — puedes consultar y descargar, pero no guardar cambios."
+    : "";
+  barra.style.display = soloLectura ? "block" : "none";
+
+  const info = document.getElementById("rol-actual");
+  if (info) info.textContent = etiquetas[rol] || rol;
+}
+
+// Contraseña temporal: hasta cambiarla, la API rechaza todo lo demás, así que
+// no tiene sentido dejar entrar a la app.
+function mostrarCambioPasswordObligatorio(){
+  const inner = document.querySelector("#login-gate .propiedad-gate-inner");
+  if (!inner) return;
+  document.getElementById("login-gate").classList.add("open");
+  inner.innerHTML = `
+    <div class="propiedad-gate-title">🔒 Cambia tu contraseña</div>
+    <div class="propiedad-gate-sub">Tu contraseña es temporal. Define una propia para continuar.</div>
+    <div class="field" style="text-align:left;">
+      <label>Contraseña temporal</label>
+      <input type="password" id="cp-actual" autocomplete="current-password">
+    </div>
+    <div class="field" style="text-align:left;">
+      <label>Nueva contraseña</label>
+      <input type="password" id="cp-nueva" autocomplete="new-password">
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Mínimo 10 caracteres, con letras y números.</div>
+    </div>
+    <div class="field" style="text-align:left;">
+      <label>Repite la nueva contraseña</label>
+      <input type="password" id="cp-repetir" autocomplete="new-password">
+    </div>
+    <button class="btn primary" style="width:100%;" onclick="guardarPasswordNueva()">Guardar y entrar</button>
+    <div id="cp-msg" style="margin-top:10px; font-size:12px;"></div>`;
+}
+
+async function guardarPasswordNueva(){
+  const actual = document.getElementById("cp-actual").value;
+  const nueva = document.getElementById("cp-nueva").value;
+  const repetir = document.getElementById("cp-repetir").value;
+  const msgEl = document.getElementById("cp-msg");
+  if (nueva !== repetir){
+    msgEl.innerHTML = `<span style="color:#963527;">Las dos contraseñas nuevas no coinciden.</span>`;
+    return;
+  }
+  msgEl.innerHTML = `<span style="color:var(--ink-soft);">Guardando…</span>`;
+  try{
+    await window.sdgApi.cambiarPassword(actual, nueva);
+    location.reload();
+  }catch(e){
+    msgEl.innerHTML = `<span style="color:#963527;">${String(e.message||"No se pudo cambiar.").replace(/</g,"")}</span>`;
+  }
+}
+
+function scopeKey(key){
+  return "prop_" + (currentPropiedadId || "sin_propiedad") + "::" + key;
+}
+
+// Cuando storage-api.js está activo (despliegue con backend), la separación
+// por propiedad la aplica el servidor a partir de la sesión — que es el único
+// lugar donde de verdad protege algo, porque el navegador no es de fiar.
+// Volver a scopear aquí duplicaría el prefijo, así que se deja tal cual.
+if (!_rawStorage.__esApi){
+  window.storage = {
+    async set(key, value, shared){
+      return _rawStorage.set(shared ? key : scopeKey(key), value, shared);
+    },
+    async get(key, shared){
+      return _rawStorage.get(shared ? key : scopeKey(key), shared);
+    },
+    async delete(key, shared){
+      return _rawStorage.delete(shared ? key : scopeKey(key), shared);
+    },
+    async list(prefix, shared){
+      const fullPrefix = shared ? (prefix||"") : scopeKey(prefix||"");
+      const res = await _rawStorage.list(fullPrefix, shared);
+      if (!res) return res;
+      if (!shared){
+        const stripPrefix = scopeKey("");
+        res.keys = res.keys.map(k => k.startsWith(stripPrefix) ? k.slice(stripPrefix.length) : k);
+      }
+      res.prefix = prefix;
+      return res;
+    },
+  };
+}
+
+function setPropiedadActual(id){
+  currentPropiedadId = id;
+  try{ localStorage.setItem("gcw:propiedad-actual", id); }catch(e){}
+}
+function getPropiedadActual(){
+  return PROPIEDADES_MAESTRAS.find(p => p.id === currentPropiedadId) || null;
+}
+
+
+const MONEDA_LABEL = { CRC: "Colones (CRC)", USD: "Dólares (USD)", EUR: "Euros (EUR)" };
+const MONEDA_LABEL_EN = { CRC: "Colones (CRC)", USD: "US Dollars (USD)", EUR: "Euros (EUR)" };
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const MESES_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+function mesEnIdioma(mesVal, lang){
+  if (!mesVal) return "";
+  if (lang === "en"){
+    const idx = MESES.indexOf(mesVal);
+    return idx >= 0 ? MESES_EN[idx] : mesVal;
+  }
+  return mesVal;
+}
+let currentKey = null; // key of the contract currently loaded (for "Actualizar")
+
+// ---------- PDF format config ----------
+const PDF_CONFIG_DEFAULT = { font: "Georgia, 'Times New Roman', serif", fontSize: "13.5", lineHeight: "1.15", margin: "0.75in", pageSize: "letter", cleanMode: false };
+let pdfConfig = Object.assign({}, PDF_CONFIG_DEFAULT);
+
+function applyPdfConfigToDom(){
+  document.documentElement.style.setProperty("--doc-font", pdfConfig.font);
+  document.documentElement.style.setProperty("--doc-font-size", pdfConfig.fontSize + "px");
+  document.documentElement.style.setProperty("--doc-line-height", pdfConfig.lineHeight);
+  document.documentElement.style.setProperty("--doc-margin", pdfConfig.margin);
+  document.body.classList.toggle("clean-mode", !!pdfConfig.cleanMode);
+  const pageStyle = document.getElementById("dynamic-page-style");
+  pageStyle.textContent = `@media print { @page { size: ${pdfConfig.pageSize}; margin: ${pdfConfig.margin}; } .doc{ padding: 0 !important; } }`;
+
+  const sel = (id) => document.getElementById(id);
+  if (sel("cfg-font")) sel("cfg-font").value = pdfConfig.font;
+  if (sel("cfg-fontsize")) sel("cfg-fontsize").value = pdfConfig.fontSize;
+  if (sel("cfg-lineheight")) sel("cfg-lineheight").value = pdfConfig.lineHeight;
+  if (sel("cfg-margin")) sel("cfg-margin").value = pdfConfig.margin;
+  if (sel("cfg-pagesize")) sel("cfg-pagesize").value = pdfConfig.pageSize;
+  if (sel("cfg-clean-off")) sel("cfg-clean-off").classList.toggle("active", !pdfConfig.cleanMode);
+  if (sel("cfg-clean-on")) sel("cfg-clean-on").classList.toggle("active", !!pdfConfig.cleanMode);
+}
+
+async function setPdfConfig(key, value){
+  pdfConfig[key] = value;
+  applyPdfConfigToDom();
+  try{
+    await window.storage.set("pdf-config", JSON.stringify(pdfConfig), false);
+  }catch(e){ /* best effort */ }
+}
+
+async function resetPdfConfig(){
+  pdfConfig = Object.assign({}, PDF_CONFIG_DEFAULT);
+  applyPdfConfigToDom();
+  try{ await window.storage.set("pdf-config", JSON.stringify(pdfConfig), false); }catch(e){}
+  statusMsg("Formato restaurado a los valores por defecto.");
+}
+
+async function loadPdfConfig(){
+  try{
+    const res = await window.storage.get("pdf-config", false);
+    if (res && res.value){
+      pdfConfig = Object.assign({}, PDF_CONFIG_DEFAULT, JSON.parse(res.value));
+    }
+  }catch(e){ /* no saved config yet, use defaults */ }
+  applyPdfConfigToDom();
+}
+
+// ---------- export / import all stored data ----------
+async function exportarPorPrefijos(prefijos, nombreArchivo, mensajeExtra){
+  const bundle = { _app: "generador_contratos_sdg", _version: 1, _exportedAt: new Date().toISOString() };
+  for (const prefix of prefijos){
+    try{
+      const res = await window.storage.list(prefix, false);
+      const keys = (res && res.keys) ? res.keys : [];
+      for (const k of keys){
+        try{
+          const r = await window.storage.get(k, false);
+          if (r && r.value !== undefined) bundle[k] = r.value;
+        }catch(e){ /* skip unreadable key */ }
+      }
+    }catch(e){ /* no items under this prefix yet */ }
+  }
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombreArchivo + "_" + new Date().toISOString().slice(0,10) + ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  statusMsg(mensajeExtra || "Datos exportados.");
+}
+
+async function exportarContratos(){
+  await exportarPorPrefijos(["contrato:", CATALOGS.empresas.prefix, CATALOGS.puestos.prefix, CATALOGS.propiedades.prefix], "contratos_sdg", "Contratos, empresas, puestos y propiedades exportados.");
+}
+async function exportarEmpleados(){
+  await exportarPorPrefijos([CATALOGS.empleados.prefix], "empleados_sdg", "Lista de empleados exportada.");
+}
+async function exportarDocumentos(){
+  await exportarPorPrefijos(["contrato:"], "documentos_sdg", "Datos base de documentos (contratos) exportados. Recuerda que los PDF generados se descargan por separado desde cada uno.");
+}
+
+async function exportarDatos(){
+  await exportarPorPrefijos(["contrato:", CATALOGS.empresas.prefix, CATALOGS.puestos.prefix, CATALOGS.propiedades.prefix, CATALOGS.empleados.prefix], "generador_contratos_datos", "Datos exportados. Guarda ese archivo para importarlo en otra copia de la app.");
+}
+
+async function importarDatosFile(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  try{
+    const text = await file.text();
+    const bundle = JSON.parse(text);
+    let count = 0;
+    for (const key of Object.keys(bundle)){
+      if (key.startsWith("_")) continue;
+      await window.storage.set(key, bundle[key], false);
+      count++;
+    }
+    statusMsg("Importados " + count + " elementos. Recargando…");
+    setTimeout(() => location.reload(), 1200);
+  }catch(e){
+    statusMsg("No se pudo leer ese archivo de datos.", false);
+  }
+  inputEl.value = "";
+}
+
+// ---------- catalogs: empresas, puestos, propiedades ----------
+const CATALOGS = {
+  empresas: {
+    prefix: "cat_empresa:",
+    label: "empresa",
+    nameField: "EMPRESA",
+    fields: [
+      ["EMPRESA","text","Nombre de la empresa",""],
+      ["DIRECCION_EMPRESA","select_provincia","Provincia de oficinas centrales",""],
+      ["ACTIVIDAD_EMPRESA","text","Actividad de la empresa",""],
+      ["PROPIEDADES","select_properties","Propiedades en el portafolio de la empresa",""],
+      ["TIPO_CEDULA_EMPRESA","text","Tipo de cédula","jurídica / física"],
+      ["CEDULA_JURIDICA_EMPRESA","text","Número de cédula","0-000-000000"],
+      ["REPRESENTANTE_LEGAL","text","Representante legal","Se sobrescribe automáticamente con Blake Adam Delatte al usar esta empresa en un contrato — este campo es solo de referencia"],
+      ["NACIONALIDAD_REPRESENTANTE","text","Nacionalidad del representante","De Blake Adam Delatte — sí se usa en el contrato"],
+      ["TIPO_IDENTIFICACION_REPRESENTANTE","text","Tipo de identificación","De Blake Adam Delatte — sí se usa en el contrato"],
+      ["IDENTIFICACION_REPRESENTANTE","text","Número de identificación","De Blake Adam Delatte — sí se usa en el contrato"],
+      ["DIRECCION_REPRESENTANTE_LEGAL","textarea","Dirección del representante (Provincia, Cantón, Distrito, Señas)","De Blake Adam Delatte — sí se usa en el contrato"],
+      ["PUESTO_REPRESENTANTE_LEGAL","text","Puesto del representante en la empresa","Se sobrescribe automáticamente con \"Gerente Generalísimo y Apoderado Legal\" — este campo es solo de referencia"],
+    ],
+    metaFields: ["ACTIVIDAD_EMPRESA","REPRESENTANTE_LEGAL","PROPIEDADES"],
+  },
+  puestos: {
+    prefix: "cat_puesto:",
+    label: "puesto",
+    nameField: "PUESTO",
+    fields: [
+      ["PUESTO","text","Nombre del puesto",""],
+      ["MODALIDAD_JORNADA","select_modalidad","Modalidad de jornada laboral (Art. 136 Código de Trabajo)",""],
+      ["JEFE_INMEDIATO","select_puesto_lider","Jefatura inmediata (solo el puesto, no el nombre de la persona)",""],
+      ["TAREAS_APOYO","textarea","Tareas específicas de apoyo a la jefatura inmediata",""],
+      ["RESPONSABILIDADES","textarea","Responsabilidades del puesto (una por línea, para el Anexo 2)","Ej. Supervisar el equipo de housekeeping"],
+      ["FIRMANTE_NOMBRE","text","Nombre de quien ocupa este puesto (si firma Acciones de Personal)","Ej. Andrey Flores Pizarro — deja en blanco si este puesto no firma documentos"],
+      ["FIRMANTE_CEDULA","text","Cédula de quien ocupa este puesto","Solo si llenaste el nombre de arriba"],
+    ],
+    metaFields: ["JEFE_INMEDIATO"],
+  },
+  propiedades: {
+    prefix: "cat_propiedad:",
+    label: "propiedad",
+    nameField: "nombre",
+    fields: [
+      ["nombre","text","Nombre de la propiedad",""],
+      ["distrito","text","Distrito",""],
+      ["canton","text","Cantón",""],
+      ["provincia","select_provincia","Provincia",""],
+    ],
+    metaFields: ["distrito","provincia"],
+  },
+  empleados: {
+    prefix: "cat_empleado:",
+    label: "empleado",
+    nameField: "NOMBRE_EMP",
+    noApply: true,
+    fields: [
+      ["grp", "Datos del puesto"],
+      ["NOMBRE_EMP","text_nombre_emp","1. Nombre (Apellidos, Primer nombre, Segundo nombre)","Ej. QUIROS MORA, ISAAC"],
+      ["TIPO_IDENTIFICACION_EMP","select_tipo_identificacion_emp","Tipo de identidad",""],
+      ["IDENTIFICACION_EMP","text_cedula_emp","2. Número de cédula","Formato: 1-1112-1111"],
+      ["PUESTO_KEY","select_puesto_catalogo","3. Puesto a contratar",""],
+      ["DEPARTAMENTO_EMP","text","Puesto / departamento (texto libre, se llena solo al elegir arriba)",""],
+      ["NUMERO_EMPLEADO","text","Número de empleado (planilla)",""],
+      ["FECHA_INGRESO_DATE","date_ingreso_emp","4. Fecha de ingreso",""],
+      ["grp", "Salario"],
+      ["SALARIO_MODO_EMP","select_salario_modo_emp","5. Salario",""],
+      ["SALARIO_EMP","salario_num_emp","Monto bruto mensual",""],
+      ["grp", "Contacto"],
+      ["CELULAR_EMP","text","6. Teléfono personal",""],
+      ["CORREO_EMP","text","7. Correo electrónico",""],
+      ["grp", "Cuenta bancaria"],
+      ["BANCO_EMP","select_banco_cr","8. Banco",""],
+      ["CUENTA_CLIENTE_EMP","cuenta_cliente_emp","Número de cuenta cliente","17 dígitos"],
+      ["CUENTA_IBAN_EMP","cuenta_iban_emp","Número de cuenta IBAN","CR + 20 dígitos"],
+      ["grp", "Adjuntos"],
+      ["ADJUNTO_ID_EMP","file_adjunto_emp","9. Foto de cédula / pasaporte / permiso laboral",""],
+      ["ADJUNTO_CUENTA_EMP","file_adjunto_emp","Foto de la cuenta bancaria (para doble confirmación)",""],
+      ["grp", "Datos personales"],
+      ["ESTADO_CIVIL_EMP","select_estado_civil","10. Estado civil",""],
+      ["HIJOS_EMP","select_sino_cantidad","11. Hijos",""],
+      ["ENFERMEDAD_CRONICA_EMP","select_sino_detalle","12. Padece alguna enfermedad crónica",""],
+      ["MEDICAMENTOS_CRONICOS_EMP","select_sino_detalle","¿Toma medicamentos para enfermedades crónicas?",""],
+      ["FECHA_NACIMIENTO_EMP","date","13. Fecha de nacimiento",""],
+      ["grp", "Contacto de emergencia"],
+      ["CONTACTO_EMERGENCIA_NOMBRE","text","14. Nombre del contacto de emergencia",""],
+      ["CONTACTO_EMERGENCIA_ID","text_cedula_emp","Identificación del contacto de emergencia","Formato: 1-1112-1111"],
+      ["CONTACTO_EMERGENCIA_TEL","text","Teléfono del contacto de emergencia",""],
+      ["grp", "Estado"],
+      ["FECHA_SALIDA_EMP","text","Fecha de salida (si ya no está activo)",""],
+      ["ESTADO_EMP","text","Estado (Activo / Inactivo)","Activo"],
+    ],
+    metaFields: ["DEPARTAMENTO_EMP","IDENTIFICACION_EMP"],
+  },
+};
+let catalogEditing = null; // { type, key } when the inline add/edit form is open
+let selectedProperties = new Set(); // property keys currently checked, for building PROPIEDADES text
+let collapsedSections = new Set(); // section titles currently collapsed (Formulario accordion)
+let formManualFields = {}; // tracks which dropdown-with-manual-fallback fields (Nacionalidad, Estado civil) are in free-text mode
+
+// Fixed project director for every contract — not asked in any form.
+const DIRECTOR_PROYECTO_FIJO = "Gerente General en Turno";
+const DIRECTOR_PROYECTO_FIJO_EN = "Manager on Duty";
+
+// Fixed legal representative who signs every employment contract, regardless
+// of which company/property it's for — set by the person, not asked per contract.
+const REPRESENTANTE_LEGAL_FIJO = {
+  nombre: "Blake Adam Delatte",
+  puesto: "Gerente Generalísimo y Apoderado Legal",
+  puestoEn: "Managing Director and Legal Representative",
+};
+
+
+// Fixed reference signer for all Employment Recommendation letters — extracted from
+// the person's own reference example, so it never has to be re-typed per letter.
+const FIRMANTE_RECOMENDACION = {
+  nombre: "Andrey Flores Pizarro",
+  cedula: "6-0417-0766",
+  puesto: "Gerente Operativo",
+  puestoEn: "Operations Manager",
+  empresa: "SDG RH Management Sociedad de Responsabilidad Limitada",
+  empresaEn: "SDG RH Management Limited Liability Company",
+  cedulaJuridica: "3-102-866040",
+  telefono: "8930-2158",
+  correo: "operations.corcovado@scphotel.com",
+};
+
+// Fixed reference signer for termination letters — the General Manager who signs
+// every despido, regardless of which contract/employee it's for.
+const FIRMANTE_DESPIDO = {
+  nombre: "Isaac Quirós Mora",
+  cedula: "304190194",
+  puesto: "Gerente General",
+  puestoEn: "General Manager",
+  etiquetaEmpresa: "SCP CORCOVADO",
+};
+
+const MOTIVOS_DESPIDO_CON = [
+  "Finalización de su período de prueba de contrato",
+  "Reestructuración de personal por temporada de baja ocupación turística",
+];
+const MOTIVOS_DESPIDO_CON_EN = {
+  "finalización de su período de prueba de contrato": "End of the contractual probationary period",
+  "reestructuración de personal por temporada de baja ocupación turística": "Staff restructuring due to the low tourist-occupancy season",
+};
+
+// Supervisory / leadership positions taken from the Ministerio de Trabajo hotel position
+// table — used as the predefined "Puesto que desempeña" options in the Líderes catalog,
+// so adding a leader only requires typing their name.
+const PUESTOS_LIDERAZGO = [
+  "Supervisor capitán de embarcación",
+  "Cocinero A supervisor",
+  "Supervisor de limpieza",
+  "Supervisor de Mantenimiento",
+  "Supervisor de agentes de recepción",
+  "Asistente de gestión de la propiedad",
+  "Administrador de propiedad",
+  "Supervisor de agente de reservas",
+  "Supervisor de saloneros",
+  "Supervisor de oficial de seguridad",
+  "Terapeuta principal de bienestar",
+  "Supervisor de Guías de turismo",
+  "Guía Naturalista Líder",
+];
+
+// data object: covers every FIELDS_META field plus the company/legal-rep fields,
+// which now live only in the Empresas catalog and are never asked again in Formulario.
+let data = {};
+FIELDS_META.forEach(f => { if (f[0] !== "grp") data[f[0]] = ""; });
+CATALOGS.empresas.fields.forEach(f => { if (data[f[0]] === undefined) data[f[0]] = ""; });
+CATALOGS.puestos.fields.forEach(f => { if (data[f[0]] === undefined) data[f[0]] = ""; });
+data.COMISION_SI_NO = "NO";
+data.TELETRABAJO_SI_NO = "NO";
+data.EXCLUSIVIDAD_SI_NO = "NO";
+data.TIPO_CONTRATO = "indeterminado";
+data.IDIOMA_CONTRATO = "es";
+data.MONEDA = "USD";
+data.DISTRITO_FIRMA = "";
+data.CANTON_FIRMA = "";
+data.PROVINCIA_FIRMA = "";
+data.LIDER_DIRECTOR = DIRECTOR_PROYECTO_FIJO;
+  data.LIDER_DIRECTOR_EN = DIRECTOR_PROYECTO_FIJO_EN;
+
+// ---------- progress bar ----------
+function updateProgress(){
+  // Only count fields that belong to the employment contract itself — the
+  // despido/recomendación groups are separate, optional documents and
+  // shouldn't affect the contract's completion percentage.
+  const contractSections = groupFieldsIntoSections().filter(sec =>
+    !DESPIDO_SECTION_TITLES.includes(sec.title) && !RECOM_SECTION_TITLES.includes(sec.title));
+  const ids = contractSections.flatMap(sec => sec.fields.map(f => f[0]));
+  const total = ids.length;
+  const done = ids.filter(id => (data[id] || "").toString().trim() !== "").length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const fill = document.getElementById("progress-fill");
+  const label = document.getElementById("progress-label");
+  if (fill) fill.style.width = pct + "%";
+  if (label) label.textContent = done + " de " + total + " campos completados (" + pct + "%)";
+}
+
+// ---------- form rendering ----------
+function tr(es, en){ return (data.IDIOMA_CONTRATO === "en") ? en : es; }
+
+const FIELD_LABELS_EN = {
+  IDIOMA_CONTRATO: ["Contract language", ""],
+  TIPO_CONTRATO: ["Contract type", ""],
+  NOMBRE_TRABAJADOR: ["Full name", ""],
+  TIPO_IDENTIFICACION: ["ID type", "E.g. National ID, DIMEX"],
+  IDENTIFICACION: ["ID number", ""],
+  NACIONALIDAD: ["Nationality", ""],
+  ESTADO_CIVIL: ["Marital status", ""],
+  ESPECIALIZACION: ["Specialization / field experience", ""],
+  DIRECCION_TRABAJADOR: ["Full address (Province, Canton, District, Directions)", ""],
+  DIA_INICIO: ["Start day", "1-31"],
+  MES_INICIO: ["Start month", ""],
+  ANIO_INICIO: ["Start year", "E.g. 2026"],
+  DIA_FIN: ["End day", "1-31"],
+  MES_FIN: ["End month", ""],
+  ANIO_FIN: ["End year", "E.g. 2027"],
+  PROPIEDADES: ["Properties / managed portfolio (or use the Properties / Companies tab)", ""],
+  EXCLUSIVIDAD_SI_NO: ["Does the exclusivity clause apply?", ""],
+  ACTIVIDADES_EXCLUSIVIDAD: ["Activities included in the exclusivity clause (auto-suggested by position)", "Activity A, activity B, activity C..."],
+  SALARIO_BRUTO_NUM: ["Gross monthly salary (number)", "E.g. 1,500.00"],
+  SALARIO_BRUTO_LETRAS: ["Gross salary in words", "E.g. one thousand five hundred"],
+  SALARIO_NETO_NUM: ["Approximate net salary (number)", "Calculated automatically (Gross − 10.83% CCSS) — editable if needed"],
+  SALARIO_NETO_LETRAS: ["Net salary in words", "Calculated automatically — editable if needed"],
+  MONEDA: ["Currency (code)", ""],
+  MONEDA_TEXTO: ["Currency in words", "E.g. dollars, colones"],
+  COMISION_SI_NO: ["Does a commission apply?", ""],
+  DEPARTAMENTO_COMISION: ["Department / commission type", ""],
+  PORCENTAJE_COMISION: ["Commission percentage (only if you chose \"Events and group trips\")", "E.g. 5.0%"],
+  PORCENTAJE_COMISION_LETRAS: ["Percentage in words", "E.g. five percent"],
+  TELETRABAJO_SI_NO: ["Does remote work apply?", ""],
+  DIRECCION_TELETRABAJO: ["Remote work address", ""],
+  COMPENSACION_TELETRABAJO: ["Monthly remote work compensation", ""],
+  DISTRITO_FIRMA: ["District", ""],
+  CANTON_FIRMA: ["Canton", ""],
+  PROVINCIA_FIRMA: ["Province", ""],
+  TIPO_DESPIDO: ["Termination type", ""],
+  CAUSAL_DESPIDO: ["Cause (Art. 81 LC)", ""],
+  DESCRIPCION_HECHOS: ["Specific description of the facts (date, place, witnesses, evidence)", "Be precise and detailed: only what is written here may later be alleged in court."],
+  DIA_DESPIDO: ["Termination day", "1-31"],
+  MES_DESPIDO: ["Termination month", ""],
+  ANIO_DESPIDO: ["Termination year", "E.g. 2026"],
+  MOTIVO_DESPIDO_CON: ["Reason (only if with employer liability)", ""],
+  NOMBRE_RECOM: ["Employee's full name", ""],
+  CEDULA_RECOM: ["Employee's ID", ""],
+  PUESTO_RECOM: ["Position held", ""],
+  DEPARTAMENTO_RECOM: ["Department / area", ""],
+  FECHA_INICIO_RECOM: ["Employment start date", "E.g. November 25, 2024"],
+  FECHA_FIN_RECOM: ["Departure date", "E.g. September 22, 2025"],
+  RAZON_SALIDA_RECOM: ["Reason for departure", "E.g. Voluntary resignation, restructuring"],
+  DESEMPENO_RECOM: ["Performance description", "E.g. performed excellent work with responsibility and dedication"],
+  CUALIDADES_RECOM: ["Personal qualities to highlight", "E.g. respectful and responsible"],
+  LUGAR_FIRMA_RECOM: ["Place of signature", "E.g. Sierpe de Osa"],
+  FECHA_FIRMA_RECOM: ["Date of signature", "E.g. September 25, 2025"],
+};
+const GROUP_TITLES_EN = {
+  "Idioma del contrato": "Contract language",
+  "Tipo de contrato": "Contract type",
+  "Datos del trabajador": "Employee information",
+  "Fecha de ingreso": "Start date",
+  "Fecha de finalización": "End date",
+  "Portafolio y exclusividad": "Portfolio and exclusivity",
+  "Salario": "Salary",
+  "Comisiones": "Commissions",
+  "Teletrabajo": "Remote work",
+  "Lugar de firma": "Place of signature",
+  "Carta de despido (opcional)": "Termination letter (optional)",
+  "Recomendación laboral (opcional)": "Employment recommendation (optional)",
+};
+
+function fieldHtml(meta){
+  const [id, type] = meta;
+  const en = FIELD_LABELS_EN[id];
+  const label = (data.IDIOMA_CONTRATO === "en" && en) ? en[0] : meta[2];
+  const hint = (data.IDIOMA_CONTRATO === "en" && en) ? en[1] : meta[3];
+  const val = data[id] || "";
+  let control = "";
+  if (type === "textarea"){
+    control = `<textarea data-field="${id}" oninput="onInput('${id}', this.value)">${escapeHtml(val)}</textarea>`;
+  } else if (type === "select_month"){
+    const monthLabels = data.IDIOMA_CONTRATO === "en" ? MESES_EN : MESES.map(cap);
+    let opts = `<option value="">${tr("Seleccionar…","Select…")}</option>` + MESES.map((m,i) => `<option value="${m}" ${val===m?"selected":""}>${monthLabels[i]}</option>`).join("");
+    control = `<select data-field="${id}" onchange="onInput('${id}', this.value)">${opts}</select>`;
+  } else if (type === "select_moneda"){
+    const labels = data.IDIOMA_CONTRATO === "en" ? MONEDA_LABEL_EN : MONEDA_LABEL;
+    let opts = Object.keys(labels).map(k => `<option value="${k}" ${val===k?"selected":""}>${labels[k]}</option>`).join("");
+    control = `<select data-field="${id}" onchange="onInput('${id}', this.value)">${opts}</select>`;
+  } else if (type === "select_idioma"){
+    control = `<div class="sino-toggle">
+      <button type="button" class="${val==='es'?'active':''}" onclick="setIdiomaContrato('es')">Español</button>
+      <button type="button" class="${val==='en'?'active':''}" onclick="setIdiomaContrato('en')">English</button>
+    </div>`;
+  } else if (type === "select_nacionalidad" || type === "select_estado_civil" || type === "select_tipo_identificacion"){
+    const optionsEs = type === "select_nacionalidad"
+      ? ["Costarricense","Estadounidense","Nicaragüense"]
+      : type === "select_estado_civil"
+      ? ["Soltero(a)","Casado(a)","Divorciado(a)","Viudo(a)","Unión de hecho"]
+      : ["Cédula de identidad","DIMEX","Pasaporte","Cédula de residencia"];
+    const dict = type === "select_nacionalidad" ? NACIONALIDAD_EN : type === "select_estado_civil" ? ESTADO_CIVIL_EN : TIPO_IDENTIFICACION_EN;
+    const isManual = !!formManualFields[id];
+    const matches = optionsEs.includes(val);
+    if (isManual || (val && !matches)){
+      control = `<input type="text" data-field="${id}" value="${escapeHtml(val)}" oninput="onInput('${id}', this.value)">
+        <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="formManualFields['${id}']=false; renderForm();">📋 ${tr("Elegir de la lista","Choose from the list")}</button>`;
+    } else {
+      let opts = `<option value="">${tr("Seleccionar…","Select…")}</option>`;
+      opts += optionsEs.map(o => {
+        const labelText = data.IDIOMA_CONTRATO === "en" ? (dict[o.toLowerCase()] || o) : o;
+        return `<option value="${escapeHtml(o)}" ${o===val?"selected":""}>${escapeHtml(labelText)}</option>`;
+      }).join("");
+      opts += `<option value="__custom__">${tr("✏️ Otro (escribir manualmente)","✏️ Other (type manually)")}</option>`;
+      control = `<select data-field="${id}" onchange="
+          if(this.value==='__custom__'){ formManualFields['${id}']=true; data['${id}']=''; renderForm(); renderPreview(); updateProgress(); }
+          else { onInput('${id}', this.value); }
+        ">${opts}</select>`;
+    }
+  } else if (type === "select_tipo_despido"){
+    control = `<div class="sino-toggle">
+      <button type="button" class="${val==='sin_responsabilidad'?'active':''}" onclick="data['${id}']='sin_responsabilidad'; renderForm(); renderPreview(); updateProgress();">${tr("Sin responsabilidad patronal","Without employer liability")}</button>
+      <button type="button" class="${val==='con_responsabilidad'?'active':''}" onclick="data['${id}']='con_responsabilidad'; renderForm(); renderPreview(); updateProgress();">${tr("Con responsabilidad patronal","With employer liability")}</button>
+    </div>`;
+  } else if (type === "select_departamento_comision"){
+    const opciones = Object.keys(COMISIONES_POR_DEPARTAMENTO);
+    let opts = `<option value="">${tr("Seleccionar…","Select…")}</option>`;
+    opts += opciones.map(o => `<option value="${escapeHtml(o)}" ${val===o?"selected":""}>${escapeHtml(o)}</option>`).join("");
+    opts += `<option value="__eventos__" ${val==="__eventos__"?"selected":""}>${tr("Eventos y viajes de grupo (personalizado)","Events and group trips (custom)")}</option>`;
+    control = `<select data-field="${id}" onchange="data['${id}']=this.value; renderForm(); renderPreview(); updateProgress();">${opts}</select>`;
+    if (val && val !== "__eventos__" && COMISIONES_POR_DEPARTAMENTO[val]){
+      const reglas = COMISIONES_POR_DEPARTAMENTO[val].reglas;
+      const resumen = reglas.map(r => r.tipo === "porcentaje"
+        ? `${r.valor}% ${tr("sobre","on")} ${tr(r.concepto, r.conceptoEn)}`
+        : `$${r.valor.toFixed(2)} ${tr("fijo por","fixed per")} ${tr(r.concepto, r.conceptoEn)}`
+      ).join(" · ");
+      control += `<div class="hint" style="color:var(--navy-deep); font-weight:600;">${escapeHtml(resumen)}</div>`;
+    } else if (val === "__eventos__"){
+      control += `<div class="hint">${tr("Completa el porcentaje manualmente abajo.","Fill in the percentage manually below.")}</div>`;
+    }
+  } else if (type === "select_motivo_despido_con"){
+    if (data.TIPO_DESPIDO !== "con_responsabilidad"){
+      control = `<div class="hint">${tr("Solo aplica cuando el despido es con responsabilidad patronal (Art. 85 CT).","Only applies when the dismissal is with employer liability (Art. 85 LC).")}</div>`;
+    } else {
+      const isManual = !!formManualFields[id];
+      const matches = MOTIVOS_DESPIDO_CON.includes(val);
+      if (isManual || (val && !matches)){
+        control = `<input type="text" data-field="${id}" value="${escapeHtml(val)}" oninput="onInput('${id}', this.value)">
+          <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="formManualFields['${id}']=false; renderForm();">📋 ${tr("Elegir de la lista","Choose from the list")}</button>`;
+      } else {
+        let opts = `<option value="">${tr("Seleccionar motivo…","Select reason…")}</option>`;
+        opts += MOTIVOS_DESPIDO_CON.map(m => `<option value="${escapeHtml(m)}" ${val===m?"selected":""}>${escapeHtml(m)}</option>`).join("");
+        opts += `<option value="__custom__">${tr("✏️ Otro (escribir manualmente)","✏️ Other (type manually)")}</option>`;
+        control = `<select data-field="${id}" onchange="
+            if(this.value==='__custom__'){ formManualFields['${id}']=true; data['${id}']=''; renderForm(); renderPreview(); updateProgress(); }
+            else { data['${id}']=this.value; renderForm(); renderPreview(); updateProgress(); }
+          ">${opts}</select>`;
+      }
+    }
+  } else if (type === "select_causal_despido"){
+    if (data.TIPO_DESPIDO !== "sin_responsabilidad"){
+      control = `<div class="hint">${tr("Solo aplica cuando el despido es sin responsabilidad patronal (Art. 81 CT).","Only applies when the dismissal is without employer liability (Art. 81 LC).")}</div>`;
+    } else {
+      let opts = `<option value="">${tr("Seleccionar causal…","Select cause…")}</option>`;
+      opts += CAUSALES_DESPIDO_81.map(c => `<option value="${c.id}" ${val===c.id?"selected":""}>${escapeHtml(c.articulo + " — " + c.resumen.slice(0,60))}${c.resumen.length>60?"…":""}</option>`).join("");
+      control = `<select data-field="${id}" onchange="data['${id}']=this.value; renderForm(); renderPreview(); updateProgress();">${opts}</select>`;
+      const causal = CAUSALES_DESPIDO_81.find(c => c.id === val);
+      if (causal){
+        const tipoTxt = causal.tipo === "progresiva"
+          ? tr("⚠️ Requiere amonestación previa por escrito antes de poder aplicar esta causal.","⚠️ Requires a prior written warning before this cause can be applied.")
+          : tr("Causal directa (no requiere amonestación previa).","Direct cause (no prior warning required).");
+        control += `<div class="hint-error" style="color:var(--navy-deep);">${escapeHtml(causal.resumen)} — ${tipoTxt}</div>`;
+      }
+    }
+  } else if (type === "select_tipo_contrato"){
+    control = `<div class="sino-toggle">
+      <button type="button" class="${val==='indeterminado'?'active':''}" onclick="setTipoContrato('indeterminado')">${tr("Tiempo indeterminado","Indefinite term")}</button>
+      <button type="button" class="${val==='determinado'?'active':''}" onclick="setTipoContrato('determinado')">${tr("Tiempo determinado","Fixed term")}</button>
+    </div>`;
+  } else if (type === "select_sino"){
+    control = `<div class="sino-toggle">
+      <button type="button" class="${val==='SI'?'active':''}" onclick="setSiNo('${id}','SI')">${tr("SÍ","YES")}</button>
+      <button type="button" class="${val==='NO'?'active':''}" onclick="setSiNo('${id}','NO')">${tr("NO","NO")}</button>
+    </div>`;
+  } else if (type === "number"){
+    control = `<input type="number" data-field="${id}" value="${escapeHtml(val)}" oninput="onInput('${id}', this.value)">`;
+  } else {
+    control = `<input type="text" data-field="${id}" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="onInput('${id}', this.value)">`;
+  }
+  const SNIPPET_FIELDS = new Set(["DESCRIPCION_HECHOS","DESEMPENO_RECOM","CUALIDADES_RECOM","RAZON_SALIDA_RECOM"]);
+  return `<div class="field" style="position:relative;">
+      <label for="${id}">${escapeHtml(label)}</label>
+      ${control}
+      ${SNIPPET_FIELDS.has(id) ? `
+        <div style="margin-top:4px;">
+          <button type="button" class="btn" style="padding:5px 10px; font-size:11px;" onclick="toggleSnippetsMenu('${id}')">💬 Frases guardadas</button>
+          <button type="button" class="btn" style="padding:5px 10px; font-size:11px;" onclick="guardarSnippetActual('${id}')">💾 Guardar esta frase</button>
+          <div class="snippets-menu" id="snippets-menu-${id}"></div>
+        </div>` : ""}
+      ${hint ? `<div class="hint">${escapeHtml(hint)}</div>` : ""}
+      ${id === "IDENTIFICACION" ? `<div class="hint-error" id="hint-cedula"></div>` : ""}
+    </div>`;
+}
+
+// ---------- reusable snippets ----------
+async function getSnippets(fieldId){
+  try{
+    const res = await window.storage.get("snippets:" + fieldId, false);
+    return res && res.value ? JSON.parse(res.value) : [];
+  }catch(e){ return []; }
+}
+async function guardarSnippetActual(fieldId){
+  const val = (data[fieldId] || "").trim();
+  if (!val){ statusMsg("Escribe algo en el campo antes de guardarlo como frase.", false); return; }
+  const list = await getSnippets(fieldId);
+  if (!list.includes(val)) list.unshift(val);
+  await window.storage.set("snippets:" + fieldId, JSON.stringify(list.slice(0,20)), false);
+  statusMsg("Frase guardada para reutilizar.");
+}
+async function toggleSnippetsMenu(fieldId){
+  const menu = document.getElementById("snippets-menu-" + fieldId);
+  if (!menu) return;
+  const isOpen = menu.classList.contains("open");
+  document.querySelectorAll(".snippets-menu.open").forEach(m => m.classList.remove("open"));
+  if (isOpen) return;
+  const list = await getSnippets(fieldId);
+  menu.innerHTML = list.length === 0
+    ? `<div style="padding:10px; font-size:12px; color:var(--ink-soft);">Sin frases guardadas todavía para este campo.</div>`
+    : list.map((s,i) => `<button type="button" onclick="insertarSnippet('${fieldId}', ${i})">${escapeHtml(s.slice(0,90))}${s.length>90?"…":""}</button>`).join("");
+  menu.classList.add("open");
+}
+function insertarSnippet(fieldId, idx){
+  getSnippets(fieldId).then(list => {
+    const val = list[idx];
+    if (val === undefined) return;
+    data[fieldId] = val;
+    renderForm();
+    renderPreview();
+    statusMsg("Frase insertada.");
+  });
+}
+
+function renderEmpresaSummary(){
+  const has = (data.EMPRESA || "").trim() !== "";
+  if (!has){
+    return `<div class="section-card" style="border-color:var(--gold);">
+      <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div>
+          <div style="font-weight:700; color:var(--navy-deep); font-size:13.5px;">${tr("Sin empresa aplicada","No company applied")}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${tr("Elige o crea una empresa en la pestaña Empresas — sus datos (representante legal, cédula, dirección) se completan solos aquí.","Choose or create a company in the Companies tab — its details (legal representative, ID, address) will fill in here automatically.")}</div>
+        </div>
+        <button class="btn primary" onclick="showTab('empresas')" style="flex-shrink:0;">${tr("Ir a Empresas","Go to Companies")}</button>
+      </div>
+    </div>`;
+  }
+  const rep = [data.REPRESENTANTE_LEGAL, data.PUESTO_REPRESENTANTE_LEGAL].filter(Boolean).join(" · ");
+  return `<div class="section-card" style="border-color:var(--leaf);">
+    <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <div>
+        <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-soft);">${tr("Empresa aplicada a este contrato","Company applied to this contract")}</div>
+        <div style="font-weight:700; color:var(--navy-deep); font-size:14px;">${escapeHtml(data.EMPRESA)}</div>
+        ${rep ? `<div style="font-size:12px; color:var(--ink-soft);">${tr("Representante","Representative")}: ${escapeHtml(rep)}</div>` : ""}
+      </div>
+      <button class="btn" onclick="showTab('empresas')" style="flex-shrink:0;">${tr("Cambiar","Change")}</button>
+    </div>
+  </div>`;
+}
+
+function renderPuestoSummary(){
+  const has = (data.PUESTO || "").trim() !== "";
+  if (!has){
+    return `<div class="section-card" style="border-color:var(--gold);">
+      <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div>
+          <div style="font-weight:700; color:var(--navy-deep); font-size:13.5px;">${tr("Sin puesto aplicado","No position applied")}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${tr("Elige o crea un puesto en la pestaña Puestos — jefatura inmediata, líder, jornada, tareas y responsabilidades se completan solos aquí.","Choose or create a position in the Positions tab — immediate supervisor, schedule, tasks and responsibilities will fill in here automatically.")}</div>
+        </div>
+        <button class="btn primary" onclick="showTab('puestos')" style="flex-shrink:0;">${tr("Ir a Puestos","Go to Positions")}</button>
+      </div>
+    </div>`;
+  }
+  const mod = MODALIDADES_JORNADA[data.MODALIDAD_JORNADA];
+  const modLabel = mod ? (data.IDIOMA_CONTRATO === "en" ? mod.labelEn : mod.label) : "";
+  const jefeLabel = tr("Jefatura inmediata","Immediate supervisor");
+  const bits = [data.JEFE_INMEDIATO ? jefeLabel + ": " + data.JEFE_INMEDIATO : "", modLabel].filter(Boolean).join(" · ");
+  return `<div class="section-card" style="border-color:var(--leaf);">
+    <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <div>
+        <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-soft);">${tr("Puesto aplicado a este contrato","Position applied to this contract")}</div>
+        <div style="font-weight:700; color:var(--navy-deep); font-size:14px;">${escapeHtml(data.PUESTO)}</div>
+        ${bits ? `<div style="font-size:12px; color:var(--ink-soft);">${escapeHtml(bits)}</div>` : ""}
+      </div>
+      <button class="btn" onclick="showTab('puestos')" style="flex-shrink:0;">${tr("Cambiar","Change")}</button>
+    </div>
+  </div>`;
+}
+
+function renderLugarFirmaInfo(){
+  const has = data.DISTRITO_FIRMA || data.CANTON_FIRMA || data.PROVINCIA_FIRMA;
+  const label = tr("Lugar de firma","Place of signature");
+  if (!has){
+    return `<div class="section-card" style="border-color:var(--gold);">
+      <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div>
+          <div style="font-weight:700; color:var(--navy-deep); font-size:13.5px;">${label}: ${tr("automático","automatic")}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${tr("Se completa solo con la ubicación de la propiedad aplicada — ve a Propiedades o Empresas para asignarla.","Fills in automatically from the applied property's location — go to Properties or Companies to assign it.")}</div>
+        </div>
+        <button class="btn" onclick="showTab('propiedades')" style="flex-shrink:0;">${tr("Ir a Propiedades","Go to Properties")}</button>
+      </div>
+    </div>`;
+  }
+  const linea = [data.DISTRITO_FIRMA, data.CANTON_FIRMA, data.PROVINCIA_FIRMA].filter(Boolean).join(", ");
+  return `<div class="section-card" style="border-color:var(--leaf);">
+    <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <div>
+        <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-soft);">${label} (${tr("automático desde la propiedad","automatic from the property")})</div>
+        <div style="font-weight:700; color:var(--navy-deep); font-size:14px;">${escapeHtml(linea)}</div>
+      </div>
+      <button class="btn" onclick="showTab('propiedades')" style="flex-shrink:0;">${tr("Cambiar","Change")}</button>
+    </div>
+  </div>`;
+}
+
+// Section titles that belong to each of the three independent documents.
+// The contract form shows everything EXCEPT the despido/recom groups; those
+// two live in their own dedicated panels so editing a contract never mixes
+// in dismissal-letter or recommendation-letter fields (and vice versa).
+const DESPIDO_SECTION_TITLES = ["Carta de despido (opcional)"];
+const RECOM_SECTION_TITLES = ["Recomendación laboral (opcional)"];
+const PERMISO_SECTION_TITLES = ["Permiso sin goce salarial (opcional)"];
+
+function groupFieldsIntoSections(){
+  let sections = [];
+  let cur = null;
+  FIELDS_META.forEach(meta => {
+    if (meta[0] === "grp"){
+      if (cur) sections.push(cur);
+      cur = { title: meta[1], fields: [] };
+    } else {
+      cur.fields.push(meta);
+    }
+  });
+  if (cur) sections.push(cur);
+  return sections;
+}
+
+// Generic renderer: draws only the sections whose title passes `filterFn`
+// into the given panel. Used separately by the contract form, the despido
+// form, and the recomendación form so each panel only ever shows its own
+// fields. `excludeIds` (optional) skips specific field ids within a matched
+// section — used to hide NOMBRE_RECOM/CEDULA_RECOM once they're shown as a
+// locked summary card instead of a free-text input.
+function renderFieldSections(panelId, filterFn, extraHtmlBefore, excludeIds){
+  let html = extraHtmlBefore || "";
+  const sections = groupFieldsIntoSections().filter(sec => filterFn(sec.title));
+
+  sections.forEach(sec => {
+    if (sec.title === "Fecha de finalización" && data.TIPO_CONTRATO !== "determinado") return;
+    const isCollapsed = collapsedSections.has(sec.title);
+    const secTitle = (data.IDIOMA_CONTRATO === "en" && GROUP_TITLES_EN[sec.title]) ? GROUP_TITLES_EN[sec.title] : sec.title;
+    html += `<div class="section-card">
+      <div class="section-head ${isCollapsed?"collapsed":""}" onclick="toggleSection('${sec.title.replace(/'/g,"\\'")}')">
+        <span>${escapeHtml(secTitle)}</span><span class="chev">▾</span>
+      </div>
+      <div class="section-body ${isCollapsed?"collapsed":""}">`;
+    if (sec.title === "Salario" && !isCollapsed){
+      html += `<div class="field">
+        <label>${tr("Salario base","Base salary")}</label>
+        <div class="sino-toggle">
+          <button type="button" class="${data.SALARIO_MODO==='min'?'active':''}" onclick="setSalarioBase('min')">${tr("Mínimo del puesto","Position minimum")}</button>
+          <button type="button" class="${data.SALARIO_MODO==='otro'?'active':''}" onclick="setSalarioBase('otro')">${tr("Otro monto","Other amount")}</button>
+        </div>
+        ${data.SALARIO_MINISTERIO
+          ? `<div class="hint">${tr("Mínimo de referencia (MTSS 2026) para","Reference minimum (MTSS 2026) for")} ${escapeHtml(data.PUESTO||tr('este puesto','this position'))}: ₡${Number(data.SALARIO_MINISTERIO).toLocaleString('es-CR',{minimumFractionDigits:2})}${tr('/mes','/month')}</div>`
+          : `<div class="hint">${tr("Este puesto no tiene salario mínimo de referencia (no fue importado del Ministerio de Trabajo).","This position has no reference minimum wage (it wasn't imported from the Ministry of Labor list).")}</div>`}
+      </div>`;
+    }
+    sec.fields.filter(f => !excludeIds || !excludeIds.has(f[0])).forEach(f => { html += fieldHtml(f); });
+    if (sec.title === "Fecha de finalización" && !isCollapsed){
+      html += `<div class="hint-error" id="hint-fechas"></div>`;
+    }
+    html += `</div></div>`;
+  });
+  document.getElementById(panelId).innerHTML = html;
+}
+
+// ---------- "employee is the source of truth" helpers ----------
+// Used by despido/recomendación (always) and by the contract form (when it
+// was started from an employee record) so the person's identity is never
+// hand-typed once it's linked — it always comes from Empleados.
+function renderEmpleadoVinculadoCard(nombre, cedula, extra, extraHtml, destTab){
+  const tab = destTab || "empleados";
+  const linea2 = [cedula ? (tr("Cédula","ID")+": "+cedula) : "", extra || ""].filter(Boolean).join(" · ");
+  return `<div class="section-card" style="border-color:var(--leaf); margin-bottom:12px;">
+    <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <div>
+        <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-soft);">🔗 ${tr("Empleado vinculado (desde Empleados)","Linked employee (from Employees)")}</div>
+        <div style="font-weight:700; color:var(--navy-deep); font-size:14px;">${escapeHtml(nombre || "")}</div>
+        ${linea2 ? `<div style="font-size:12px; color:var(--ink-soft);">${escapeHtml(linea2)}</div>` : ""}
+        ${extraHtml || ""}
+      </div>
+      <button class="btn" onclick="showTab('${tab}')" style="flex-shrink:0;">${tr("Cambiar","Change")}</button>
+    </div>
+  </div>`;
+}
+
+function renderElegirEmpleadoGate(mensaje, destTab, destLabel){
+  const tab = destTab || "empleados";
+  const label = destLabel || tr("Ir a Empleados","Go to Employees");
+  return `<div class="section-card" style="border-color:var(--gold);">
+    <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <div>
+        <div style="font-weight:700; color:var(--navy-deep); font-size:13.5px;">${tr("Primero elige el empleado","First choose the employee")}</div>
+        <div style="font-size:12px; color:var(--ink-soft);">${escapeHtml(mensaje)}</div>
+      </div>
+      <button class="btn primary" onclick="showTab('${tab}')" style="flex-shrink:0;">${escapeHtml(label)}</button>
+    </div>
+  </div>`;
+}
+
+function renderForm(){
+  let intro = renderEmpresaSummary() + renderPuestoSummary() + renderLugarFirmaInfo();
+  let exclude = null;
+  if (currentEmpKeyForContract && data.NOMBRE_TRABAJADOR){
+    intro += renderEmpleadoVinculadoCard(data.NOMBRE_TRABAJADOR, data.IDENTIFICACION, "",
+      `<button type="button" class="btn" style="margin-top:6px; padding:5px 10px; font-size:11px;" onclick="desvincularEmpleadoContrato()">🔓 ${tr("Desvincular (editar manualmente)","Unlink (edit manually)")}</button>`);
+    exclude = new Set(["NOMBRE_TRABAJADOR","IDENTIFICACION"]);
+  }
+  renderFieldSections("form-panel", title => !DESPIDO_SECTION_TITLES.includes(title) && !RECOM_SECTION_TITLES.includes(title), intro, exclude);
+  updateProgress();
+  updateValidationHints();
+}
+
+function desvincularEmpleadoContrato(){
+  currentEmpKeyForContract = null;
+  renderForm();
+  statusMsg(tr("Contrato desvinculado — ahora puedes escribir el nombre y la cédula manualmente.","Contract unlinked — you can now type the name and ID manually."));
+}
+
+function renderDespidoForm(){
+  if (!data.NOMBRE_TRABAJADOR || !data.IDENTIFICACION){
+    document.getElementById("despidoform-panel").innerHTML = renderElegirEmpleadoGate(
+      tr("La carta de despido siempre se genera desde el registro del empleado, para que el nombre, la cédula y los datos patronales nunca se escriban a mano ni se desalineen con Empleados.",
+         "The dismissal letter is always generated from the employee record, so the name, ID and employer details are never hand-typed or out of sync with Employees.")
+    );
+    return;
+  }
+  const intro = renderEmpleadoVinculadoCard(data.NOMBRE_TRABAJADOR, data.IDENTIFICACION, data.PUESTO)
+    + `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
+      <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
+        ⚖️ ${tr("Completa el tipo, la causal (si aplica) y los hechos para generar la carta.","Complete the type, cause (if it applies), and the facts to generate the letter.")}
+      </div>
+    </div>`;
+  renderFieldSections("despidoform-panel", title => DESPIDO_SECTION_TITLES.includes(title), intro);
+}
+
+function renderRecomForm(){
+  if (!data.NOMBRE_RECOM || !data.CEDULA_RECOM){
+    document.getElementById("recomform-panel").innerHTML = renderElegirEmpleadoGate(
+      tr("La recomendación laboral solo aplica a empleados que ya salieron de la empresa — se genera desde el Archivo, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados.",
+         "The recommendation letter only applies to employees who already left the company — it's generated from the Archive, so the name and ID are never hand-typed or out of sync with Employees."),
+      "archivo",
+      tr("Ir a Archivo","Go to Archive")
+    );
+    return;
+  }
+  const intro = renderEmpleadoVinculadoCard(data.NOMBRE_RECOM, data.CEDULA_RECOM, data.PUESTO_RECOM, null, "archivo")
+    + `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
+      <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
+        📝 ${tr("Completa el resto de los datos para generar la carta de recomendación.","Complete the rest of the details to generate the recommendation letter.")}
+      </div>
+    </div>`;
+  renderFieldSections("recomform-panel", title => RECOM_SECTION_TITLES.includes(title), intro, new Set(["NOMBRE_RECOM","CEDULA_RECOM"]));
+}
+
+function renderPermisoForm(){
+  if (!data.NOMBRE_PERMISO || !data.CEDULA_PERMISO){
+    document.getElementById("permisoform-panel").innerHTML = renderElegirEmpleadoGate(
+      tr("La acción de personal siempre se genera desde el registro del empleado, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados.",
+         "The personnel action is always generated from the employee record, so the name and ID are never hand-typed or out of sync with Employees.")
+    );
+    return;
+  }
+  const intro = renderEmpleadoVinculadoCard(data.NOMBRE_PERMISO, data.CEDULA_PERMISO, data.PUESTO_PERMISO)
+    + `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
+      <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
+        🗓️ ${tr("Elige las fechas del permiso — el total de días se calcula automáticamente.","Choose the leave dates — the total days are calculated automatically.")}
+      </div>
+    </div>`;
+  renderFieldSections("permisoform-panel", title => PERMISO_SECTION_TITLES.includes(title), intro, new Set(["NOMBRE_PERMISO","CEDULA_PERMISO"]));
+}
+
+async function generarPermisoDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    data.NOMBRE_PERMISO = emp.NOMBRE_EMP || "";
+    data.CEDULA_PERMISO = emp.IDENTIFICACION_EMP || "";
+    let puestoNombre = emp.DEPARTAMENTO_EMP || "";
+    if (emp.PUESTO_KEY){
+      try{
+        const puestoRes = await window.storage.get(CATALOGS.puestos.prefix + emp.PUESTO_KEY, false);
+        if (puestoRes && puestoRes.value) puestoNombre = JSON.parse(puestoRes.value).PUESTO || puestoNombre;
+      }catch(e){ /* fall back to DEPARTAMENTO_EMP */ }
+    }
+    data.PUESTO_PERMISO = puestoNombre;
+    data.DEPARTAMENTO_PERMISO = emp.DEPARTAMENTO_EMP || "";
+    data.DIA_INICIO_PERMISO = ""; data.MES_INICIO_PERMISO = ""; data.ANIO_INICIO_PERMISO = "";
+    data.DIA_FIN_PERMISO = ""; data.MES_FIN_PERMISO = ""; data.ANIO_FIN_PERMISO = "";
+    data.TOTAL_DIAS_PERMISO = "";
+    data.NUMERO_ACCION_PERMISO = "";
+    // Quien tiene la sesión abierta manda como firmante: es literalmente quien
+    // está generando el documento. Solo se recurre al firmante del catálogo de
+    // Puestos cuando la app corre sin backend, sin sesión que consultar
+    // (ver buscarFirmanteAccionesPropiedad).
+    if (trabajadorActual){
+      data.FIRMANTE_PERMISO_NOMBRE = trabajadorActual.nombre;
+      data.FIRMANTE_PERMISO_CEDULA = trabajadorActual.cedula;
+      data.FIRMANTE_PERMISO_PUESTO = trabajadorActual.puesto;
+    } else {
+      const firmante = await buscarFirmanteAccionesPropiedad();
+      data.FIRMANTE_PERMISO_NOMBRE = firmante.nombre;
+      data.FIRMANTE_PERMISO_CEDULA = firmante.cedula;
+      data.FIRMANTE_PERMISO_PUESTO = firmante.puesto;
+    }
+    currentEmpKeyForLetter = key;
+    showTab("permisoform");
+    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados. Elige las fechas del permiso.");
+  }catch(e){ statusMsg("No se pudo preparar la acción de personal.", false); }
+}
+
+function toggleSection(title){
+  if (collapsedSections.has(title)) collapsedSections.delete(title);
+  else collapsedSections.add(title);
+  renderForm();
+}
+
+// ---------- number to words (Spanish, for salario en letras) ----------
+function numeroALetrasEs(n, montoEsExacto){
+  n = Math.floor(n);
+  if (n === 0) return "cero";
+  const UNIDADES = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"];
+  const DIECIS = ["diez","once","doce","trece","catorce","quince","dieciséis","diecisiete","dieciocho","diecinueve"];
+  const VEINTIS = ["veinte","veintiuno","veintidós","veintitrés","veinticuatro","veinticinco","veintiséis","veintisiete","veintiocho","veintinueve"];
+  const DECENAS = ["","diez","veinte","treinta","cuarenta","cincuenta","sesenta","setenta","ochenta","noventa"];
+  const CENTENAS = ["","ciento","doscientos","trescientos","cuatrocientos","quinientos","seiscientos","setecientos","ochocientos","novecientos"];
+
+  function grupo(num){
+    let str = "";
+    if (num === 100) return "cien";
+    const c = Math.floor(num/100);
+    const resto = num % 100;
+    if (c > 0) str += CENTENAS[c];
+    if (resto > 0){
+      if (str) str += " ";
+      if (resto < 10) str += UNIDADES[resto];
+      else if (resto < 20) str += DIECIS[resto-10];
+      else if (resto < 30) str += VEINTIS[resto-20];
+      else {
+        const d = Math.floor(resto/10), u = resto % 10;
+        str += DECENAS[d];
+        if (u > 0) str += " y " + UNIDADES[u];
+      }
+    }
+    return str;
+  }
+
+  if (n < 1000) return grupo(n);
+  if (n < 1000000){
+    const miles = Math.floor(n/1000), resto = n % 1000;
+    let str = (miles === 1) ? "mil" : grupo(miles) + " mil";
+    if (resto > 0) str += " " + grupo(resto);
+    return str;
+  }
+  const millones = Math.floor(n/1000000), resto = n % 1000000;
+  let str = (millones === 1) ? "un millón" : grupo(millones) + " millones";
+  if (resto > 0){
+    if (resto < 1000) str += " " + grupo(resto);
+    else {
+      const miles = Math.floor(resto/1000), restoMiles = resto % 1000;
+      str += " " + ((miles === 1) ? "mil" : grupo(miles) + " mil");
+      if (restoMiles > 0) str += " " + grupo(restoMiles);
+    }
+  } else if (montoEsExacto) {
+    str += " de"; // "un millón de colones" / "dos millones de colones"
+  }
+  return str;
+}
+
+function numeroALetrasEn(n){
+  n = Math.floor(n);
+  if (n === 0) return "zero";
+  const ONES = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+  const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+
+  function grupo(num){
+    let str = "";
+    const h = Math.floor(num/100);
+    const rest = num % 100;
+    if (h > 0) str += ONES[h] + " hundred";
+    if (rest > 0){
+      if (str) str += " ";
+      if (rest < 20) str += ONES[rest];
+      else {
+        const t = Math.floor(rest/10), u = rest % 10;
+        str += TENS[t];
+        if (u > 0) str += "-" + ONES[u];
+      }
+    }
+    return str;
+  }
+
+  if (n < 1000) return grupo(n);
+  if (n < 1000000){
+    const th = Math.floor(n/1000), rest = n % 1000;
+    let str = grupo(th) + " thousand";
+    if (rest > 0) str += " " + grupo(rest);
+    return str;
+  }
+  const mm = Math.floor(n/1000000), rest = n % 1000000;
+  let str = grupo(mm) + " million";
+  if (rest > 0){
+    if (rest < 1000) str += " " + grupo(rest);
+    else {
+      const th = Math.floor(rest/1000), restTh = rest % 1000;
+      str += " " + grupo(th) + " thousand";
+      if (restTh > 0) str += " " + grupo(restTh);
+    }
+  }
+  return str;
+}
+
+function salarioEnLetras(monto, monedaTexto, lang){
+  const entero = Math.floor(monto);
+  const centavos = Math.round((monto - entero) * 100);
+  if (lang === "en"){
+    let str = numeroALetrasEn(entero) + " " + (monedaTexto || "colones");
+    if (centavos > 0) str += " with " + numeroALetrasEn(centavos) + "/100";
+    return str;
+  }
+  let str = numeroALetrasEs(entero, true) + " " + (monedaTexto || "colones");
+  if (centavos > 0) str += " con " + numeroALetrasEs(centavos) + "/100";
+  return str;
+}
+
+const DEDUCCION_CCSS = 0.1083; // 10.83% del salario bruto, deducción obrera aproximada
+
+function calcularSalarioNeto(brutoStr){
+  const bruto = parseFloat(String(brutoStr).replace(/,/g, ""));
+  if (!bruto || isNaN(bruto)) return;
+  const neto = bruto * (1 - DEDUCCION_CCSS);
+  data.SALARIO_NETO_NUM = neto.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+  const monedaTexto = data.IDIOMA_CONTRATO === "en"
+    ? (MONEDA_TEXTO_EN[(data.MONEDA_TEXTO||"").trim().toLowerCase()] || data.MONEDA_TEXTO || "colones")
+    : (data.MONEDA_TEXTO || "colones");
+  data.SALARIO_NETO_LETRAS = salarioEnLetras(neto, monedaTexto, data.IDIOMA_CONTRATO);
+}
+
+function setIdiomaContrato(val){
+  data.IDIOMA_CONTRATO = val;
+  // if the salary in words was auto-generated from the position's minimum wage,
+  // regenerate it in the newly selected language so it's never left stale/mixed.
+  if (data.SALARIO_MODO === "min" && data.SALARIO_BRUTO_NUM){
+    const monedaTexto = val === "en" ? "colones" : "colones";
+    data.SALARIO_BRUTO_LETRAS = salarioEnLetras(Number(String(data.SALARIO_BRUTO_NUM).replace(/,/g,"")), monedaTexto, val);
+    calcularSalarioNeto(data.SALARIO_BRUTO_NUM);
+  }
+  renderForm();
+  renderPreview();
+}
+
+function setTipoContrato(val){
+  data.TIPO_CONTRATO = val;
+  if (val === "indeterminado"){
+    data.DIA_FIN = ""; data.MES_FIN = ""; data.ANIO_FIN = "";
+  }
+  renderForm();
+  renderPreview();
+  updateProgress();
+}
+
+function setSalarioBase(mode){
+  const prevMode = data.SALARIO_MODO;
+  data.SALARIO_MODO = mode;
+  if (mode === "min"){
+    if (!data.SALARIO_MINISTERIO){
+      statusMsg("Este puesto no tiene salario mínimo de referencia — impórtalo desde el Ministerio de Trabajo en la pestaña Puestos, o usa 'Otro monto'.", false);
+      renderForm();
+      return;
+    }
+    const monto = Number(data.SALARIO_MINISTERIO);
+    data.SALARIO_BRUTO_NUM = monto.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+    data.MONEDA = "CRC";
+    data.MONEDA_TEXTO = "colones";
+    data.SALARIO_BRUTO_LETRAS = salarioEnLetras(monto, "colones", data.IDIOMA_CONTRATO);
+    calcularSalarioNeto(data.SALARIO_BRUTO_NUM);
+    statusMsg("Salario mínimo del puesto aplicado (neto calculado con 10.83% de deducción CCSS).");
+  } else if (mode === "otro" && prevMode === "min"){
+    // the words-value was auto-derived from the minimum wage; it no longer matches once
+    // the person types a different number, so clear it and ask them to re-enter it.
+    data.SALARIO_BRUTO_LETRAS = "";
+    statusMsg("Ahora escribe el monto y su equivalente en letras a mano.");
+  }
+  renderForm();
+  renderPreview();
+  updateProgress();
+}
+
+function setSiNo(id, val){
+  data[id] = val;
+  renderForm();
+  renderPreview();
+}
+
+// ---------- validations ----------
+const CEDULA_PATTERNS = {
+  "cédula de identidad": { re: /^\d{1}-?\d{4}-?\d{4}$/, msg: es => `Formato esperado: 1-2345-6789 (9 dígitos).` },
+  "dimex": { re: /^\d{11,12}$/, msg: v => `El DIMEX debe tener 11 o 12 dígitos.` },
+  "cédula de residencia": { re: /^\d{11,12}$/, msg: v => `Debe tener 11 o 12 dígitos.` },
+};
+
+function validarCedula(){
+  const tipo = (data.TIPO_IDENTIFICACION || "").trim().toLowerCase();
+  const valor = (data.IDENTIFICACION || "").trim();
+  if (!tipo || !valor) return null; // nothing to validate yet
+  if (tipo === "pasaporte") return null; // passport formats vary too much by country to validate
+  const pattern = CEDULA_PATTERNS[tipo];
+  if (!pattern) return null; // unrecognized/manual type — don't block on something we can't check
+  if (!pattern.re.test(valor)){
+    return tr(
+      `El número de identificación no tiene el formato esperado para "${data.TIPO_IDENTIFICACION}". ${pattern.msg()}`,
+      `The ID number doesn't match the expected format for "${data.TIPO_IDENTIFICACION}".`
+    );
+  }
+  return null;
+}
+
+function validarFechasContrato(){
+  if (data.TIPO_CONTRATO !== "determinado") return null;
+  const { DIA_INICIO, MES_INICIO, ANIO_INICIO, DIA_FIN, MES_FIN, ANIO_FIN } = data;
+  if (!DIA_INICIO || !MES_INICIO || !ANIO_INICIO || !DIA_FIN || !MES_FIN || !ANIO_FIN) return null; // incomplete, nothing to compare yet
+  const idxI = MESES.indexOf(MES_INICIO), idxF = MESES.indexOf(MES_FIN);
+  if (idxI < 0 || idxF < 0) return null;
+  const inicio = new Date(Number(ANIO_INICIO), idxI, Number(DIA_INICIO));
+  const fin = new Date(Number(ANIO_FIN), idxF, Number(DIA_FIN));
+  if (fin <= inicio){
+    return tr(
+      "La fecha de finalización debe ser posterior a la fecha de inicio.",
+      "The end date must be after the start date."
+    );
+  }
+  return null;
+}
+
+function updateValidationHints(){
+  const cedulaHint = document.getElementById("hint-cedula");
+  if (cedulaHint) cedulaHint.textContent = validarCedula() || "";
+  const fechasHint = document.getElementById("hint-fechas");
+  if (fechasHint) fechasHint.textContent = validarFechasContrato() || "";
+}
+
+function onInput(id, val){
+  data[id] = val;
+  const PERMISO_DATE_FIELDS = ["DIA_INICIO_PERMISO","MES_INICIO_PERMISO","ANIO_INICIO_PERMISO","DIA_FIN_PERMISO","MES_FIN_PERMISO","ANIO_FIN_PERMISO"];
+  if (PERMISO_DATE_FIELDS.includes(id)){
+    calcularDiasPermiso();
+  }
+  if (id === "SALARIO_BRUTO_NUM"){
+    const bruto = parseFloat(String(val).replace(/,/g, ""));
+    if (bruto && !isNaN(bruto)){
+      const monedaTexto = data.IDIOMA_CONTRATO === "en"
+        ? (MONEDA_TEXTO_EN[(data.MONEDA_TEXTO||"").trim().toLowerCase()] || data.MONEDA_TEXTO || "colones")
+        : (data.MONEDA_TEXTO || "colones");
+      data.SALARIO_BRUTO_LETRAS = salarioEnLetras(bruto, monedaTexto, data.IDIOMA_CONTRATO);
+      syncBrutoLetrasDom();
+    }
+    calcularSalarioNeto(val);
+    syncNetoInputsDom();
+  } else if (id === "MONEDA_TEXTO"){
+    // keep both "en letras" fields in sync with the currency name if they were auto-generated
+    const bruto = parseFloat(String(data.SALARIO_BRUTO_NUM||"").replace(/,/g,""));
+    if (bruto && !isNaN(bruto)){
+      const monedaTexto = data.IDIOMA_CONTRATO === "en"
+        ? (MONEDA_TEXTO_EN[(val||"").trim().toLowerCase()] || val || "colones")
+        : (val || "colones");
+      data.SALARIO_BRUTO_LETRAS = salarioEnLetras(bruto, monedaTexto, data.IDIOMA_CONTRATO);
+      syncBrutoLetrasDom();
+    }
+    if (data.SALARIO_NETO_NUM){
+      calcularSalarioNeto(data.SALARIO_BRUTO_NUM);
+      syncNetoInputsDom();
+    }
+  }
+  if (id === "IDENTIFICACION" || id === "TIPO_IDENTIFICACION" ||
+      id === "DIA_INICIO" || id === "MES_INICIO" || id === "ANIO_INICIO" ||
+      id === "DIA_FIN" || id === "MES_FIN" || id === "ANIO_FIN"){
+    updateValidationHints();
+  }
+  renderPreview();
+  updateProgress();
+}
+
+function syncBrutoLetrasDom(){
+  const el = document.querySelector('[data-field="SALARIO_BRUTO_LETRAS"]');
+  if (el) el.value = data.SALARIO_BRUTO_LETRAS || "";
+}
+
+function syncNetoInputsDom(){
+  // update the neto inputs directly (no full re-render) so the field the person
+  // is actively typing in never loses focus/cursor position.
+  const numEl = document.querySelector('[data-field="SALARIO_NETO_NUM"]');
+  const letrasEl = document.querySelector('[data-field="SALARIO_NETO_LETRAS"]');
+  if (numEl) numEl.value = data.SALARIO_NETO_NUM || "";
+  if (letrasEl) letrasEl.value = data.SALARIO_NETO_LETRAS || "";
+}
+
+function calcularDiasPermiso(){
+  const di = parseInt(data.DIA_INICIO_PERMISO, 10);
+  const mi = MESES.indexOf(data.MES_INICIO_PERMISO);
+  const ai = parseInt(data.ANIO_INICIO_PERMISO, 10);
+  const df = parseInt(data.DIA_FIN_PERMISO, 10);
+  const mf = MESES.indexOf(data.MES_FIN_PERMISO);
+  const af = parseInt(data.ANIO_FIN_PERMISO, 10);
+  if (!di || mi < 0 || !ai || !df || mf < 0 || !af){
+    return; // wait until both dates are fully chosen
+  }
+  const inicio = new Date(ai, mi, di);
+  const fin = new Date(af, mf, df);
+  const msDia = 24 * 60 * 60 * 1000;
+  const dias = Math.round((fin - inicio) / msDia) + 1; // inclusive of both endpoints
+  data.TOTAL_DIAS_PERMISO = dias > 0 ? String(dias) : "";
+  const totalEl = document.querySelector('[data-field="TOTAL_DIAS_PERMISO"]');
+  if (totalEl) totalEl.value = data.TOTAL_DIAS_PERMISO;
+  if (dias <= 0){
+    statusMsg("La fecha de fin debe ser igual o posterior a la fecha de inicio.", false);
+  }
+}
+
+
+function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+function escapeHtml(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function slugify(s){
+  return String(s).trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-_.]/g,"");
+}
+
+// ---------- generic catalog field renderer (used inside the inline add/edit form) ----------
+const PROVINCIAS_CR = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Puntarenas", "Limón"];
+const BANCOS_CR = [
+  "Banco Nacional de Costa Rica (BNCR)",
+  "Banco de Costa Rica (BCR)",
+  "Banco Popular y de Desarrollo Comunal",
+  "BAC Credomatic",
+  "Banco Davivienda",
+  "Scotiabank",
+  "Banco Promerica",
+  "Banco Lafise",
+  "Banco Improsa",
+  "Banco CMB (Costa Rica)",
+  "Coopenae",
+  "Coopealianza",
+  "Mucap",
+  "Grupo Mutual",
+  "Banco BCT",
+];
+
+function catalogFieldHtml(meta){
+  const [id, type, label, hint] = meta;
+  const val = (catalogEditing.values[id] || "");
+  let control;
+  if (type === "textarea"){
+    control = `<textarea oninput="catalogEditing.values['${id}']=this.value">${escapeHtml(val)}</textarea>`;
+  } else if (type === "text_nombre_emp"){
+    control = `<input type="text" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="
+        this.value = this.value.toUpperCase();
+        catalogEditing.values['${id}'] = this.value;
+        document.getElementById('hint-nombre-emp').textContent = /^[^,]+,\\s*[^,]+/.test(this.value) ? '' : 'Falta el formato: Apellidos, Primer nombre, Segundo nombre (separados por coma).';
+      ">
+      <div class="hint-error" id="hint-nombre-emp">${/^[^,]+,\s*[^,]+/.test(val) ? "" : (val ? "Falta el formato: Apellidos, Primer nombre, Segundo nombre (separados por coma)." : "")}</div>`;
+  } else if (type === "text_cedula_emp"){
+    const cedulaOk = /^\d-\d{4}-\d{4}$/.test(val);
+    control = `<input type="text" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="
+        let v = this.value.replace(/[^0-9]/g,'').slice(0,9);
+        let f = v;
+        if (v.length > 5) f = v.slice(0,1) + '-' + v.slice(1,5) + '-' + v.slice(5);
+        else if (v.length > 1) f = v.slice(0,1) + '-' + v.slice(1);
+        this.value = f;
+        catalogEditing.values['${id}'] = f;
+        document.getElementById('hint-${id}').textContent = /^\\d-\\d{4}-\\d{4}$/.test(f) ? '' : (f ? 'Formato incompleto — debe ser 1-1112-1111 (9 dígitos).' : '');
+      ">
+      <div class="hint-error" id="hint-${id}">${val && !cedulaOk ? "Formato incompleto — debe ser 1-1112-1111 (9 dígitos)." : ""}</div>`;
+  } else if (type === "date_ingreso_emp"){
+    let isoVal = "";
+    if (catalogEditing.values.FECHA_INGRESO_EMP){
+      const d = parseFechaFlexible(catalogEditing.values.FECHA_INGRESO_EMP);
+      if (d) isoVal = d.toISOString().slice(0,10);
+    }
+    control = `<input type="date" value="${isoVal}" onchange="onFechaIngresoEmpChange(this.value)">
+      ${catalogEditing.values.FECHA_INGRESO_EMP ? `<div class="hint">${escapeHtml(catalogEditing.values.FECHA_INGRESO_EMP)}${catalogEditing.values.FECHA_INGRESO_LETRAS_EMP ? " — " + escapeHtml(catalogEditing.values.FECHA_INGRESO_LETRAS_EMP) : ""}</div>` : ""}`;
+  } else if (type === "select_salario_modo_emp"){
+    const modo = catalogEditing.values.SALARIO_MODO_EMP || "";
+    control = `<div class="sino-toggle">
+      <button type="button" class="${modo==='minimo'?'active':''}" onclick="setSalarioModoEmp('minimo')">Mínimo del puesto</button>
+      <button type="button" class="${modo==='otro'?'active':''}" onclick="setSalarioModoEmp('otro')">Otro monto</button>
+    </div>`;
+  } else if (type === "salario_num_emp"){
+    control = `<input type="text" value="${escapeHtml(val)}" placeholder="Monto bruto mensual" oninput="onSalarioEmpInput(this.value)">
+      ${catalogEditing.values.SALARIO_EMP_LETRAS ? `<div class="hint">${escapeHtml(catalogEditing.values.SALARIO_EMP_LETRAS)}</div>` : ""}`;
+  } else if (type === "select_banco_cr"){
+    const isManual = !!(catalogEditing.manualFields && catalogEditing.manualFields[id]);
+    const matches = BANCOS_CR.includes(val);
+    if (isManual || (val && !matches)){
+      control = `<input type="text" value="${escapeHtml(val)}" oninput="catalogEditing.values['${id}']=this.value">
+        <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="catalogEditing.manualFields=catalogEditing.manualFields||{}; catalogEditing.manualFields['${id}']=false; renderCatalogTab('empleados');">📋 Elegir de la lista</button>`;
+    } else {
+      let opts = `<option value="">Seleccionar banco…</option>` + BANCOS_CR.map(b => `<option value="${escapeHtml(b)}" ${val===b?"selected":""}>${escapeHtml(b)}</option>`).join("");
+      opts += `<option value="__custom__">✏️ Otro (escribir manualmente)</option>`;
+      control = `<select onchange="
+          if(this.value==='__custom__'){ catalogEditing.manualFields=catalogEditing.manualFields||{}; catalogEditing.manualFields['${id}']=true; catalogEditing.values['${id}']=''; renderCatalogTab('empleados'); }
+          else { catalogEditing.values['${id}']=this.value; }
+        ">${opts}</select>`;
+    }
+  } else if (type === "cuenta_cliente_emp"){
+    const digitos = val.replace(/\D/g,"");
+    const ok = digitos.length === 17;
+    control = `<input type="text" value="${escapeHtml(val)}" placeholder="17 dígitos" oninput="
+        let v = this.value.replace(/[^0-9]/g,'').slice(0,17);
+        this.value = v; catalogEditing.values['${id}'] = v;
+        document.getElementById('hint-${id}').textContent = v.length === 17 ? '' : ('Incompleto: ' + v.length + ' de 17 dígitos.');
+      ">
+      <div class="hint-error" id="hint-${id}">${val ? (ok ? "" : "Incompleto: " + digitos.length + " de 17 dígitos.") : ""}</div>`;
+  } else if (type === "cuenta_iban_emp"){
+    const soloDigitos = val.replace(/^CR/i,"").replace(/\D/g,"");
+    const ok = /^CR\d{20}$/i.test(val.replace(/\s/g,""));
+    control = `<input type="text" value="${escapeHtml(val)}" placeholder="CR + 20 dígitos" oninput="
+        let raw = this.value.toUpperCase().replace(/\\s/g,'');
+        let digits = raw.replace(/^CR/,'').replace(/[^0-9]/g,'').slice(0,20);
+        let v = 'CR' + digits;
+        this.value = v; catalogEditing.values['${id}'] = v;
+        document.getElementById('hint-${id}').textContent = digits.length === 20 ? '' : ('Incompleto: ' + digits.length + ' de 20 dígitos después de CR.');
+      ">
+      <div class="hint-error" id="hint-${id}">${val ? (ok ? "" : "Incompleto: " + soloDigitos.length + " de 20 dígitos después de CR.") : ""}</div>`;
+  } else if (type === "file_adjunto_emp"){
+    // Tres estados posibles: vacío, referencia al almacén ("doc:<id>"), o un
+    // base64 heredado de antes del backend. Los tres se muestran distinto.
+    const esReferencia = typeof val === "string" && val.startsWith("doc:");
+    const esLegado = typeof val === "string" && val.startsWith("data:");
+    const nombreAdj = catalogEditing.values[id + "_NOMBRE"] || "archivo adjunto";
+    const quitar = `<button type="button" class="btn" style="padding:4px 8px; font-size:10.5px;" onclick="catalogEditing.values['${id}']=''; catalogEditing.values['${id}_NOMBRE']=''; renderCatalogTab('empleados');">Quitar</button>`;
+
+    let estado;
+    if (esReferencia){
+      const url = window.sdgApi ? window.sdgApi.urlDescarga(val.slice(4)) : "#";
+      estado = `<div class="hint" style="color:var(--leaf);">✅ <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(nombreAdj)}</a> — archivado en el servidor. ${quitar}</div>`;
+    } else if (esLegado){
+      estado = `<div class="hint" style="color:var(--leaf);">✅ Archivo adjunto guardado (formato antiguo, en el registro). Vuelve a subirlo para archivarlo en el servidor. ${quitar}</div>`;
+    } else {
+      estado = `<div class="hint">Sin archivo adjunto todavía.</div>`;
+    }
+    control = `<input type="file" accept="image/*,.pdf" onchange="onAdjuntoEmpChange('${id}', this)">${estado}`;
+  } else if (type === "select_sino_cantidad"){
+    const tieneSi = catalogEditing.values[id+"_SI"] === true || catalogEditing.values[id+"_SI"] === "true";
+    control = `<div class="sino-toggle">
+        <button type="button" class="${tieneSi?'active':''}" onclick="catalogEditing.values['${id}_SI']=true; renderCatalogTab('empleados');">Sí</button>
+        <button type="button" class="${!tieneSi && catalogEditing.values[id+'_SI']!==undefined?'active':''}" onclick="catalogEditing.values['${id}_SI']=false; catalogEditing.values['${id}']=''; renderCatalogTab('empleados');">No</button>
+      </div>
+      ${tieneSi ? `<input type="number" min="0" value="${escapeHtml(val)}" placeholder="¿Cuántos?" oninput="catalogEditing.values['${id}']=this.value">` : ""}`;
+  } else if (type === "select_sino_detalle"){
+    const tieneSi = catalogEditing.values[id+"_SI"] === true || catalogEditing.values[id+"_SI"] === "true";
+    control = `<div class="sino-toggle">
+        <button type="button" class="${tieneSi?'active':''}" onclick="catalogEditing.values['${id}_SI']=true; renderCatalogTab('empleados');">Sí</button>
+        <button type="button" class="${!tieneSi && catalogEditing.values[id+'_SI']!==undefined?'active':''}" onclick="catalogEditing.values['${id}_SI']=false; catalogEditing.values['${id}']=''; renderCatalogTab('empleados');">No</button>
+      </div>
+      ${tieneSi ? `<input type="text" value="${escapeHtml(val)}" placeholder="¿Cuál(es)?" oninput="catalogEditing.values['${id}']=this.value">` : ""}`;
+  } else if (type === "select_tipo_identificacion_emp"){
+    const opciones = ["Cédula de identidad","DIMEX","Pasaporte","Cédula de residencia"];
+    let opts = `<option value="">Seleccionar…</option>` + opciones.map(o =>
+      `<option value="${escapeHtml(o)}" ${val===o?"selected":""}>${escapeHtml(o)}</option>`).join("");
+    opts += `<option value="__custom__">✏️ Otro</option>`;
+    control = `<select onchange="
+        if(this.value==='__custom__'){ const v = prompt('Escribe el tipo de identidad:',''); catalogEditing.values['${id}'] = v || ''; renderCatalogTab('empleados'); }
+        else { catalogEditing.values['${id}']=this.value; }
+      ">${opts}</select>`;
+  } else if (type === "select_estado_civil"){
+    let opts = `<option value="">Seleccionar…</option>` + ["Soltero(a)","Casado(a)","Divorciado(a)","Viudo(a)","Unión de hecho"].map(o =>
+      `<option value="${escapeHtml(o)}" ${val===o?"selected":""}>${escapeHtml(o)}</option>`).join("");
+    control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
+  } else if (type === "date"){
+    control = `<input type="date" value="${escapeHtml(val)}" onchange="catalogEditing.values['${id}']=this.value">`;
+  } else if (type === "select_provincia"){
+    let opts = `<option value="">Seleccionar provincia…</option>` + PROVINCIAS_CR.map(p =>
+      `<option value="${escapeHtml(p)}" ${val===p?"selected":""}>${escapeHtml(p)}</option>`).join("");
+    control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
+  } else if (type === "select_modalidad"){
+    let opts = `<option value="">Seleccionar modalidad…</option>` + Object.keys(MODALIDADES_JORNADA).map(k =>
+      `<option value="${k}" ${val===k?"selected":""}>${escapeHtml(MODALIDADES_JORNADA[k].label)}</option>`).join("");
+    control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
+  } else if (type === "select_puesto_catalogo"){
+    const opts = (catalogEditing.puestoOptions || []).map(p =>
+      `<option value="${escapeHtml(p.key)}" ${val===p.key?"selected":""}>${escapeHtml(p.nombre)}</option>`).join("");
+    control = `<select onchange="onSelectPuestoCatalogo(this.value)"><option value="">Seleccionar puesto…</option>${opts}<option value="__custom__">✏️ No está en la lista (escribir abajo)</option></select>`;
+  } else if (type === "select_puesto_lider"){
+    const isManual = !!(catalogEditing.manualFields && catalogEditing.manualFields[id]);
+    const matches = PUESTOS_LIDERAZGO.includes(val);
+    if (isManual || (val && !matches)){
+      control = `<input type="text" value="${escapeHtml(val)}" placeholder="Ej. Gerente General, Director de Operaciones" oninput="catalogEditing.values['${id}']=this.value">
+        <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="catalogEditing.manualFields=catalogEditing.manualFields||{}; catalogEditing.manualFields['${id}']=false; renderCatalogTab('${catalogEditing.type}');">📋 Elegir de la lista de puestos</button>`;
+    } else {
+      let optHtml = `<option value="">— Seleccionar puesto —</option>`;
+      optHtml += PUESTOS_LIDERAZGO.map(p => `<option value="${escapeHtml(p)}" ${p===val?"selected":""}>${escapeHtml(p)}</option>`).join("");
+      optHtml += `<option value="__custom__">✏️ Otro (escribir manualmente)</option>`;
+      control = `<select onchange="
+          if(this.value==='__custom__'){ catalogEditing.manualFields=catalogEditing.manualFields||{}; catalogEditing.manualFields['${id}']=true; catalogEditing.values['${id}']=''; catalogEditing.values['${id}_EN']=''; }
+          else {
+            catalogEditing.values['${id}']=this.value;
+            const idx = PUESTOS_LIDERAZGO.indexOf(this.value);
+            catalogEditing.values['${id}_EN'] = idx>=0 ? PUESTOS_LIDERAZGO_EN[idx] : this.value;
+          }
+          renderCatalogTab('${catalogEditing.type}');
+        ">${optHtml}</select>`;
+    }
+  } else if (type === "select_properties"){
+    const opts = catalogEditing.propertyOptions || [];
+    const chosenKeys = new Set((catalogEditing.values.PROPIEDADES_KEYS || "").split(",").map(s=>s.trim()).filter(Boolean));
+    if (opts.length === 0){
+      control = `<div class="hint">Todavía no hay propiedades guardadas — agrégalas en la pestaña Propiedades para poder incluirlas en el portafolio de esta empresa.</div>`;
+    } else {
+      control = `<div>` + opts.map(o => `
+        <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
+          <input type="checkbox" ${chosenKeys.has(o.key)?"checked":""} onchange="toggleEmpresaPropiedad('${o.key.replace(/'/g,"\\'")}', this.checked)">
+          <span>${escapeHtml(o.nombre)}${o.meta?` <span class="hint" style="display:inline;">(${escapeHtml(o.meta)})</span>`:""}</span>
+        </label>`).join("") + `</div>`;
+      if (catalogEditing.values.PROPIEDADES){
+        control += `<div class="hint">Portafolio actual: ${escapeHtml(catalogEditing.values.PROPIEDADES)}</div>`;
+      }
+    }
+  } else {
+    control = `<input type="text" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="catalogEditing.values['${id}']=this.value">`;
+  }
+  return `<div class="field"><label>${escapeHtml(label)}</label>${control}${hint?`<div class="hint">${escapeHtml(hint)}</div>`:""}</div>`;
+}
+
+async function loadPropertyOptions(){
+  try{
+    const res = await window.storage.list(CATALOGS.propiedades.prefix, false);
+    const keys = (res && res.keys) ? res.keys : [];
+    const items = await Promise.all(keys.map(async k => {
+      try{
+        const r = await window.storage.get(k, false);
+        const v = r && r.value ? JSON.parse(r.value) : {};
+        const meta = [v.distrito, v.canton, v.provincia].filter(Boolean).join(", ");
+        return { key: k.replace(CATALOGS.propiedades.prefix,""), nombre: v.nombre || k, meta,
+                 distrito: v.distrito || "", canton: v.canton || "", provincia: v.provincia || "",
+                 linea: (v.nombre || k) + (meta ? " – " + meta + "." : ".") };
+      }catch(e){ return null; }
+    }));
+    return items.filter(Boolean);
+  }catch(e){ return []; }
+}
+
+// Sets "Lugar de firma" from the first property in the given key list — the signing
+// location should just come from where the portfolio actually is, not be typed twice.
+async function syncLugarFirmaFromPropiedades(keysCsv){
+  const keys = (keysCsv || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (keys.length === 0) return;
+  const allProps = await loadPropertyOptions();
+  const byKey = {};
+  allProps.forEach(p => { byKey[p.key] = p; });
+  const first = byKey[keys[0]];
+  if (first){
+    if (first.distrito) data.DISTRITO_FIRMA = first.distrito;
+    if (first.canton) data.CANTON_FIRMA = first.canton;
+    if (first.provincia) data.PROVINCIA_FIRMA = first.provincia;
+  }
+}
+
+// Builds the "PROPIEDADES" summary text and the detailed per-line list (used by the
+// dynamic bullet list in Clause SEGUNDA) from a comma-separated list of property keys.
+async function buildPropiedadesFromKeys(keysCsv){
+  const keys = (keysCsv || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (keys.length === 0) return { resumen: "", detalle: "" };
+  const allProps = await loadPropertyOptions();
+  const byKey = {};
+  allProps.forEach(p => { byKey[p.key] = p; });
+  const chosen = keys.map(k => byKey[k]).filter(Boolean);
+  return {
+    resumen: chosen.map(p => p.nombre).join(", "),
+    detalle: chosen.map(p => p.linea).join("\n"),
+  };
+}
+
+function renderMinisterioImportBox(){
+  const opts = MINISTERIO_PUESTOS.map((p,i) => `<option value="${i}">${escapeHtml(p.puestoEs)} — ${escapeHtml(p.departamento)}</option>`).join("");
+  return `<div class="section-card" style="border-color:var(--leaf);">
+    <div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); font-size:13px;">📋 Lista oficial de puestos hoteleros (Ministerio de Trabajo 2026)</div>
+      <div class="field" style="margin-top:2px;">
+        <select id="ministerio-select">${opts}</select>
+      </div>
+      <button class="btn primary" onclick="importFromMinisterio()">Usar como base para nuevo puesto</button>
+    </div>
+  </div>`;
+}
+
+async function importFromMinisterio(){
+  const idx = parseInt(document.getElementById("ministerio-select").value, 10);
+  const p = MINISTERIO_PUESTOS[idx];
+  if (!p) return;
+  const values = { PUESTO: p.puestoEs, PUESTO_EN: p.puestoEn };
+  if (RESPONSABILIDADES_SUGERIDAS[p.puestoEs]){
+    values.RESPONSABILIDADES = RESPONSABILIDADES_SUGERIDAS[p.puestoEs];
+  }
+  if (RESPONSABILIDADES_SUGERIDAS_EN[p.puestoEs]){
+    values.RESPONSABILIDADES_EN = RESPONSABILIDADES_SUGERIDAS_EN[p.puestoEs];
+  }
+  if (TAREAS_APOYO_SUGERIDAS[p.puestoEs]){
+    values.TAREAS_APOYO = TAREAS_APOYO_SUGERIDAS[p.puestoEs];
+  }
+  if (TAREAS_APOYO_SUGERIDAS_EN[p.puestoEs]){
+    values.TAREAS_APOYO_EN = TAREAS_APOYO_SUGERIDAS_EN[p.puestoEs];
+  }
+  catalogEditing = { type: "puestos", key: null, values, ministerioRef: p };
+  renderCatalogTab("puestos");
+}
+
+function toggleEmpresaPropiedad(key, checked){
+  const chosenKeys = new Set((catalogEditing.values.PROPIEDADES_KEYS || "").split(",").map(s=>s.trim()).filter(Boolean));
+  if (checked) chosenKeys.add(key); else chosenKeys.delete(key);
+  catalogEditing.values.PROPIEDADES_KEYS = [...chosenKeys].join(",");
+  const opts = catalogEditing.propertyOptions || [];
+  const byKey = {}; opts.forEach(o => { byKey[o.key] = o; });
+  const chosen = [...chosenKeys].map(k => byKey[k]).filter(Boolean);
+  catalogEditing.values.PROPIEDADES = chosen.map(o => o.nombre).join(", ");
+  catalogEditing.values.PROPIEDADES_DETALLE = chosen.map(o => o.linea).join("\n");
+  renderCatalogTab("empresas");
+}
+
+async function openCatalogForm(type, key){
+  const cfg = CATALOGS[type];
+  let values = {};
+  if (key){
+    try{
+      const res = await window.storage.get(cfg.prefix + key, false);
+      values = res && res.value ? JSON.parse(res.value) : {};
+    }catch(e){ values = {}; }
+  }
+  catalogEditing = { type, key, values };
+  if (type === "empresas"){
+    catalogEditing.propertyOptions = await loadPropertyOptions();
+  }
+  if (type === "empleados"){
+    const res2 = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const keys2 = (res2 && res2.keys) || [];
+    catalogEditing.puestoOptions = await Promise.all(keys2.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix,""), nombre: v.PUESTO || k };
+    }));
+  }
+  renderCatalogTab(type);
+}
+
+function closeCatalogForm(type){
+  catalogEditing = null;
+  renderCatalogTab(type);
+}
+
+async function agregarBitacora(empKeyShort, texto){
+  try{
+    const fullKey = CATALOGS.empleados.prefix + empKeyShort;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value) return;
+    const emp = JSON.parse(res.value);
+    if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
+    emp.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: texto });
+    if (emp.HISTORIAL.length > 50) emp.HISTORIAL = emp.HISTORIAL.slice(0, 50);
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+  }catch(e){ /* logging failures should never block the main action */ }
+}
+
+function onFechaIngresoEmpChange(isoDate){
+  if (!isoDate) return;
+  const [y,m,d] = isoDate.split("-").map(Number);
+  const dt = new Date(y, m-1, d);
+  catalogEditing.values.FECHA_INGRESO_EMP = `${String(d).padStart(2,"0")}/${String(m).padStart(2,"0")}/${y}`;
+  catalogEditing.values.FECHA_INGRESO_LETRAS_EMP = `${numeroALetrasEs(d)} de ${MESES[m-1]} del ${numeroALetrasEs(y)}`;
+  renderCatalogTab("empleados");
+}
+
+function setSalarioModoEmp(modo){
+  catalogEditing.values.SALARIO_MODO_EMP = modo;
+  if (modo === "minimo"){
+    const puesto = (catalogEditing.puestoOptions || []).find(p => p.key === catalogEditing.values.PUESTO_KEY);
+    if (!puesto){
+      statusMsg("Elige primero un puesto del catálogo para poder usar su salario mínimo.", false);
+    } else {
+      window.storage.get(CATALOGS.puestos.prefix + puesto.key, false).then(res => {
+        const p = res && res.value ? JSON.parse(res.value) : {};
+        if (p.SALARIO_MINISTERIO){
+          const monto = Number(p.SALARIO_MINISTERIO);
+          catalogEditing.values.SALARIO_EMP = String(monto);
+          catalogEditing.values.SALARIO_EMP_LETRAS = salarioEnLetras(monto, "colones", "es");
+        } else {
+          statusMsg("Ese puesto no tiene salario mínimo de referencia del MTSS guardado.", false);
+        }
+        renderCatalogTab("empleados");
+      });
+      return;
+    }
+  } else if (modo === "otro"){
+    catalogEditing.values.SALARIO_EMP_LETRAS = "";
+  }
+  renderCatalogTab("empleados");
+}
+
+function onSalarioEmpInput(val){
+  catalogEditing.values.SALARIO_EMP = val;
+  const monto = parseFloat(String(val).replace(/,/g,""));
+  if (monto && !isNaN(monto)){
+    catalogEditing.values.SALARIO_EMP_LETRAS = salarioEnLetras(monto, "colones", "es");
+    const hintEl = document.querySelector('[placeholder="Monto bruto mensual"]');
+    if (hintEl && hintEl.nextElementSibling) hintEl.nextElementSibling.textContent = catalogEditing.values.SALARIO_EMP_LETRAS;
+  }
+}
+
+// Los adjuntos de empleado (cédula, foto, títulos) van al almacén de
+// documentos del servidor, no incrustados en base64 dentro del registro.
+// En el registro queda solo la referencia "doc:<id>", así que la ficha del
+// empleado se mantiene liviana y el archivo entra en los backups de la BD.
+const MAX_ADJUNTO_BYTES = 15 * 1024 * 1024;
+
+async function onAdjuntoEmpChange(fieldId, inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+
+  // Sin backend no hay dónde subirlo: se conserva el comportamiento viejo
+  // (base64 en el registro) con su límite estrecho de almacenamiento local.
+  if (!CON_BACKEND){
+    if (file.size > 2*1024*1024){
+      statusMsg("El archivo es muy grande (máx. 2MB) — el almacenamiento del navegador es limitado. Usa una foto comprimida.", false);
+      inputEl.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(){
+      catalogEditing.values[fieldId] = reader.result;
+      renderCatalogTab("empleados");
+      statusMsg("Archivo adjuntado.");
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  if (file.size > MAX_ADJUNTO_BYTES){
+    statusMsg("El archivo supera el límite de 15 MB.", false);
+    inputEl.value = "";
+    return;
+  }
+
+  statusMsg("Subiendo " + file.name + "…", true);
+  try{
+    const r = await window.sdgApi.congelarDocumento(file, {
+      tipo: "adjunto_empleado",
+      titulo: (catalogEditing.values.NOMBRE_EMP || "Empleado") + " — " + file.name,
+      nombreArchivo: file.name,
+      claveOrigen: catalogEditing.key ? CATALOGS.empleados.prefix + catalogEditing.key : null,
+      empleadoCedula: catalogEditing.values.IDENTIFICACION_EMP || null,
+      empleadoNombre: catalogEditing.values.NOMBRE_EMP || null,
+    });
+    catalogEditing.values[fieldId] = "doc:" + r.id;
+    catalogEditing.values[fieldId + "_NOMBRE"] = file.name;
+    renderCatalogTab("empleados");
+    statusMsg("Archivo adjuntado y archivado (huella " + r.sha256.slice(0, 12) + "…).", true);
+  }catch(e){
+    inputEl.value = "";
+    statusMsg("No se pudo subir el archivo: " + (e.message || "error"), false);
+  }
+}
+
+async function onSelectPuestoCatalogo(val){
+  if (val === "__custom__"){
+    catalogEditing.values.PUESTO_KEY = "";
+    renderCatalogTab("empleados");
+    return;
+  }
+  catalogEditing.values.PUESTO_KEY = val;
+  if (val){
+    try{
+      const res = await window.storage.get(CATALOGS.puestos.prefix + val, false);
+      const puesto = res && res.value ? JSON.parse(res.value) : {};
+      catalogEditing.values.DEPARTAMENTO_EMP = puesto.PUESTO || catalogEditing.values.DEPARTAMENTO_EMP || "";
+    }catch(e){ /* keep existing text if lookup fails */ }
+  }
+  renderCatalogTab("empleados");
+}
+
+async function saveCatalogItem(type){
+  const cfg = CATALOGS[type];
+  const name = (catalogEditing.values[cfg.nameField] || "").trim();
+  if (!name){ statusMsg("Escribe un nombre antes de guardar.", false); return; }
+  if (type === "puestos" && catalogEditing.ministerioRef && catalogEditing.ministerioRef.salarioMin){
+    catalogEditing.values.SALARIO_MINISTERIO = catalogEditing.ministerioRef.salarioMin;
+    catalogEditing.values.DEPARTAMENTO_MINISTERIO = catalogEditing.ministerioRef.departamento || "";
+  }
+  const newKey = slugify(name);
+  const storageKey = cfg.prefix + newKey;
+  try{
+    // for empleados, compare against the previous saved values to log meaningful changes in the bitácora
+    let bitacoraNotas = [];
+    if (type === "empleados" && catalogEditing.key){
+      try{
+        const prevRes = await window.storage.get(cfg.prefix + catalogEditing.key, false);
+        if (prevRes && prevRes.value){
+          const prev = JSON.parse(prevRes.value);
+          if (prev.SALARIO_EMP !== catalogEditing.values.SALARIO_EMP){
+            bitacoraNotas.push(`Salario actualizado: ${prev.SALARIO_EMP || "—"} → ${catalogEditing.values.SALARIO_EMP || "—"}`);
+          }
+          if (prev.DEPARTAMENTO_EMP !== catalogEditing.values.DEPARTAMENTO_EMP){
+            bitacoraNotas.push(`Puesto actualizado: ${prev.DEPARTAMENTO_EMP || "—"} → ${catalogEditing.values.DEPARTAMENTO_EMP || "—"}`);
+          }
+          catalogEditing.values.HISTORIAL = prev.HISTORIAL || [];
+        }
+      }catch(e){ /* ignore */ }
+    }
+    // if renaming (key changed), remove the old entry
+    if (catalogEditing.key && catalogEditing.key !== newKey){
+      try{ await window.storage.delete(cfg.prefix + catalogEditing.key, false); }catch(e){}
+    }
+    const res = await window.storage.set(storageKey, JSON.stringify(catalogEditing.values), false);
+    if (res){
+      const esEmpleadoNuevo = type === "empleados" && !catalogEditing.key;
+      catalogEditing = null;
+      renderCatalogTab(type);
+      for (const nota of bitacoraNotas){ await agregarBitacora(newKey, nota); }
+      if (esEmpleadoNuevo){
+        document.getElementById("status-msg").textContent = "Empleado creado.";
+        document.getElementById("status-msg").style.color = "#2E7D5B";
+        showToast("Empleado creado.", true, function(){ actualizarContratoDeEmpleado(newKey); }, "Crear contrato →");
+      } else {
+        statusMsg("Guardado.");
+      }
+    } else {
+      statusMsg("No se pudo guardar.", false);
+    }
+  }catch(e){
+    statusMsg("Error al guardar: " + e.message, false);
+  }
+}
+
+async function deleteCatalogItem(type, key){
+  const cfg = CATALOGS[type];
+  if (!confirm("¿Eliminar “" + key + "”?")) return;
+  try{
+    const fullKey = cfg.prefix + key;
+    const res = await window.storage.get(fullKey, false);
+    const backup = res ? res.value : null;
+    await window.storage.delete(fullKey, false);
+    renderCatalogTab(type);
+    statusMsg("Eliminado.", true, backup ? async function(){
+      await window.storage.set(fullKey, backup, false);
+      renderCatalogTab(type);
+      statusMsg("Restaurado.");
+    } : null);
+  }catch(e){
+    statusMsg("No se pudo eliminar.", false);
+  }
+}
+
+async function useEmpresa(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empresas.prefix + key, false);
+    if (res && res.value){
+      data.PROPIEDADES = "";
+      data.PROPIEDADES_DETALLE = "";
+      data.PROPIEDADES_KEYS = "";
+      Object.assign(data, JSON.parse(res.value));
+      // Every contract is signed by the same legal representative, regardless
+      // of which company record it came from — never asked per contract.
+      data.REPRESENTANTE_LEGAL = REPRESENTANTE_LEGAL_FIJO.nombre;
+      data.PUESTO_REPRESENTANTE_LEGAL = REPRESENTANTE_LEGAL_FIJO.puesto;
+      await syncLugarFirmaFromPropiedades(data.PROPIEDADES_KEYS);
+      renderForm();
+      renderPreview();
+      showTab("form");
+      statusMsg("Empresa aplicada al contrato (incluye su portafolio de propiedades y lugar de firma).");
+    }
+  }catch(e){ statusMsg("No se pudo aplicar.", false); }
+}
+
+async function usePuesto(key){
+  try{
+    const res = await window.storage.get(CATALOGS.puestos.prefix + key, false);
+    if (res && res.value){
+      data.SALARIO_MINISTERIO = "";
+      data.DEPARTAMENTO_MINISTERIO = "";
+      data.SALARIO_MODO = "";
+      Object.assign(data, JSON.parse(res.value));
+      data.LIDER_DIRECTOR = DIRECTOR_PROYECTO_FIJO; // fixed for every contract, not per-puesto
+  data.LIDER_DIRECTOR_EN = DIRECTOR_PROYECTO_FIJO_EN;
+      // Suggest exclusivity activities for this position's department, but never
+      // overwrite something the person already wrote by hand.
+      if (!data.ACTIVIDADES_EXCLUSIVIDAD && data.DEPARTAMENTO_MINISTERIO && EXCLUSIVIDAD_POR_DEPTO[data.DEPARTAMENTO_MINISTERIO]){
+        data.ACTIVIDADES_EXCLUSIVIDAD = EXCLUSIVIDAD_POR_DEPTO[data.DEPARTAMENTO_MINISTERIO];
+      }
+      // best-effort suggestion of the applicable sales-commission department, based on
+      // keywords in the position/department text — never overrides a manual choice.
+      if (!data.DEPARTAMENTO_COMISION){
+        const texto = ((data.PUESTO||"") + " " + (data.DEPARTAMENTO_MINISTERIO||"")).toLowerCase();
+        if (/\bbar\b|bartender|salonero/.test(texto)) data.DEPARTAMENTO_COMISION = "Bar";
+        else if (/cocin/.test(texto)) data.DEPARTAMENTO_COMISION = "Cocina";
+        else if (/lavander|camarer|housekeep|ama de/.test(texto)) data.DEPARTAMENTO_COMISION = "Limpieza y Lavandería";
+        else if (/recep|front desk/.test(texto)) data.DEPARTAMENTO_COMISION = "Recepción / Front Desk";
+        else if (/spa|terapeuta|bienestar/.test(texto)) data.DEPARTAMENTO_COMISION = "Spa / Bienestar";
+        else if (/reserva/.test(texto)) data.DEPARTAMENTO_COMISION = "Reservas";
+      }
+      renderForm();
+      renderPreview();
+      showTab("form");
+      statusMsg("Puesto aplicado al contrato.");
+    }
+  }catch(e){ statusMsg("No se pudo aplicar.", false); }
+}
+
+function parseCSVLine(line){
+  // handles simple CSV with optional double-quoted fields (Excel's own CSV export format)
+  const out = [];
+  let cur = "", inQuotes = false;
+  for (let i = 0; i < line.length; i++){
+    const c = line[i];
+    if (inQuotes){
+      if (c === '"' && line[i+1] === '"'){ cur += '"'; i++; }
+      else if (c === '"'){ inQuotes = false; }
+      else { cur += c; }
+    } else {
+      if (c === '"'){ inQuotes = true; }
+      else if (c === ","){ out.push(cur); cur = ""; }
+      else { cur += c; }
+    }
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+
+function parseCSV(text){
+  const lines = text.split(/\r\n|\n|\r/).filter(l => l.trim() !== "");
+  if (lines.length === 0) return [];
+  const headers = parseCSVLine(lines[0]);
+  return lines.slice(1).map(line => {
+    const cells = parseCSVLine(line);
+    const row = {};
+    headers.forEach((h, i) => { row[h] = cells[i] !== undefined ? cells[i] : ""; });
+    return row;
+  });
+}
+
+async function guardarFilasEmpleados(rows){
+  // look up existing employees by cédula / número de empleado FIRST — using the name
+  // to decide the storage key means a spelling correction creates a duplicate person
+  // instead of updating the one that already exists, which is exactly what happened before.
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  const keys = (res && res.keys) || [];
+  const existentes = await Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    const v = r && r.value ? JSON.parse(r.value) : {};
+    return { key: k.replace(CATALOGS.empleados.prefix, ""), ...v };
+  }));
+  const porCedula = {}, porNumero = {};
+  existentes.forEach(e => {
+    if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
+    if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).replace(/^0+/,"")] = e;
+  });
+
+  let count = 0;
+  for (const row of rows){
+    const nombre = String(row["NOMBRE"] || "").trim();
+    if (!nombre) continue;
+    const cedulaFila = String(row["IDENTIFICACION"] || "").trim();
+    const numeroFila = String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim();
+
+    let existente = {};
+    let key = null;
+    if (cedulaFila && porCedula[cedulaFila.replace(/\D/g,"")]){
+      existente = porCedula[cedulaFila.replace(/\D/g,"")];
+      key = CATALOGS.empleados.prefix + existente.key;
+    } else if (numeroFila && porNumero[numeroFila.replace(/^0+/,"")]){
+      existente = porNumero[numeroFila.replace(/^0+/,"")];
+      key = CATALOGS.empleados.prefix + existente.key;
+    } else {
+      key = CATALOGS.empleados.prefix + nombre.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
+      try{
+        const prevRes = await window.storage.get(key, false);
+        if (prevRes && prevRes.value) existente = JSON.parse(prevRes.value);
+      }catch(e){ /* no previous record under that name-key — genuinely new employee */ }
+    }
+
+    const value = Object.assign({}, existente, {
+      NOMBRE_EMP: nombre,
+      NUMERO_EMPLEADO: numeroFila || existente.NUMERO_EMPLEADO || "",
+      DEPARTAMENTO_EMP: String(row["DEPARTAMENTO"] || "").trim() || existente.DEPARTAMENTO_EMP || "",
+      IDENTIFICACION_EMP: cedulaFila || existente.IDENTIFICACION_EMP || "",
+      FECHA_INGRESO_EMP: String(row["FECHA DE INGRESO"] || "").trim() || existente.FECHA_INGRESO_EMP || "",
+      FECHA_SALIDA_EMP: String(row["FECHA DE SALIDA"] || "").trim() || existente.FECHA_SALIDA_EMP || "",
+      SALARIO_EMP: String(row["SALARIO"] || "").trim() || existente.SALARIO_EMP || "",
+      CORREO_EMP: String(row["CORREO"] || "").trim() || existente.CORREO_EMP || "",
+      CELULAR_EMP: String(row["CELULAR PERSONAL"] || "").trim() || existente.CELULAR_EMP || "",
+      ESTADO_EMP: existente.ESTADO_EMP || "Activo",
+    });
+    delete value.key;
+    await window.storage.set(key, JSON.stringify(value), false);
+    count++;
+  }
+  return count;
+}
+
+async function importarEmpleadosExcel(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const esCSV = /\.csv$/i.test(file.name);
+  try{
+    let rows;
+    if (esCSV){
+      // CSV needs no external library — always works, online or offline.
+      const text = await file.text();
+      rows = parseCSV(text);
+    } else {
+      if (typeof XLSX === "undefined"){
+        statusMsg("No se pudo cargar el lector de Excel (necesita internet la primera vez). Si no tienes internet ahora, guarda el archivo como CSV desde Excel (Archivo → Guardar como → CSV) y súbelo así — el CSV no necesita internet.", false);
+        return;
+      }
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    }
+    const count = await guardarFilasEmpleados(rows);
+    statusMsg(`Importados ${count} empleados desde el ${esCSV ? "CSV" : "Excel"}.`);
+    renderCatalogTab("empleados");
+  }catch(e){
+    statusMsg("No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
+  }
+  inputEl.value = "";
+}
+
+// ---------- cross-data linking (Empleados <-> Contratos, by cédula) ----------
+let contratosPorCedulaCache = null;
+async function buildContratosPorCedulaIndex(){
+  const res = await window.storage.list("contrato:", false);
+  const keys = (res && res.keys) ? res.keys : [];
+  const index = {};
+  await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const d = r && r.value ? JSON.parse(r.value) : {};
+      const ced = (d.IDENTIFICACION || "").trim();
+      if (ced){
+        if (!index[ced]) index[ced] = [];
+        index[ced].push({ key: k, nombre: d.NOMBRE_TRABAJADOR || k.replace("contrato:",""), puesto: d.PUESTO || "" });
+      }
+    }catch(e){ /* skip unreadable */ }
+  }));
+  contratosPorCedulaCache = index;
+  return index;
+}
+async function buscarContratosPorCedula(cedula){
+  if (!cedula) return [];
+  if (!contratosPorCedulaCache) await buildContratosPorCedulaIndex();
+  return contratosPorCedulaCache[cedula.trim()] || [];
+}
+
+async function renderCatalogTab(type){
+  const cfg = CATALOGS[type];
+  const panel = document.getElementById(type + "-panel");
+  let html = "";
+
+  if (type === "puestos" && !(catalogEditing && catalogEditing.type === "puestos")){
+    html += `<div class="section-card" style="border-color:var(--gold);"><div class="section-body" style="padding:10px 14px;">
+      <div style="font-size:11.5px; color:var(--ink-soft);">🎖️ Director del Proyecto (fijo en todos los contratos, sin nombre propio): <b style="color:var(--navy-deep);">${escapeHtml(DIRECTOR_PROYECTO_FIJO)}</b></div>
+    </div></div>`;
+    html += renderMinisterioImportBox();
+  }
+
+  if (catalogEditing && catalogEditing.type === type){
+    html += `<div class="section-card"><div class="section-head">${catalogEditing.key ? "Editar" : "Nueva"} ${cfg.label}</div><div class="section-body">`;
+    if (type === "puestos" && catalogEditing.ministerioRef){
+      const ref = catalogEditing.ministerioRef;
+      const salario = ref.salarioMin ? "₡" + Math.round(ref.salarioMin).toLocaleString("es-CR") : "N/D";
+      html += `<div class="portfolio-box">Referencia MTSS 2026 · Departamento: ${escapeHtml(ref.departamento)} · Ocupación equivalente: ${escapeHtml(ref.ocupacion || "N/D")} (${escapeHtml(ref.significado || "")}) · <b>Salario mínimo legal: ${salario}/mes</b></div>`;
+      if (RESPONSABILIDADES_SUGERIDAS[ref.puestoEs] || TAREAS_APOYO_SUGERIDAS[ref.puestoEs]){
+        html += `<div class="portfolio-box" style="border-color:var(--leaf);">📋 Se sugirieron "Tareas de apoyo" y responsabilidades de confidencialidad para este puesto — revísalas abajo antes de guardar.</div>`;
+      }
+    } else if (type === "puestos" && catalogEditing.values.SALARIO_MINISTERIO){
+      const salario = "₡" + Math.round(catalogEditing.values.SALARIO_MINISTERIO).toLocaleString("es-CR");
+      html += `<div class="portfolio-box">Salario mínimo legal guardado con este puesto (MTSS 2026): <b>${salario}/mes</b></div>`;
+    }
+    cfg.fields.forEach(f => { html += f[0] === "grp" ? `<div class="catalog-group-title">${escapeHtml(f[1])}</div>` : catalogFieldHtml(f); });
+    html += `</div></div>
+      <div class="catalog-toolbar">
+        <button class="btn primary" onclick="saveCatalogItem('${type}')">💾 Guardar</button>
+        <button class="btn" onclick="closeCatalogForm('${type}')">Cancelar</button>
+      </div>`;
+  } else {
+    html += `<div class="catalog-toolbar"><button class="btn primary" onclick="openCatalogForm('${type}', null)">➕ Agregar ${cfg.label}</button></div>`;
+  }
+
+  if (type === "propiedades"){
+    html += `<div class="portfolio-box" id="portfolio-preview">Selecciona propiedades abajo para armar el portafolio del contrato.</div>
+      <button class="btn primary" style="margin-bottom:14px;" onclick="applyPropiedades()">✅ Aplicar selección al contrato</button>`;
+  }
+
+  if (type === "empleados"){
+    html += `<div class="section-card" style="border-color:var(--leaf);"><div class="section-body">
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Importa tu lista de empleados activos (columnas: NOMBRE, DEPARTAMENTO, IDENTIFICACION, FECHA DE INGRESO, SALARIO, CORREO, CELULAR PERSONAL). Alimenta las Recomendaciones Laborales, Amonestaciones y Cartas de Despido.</p>
+        <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px;"><b>Recomendado: sube un archivo CSV</b> (Excel → Archivo → Guardar como → CSV) — funciona siempre, sin necesitar internet. El Excel (.xlsx) también funciona, pero necesita internet la primera vez.</p>
+        <button class="btn primary" onclick="document.getElementById('empleados-file-input').click()">📥 Importar empleados (CSV o Excel)</button>
+        <input type="file" id="empleados-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarEmpleadosExcel(this)">
+      </div></div>
+      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
+      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
+      <div class="field" style="margin-bottom:10px;">
+        <input type="text" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <div class="field" style="flex:1; margin-bottom:0;">
+          <label style="font-size:10.5px;">Ordenar por</label>
+          <select onchange="ordenarEmpleadosPor(this.value)">
+            <option value="nombre_asc" ${empleadosOrden==="nombre_asc"?"selected":""}>Nombre (A → Z)</option>
+            <option value="nombre_desc" ${empleadosOrden==="nombre_desc"?"selected":""}>Nombre (Z → A)</option>
+            <option value="fecha_reciente" ${empleadosOrden==="fecha_reciente"?"selected":""}>Fecha de ingreso (más reciente)</option>
+            <option value="fecha_antigua" ${empleadosOrden==="fecha_antigua"?"selected":""}>Fecha de ingreso (más antigua)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1; margin-bottom:0;">
+          <label style="font-size:10.5px;">Contrato</label>
+          <select onchange="filtrarEmpleadosPorContrato(this.value)">
+            <option value="todos" ${empleadosFiltroContrato==="todos"?"selected":""}>Todos</option>
+            <option value="con" ${empleadosFiltroContrato==="con"?"selected":""}>Con contrato registrado</option>
+            <option value="sin" ${empleadosFiltroContrato==="sin"?"selected":""}>Sin contrato registrado</option>
+          </select>
+        </div>
+      </div>`;
+  }
+  if (type === "puestos"){
+    html = html.replace('<div class="catalog-toolbar">', `<div class="field" style="margin-bottom:10px;">
+        <input type="text" placeholder="🔍 Buscar puesto por nombre o jefatura…" value="${escapeHtml(puestosSearchTerm)}" oninput="filtrarPuestosInput(this.value)">
+      </div><div class="catalog-toolbar">`);
+  }
+
+  html += `<div id="${type}-list"></div>`;
+  panel.innerHTML = html;
+
+  const listEl = document.getElementById(type + "-list");
+  listEl.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const res = await window.storage.list(cfg.prefix, false);
+    const keys = (res && res.keys) ? res.keys.sort() : [];
+    if (keys.length === 0){
+      listEl.innerHTML = `<div class="empty-state">Todavía no hay ${cfg.label}s guardados.</div>`;
+      if (type === "propiedades") updatePortfolioPreview();
+      return;
+    }
+    const items = await Promise.all(keys.map(async k => {
+      const short = k.replace(cfg.prefix, "");
+      try{
+        const r = await window.storage.get(k, false);
+        const v = r && r.value ? JSON.parse(r.value) : {};
+        let metaParts = cfg.metaFields.map(mf => v[mf]).filter(Boolean);
+        if (type === "puestos" && v.MODALIDAD_JORNADA && MODALIDADES_JORNADA[v.MODALIDAD_JORNADA]){
+          metaParts.push(MODALIDADES_JORNADA[v.MODALIDAD_JORNADA].label);
+        }
+        if (type === "empleados" && v.SALARIO_EMP){
+          const n = Number(String(v.SALARIO_EMP).replace(/[^0-9.]/g, ""));
+          if (n) metaParts.push("₡" + n.toLocaleString("es-CR"));
+        }
+        return { key: short, name: v[cfg.nameField] || short, meta: metaParts.join(" · "), raw: v };
+      }catch(e){
+        return { key: short, name: short, meta: "", raw: {} };
+      }
+    }));
+    let itemsFiltered = items;
+    if (type === "empleados" && empleadosSearchTerm){
+      itemsFiltered = items.filter(it =>
+        it.name.toLowerCase().includes(empleadosSearchTerm) ||
+        (it.raw.DEPARTAMENTO_EMP||"").toLowerCase().includes(empleadosSearchTerm) ||
+        (it.raw.IDENTIFICACION_EMP||"").toLowerCase().includes(empleadosSearchTerm));
+    }
+    if (type === "puestos" && puestosSearchTerm){
+      itemsFiltered = items.filter(it =>
+        it.name.toLowerCase().includes(puestosSearchTerm) ||
+        (it.raw.JEFE_INMEDIATO||"").toLowerCase().includes(puestosSearchTerm));
+    }
+    if (type === "empleados"){
+      const archivadosCount = items.filter(it => it.raw.ARCHIVADO).length;
+      await buildContratosPorCedulaIndex();
+      let activos = itemsFiltered.filter(it => !it.raw.ARCHIVADO);
+
+      // Filtro 3: contrato registrado (cruza contra el índice real de contratos por cédula)
+      if (empleadosFiltroContrato !== "todos"){
+        activos = activos.filter(it => {
+          const cedula = (it.raw.IDENTIFICACION_EMP || "").trim();
+          const tieneContrato = (contratosPorCedulaCache[cedula] || []).length > 0;
+          return empleadosFiltroContrato === "con" ? tieneContrato : !tieneContrato;
+        });
+      }
+
+      // Filtros 1 y 2: orden por nombre o por fecha de ingreso
+      activos = activos.slice().sort((a, b) => {
+        if (empleadosOrden === "nombre_asc") return a.name.localeCompare(b.name, "es");
+        if (empleadosOrden === "nombre_desc") return b.name.localeCompare(a.name, "es");
+        const fa = parseFechaFlexible(a.raw.FECHA_INGRESO_EMP);
+        const fb = parseFechaFlexible(b.raw.FECHA_INGRESO_EMP);
+        if (!fa && !fb) return a.name.localeCompare(b.name, "es");
+        if (!fa) return 1;  // sin fecha registrada: al final, sin importar la dirección
+        if (!fb) return -1;
+        return empleadosOrden === "fecha_reciente" ? (fb - fa) : (fa - fb);
+      });
+
+      if (activos.length === 0){
+        listEl.innerHTML = `<div class="empty-state">${items.length > 0 ? "Ningún empleado activo coincide con los filtros aplicados." : "Todavía no hay empleados activos guardados."}</div>`;
+      } else {
+        listEl.innerHTML = activos.map(it => {
+          const handbookBadge = it.raw.HANDBOOK_FIRMADO_FECHA
+            ? `<span style="color:var(--leaf); font-weight:700;">✅ Handbook firmado (${escapeHtml(it.raw.HANDBOOK_FIRMADO_FECHA)})</span>${it.raw.HANDBOOK_PDF_FIRMADO ? ` <button class="link-badge" onclick="descargarHandbookPDF('${it.key.replace(/'/g,"\\'")}')">📎 Ver PDF</button>` : ` <span style="color:#9a8759; font-size:10px;">(sin PDF adjunto)</span>`}`
+            : `<span style="color:#9a8759; font-weight:700;">⏳ Handbook pendiente de firma</span>`;
+          const cedula = (it.raw.IDENTIFICACION_EMP || "").trim();
+          const contratosVinculados = contratosPorCedulaCache[cedula] || [];
+          const contratoBadge = contratosVinculados.length
+            ? `<button class="link-badge" onclick="openContract('${contratosVinculados[0].key.replace(/'/g,"\\'")}')">📄 Contrato vinculado: abrir</button>`
+            : `<span style="color:var(--ink-soft); font-size:10.5px;">📄 Sin contrato registrado con esta cédula</span>`;
+          const completo = it.raw.NOMBRE_EMP && it.raw.IDENTIFICACION_EMP && it.raw.DEPARTAMENTO_EMP && it.raw.SALARIO_EMP;
+          const dot = `<span class="completeness-dot ${completo ? 'dot-ok' : 'dot-warn'}" title="${completo ? 'Datos completos' : 'Faltan datos básicos'}"></span>`;
+          const k2 = it.key.replace(/'/g,"\\'");
+          return `<div class="catalog-item">
+            <div class="row1">
+              <div class="info">
+                <div class="name" style="cursor:pointer;" onclick="verPerfilEmpleado('${k2}')">${dot}${escapeHtml(it.name)}</div>
+                ${it.meta ? `<div class="meta">${escapeHtml(it.meta)}</div>` : ""}
+                <div class="meta" style="font-size:10.5px;">${handbookBadge}</div>
+                <div class="meta" style="font-size:10.5px; margin-top:2px;">${contratoBadge}</div>
+              </div>
+              <div class="actions">
+                <button onclick="toggleEmpAcciones('${k2}')">Acciones ▾</button>
+              </div>
+            </div>
+            <div class="emp-acciones-menu" id="emp-acciones-${escapeHtml(it.key)}">
+              <button onclick="generarDespidoDeEmpleado('${k2}')">1. ⚖️ Carta de despido</button>
+              <button onclick="actualizarContratoDeEmpleado('${k2}')">2. 📄 ${contratosVinculados.length ? "Actualizar" : "Crear"} contrato</button>
+              <button onclick="actualizarHandbookDeEmpleado('${k2}')">3. 📋 Actualizar handbook</button>
+              <button onclick="generarPermisoDeEmpleado('${k2}')">4. 🗓️ Permiso sin goce salarial</button>
+              <button onclick="openCatalogForm('empleados','${k2}')">5. ✏️ Editar datos (puesto, salario, contacto...)</button>
+              <button onclick="confirmarFirmaHandbook('${k2}')">6. ✍️ Confirmar firma handbook</button>
+              <button onclick="subirContratoFirmado('${k2}')">7. 📎 Subir contrato firmado (PDF)</button>
+              <button onclick="archivarEmpleado('${k2}')">8. 🗄️ Archivar</button>
+            </div>
+          </div>`;
+        }).join("");
+      }
+      if (archivadosCount > 0){
+        listEl.innerHTML += `<div class="section-card" style="margin-top:14px; border-color:var(--ink-soft);">
+          <div class="section-body" style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:12.5px; color:var(--ink-soft);">🗄️ ${archivadosCount} empleado(s) archivado(s) (salidas)</span>
+            <button class="btn" onclick="showTab('archivo')">Ver archivo</button>
+          </div>
+        </div>`;
+      }
+    } else if (type === "propiedades"){
+      listEl.innerHTML = items.map(it => `
+        <div class="catalog-item">
+          <div class="row1">
+            <label style="display:flex; align-items:center; flex:1; cursor:pointer;">
+              <input type="checkbox" ${selectedProperties.has(it.key)?"checked":""} onchange="togglePropiedad('${it.key.replace(/'/g,"\\'")}', this.checked)">
+              <span>
+                <div class="name">${escapeHtml(it.name)}</div>
+                ${it.meta ? `<div class="meta">${escapeHtml(it.meta)}</div>` : ""}
+              </span>
+            </label>
+            <div class="actions">
+              <button onclick="openCatalogForm('propiedades','${it.key.replace(/'/g,"\\'")}')">Editar</button>
+              <button class="del" onclick="deleteCatalogItem('propiedades','${it.key.replace(/'/g,"\\'")}')">Eliminar</button>
+            </div>
+          </div>
+        </div>`).join("");
+      updatePortfolioPreview();
+    } else {
+      const useFn = type === "empresas" ? "useEmpresa" : (type === "puestos" ? "usePuesto" : null);
+      listEl.innerHTML = itemsFiltered.map(it => `
+        <div class="catalog-item">
+          <div class="row1">
+            <div class="info">
+              <div class="name">${escapeHtml(it.name)}</div>
+              ${it.meta ? `<div class="meta">${escapeHtml(it.meta)}</div>` : ""}
+            </div>
+            <div class="actions">
+              ${useFn ? `<button class="use" onclick="${useFn}('${it.key.replace(/'/g,"\\'")}')">Usar</button>` : ""}
+              <button onclick="openCatalogForm('${type}','${it.key.replace(/'/g,"\\'")}')">Editar</button>
+              <button class="del" onclick="deleteCatalogItem('${type}','${it.key.replace(/'/g,"\\'")}')">Eliminar</button>
+            </div>
+          </div>
+        </div>`).join("");
+    }
+  }catch(e){
+    listEl.innerHTML = `<div class="empty-state">Todavía no hay ${cfg.label}s guardados.</div>`;
+    if (type === "propiedades") updatePortfolioPreview();
+  }
+}
+
+async function togglePropiedad(key, checked){
+  if (checked) selectedProperties.add(key); else selectedProperties.delete(key);
+  await updatePortfolioPreview();
+}
+
+async function updatePortfolioPreview(){
+  const box = document.getElementById("portfolio-preview");
+  if (!box) return;
+  if (selectedProperties.size === 0){
+    box.textContent = "Selecciona propiedades abajo para armar el portafolio del contrato.";
+    return;
+  }
+  const names = await Promise.all([...selectedProperties].map(async k => {
+    try{
+      const r = await window.storage.get(CATALOGS.propiedades.prefix + k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return v.nombre || k;
+    }catch(e){ return k; }
+  }));
+  box.textContent = names.join(", ");
+}
+
+async function applyPropiedades(){
+  const keysCsv = [...selectedProperties].join(",");
+  const { resumen, detalle } = await buildPropiedadesFromKeys(keysCsv);
+  data.PROPIEDADES = resumen;
+  data.PROPIEDADES_DETALLE = detalle;
+  data.PROPIEDADES_KEYS = keysCsv;
+  await syncLugarFirmaFromPropiedades(keysCsv);
+  renderForm();
+  renderPreview();
+  showTab("form");
+  statusMsg("Portafolio de propiedades y lugar de firma aplicados al contrato.");
+}
+
+// ---------- preview rendering ----------
+const MODALIDADES_JORNADA = {
+  turno_continuo_diurno: {
+    label: "Turno continuo diurno (8h/día · 48h/semana)",
+    labelEn: "Continuous day shift (8h/day · 48h/week)",
+    horasDiarias: 8, horasSemanales: 48,
+    es: "ocho (8) horas diarias y cuarenta y ocho (48) horas semanales, en jornada diurna continua (Art. 136 CT, de 5:00 a.m. a 7:00 p.m.)",
+    en: "eight (8) hours per day and forty-eight (48) hours per week, under a continuous day shift (Art. 136 LC, 5:00 a.m. to 7:00 p.m.)",
+  },
+  turno_mixto: {
+    label: "Turno mixto / quebrado, diurno y nocturno (7h/día · 42h/semana)",
+    labelEn: "Mixed / split day-and-night shift (7h/day · 42h/week)",
+    horasDiarias: 7, horasSemanales: 42,
+    es: "siete (7) horas diarias y cuarenta y dos (42) horas semanales, en jornada mixta con horario quebrado que combina horas diurnas y nocturnas (Art. 136 CT)",
+    en: "seven (7) hours per day and forty-two (42) hours per week, under a mixed, split day-and-night shift (Art. 136 LC)",
+  },
+  turno_nocturno: {
+    label: "Turno nocturno (6h/día · 36h/semana)",
+    labelEn: "Night shift (6h/day · 36h/week)",
+    horasDiarias: 6, horasSemanales: 36,
+    es: "seis (6) horas diarias y treinta y seis (36) horas semanales, en jornada nocturna (Art. 136 CT, de 7:00 p.m. a 5:00 a.m.)",
+    en: "six (6) hours per day and thirty-six (36) hours per week, under a night shift (Art. 136 LC, 7:00 p.m. to 5:00 a.m.)",
+  },
+};
+
+const TIPO_CONTRATO_TEXT = {
+  indeterminado: { es: "INDETERMINADO", en: "AN INDEFINITE" },
+  determinado: { es: "DETERMINADO", en: "A DEFINITE" },
+};
+
+function textoPlazoContrato(lang){
+  const dia = data.DIA_INICIO, mes = mesEnIdioma(data.MES_INICIO, lang), anio = data.ANIO_INICIO;
+  const f = (v, ph) => v ? escapeHtml(v) : `<span class="missing">[${ph}]</span>`;
+  if (data.TIPO_CONTRATO === "determinado"){
+    const diaF = data.DIA_FIN, mesF = mesEnIdioma(data.MES_FIN, lang), anioF = data.ANIO_FIN;
+    if (lang === "en"){
+      return `This contract is of a fixed (definite) nature and shall take effect as of the ${f(dia,'DIA_INICIO')} of ${f(mes,'MES_INICIO')} of ${f(anio,'ANIO_INICIO')}, and shall end on the ${f(diaF,'DIA_FIN')} of ${f(mesF,'MES_FIN')} of ${f(anioF,'ANIO_FIN')}, subject to the probationary period established in Clause Fourteen.`;
+    }
+    return `El presente contrato es de carácter definido, y entrará en vigor a partir del ${f(dia,'DIA_INICIO')} de ${f(mes,'MES_INICIO')} del ${f(anio,'ANIO_INICIO')} y finaliza el ${f(diaF,'DIA_FIN')} de ${f(mesF,'MES_FIN')} del ${f(anioF,'ANIO_FIN')}, sujeto al período de prueba establecido en la Cláusula Décima Cuarta.`;
+  }
+  if (lang === "en"){
+    return `This contract is of an indefinite nature and shall take effect as of the ${f(dia,'DIA_INICIO')} of ${f(mes,'MES_INICIO')} of ${f(anio,'ANIO_INICIO')}, subject to the probationary period established in Clause Fourteen.`;
+  }
+  return `El presente contrato es de carácter indefinido y entrará en vigor a partir del ${f(dia,'DIA_INICIO')} de ${f(mes,'MES_INICIO')} del ${f(anio,'ANIO_INICIO')}, sujeto al período de prueba establecido en la Cláusula Décima Cuarta.`;
+}
+
+function textoFechaFirma(lang){
+  const dia = data.DIA_INICIO, mes = mesEnIdioma(data.MES_INICIO, lang), anio = data.ANIO_INICIO;
+  const f = (v, ph) => v ? escapeHtml(v) : `<span class="missing">[${ph}]</span>`;
+  if (lang === "en"){
+    return `${f(dia,'DIA_INICIO')} day of the month of ${f(mes,'MES_INICIO')} of ${f(anio,'ANIO_INICIO')}`;
+  }
+  return `día ${f(dia,'DIA_INICIO')} del mes de ${f(mes,'MES_INICIO')} del ${f(anio,'ANIO_INICIO')}`;
+}
+
+function resolveField(fieldName, lang){
+  if (fieldName === "COMISION_SI_NO" || fieldName === "TELETRABAJO_SI_NO" || fieldName === "EXCLUSIVIDAD_SI_NO"){
+    const yes = data[fieldName] === "SI";
+    return `SÍ ${yes ? "☒" : "☐"}&nbsp;&nbsp;NO ${yes ? "☐" : "☒"}`;
+  }
+  // Fields that only matter when their related SI/NO toggle is "SI" — if that toggle is
+  // "NO" and the field was never filled in, show "No aplica" instead of a red missing warning.
+  const NA_FIELDS = {
+    DIRECCION_TELETRABAJO: "TELETRABAJO_SI_NO",
+    COMPENSACION_TELETRABAJO: "TELETRABAJO_SI_NO",
+    PORCENTAJE_COMISION: "COMISION_SI_NO",
+    PORCENTAJE_COMISION_LETRAS: "COMISION_SI_NO",
+  };
+  if (NA_FIELDS[fieldName] && data[NA_FIELDS[fieldName]] === "NO" && !(data[fieldName] || "").trim()){
+    return `<span class="filled">${lang === "en" ? "Not applicable" : "No aplica"}</span>`;
+  }
+  if (fieldName === "JORNADA_DESCRIPCION"){
+    const mod = MODALIDADES_JORNADA[data.MODALIDAD_JORNADA];
+    if (!mod) return `<span class="missing">[Selecciona la modalidad de jornada en el puesto — pestaña Puestos]</span>`;
+    return `<span class="filled">${escapeHtml(mod[lang] || mod.es)}</span>`;
+  }
+  if (fieldName === "TIPO_CONTRATO_LABEL"){
+    const t = TIPO_CONTRATO_TEXT[data.TIPO_CONTRATO] || TIPO_CONTRATO_TEXT.indeterminado;
+    return `<span class="filled">${t[lang] || t.es}</span>`;
+  }
+  if (fieldName === "PLAZO_CONTRATO_TEXTO"){
+    return `<span class="filled">${textoPlazoContrato(lang)}</span>`;
+  }
+  if (fieldName === "FECHA_FIRMA_TEXTO"){
+    return `<span class="filled">${textoFechaFirma(lang)}</span>`;
+  }
+  if (fieldName === "TIPO_CEDULA_EMPRESA" && lang === "en" && data.TIPO_CEDULA_EMPRESA){
+    const key = data.TIPO_CEDULA_EMPRESA.trim().toLowerCase();
+    const en = TIPO_CEDULA_EN[key];
+    if (en) return `<span class="filled">${escapeHtml(en)}</span>`;
+  }
+  if ((fieldName === "TIPO_IDENTIFICACION" || fieldName === "TIPO_IDENTIFICACION_REPRESENTANTE") && lang === "en" && data[fieldName]){
+    const key = data[fieldName].trim().toLowerCase();
+    const en = TIPO_IDENTIFICACION_EN[key];
+    if (en) return `<span class="filled">${escapeHtml(en)}</span>`;
+  }
+  if (fieldName === "ESTADO_CIVIL" && lang === "en" && data.ESTADO_CIVIL){
+    const key = data.ESTADO_CIVIL.trim().toLowerCase();
+    const en = ESTADO_CIVIL_EN[key];
+    if (en) return `<span class="filled">${escapeHtml(en)}</span>`;
+  }
+  if ((fieldName === "NACIONALIDAD" || fieldName === "NACIONALIDAD_REPRESENTANTE") && lang === "en" && data[fieldName]){
+    const key = data[fieldName].trim().toLowerCase();
+    const en = NACIONALIDAD_EN[key];
+    if (en) return `<span class="filled">${escapeHtml(en)}</span>`;
+  }
+  if (fieldName === "MONEDA_TEXTO" && lang === "en" && data.MONEDA_TEXTO){
+    const key = data.MONEDA_TEXTO.trim().toLowerCase();
+    const en = MONEDA_TEXTO_EN[key];
+    if (en) return `<span class="filled">${escapeHtml(en)}</span>`;
+  }
+  // Fields with a stored "_EN" companion (built when the value was picked from a
+  // bilingual source: Ministerio de Trabajo positions, the predefined leadership
+  // titles, or the cédula type). Free-typed text has no companion and shows the
+  // same value in both columns, since this offline app can't machine-translate it.
+  if (lang === "en" && data[fieldName + "_EN"]){
+    const v = data[fieldName + "_EN"];
+    return `<span class="filled">${escapeHtml(v)}</span>`;
+  }
+  const v = data[fieldName];
+  if (v === undefined) return `«${fieldName}»`;
+  if (v === "" || v === null) return `<span class="missing">[${fieldName}]</span>`;
+  return `<span class="filled">${escapeHtml(v)}</span>`;
+}
+
+function renderParaHtml(rawHtml, lang){
+  return rawHtml.replace(/\u00ab([A-Z_]+)\u00bb/g, (m, name) => resolveField(name, lang));
+}
+
+function renderResponsabilidadesList(lang){
+  const value = (lang === "en" && data.RESPONSABILIDADES_EN) ? data.RESPONSABILIDADES_EN : data.RESPONSABILIDADES;
+  const raw = (value || "").split("\n").map(s => s.trim()).filter(Boolean);
+  if (raw.length === 0){
+    const msg = lang === "en"
+      ? "[Add the position's responsibilities in the form or in the Positions catalog]"
+      : "[Agrega las responsabilidades del puesto en el formulario o en el catálogo de Puestos]";
+    return `<li><span class="missing">${msg}</span></li>`;
+  }
+  return raw.map(r => `<li>${escapeHtml(r)}</li>`).join("");
+}
+
+function renderPropiedadesList(lang){
+  const raw = (data.PROPIEDADES_DETALLE || "").split("\n").map(s => s.trim()).filter(Boolean);
+  if (raw.length === 0){
+    const msg = lang === "en"
+      ? "[Select the portfolio properties in the Properties tab or in the applied company]"
+      : "[Selecciona las propiedades del portafolio en la pestaña Propiedades o en la empresa aplicada]";
+    return `<li><span class="missing">${msg}</span></li>`;
+  }
+  return raw.map(r => `<li>${escapeHtml(r)}</li>`).join("");
+}
+
+function renderFirmaBlock(lang){
+  const empresa = resolveField("EMPRESA", lang);
+  const patrono = lang === "en"
+    ? { titulo: "THE EMPLOYER", nombre: "(Name of the employer / legal representative)", puesto: "General Attorney-in-Fact" }
+    : { titulo: "EL PATRONO", nombre: "(Nombre del patrono / representante legal)", puesto: "Apoderado Generalísimo" };
+  const trabajador = lang === "en"
+    ? { titulo: "THE EMPLOYEE", nombre: "(Name of the employee)", puesto: "(Position of the employee to be performed)" }
+    : { titulo: "EL TRABAJADOR", nombre: "(Nombre del colaborador)", puesto: "(Puesto del colaborador a desempeñar)" };
+  return `<div class="firma-espacio-block">
+    <div class="firma-espacio-col">
+      <div class="firma-espacio-linea"></div>
+      <div class="firma-espacio-titulo">${patrono.titulo}</div>
+      <div class="firma-espacio-detalle">${patrono.nombre}</div>
+      <div class="firma-espacio-detalle" style="font-style:italic;">${patrono.puesto}</div>
+      <div class="firma-espacio-detalle">${empresa}</div>
+    </div>
+    <div class="firma-espacio-col">
+      <div class="firma-espacio-linea"></div>
+      <div class="firma-espacio-titulo">${trabajador.titulo}</div>
+      <div class="firma-espacio-detalle">${trabajador.nombre}</div>
+      <div class="firma-espacio-detalle" style="font-style:italic;">${trabajador.puesto}</div>
+    </div>
+  </div>`;
+}
+
+function renderComisionDetalleBlock(lang){
+  const depto = data.DEPARTAMENTO_COMISION;
+  const esDepartamento = depto && depto !== "__eventos__" && COMISIONES_POR_DEPARTAMENTO[depto];
+
+  if (esDepartamento){
+    const info = COMISIONES_POR_DEPARTAMENTO[depto];
+    const reglas = info.reglas;
+    const filas = reglas.map(r => r.tipo === "porcentaje"
+      ? tr(`${r.valor}% (${numeroALetrasEs(r.valor)} por ciento) sobre el monto neto de la ${r.concepto}, generada directamente por la gestión de EL TRABAJADOR.`,
+           `${r.valor}% (${numeroALetrasEn(r.valor)} percent) of the net amount of ${r.conceptoEn}, generated directly through THE EMPLOYEE's efforts.`)
+      : tr(`$${r.valor.toFixed(2)} (${numeroALetrasEs(Math.floor(r.valor))} dólares) fijos por ${r.concepto}, efectivamente vendido y cobrado por gestión de EL TRABAJADOR.`,
+           `$${r.valor.toFixed(2)} (${numeroALetrasEn(Math.floor(r.valor))} dollars) fixed for ${r.conceptoEn}, effectively sold and collected through THE EMPLOYEE's efforts.`)
+    );
+    const intro = tr(
+      `Además del salario mensual establecido en la cláusula anterior, y en razón del departamento (<b>${escapeHtml(depto)}</b>) en el que EL TRABAJADOR presta sus servicios, EL TRABAJADOR percibirá las siguientes comisiones:`,
+      `In addition to the monthly salary established in the preceding clause, and due to the department (<b>${escapeHtml(depto)}</b>) in which THE EMPLOYEE renders services, THE EMPLOYEE shall receive the following commissions:`
+    );
+    const motivoTxt = tr(
+      `<b>Motivo de la comisión:</b> ${escapeHtml(info.motivo)}`,
+      `<b>Reason for the commission:</b> ${escapeHtml(info.motivoEn)}`
+    );
+    const cierre = tr(
+      `<p>Las comisiones sobre porcentaje se calcularán sobre el monto neto de la venta correspondiente, una vez descontados impuestos, descuentos, propinas y devoluciones. Las comisiones de monto fijo se reconocerán por cada unidad de venta o servicio efectivamente completado y cobrado, verificado contra el sistema de punto de venta o reservas de EL PATRONO.</p>
+      <p>La comisión se generará únicamente cuando la venta o el servicio correspondiente haya sido pagado en su totalidad por el cliente y verificado por el equipo contable o administrativo. EL PATRONO entregará a EL TRABAJADOR un estado de cuenta mensual con el detalle de las comisiones generadas y pagadas.</p>
+      <p>Las comisiones no forman parte del salario ordinario para efectos del cálculo de cargas sociales, salvo lo que establezca la legislación aplicable. No obstante, sí se incluirán en la base de cálculo del aguinaldo y cesantía proporcionales cuando así lo exija la ley. Salvo error material manifiesto, el estado de cuenta mensual se tendrá como aceptado si EL TRABAJADOR no formula observaciones por escrito dentro de los cinco (5) días hábiles siguientes a su entrega.</p>`,
+      `<p>Percentage-based commissions shall be calculated on the net amount of the corresponding sale, after deducting taxes, discounts, tips, and refunds. Fixed-amount commissions shall be recognized for each unit of sale or service effectively completed and collected, verified against THE EMPLOYER's point-of-sale or reservations system.</p>
+      <p>The commission shall be generated only once the corresponding sale or service has been paid in full by the client and verified by the accounting or administrative team. THE EMPLOYER shall provide THE EMPLOYEE with a monthly statement detailing the commissions generated and paid.</p>
+      <p>Commissions do not form part of the ordinary salary for the purpose of calculating social charges, except as established by applicable law. However, they shall be included in the calculation base of the proportional Christmas bonus ("<i><b>Aguinaldo</b></i>") and severance when so required by law. Barring manifest material error, the monthly statement shall be deemed accepted if THE EMPLOYEE does not raise written objections within the five (5) business days following its delivery.</p>`
+    );
+    return `<p>${intro}</p><ul>${filas.map(f => `<li>${f}</li>`).join("")}</ul><p>${motivoTxt}</p>${cierre}`;
+  }
+
+  // fallback: the original events / weddings / group-trips commission scheme
+  return tr(
+    `<p>Además del salario mensual establecido en la cláusula anterior, EL TRABAJADOR percibirá una comisión de <b class="filled">${data.PORCENTAJE_COMISION_LETRAS||"[PORCENTAJE_COMISION_LETRAS]"}</b> por ciento <b class="filled">${data.PORCENTAJE_COMISION||"[PORCENTAJE_COMISION]"}</b> sobre los ingresos netos de EL PATRONO provenientes de eventos especiales, bodas y viajes de grupo en los que EL TRABAJADOR haya participado directa y materialmente en su coordinación, venta y ejecución. Esta comisión aplica para:</p>
+    <ul>
+      <li>Eventos directos, bodas y viajes de grupo coordinados por EL TRABAJADOR.</li>
+      <li>Eventos, bodas y viajes de grupo que involucren agencias de viajes, DMC, programas de referidos o canales de terceros aportados u organizados por EL TRABAJADOR, donde conste su participación activa en la comunicación con el cliente, planeación, propuestas, seguimiento y ejecución.</li>
+    </ul>
+    <p>Los ingresos netos corresponden a las ganancias de EL PATRONO luego de deducir todos los gastos directos, comisiones de agencias, impuestos, descuentos y reintegros relacionados con el evento. La comisión se generará únicamente cuando el evento haya sido pagado en su totalidad por el cliente a EL PATRONO y posterior a la revisión del equipo contable. La comisión no se considera devengada hasta la recepción efectiva e irrevocable de los fondos por parte de la empresa. EL PATRONO entregará a EL TRABAJADOR un estado de cuenta mensual con el detalle de las comisiones generadas y pagadas.</p>
+    <p>Las comisiones no forman parte del salario ordinario para efectos del cálculo de cargas sociales, salvo lo que establezca la legislación aplicable. No obstante, sí se incluirán en la base de cálculo del aguinaldo y cesantía proporcionales cuando así lo exija la ley. Salvo error material manifiesto, el estado de cuenta mensual se tendrá como aceptado si EL TRABAJADOR no formula observaciones por escrito dentro de los cinco (5) días hábiles siguientes a su entrega.</p>`,
+    `<p>In addition to the monthly salary established in the preceding clause, THE EMPLOYEE shall receive a commission of <b class="filled">${data.PORCENTAJE_COMISION_LETRAS||"[PORCENTAJE_COMISION_LETRAS]"}</b> percent <b class="filled">${data.PORCENTAJE_COMISION||"[PORCENTAJE_COMISION]"}</b> on THE EMPLOYER's net income from special events, weddings, and group trips in which THE EMPLOYEE has participated directly and materially in their coordination, sale, and execution. This commission applies to:</p>
+    <ul>
+      <li>Direct events, weddings, and group trips coordinated by THE EMPLOYEE.</li>
+      <li>Events, weddings, and group trips involving travel agencies, DMCs, referral programs, or third-party channels contributed or organized by THE EMPLOYEE, where the EMPLOYEE's active participation in client communication, planning, proposals, follow-up, and execution is evidenced.</li>
+    </ul>
+    <p>Net income corresponds to THE EMPLOYER's profits after deducting all direct expenses, agency commissions, taxes, discounts, and refunds related to the event. The commission shall be generated only once the event has been paid in full by the client to THE EMPLOYER and after review by the accounting team. The commission is not considered earned until the effective and irrevocable receipt of the funds by the company. THE EMPLOYER shall provide THE EMPLOYEE with a monthly statement detailing the commissions generated and paid.</p>
+    <p>Commissions do not form part of the ordinary salary for the purpose of calculating social charges, except as established by applicable law. However, they shall be included in the calculation base of the proportional Christmas bonus ("<i><b>Aguinaldo</b></i>") and severance when so required by law. Barring manifest material error, the monthly statement shall be deemed accepted if THE EMPLOYEE does not raise written objections within the five (5) business days following its delivery.</p>`
+  );
+}
+
+function renderCell(paragraphs, lang){
+  let html = "";
+  let inList = false;
+  paragraphs.forEach(p => {
+    if (p.html === "\u00abRESPONSABILIDADES_LIST\u00bb"){
+      if (!inList){ html += "<ul>"; inList = true; }
+      html += renderResponsabilidadesList(lang);
+      return;
+    }
+    if (p.html === "\u00abPROPIEDADES_LIST\u00bb"){
+      if (!inList){ html += "<ul>"; inList = true; }
+      html += renderPropiedadesList(lang);
+      return;
+    }
+    if (p.html === "\u00abFIRMA_BLOCK\u00bb"){
+      if (inList){ html += "</ul>"; inList = false; }
+      html += renderFirmaBlock(lang);
+      return;
+    }
+    if (p.html === "\u00abCOMISION_DETALLE_BLOCK\u00bb"){
+      if (inList){ html += "</ul>"; inList = false; }
+      html += renderComisionDetalleBlock(lang);
+      return;
+    }
+    if (p.bullet){
+      if (!inList){ html += "<ul>"; inList = true; }
+      html += `<li>${renderParaHtml(p.html, lang)}</li>`;
+    } else {
+      if (inList){ html += "</ul>"; inList = false; }
+      html += `<p>${renderParaHtml(p.html, lang)}</p>`;
+    }
+  });
+  if (inList) html += "</ul>";
+  return html;
+}
+
+function logoHeaderHtml(){
+  const propiedad = getPropiedadActual();
+  const logo = propiedad ? propiedad.logo : LOGO_HOTEL_B64;
+  const nombre = propiedad ? propiedad.nombre : "Corcovado Wilderness Lodge";
+  return `<div class="doc-logo-header"><img src="${logo}" alt="${escapeHtml(nombre)}"></div>`;
+}
+
+// ---------- multi-property gate ----------
+function renderPropiedadGate(){
+  const grid = document.getElementById("propiedad-gate-grid");
+  grid.innerHTML = PROPIEDADES_MAESTRAS.map(p => `
+    <div class="propiedad-card" onclick="seleccionarPropiedad('${p.id}')">
+      <img src="${p.logo}" alt="${escapeHtml(p.nombre)}">
+      <div class="propiedad-card-name">${escapeHtml(p.nombre)}</div>
+    </div>`).join("");
+}
+
+function abrirPropiedadGate(){
+  renderPropiedadGate();
+  document.getElementById("propiedad-gate").classList.add("open");
+}
+
+async function seleccionarPropiedad(id){
+  setPropiedadActual(id);
+  document.getElementById("propiedad-gate").classList.remove("open");
+  renderPropiedadBadge();
+  currentKey = null;
+  currentEmpKeyForContract = null;
+  currentEmpKeyForLetter = null;
+  FIELDS_META.forEach(f => { if (f[0] !== "grp") data[f[0]] = ""; });
+  data.COMISION_SI_NO = "NO";
+  data.TELETRABAJO_SI_NO = "NO";
+  data.EXCLUSIVIDAD_SI_NO = "NO";
+  data.TIPO_CONTRATO = "indeterminado";
+  await loadContentOverrides();
+  await loadPdfConfig();
+  renderForm();
+  renderPreview();
+  updateUpdateBtn();
+  showTab("inicio");
+  statusMsg("Trabajando ahora con " + (getPropiedadActual()||{}).nombre + ".");
+}
+
+function renderPropiedadBadge(){
+  const wrap = document.getElementById("propiedad-actual-badge-wrap");
+  const p = getPropiedadActual();
+  const brandTag = document.getElementById("brand-tag");
+  if (!p){
+    wrap.innerHTML = "";
+    return;
+  }
+  wrap.innerHTML = `<div class="propiedad-actual-badge" onclick="event.stopPropagation(); abrirPropiedadGate();">
+    <img src="${p.logo}" alt="">
+    <span>${escapeHtml(p.nombre)} · Cambiar</span>
+  </div>`;
+  if (brandTag) brandTag.textContent = "🏠 " + p.nombre;
+}
+
+function renderPreview(){
+  const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
+  const titleText = lang === "en" ? "EMPLOYMENT CONTRACT" : "CONTRATO DE TRABAJO";
+  const headerLine = lang === "en"
+    ? "INDIVIDUAL EMPLOYMENT CONTRACT&nbsp;&nbsp;|&nbsp;&nbsp;CONFIDENTIAL"
+    : "CONTRATO INDIVIDUAL DE TRABAJO&nbsp;&nbsp;|&nbsp;&nbsp;CONFIDENCIAL";
+
+  let html = logoHeaderHtml();
+  html += `<div class="page-header-line">${headerLine}</div>`;
+  html += `<h2 class="doc-title">${titleText}</h2>`;
+  CONTRACT_ROWS.forEach(row => {
+    const paragraphs = lang === "en" ? row.en : row.es;
+    html += `<div class="clause-block">${renderCell(paragraphs, lang)}</div>`;
+  });
+  html += `<div class="print-footer">SDG RH Management · Confidencial</div>`;
+  document.getElementById("doc-root").innerHTML = html;
+}
+
+// ---------- tabs ----------
+function showTab(which){
+  document.getElementById("inicio-panel").style.display = which === "inicio" ? "block" : "none";
+  document.getElementById("contracts-panel").style.display = which === "contracts" ? "block" : "none";
+  document.getElementById("form-panel").style.display = which === "form" ? "block" : "none";
+  document.getElementById("despidoform-panel").style.display = which === "despidoform" ? "block" : "none";
+  document.getElementById("recomform-panel").style.display = which === "recomform" ? "block" : "none";
+  document.getElementById("permisoform-panel").style.display = which === "permisoform" ? "block" : "none";
+  document.getElementById("empresas-panel").style.display = which === "empresas" ? "block" : "none";
+  document.getElementById("puestos-panel").style.display = which === "puestos" ? "block" : "none";
+  document.getElementById("propiedades-panel").style.display = which === "propiedades" ? "block" : "none";
+  document.getElementById("empleados-panel").style.display = which === "empleados" ? "block" : "none";
+  document.getElementById("archivo-panel").style.display = which === "archivo" ? "block" : "none";
+  document.getElementById("perfil-panel").style.display = which === "perfil" ? "block" : "none";
+  document.getElementById("reporte-panel").style.display = which === "reporte" ? "block" : "none";
+  document.getElementById("faq-panel").style.display = which === "faq" ? "block" : "none";
+  document.getElementById("colillas-panel").style.display = which === "colillas" ? "block" : "none";
+  document.getElementById("preview-wrap").style.display = which === "preview" ? "block" : "none";
+  document.getElementById("constancia-wrap").style.display = which === "constancia" ? "block" : "none";
+  document.getElementById("recomendacion-wrap").style.display = which === "recomendacion" ? "block" : "none";
+  document.getElementById("permiso-wrap").style.display = "none";
+  document.getElementById("despido-wrap").style.display = "none";
+  document.getElementById("format-panel").style.display = which === "format" ? "block" : "none";
+  document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
+  document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
+  document.getElementById("recomform-toolbar").style.display = (which === "recomform") ? "flex" : "none";
+  document.getElementById("permisoform-toolbar").style.display = (which === "permisoform") ? "flex" : "none";
+  const groupOf = {
+    contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
+    empleados:"empleados", archivo:"empleados", perfil:"empleados", colillas:"empleados",
+    despidoform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos",
+    reporte:"ajustes", faq:"ajustes", format:"ajustes",
+  };
+  ["contratos","empleados","documentos","datos","ajustes"].forEach(g => {
+    const btn = document.getElementById("navbtn-" + g);
+    if (btn) btn.classList.toggle("active", groupOf[which] === g);
+  });
+  closeAllNavMenus();
+  if (which === "preview") renderPreview();
+  if (which === "constancia") renderConstancia();
+  if (which === "recomendacion") renderRecomendacion();
+  if (which === "format") applyPdfConfigToDom();
+  if (which === "inicio") renderInicio();
+  if (which === "contracts"){ renderSolicitudesList(); renderContractsList(); }
+  if (which === "empresas") renderCatalogTab("empresas");
+  if (which === "puestos") renderCatalogTab("puestos");
+  if (which === "propiedades") renderCatalogTab("propiedades");
+  if (which === "empleados") renderCatalogTab("empleados");
+  if (which === "archivo") renderArchivoList();
+  if (which === "perfil") renderPerfilEmpleado();
+  if (which === "reporte") renderReporteMensual();
+  if (which === "faq") renderFaqLaboral();
+  if (which === "colillas") renderColillasImporter();
+  if (which === "despidoform") renderDespidoForm();
+  if (which === "recomform") renderRecomForm();
+  if (which === "permisoform") renderPermisoForm();
+}
+
+// ---------- dropdown navbar ----------
+function closeAllNavMenus(){
+  document.querySelectorAll(".nav-dd-menu").forEach(m => m.classList.remove("open"));
+}
+function toggleNavMenu(name){
+  const menu = document.getElementById("navmenu-" + name);
+  const isOpen = menu.classList.contains("open");
+  closeAllNavMenus();
+  if (!isOpen) menu.classList.add("open");
+}
+function navCloseAndRun(fn){
+  closeAllNavMenus();
+  fn();
+}
+document.addEventListener("click", function(e){
+  if (!e.target.closest(".nav-dd")) closeAllNavMenus();
+});
+
+function verConstanciaActual(){
+  showTab("constancia");
+}
+
+function prepararDespidoTipo(tipo){
+  data.TIPO_DESPIDO = tipo;
+  showTab("despidoform");
+}
+
+// ---------- storage ----------
+async function renderReporteMensual(){
+  const panel = document.getElementById("reporte-panel");
+  panel.innerHTML = `<div class="empty-state">Generando reporte…</div>`;
+  try{
+    const now = new Date();
+    const mesActual = now.getMonth(), anioActual = now.getFullYear();
+    const nombreMes = MESES[mesActual] ? cap(MESES[mesActual]) : "";
+
+    const [contratosRes, empleadosRes] = await Promise.all([
+      window.storage.list("contrato:", false),
+      window.storage.list(CATALOGS.empleados.prefix, false),
+    ]);
+    const contratos = await Promise.all(((contratosRes && contratosRes.keys) || []).map(async k => {
+      try{ const r = await window.storage.get(k, false); return r && r.value ? JSON.parse(r.value) : {}; }catch(e){ return {}; }
+    }));
+    const empleados = await Promise.all(((empleadosRes && empleadosRes.keys) || []).map(async k => {
+      try{ const r = await window.storage.get(k, false); return r && r.value ? JSON.parse(r.value) : {}; }catch(e){ return {}; }
+    }));
+
+    const esEsteMes = iso => {
+      if (!iso) return false;
+      const d = new Date(iso);
+      return d.getMonth() === mesActual && d.getFullYear() === anioActual;
+    };
+
+    const contratosNuevos = contratos.filter(c => esEsteMes(c._createdAt));
+    const contratosActualizados = contratos.filter(c => c._updatedAt && !esEsteMes(c._createdAt) && esEsteMes(c._updatedAt));
+    const salidasEsteMes = empleados.filter(e => e.ARCHIVADO && esEsteMes(e.FECHA_ARCHIVADO ? new Date(e.FECHA_ARCHIVADO.split("/").reverse().join("-")).toISOString() : null));
+    const empleadosActivos = empleados.filter(e => !e.ARCHIVADO);
+    const handbooksPendientes = empleadosActivos.filter(e => !e.HANDBOOK_FIRMADO_FECHA);
+    const vencenPronto = contratos.filter(d => estadoVencimiento(d));
+    const salariosBajoMinimo = empleadosActivos.filter(e => {
+      const n = Number(String(e.SALARIO_EMP||"").replace(/[^0-9.]/g,""));
+      const ref = buscarSalarioMinimoPorDepartamento(e.DEPARTAMENTO_EMP);
+      return ref && ref.salarioMin && n && n < ref.salarioMin;
+    });
+
+    const fila = (label, valor) => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--paper-line);">
+      <span style="font-size:13px;">${label}</span><span style="font-weight:800; color:var(--navy-deep);">${valor}</span>
+    </div>`;
+
+    panel.innerHTML = `
+      <div style="margin-bottom:12px;">
+        <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">📊 Reporte de RRHH — ${nombreMes} ${anioActual}</div>
+        <div style="font-size:12px; color:var(--ink-soft);">Generado automáticamente con los datos guardados en este navegador.</div>
+      </div>
+      <div class="section-card"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:4px;">Movimiento del mes</div>
+        ${fila("Contratos nuevos creados", contratosNuevos.length)}
+        ${fila("Contratos actualizados", contratosActualizados.length)}
+        ${fila("Salidas / archivados", salidasEsteMes.length)}
+      </div></div>
+      <div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:4px;">Estado general</div>
+        ${fila("Empleados activos", empleadosActivos.length)}
+        ${fila("Contratos guardados en total", contratos.length)}
+        ${fila("Handbooks pendientes de firma", handbooksPendientes.length)}
+        ${fila("Contratos por vencer / vencidos", vencenPronto.length)}
+        ${fila("Salarios bajo el mínimo MTSS", salariosBajoMinimo.length)}
+      </div></div>
+      ${handbooksPendientes.length ? `<div class="section-card" style="margin-top:10px; border-color:#D9A54A;"><div class="section-body">
+        <div style="font-weight:700; color:#8a6d1f; margin-bottom:4px;">Pendientes de firmar Handbook</div>
+        ${handbooksPendientes.map(e => `<div style="font-size:12.5px;">• ${escapeHtml(e.NOMBRE_EMP||"")}</div>`).join("")}
+      </div></div>` : ""}
+      ${salariosBajoMinimo.length ? `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
+        <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">Salarios bajo el mínimo legal</div>
+        ${salariosBajoMinimo.map(e => `<div style="font-size:12.5px;">• ${escapeHtml(e.NOMBRE_EMP||"")} — ${escapeHtml(e.DEPARTAMENTO_EMP||"")}</div>`).join("")}
+      </div></div>` : ""}
+      <button class="btn gold" style="width:100%; margin-top:14px;" onclick="window.print()">⬇️ Descargar este reporte (PDF)</button>
+    `;
+  }catch(e){ panel.innerHTML = `<div class="empty-state">No se pudo generar el reporte.</div>`; }
+}
+
+function calcularVacaciones(){
+  const meses = Number(document.getElementById("faq-meses-input").value || 0);
+  const dias = Math.floor(meses / 50 * 15 * 100) / 100; // 2 semanas (15 días) por cada 50 semanas ≈ proporción por mes trabajado
+  // more precise: Art.153 grants 1 day per full month worked once continuity exceeds 50 weeks; simplified linear estimate
+  const diasSimple = Math.round((meses / 12) * 15 * 10) / 10;
+  document.getElementById("faq-meses-resultado").textContent =
+    `Aproximadamente ${diasSimple} día(s) de vacaciones proporcionales (referencia: 15 días por año completo, Art. 153 CT). Para el cálculo exacto de tu caso, confirma con Legal.`;
+}
+
+// ---------- payroll slip (colilla) importer ----------
+let colillasResultadosCache = [];
+
+function normalizarNombre(s){
+  return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase()
+    .split(/\s+/).filter(Boolean).sort().join(" ");
+}
+
+function parseColillas(text){
+  const chunks = text.split(/Empleado:\s*/).slice(1);
+  const empleados = [];
+  chunks.forEach(chunk => {
+    // name is capped to a reasonable length as a safety net — a genuine full name
+    // never runs 60+ characters, so this stops a broken line-join from swallowing
+    // the rest of the payslip into the name/occupation fields.
+    const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)/s);
+    if (!m) return;
+    const numero = m[1];
+    const nombre = m[2].replace(/\s+/g," ").trim();
+    const salario = parseFloat(m[3].replace(/,/g,""));
+    const deptMatch = chunk.match(/Departamento\s*:\s*([^\n]{1,60})/);
+    const ocupMatch = chunk.match(/Ocupaci[oó]n:\s*([^\n]{1,60})/);
+    const cedulaMatch = chunk.match(/[Cc]édula\D{0,10}(\d[\d-]{7,10}\d)/);
+    empleados.push({
+      numero, nombre, salario: isNaN(salario) ? 0 : salario,
+      departamento: deptMatch ? deptMatch[1].trim() : "",
+      ocupacion: ocupMatch ? ocupMatch[1].trim() : "",
+      cedula: cedulaMatch ? cedulaMatch[1].trim() : "",
+    });
+  });
+  return empleados;
+}
+
+function levenshtein(a, b){
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0));
+  for (let i=0;i<=m;i++) dp[i][0]=i;
+  for (let j=0;j<=n;j++) dp[0][j]=j;
+  for (let i=1;i<=m;i++)
+    for (let j=1;j<=n;j++)
+      dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j-1],dp[i-1][j],dp[i][j-1]);
+  return dp[m][n];
+}
+
+// finds an employee whose name is nearly identical (allows small typos) when no exact match exists
+function buscarCoincidenciaDifusa(nombreColilla, empleadosDB){
+  const wordsColilla = normalizarNombre(nombreColilla).split(" ").filter(Boolean);
+  let mejor = null, mejorScore = Infinity;
+  empleadosDB.forEach(e => {
+    const wordsDB = normalizarNombre(e.NOMBRE_EMP).split(" ").filter(Boolean);
+    if (wordsDB.length !== wordsColilla.length) return; // only compare names with the same word count, for safety
+    let totalDist = 0;
+    for (let i=0;i<wordsColilla.length;i++) totalDist += levenshtein(wordsColilla[i], wordsDB[i]);
+    if (totalDist < mejorScore){ mejorScore = totalDist; mejor = e; }
+  });
+  // accept only very close matches (at most ~2 characters different across the whole name) to avoid false positives
+  return (mejor && mejorScore > 0 && mejorScore <= 2) ? mejor : null;
+}
+
+async function procesarColillas(){
+  const text = document.getElementById("colillas-textarea").value;
+  if (!text.trim()){ statusMsg("Pega primero el texto de la(s) colilla(s).", false); return; }
+  const parsed = parseColillas(text);
+  if (parsed.length === 0){ statusMsg("No se reconoció ningún registro de empleado en ese texto.", false); return; }
+
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  const keys = (res && res.keys) || [];
+  const empleadosDB = await Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    const v = r && r.value ? JSON.parse(r.value) : {};
+    return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
+  }));
+  const porNumero = {};
+  const porCedula = {};
+  const porNombre = {};
+  empleadosDB.forEach(e => {
+    if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).trim().replace(/^0+/,"")] = e;
+    if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
+    porNombre[normalizarNombre(e.NOMBRE_EMP)] = e;
+  });
+
+  colillasResultadosCache = parsed.map(p => {
+    let match = null;
+    let nombreCorregido = null;
+    let matchedBy = null;
+
+    // 1) most reliable: match by employee number, if we've already linked it before
+    if (p.numero && porNumero[p.numero.replace(/^0+/,"")]){
+      match = porNumero[p.numero.replace(/^0+/,"")];
+      matchedBy = "número de empleado";
+    }
+    // 2) match by cédula, if the colilla happens to include one
+    if (!match && p.cedula && porCedula[p.cedula.replace(/\D/g,"")]){
+      match = porCedula[p.cedula.replace(/\D/g,"")];
+      matchedBy = "cédula";
+    }
+    // 3) exact name match
+    if (!match){
+      match = porNombre[normalizarNombre(p.nombre)] || null;
+      if (match) matchedBy = "nombre";
+    }
+    // 4) fuzzy name match (small typos only)
+    if (!match){
+      const fuzzy = buscarCoincidenciaDifusa(p.nombre, empleadosDB);
+      if (fuzzy){
+        match = fuzzy;
+        nombreCorregido = { anterior: fuzzy.NOMBRE_EMP, nuevo: p.nombre };
+        matchedBy = "nombre (con corrección)";
+      }
+    }
+    const puestoCoincide = match ? (normalizarNombre(match.DEPARTAMENTO_EMP) === normalizarNombre(p.ocupacion)) : null;
+    return Object.assign({}, p, { match, puestoCoincide, nombreCorregido, matchedBy });
+  });
+  renderColillasPreview();
+}
+
+function renderColillasPreview(){
+  const wrap = document.getElementById("colillas-resultados");
+  const encontrados = colillasResultadosCache.filter(r => r.match);
+  const noEncontrados = colillasResultadosCache.filter(r => !r.match);
+  const puestosDistintos = encontrados.filter(r => !r.puestoCoincide);
+
+  let html = `<div class="section-card" style="border-color:var(--leaf); margin-top:12px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:4px;">Resumen</div>
+    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b></div>
+  </div></div>`;
+
+  if (encontrados.length){
+    const corregidos = encontrados.filter(r => r.nombreCorregido);
+    html += `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:6px;">✅ Se actualizará el salario de:</div>
+      ${encontrados.map(r => {
+        const cambia = String(r.match.SALARIO_EMP||"").trim() !== String(r.salario).trim();
+        return `<div style="font-size:12px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
+          <b>${escapeHtml(r.match.NOMBRE_EMP)}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
+          ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
+          Salario: ${r.match.SALARIO_EMP ? "₡"+Number(r.match.SALARIO_EMP).toLocaleString("es-CR") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">₡${r.salario.toLocaleString("es-CR")}</b>
+          ${r.puestoCoincide === false ? `<br><span style="color:#8a6d1f;">⚠️ Puesto distinto — catálogo: "${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}" / colilla: "${escapeHtml(r.ocupacion)}"</span>` : ""}
+        </div>`;
+      }).join("")}
+      <button class="btn primary" style="width:100%; margin-top:10px;" onclick="aplicarColillas()">✅ Aplicar ${encontrados.length} actualización(es)${corregidos.length ? " (incluye " + corregidos.length + " corrección(es) de nombre)" : ""}</button>
+    </div></div>`;
+  }
+
+  if (noEncontrados.length){
+    html += `<div class="section-card" style="margin-top:10px; border-color:#D9A54A;"><div class="section-body">
+      <div style="font-weight:700; color:#8a6d1f; margin-bottom:6px;">⚠️ Sin coincidencia en tu lista de empleados (revisar nombre manualmente):</div>
+      ${noEncontrados.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre)} — № ${escapeHtml(r.numero)} — ₡${r.salario.toLocaleString("es-CR")} (${escapeHtml(r.ocupacion)})</div>`).join("")}
+    </div></div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+async function aplicarColillas(){
+  const encontrados = colillasResultadosCache.filter(r => r.match);
+  let count = 0;
+  for (const r of encontrados){
+    const fullKey = CATALOGS.empleados.prefix + r.match.key;
+    const salarioAnterior = r.match.SALARIO_EMP || "—";
+    r.match.SALARIO_EMP = String(r.salario);
+    r.match.NUMERO_EMPLEADO = r.numero;
+    if (r.nombreCorregido){
+      r.match.NOMBRE_EMP = r.nombreCorregido.nuevo;
+    }
+    await window.storage.set(fullKey, JSON.stringify(r.match), false);
+    if (r.nombreCorregido){
+      await agregarBitacora(r.match.key, `Nombre corregido automáticamente desde colilla: "${r.nombreCorregido.anterior}" → "${r.nombreCorregido.nuevo}".`);
+    }
+    if (String(salarioAnterior) !== String(r.salario)){
+      await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago: ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
+    }
+    count++;
+  }
+  const fechaHoy = fmtFecha(new Date().toISOString());
+  await window.storage.set("colillas-ultima-actualizacion", fechaHoy + " (" + count + " empleado(s))", false);
+  document.getElementById("colillas-pdf-status").innerHTML = `<span style="color:var(--leaf); font-weight:700;">✅ Aplicado y guardado — listo para la próxima quincena. Puedes subir otro PDF cuando quieras.</span>`;
+  statusMsg(`Actualizados ${count} empleado(s) desde la colilla de pago.`);
+  document.getElementById("colillas-textarea").value = "";
+  document.getElementById("colillas-resultados").innerHTML = "";
+  colillasResultadosCache = [];
+}
+
+async function renderColillasImporter(){
+  const panel = document.getElementById("colillas-panel");
+  let ultimaActualizacion = "";
+  try{
+    const r = await window.storage.get("colillas-ultima-actualizacion", false);
+    if (r && r.value) ultimaActualizacion = r.value;
+  }catch(e){ /* never run before */ }
+  panel.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🧾 Importación de colillas de pago</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Sube el/los PDF con las colillas de pago (por ejemplo, uno en colones y otro en dólares — puedes elegir ambos a la vez). El sistema las reparte automáticamente, empareja por número de empleado, cédula o nombre, corrige nombres con errores de tipeo, y actualiza el salario de cada quien.</div>
+      ${ultimaActualizacion ? `<div style="font-size:11px; color:var(--leaf); margin-top:6px; font-weight:600;">✅ Última actualización aplicada: ${escapeHtml(ultimaActualizacion)}</div>` : ""}
+    </div>
+    <button class="btn primary" style="width:100%; margin-bottom:8px;" onclick="document.getElementById('colillas-pdf-input').click()">📄 Subir PDF(s) de colillas</button>
+    <input type="file" id="colillas-pdf-input" accept=".pdf" multiple style="display:none;" onchange="onColillasPdfSelected(this)">
+    <div id="colillas-pdf-status" style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;"></div>
+    <details style="margin-bottom:10px;">
+      <summary style="font-size:11.5px; color:var(--ink-soft); cursor:pointer;">¿No tienes el PDF a mano? Pega el texto manualmente</summary>
+      <div class="field" style="margin-top:8px;">
+        <textarea id="colillas-textarea" style="min-height:140px;" placeholder="Pega aquí el texto completo de la(s) colilla(s) de pago…"></textarea>
+      </div>
+      <button class="btn" style="width:100%;" onclick="procesarColillas()">🔍 Procesar texto pegado</button>
+    </details>
+    <div id="colillas-resultados"></div>
+  `;
+}
+
+async function extraerTextoPDF(file){
+  if (typeof pdfjsLib === "undefined"){
+    throw new Error("El lector de PDF necesita conexión a internet la primera vez que se usa en este navegador.");
+  }
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let texto = "";
+  for (let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    // PDF text fragments don't always come in left-to-right reading order internally —
+    // group them into visual lines by vertical (Y) position, then sort each line by
+    // horizontal (X) position so the words come out in the order they're actually shown.
+    const lineas = [];
+    content.items.forEach(item => {
+      if (!item.str || !item.str.trim()) return;
+      const x = item.transform ? item.transform[4] : 0;
+      const y = item.transform ? item.transform[5] : 0;
+      let linea = lineas.find(l => Math.abs(l.y - y) <= 2);
+      if (!linea){ linea = { y, items: [] }; lineas.push(linea); }
+      linea.items.push({ x, str: item.str });
+    });
+    lineas.sort((a, b) => b.y - a.y); // PDF Y grows upward, so higher Y = higher on the page
+    lineas.forEach(l => {
+      l.items.sort((a, b) => a.x - b.x);
+      texto += l.items.map(it => it.str).join(" ") + "\n";
+    });
+    texto += "\n";
+  }
+  return texto;
+}
+
+async function onColillasPdfSelected(inputEl){
+  const files = inputEl.files ? Array.from(inputEl.files) : [];
+  if (files.length === 0) return;
+  const statusEl = document.getElementById("colillas-pdf-status");
+  let textoCombinado = "";
+  let leidos = [];
+  for (const file of files){
+    statusEl.textContent = `Leyendo ${file.name} (${leidos.length + 1} de ${files.length})…`;
+    try{
+      const texto = await extraerTextoPDF(file);
+      textoCombinado += texto + "\n";
+      leidos.push(file.name);
+    }catch(e){
+      statusMsg(`No se pudo leer "${file.name}": ${e.message} — como alternativa, abre ese PDF, copia el texto y pégalo abajo.`, false);
+    }
+  }
+  if (leidos.length > 0){
+    document.getElementById("colillas-textarea").value = textoCombinado;
+    statusEl.textContent = `PDF(s) leído(s): ${leidos.join(", ")}. Procesando…`;
+    await procesarColillas();
+    statusEl.textContent = "✅ " + leidos.length + " PDF(s) procesado(s): " + leidos.join(", ");
+  } else {
+    statusEl.textContent = "";
+  }
+  inputEl.value = "";
+}
+
+// ---------- missing-data popup ----------
+function evaluarCamposFaltantes(e){
+  const faltan = [];
+  if (!e.NOMBRE_EMP || !/^[^,]+,\s*[^,]+/.test(e.NOMBRE_EMP)) faltan.push("Nombre (formato Apellidos, Nombre)");
+  if (!e.IDENTIFICACION_EMP || !/^\d-\d{4}-\d{4}$/.test(e.IDENTIFICACION_EMP)) faltan.push("Cédula (formato completo)");
+  if (!e.PUESTO_KEY && !e.DEPARTAMENTO_EMP) faltan.push("Puesto");
+  if (!e.FECHA_INGRESO_EMP) faltan.push("Fecha de ingreso");
+  if (!e.SALARIO_EMP) faltan.push("Salario");
+  if (!e.CELULAR_EMP) faltan.push("Teléfono personal");
+  if (!e.CORREO_EMP) faltan.push("Correo electrónico");
+  if (!e.BANCO_EMP) faltan.push("Banco");
+  if (!e.CUENTA_CLIENTE_EMP || e.CUENTA_CLIENTE_EMP.replace(/\D/g,"").length !== 17) faltan.push("Cuenta cliente (17 dígitos)");
+  if (!e.CUENTA_IBAN_EMP || e.CUENTA_IBAN_EMP.replace(/^CR/i,"").replace(/\D/g,"").length !== 20) faltan.push("Cuenta IBAN (20 dígitos)");
+  if (!e.ADJUNTO_ID_EMP) faltan.push("Foto de cédula/pasaporte");
+  if (!e.ADJUNTO_CUENTA_EMP) faltan.push("Foto de cuenta bancaria");
+  if (!e.ESTADO_CIVIL_EMP) faltan.push("Estado civil");
+  if (e.HIJOS_EMP_SI === undefined) faltan.push("Hijos (sí/no)");
+  if (e.ENFERMEDAD_CRONICA_EMP_SI === undefined) faltan.push("Enfermedad crónica (sí/no)");
+  if (e.MEDICAMENTOS_CRONICOS_EMP_SI === undefined) faltan.push("Medicamentos crónicos (sí/no)");
+  if (!e.FECHA_NACIMIENTO_EMP) faltan.push("Fecha de nacimiento");
+  if (!e.CONTACTO_EMERGENCIA_NOMBRE) faltan.push("Nombre de contacto de emergencia");
+  if (!e.CONTACTO_EMERGENCIA_ID) faltan.push("Cédula de contacto de emergencia");
+  if (!e.CONTACTO_EMERGENCIA_TEL) faltan.push("Teléfono de contacto de emergencia");
+  return faltan;
+}
+
+async function mostrarModalIncompletos(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "👁️ Datos incompletos por empleado";
+  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const keys = (res && res.keys) || [];
+    const empleados = await Promise.all(keys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
+    }));
+    const activos = empleados.filter(e => !e.ARCHIVADO);
+    const conFaltantes = activos.map(e => ({ e, faltan: evaluarCamposFaltantes(e) })).filter(x => x.faltan.length > 0);
+    conFaltantes.sort((a,b) => b.faltan.length - a.faltan.length);
+
+    if (conFaltantes.length === 0){
+      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados activos tienen sus datos completos.</div>`;
+      return;
+    }
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${conFaltantes.length} de ${activos.length} empleados tienen datos pendientes.</div>` +
+      conFaltantes.map(({e, faltan}) => `
+        <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
+          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(e.NOMBRE_EMP || e.key)} <span style="font-weight:400; color:#B3261E; font-size:11px;">(${faltan.length} pendiente${faltan.length>1?"s":""})</span></div>
+          <div style="font-size:11.5px; color:#8a3b34; margin-top:2px;">${faltan.map(escapeHtml).join(" · ")}</div>
+          <button class="btn" style="padding:5px 10px; font-size:11px; margin-top:5px;" onclick="cerrarModalIncompletos(); openCatalogForm('empleados','${e.key.replace(/'/g,"\\'")}');">Completar ahora</button>
+        </div>`).join("");
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista.</div>`; }
+}
+
+function cerrarModalIncompletos(){
+  document.getElementById("modal-incompletos").classList.remove("open");
+}
+
+// ---------- duplicate detection & merge ----------
+function contarCamposLlenos(e){
+  return Object.keys(e).filter(k => e[k] && k !== "key" && k !== "HISTORIAL").length;
+}
+
+async function buscarDuplicados(){
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  const keys = (res && res.keys) || [];
+  const empleados = await Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    const v = r && r.value ? JSON.parse(r.value) : {};
+    return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
+  }));
+  const grupos = {};
+  empleados.forEach(e => {
+    const ced = (e.IDENTIFICACION_EMP || "").replace(/\D/g,"");
+    const num = (e.NUMERO_EMPLEADO || "").replace(/^0+/,"");
+    const criterio = ced ? "c:"+ced : (num ? "n:"+num : null);
+    if (!criterio) return;
+    if (!grupos[criterio]) grupos[criterio] = [];
+    grupos[criterio].push(e);
+  });
+  return Object.values(grupos).filter(g => g.length > 1);
+}
+
+async function mostrarModalDuplicados(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔀 Empleados duplicados";
+  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const grupos = await buscarDuplicados();
+    if (grupos.length === 0){
+      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ No se encontraron empleados duplicados (comparando por cédula y número de empleado).</div>`;
+      return;
+    }
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Se encontraron ${grupos.length} grupo(s) de posibles duplicados — misma cédula o número de empleado guardados dos veces.</div>` +
+      grupos.map((g, gi) => `
+        <div style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
+          ${g.map(e => `<div style="font-size:12px; padding:4px 0;"><b>${escapeHtml(e.NOMBRE_EMP)}</b> — ${escapeHtml(e.DEPARTAMENTO_EMP||"")} · ₡${e.SALARIO_EMP ? Number(e.SALARIO_EMP).toLocaleString("es-CR") : "—"} · ${e.IDENTIFICACION_EMP||"sin cédula"} · № ${e.NUMERO_EMPLEADO||"—"}</div>`).join("")}
+          <button class="btn primary" style="padding:6px 12px; font-size:11.5px; margin-top:4px;" onclick="fusionarDuplicados(${gi})">🔀 Fusionar en uno solo</button>
+        </div>`).join("");
+    window._duplicadosCache = grupos;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista.</div>`; }
+}
+
+async function fusionarDuplicados(gi){
+  const grupo = (window._duplicadosCache || [])[gi];
+  if (!grupo || grupo.length < 2) return;
+  // keep whichever record has the most complete data; merge in any missing fields
+  // from the others, combine their bitácoras, and delete the redundant records.
+  grupo.sort((a,b) => contarCamposLlenos(b) - contarCamposLlenos(a));
+  const principal = grupo[0];
+  const historialCombinado = [];
+  grupo.forEach(e => { if (Array.isArray(e.HISTORIAL)) historialCombinado.push(...e.HISTORIAL); });
+  historialCombinado.sort((a,b) => (b.fecha||"").localeCompare(a.fecha||""));
+
+  const fusionado = Object.assign({}, ...grupo.slice().reverse(), principal);
+  fusionado.HISTORIAL = historialCombinado;
+  fusionado.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: `Registro fusionado automáticamente (se eliminaron ${grupo.length - 1} duplicado(s)).` });
+  delete fusionado.key;
+
+  const key = CATALOGS.empleados.prefix + principal.key;
+  await window.storage.set(key, JSON.stringify(fusionado), false);
+  for (const dup of grupo.slice(1)){
+    await window.storage.delete(CATALOGS.empleados.prefix + dup.key, false);
+  }
+  statusMsg(`Fusionado: "${principal.NOMBRE_EMP}" — se eliminaron ${grupo.length - 1} duplicado(s).`);
+  mostrarModalDuplicados();
+}
+
+function renderFaqLaboral(){
+  const panel = document.getElementById("faq-panel");
+  const preguntas = [
+    { q: "¿Cuántos días de vacaciones le corresponden a un trabajador?", a: "Dos semanas (15 días) por cada cincuenta semanas de trabajo continuo, según el artículo 153 del Código de Trabajo. Si la relación laboral es menor a 50 semanas, las vacaciones se calculan de forma proporcional." },
+    { q: "¿Cómo se calcula el aguinaldo?", a: "Un doceavo de todos los salarios ordinarios y extraordinarios devengados entre el 1 de diciembre del año anterior y el 30 de noviembre del año en curso, según la Ley de Aguinaldo. Debe pagarse dentro de los primeros veinte días de diciembre." },
+    { q: "¿Cuánto preaviso hay que dar antes de terminar un contrato?", a: "Según el artículo 28 del Código de Trabajo: una semana si el trabajador tiene entre 3 y 6 meses de servicio; dos semanas entre 6 meses y 1 año; y un mes si supera el año de servicio." },
+    { q: "¿Cuánto dura el período de prueba?", a: "Tres meses, según el artículo 26 del Código de Trabajo. Durante ese período, cualquiera de las partes puede terminar la relación sin responsabilidad, salvo el pago proporcional de vacaciones y aguinaldo." },
+    { q: "¿Qué diferencia hay entre despido con y sin responsabilidad patronal?", a: "Sin responsabilidad patronal (Art. 81 CT): el patrono despide por una causa grave probada y no paga preaviso ni cesantía, solo vacaciones y aguinaldo proporcional. Con responsabilidad patronal (Art. 85 CT): el patrono termina la relación sin necesidad de causa grave, pero debe pagar preaviso, cesantía, vacaciones y aguinaldo proporcional." },
+    { q: "¿Cuántos días de incapacidad paga la CCSS?", a: "La CCSS reconoce el subsidio a partir del cuarto día de incapacidad por enfermedad, según el artículo 79 del Código de Trabajo; los primeros tres días corren por cuenta del patrono en el porcentaje que la ley establece." },
+  ];
+  let html = `
+    <div style="margin-bottom:12px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">❓ Preguntas frecuentes de ley laboral (Costa Rica)</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Respuestas de referencia general — confirma siempre con Legal para casos específicos.</div>
+    </div>
+    <div class="section-card" style="border-color:var(--leaf); margin-bottom:12px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:8px;">🧮 Calculadora rápida de vacaciones</div>
+      <div class="field"><label>Meses trabajados</label><input type="number" id="faq-meses-input" placeholder="Ej. 8"></div>
+      <button class="btn primary" onclick="calcularVacaciones()">Calcular</button>
+      <div id="faq-meses-resultado" style="font-size:12.5px; margin-top:8px; color:var(--navy-deep); font-weight:600;"></div>
+    </div></div>
+  `;
+  html += preguntas.map(p => `<div class="section-card" style="margin-bottom:8px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:4px;">${escapeHtml(p.q)}</div>
+    <div style="font-size:13px; color:var(--ink); text-align:justify;">${escapeHtml(p.a)}</div>
+  </div></div>`).join("");
+  panel.innerHTML = html;
+}
+
+async function renderInicio(){
+  const panel = document.getElementById("inicio-panel");
+  panel.innerHTML = `<div class="empty-state">Cargando resumen…</div>`;
+  try{
+    const [contratosRes, empleadosRes, empresasRes] = await Promise.all([
+      window.storage.list("contrato:", false),
+      window.storage.list(CATALOGS.empleados.prefix, false),
+      window.storage.list(CATALOGS.empresas.prefix, false),
+    ]);
+    const contratoKeys = (contratosRes && contratosRes.keys) || [];
+    const empleadoKeys = (empleadosRes && empleadosRes.keys) || [];
+    const empresaKeys = (empresasRes && empresasRes.keys) || [];
+
+    const contratos = await Promise.all(contratoKeys.map(async k => {
+      try{ const r = await window.storage.get(k, false); return r && r.value ? JSON.parse(r.value) : {}; }catch(e){ return {}; }
+    }));
+    const empleados = await Promise.all(empleadoKeys.map(async k => {
+      try{ const r = await window.storage.get(k, false); return r && r.value ? JSON.parse(r.value) : {}; }catch(e){ return {}; }
+    }));
+
+    const vencenPronto = contratos.filter(d => estadoVencimiento(d));
+    const empleadosActivos = empleados.filter(e => !e.ARCHIVADO);
+    const empleadosArchivados = empleados.filter(e => e.ARCHIVADO);
+    const handbooksPendientes = empleadosActivos.filter(e => !e.HANDBOOK_FIRMADO_FECHA);
+
+    const card = (icono, numero, etiqueta, accion, color) => `
+      <div class="section-card" style="border-color:${color || 'var(--paper-line)'}; cursor:pointer;" onclick="${accion}">
+        <div class="section-body" style="display:flex; align-items:center; gap:12px; padding:14px;">
+          <div style="font-size:26px;">${icono}</div>
+          <div>
+            <div style="font-size:20px; font-weight:800; color:var(--navy-deep); line-height:1;">${numero}</div>
+            <div style="font-size:12px; color:var(--ink-soft);">${etiqueta}</div>
+          </div>
+        </div>
+      </div>`;
+
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">👋 Resumen general</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Toca cualquier tarjeta para ir directo a esa sección.</div>
+    </div>`;
+    html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">`;
+    html += card("🗂️", contratoKeys.length, "Contratos guardados", "showTab('contracts')");
+    html += card("👥", empleadosActivos.length, "Empleados activos", "showTab('empleados')");
+    html += card("🏨", empresaKeys.length, "Empresas registradas", "showTab('empresas')");
+    html += card("🗄️", empleadosArchivados.length, "Empleados archivados", "showTab('archivo')");
+    html += `</div>`;
+
+    if (vencenPronto.length > 0){
+      html += `<div class="section-card" style="border-color:#D9A54A; margin-bottom:12px; cursor:pointer;" onclick="showTab('contracts')">
+        <div class="section-body" style="padding:14px;">
+          <div style="font-weight:700; color:#8a6d1f;">⚠️ ${vencenPronto.length} contrato(s) por vencer o vencidos</div>
+          <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">Toca para revisarlos en Contratos.</div>
+        </div>
+      </div>`;
+    }
+    if (handbooksPendientes.length > 0){
+      html += `<div class="section-card" style="border-color:#D9A54A; margin-bottom:12px; cursor:pointer;" onclick="showTab('empleados')">
+        <div class="section-body" style="padding:14px;">
+          <div style="font-weight:700; color:#8a6d1f;">📋 ${handbooksPendientes.length} empleado(s) sin firmar el Handbook</div>
+          <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">Toca para revisarlos en Empleados.</div>
+        </div>
+      </div>`;
+    }
+
+    html += `<button class="btn primary" style="width:100%; padding:14px; font-size:14.5px; margin-top:6px;" onclick="showTab('contracts'); createNewFromTab();">🌱 Crear contrato nuevo</button>`;
+
+    panel.innerHTML = html;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar el resumen.</div>`;
+  }
+}
+
+function statusMsg(txt, ok, undoFn){
+  const el = document.getElementById("status-msg");
+  el.textContent = txt;
+  el.style.color = ok === false ? "#B3261E" : "#2E7D5B";
+  setTimeout(()=>{ if (el.textContent === txt) el.textContent = ""; }, 3500);
+  showToast(txt, ok, undoFn);
+}
+
+let toastTimer = null;
+function showToast(txt, ok, actionFn, actionLabel){
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  const label = actionLabel || "Deshacer";
+  toast.innerHTML = escapeHtml(txt) + (actionFn ? `<span class="toast-undo" id="toast-undo-btn">${escapeHtml(label)}</span>` : "");
+  toast.className = "toast show" + (ok === false ? " toast-error" : "");
+  if (actionFn){
+    document.getElementById("toast-undo-btn").onclick = function(){
+      actionFn();
+      toast.classList.remove("show");
+    };
+  }
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.classList.remove("show"); }, actionFn ? 8000 : 3000);
+}
+
+let contractsSearchTerm = "";
+let empleadosSearchTerm = "";
+let puestosSearchTerm = "";
+let empleadosOrden = "nombre_asc"; // nombre_asc | nombre_desc | fecha_reciente | fecha_antigua
+let empleadosFiltroContrato = "todos"; // todos | con | sin
+function filtrarEmpleadosInput(val){ empleadosSearchTerm = val.toLowerCase(); renderCatalogTab("empleados"); }
+function filtrarPuestosInput(val){ puestosSearchTerm = val.toLowerCase(); renderCatalogTab("puestos"); }
+function ordenarEmpleadosPor(val){ empleadosOrden = val; renderCatalogTab("empleados"); }
+function filtrarEmpleadosPorContrato(val){ empleadosFiltroContrato = val; renderCatalogTab("empleados"); }
+
+async function renderSolicitudesList(){
+  const el = document.getElementById("solicitudes-list");
+  if (!el) return;
+  try{
+    const res = await window.storage.list("solicitud:", false);
+    const keys = (res && res.keys) ? res.keys : [];
+    if (keys.length === 0){ el.innerHTML = ""; return; }
+    const items = await Promise.all(keys.map(async k => {
+      try{
+        const r = await window.storage.get(k, false);
+        const d = r && r.value ? JSON.parse(r.value) : {};
+        return { key: k, nombre: d.NOMBRE_TRABAJADOR || "(sin nombre)", puesto: d.PUESTO || "" };
+      }catch(e){ return null; }
+    }));
+    const valid = items.filter(Boolean);
+    if (valid.length === 0){ el.innerHTML = ""; return; }
+    el.innerHTML = `<div class="section-card" style="border-color:var(--gold); margin-bottom:14px;">
+      <div class="section-head" style="background:#F1E6D2;">📋 Solicitudes de información recibidas (${valid.length})</div>
+      <div class="section-body">
+        ${valid.map(it => `
+          <div class="catalog-item">
+            <div class="row1">
+              <div class="info">
+                <div class="name">${escapeHtml(it.nombre)}</div>
+                ${it.puesto ? `<div class="meta">${escapeHtml(it.puesto)}</div>` : ""}
+              </div>
+              <div class="actions">
+                <button class="use" onclick="usarSolicitud('${it.key.replace(/'/g,"\\'")}')">Usar</button>
+                <button class="del" onclick="descartarSolicitud('${it.key.replace(/'/g,"\\'")}')">Descartar</button>
+              </div>
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>`;
+  }catch(e){ el.innerHTML = ""; }
+}
+
+async function usarSolicitud(key){
+  try{
+    const res = await window.storage.get(key, false);
+    if (!res || !res.value) return;
+    const d = JSON.parse(res.value);
+    ["NOMBRE_TRABAJADOR","TIPO_IDENTIFICACION","IDENTIFICACION","NACIONALIDAD","ESTADO_CIVIL","ESPECIALIZACION","DIRECCION_TRABAJADOR"].forEach(id => {
+      if (d[id]) data[id] = d[id];
+    });
+    if (d.FECHA_DESEADA){
+      const [y,m,day] = d.FECHA_DESEADA.split("-");
+      const idx = Number(m) - 1;
+      if (MESES[idx]){ data.DIA_INICIO = String(Number(day)); data.MES_INICIO = MESES[idx]; data.ANIO_INICIO = y; }
+    }
+    await window.storage.delete(key, false);
+    renderForm();
+    renderPreview();
+    showTab("form");
+    statusMsg("Datos de " + (d.NOMBRE_TRABAJADOR || "la solicitud") + " aplicados al Formulario.");
+  }catch(e){ statusMsg("No se pudo aplicar esa solicitud.", false); }
+}
+
+async function descartarSolicitud(key){
+  try{
+    await window.storage.delete(key, false);
+    renderSolicitudesList();
+  }catch(e){ /* ignore */ }
+}
+
+
+function fmtFecha(iso){
+  if (!iso) return "";
+  try{
+    const d = new Date(iso);
+    return d.toLocaleDateString("es-CR", { day:"2-digit", month:"2-digit", year:"numeric" });
+  }catch(e){ return ""; }
+}
+
+function estadoVencimiento(d){
+  if (d.TIPO_CONTRATO !== "determinado" || !d.ANIO_FIN || !d.MES_FIN || !d.DIA_FIN) return null;
+  const idx = MESES.indexOf(d.MES_FIN);
+  if (idx < 0) return null;
+  const fin = new Date(Number(d.ANIO_FIN), idx, Number(d.DIA_FIN));
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const diffDias = Math.round((fin - hoy) / 86400000);
+  if (diffDias < 0) return { texto: "Vencido hace " + Math.abs(diffDias) + " días", clase: "venc-rojo" };
+  if (diffDias <= 30) return { texto: "Vence en " + diffDias + " días", clase: "venc-amarillo" };
+  return null;
+}
+
+function filtrarContratosInput(val){
+  contractsSearchTerm = val.toLowerCase();
+  renderContractsList();
+}
+
+async function renderContractsList(){
+  const listEl = document.getElementById("contracts-list");
+  listEl.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const res = await window.storage.list("contrato:", false);
+    const keys = (res && res.keys) ? res.keys.sort() : [];
+    if (keys.length === 0){
+      listEl.innerHTML = `<div class="empty-state">Todavía no hay contratos guardados.<br>Usa “➕ Crear contrato nuevo” para empezar.</div>`;
+      return;
+    }
+    let items = await Promise.all(keys.map(async k => {
+      try{
+        const r = await window.storage.get(k, false);
+        const d = r && r.value ? JSON.parse(r.value) : {};
+        const completo = d.NOMBRE_TRABAJADOR && d.IDENTIFICACION && d.EMPRESA && d.PUESTO && d.SALARIO_BRUTO_NUM;
+        return {
+          key: k, name: k.replace("contrato:", ""), puesto: d.PUESTO || "", empresa: d.EMPRESA || "",
+          updatedAt: d._updatedAt || "", vencimiento: estadoVencimiento(d), completo: !!completo,
+        };
+      }catch(e){
+        return { key: k, name: k.replace("contrato:", ""), puesto: "", empresa: "", updatedAt: "", vencimiento: null, completo: false };
+      }
+    }));
+    if (contractsSearchTerm){
+      items = items.filter(it =>
+        it.name.toLowerCase().includes(contractsSearchTerm) ||
+        it.puesto.toLowerCase().includes(contractsSearchTerm) ||
+        it.empresa.toLowerCase().includes(contractsSearchTerm));
+    }
+    const searchBar = `<div class="field" style="margin-bottom:10px;">
+      <input type="text" placeholder="🔍 Buscar por nombre, puesto o empresa…" value="${escapeHtml(contractsSearchTerm)}" oninput="filtrarContratosInput(this.value)">
+    </div>`;
+    if (items.length === 0){
+      listEl.innerHTML = searchBar + `<div class="empty-state">Sin resultados para “${escapeHtml(contractsSearchTerm)}”.</div>`;
+      return;
+    }
+    listEl.innerHTML = searchBar + items.map(it => {
+      const meta = [it.puesto, it.empresa].filter(Boolean).join(" · ");
+      const fecha = it.updatedAt ? `Última actualización: ${fmtFecha(it.updatedAt)}` : "";
+      const venc = it.vencimiento ? `<span class="${it.vencimiento.clase}">⚠️ ${it.vencimiento.texto}</span>` : "";
+      const dot = `<span class="completeness-dot ${it.completo ? 'dot-ok' : 'dot-warn'}" title="${it.completo ? 'Contrato completo' : 'Faltan datos clave'}"></span>`;
+      return `<div class="contract-card">
+        <div class="info">
+          <div class="name">${dot}${escapeHtml(it.name)}</div>
+          ${meta ? `<div class="meta">${escapeHtml(meta)}</div>` : ""}
+          <div class="meta" style="font-size:10.5px;">${fecha}${fecha && venc ? " · " : ""}${venc}</div>
+        </div>
+        <div class="actions">
+          <button onclick="openContract('${it.key.replace(/'/g,"\\'")}')">Abrir</button>
+          <button onclick="descargarContrato('${it.key.replace(/'/g,"\\'")}')">Descargar</button>
+          <button onclick="openContract('${it.key.replace(/'/g,"\\'")}')">Actualizar</button>
+          <button onclick="duplicarContrato('${it.key.replace(/'/g,"\\'")}')">Duplicar</button>
+          <button onclick="descargarConstanciaDeContrato('${it.key.replace(/'/g,"\\'")}')">📋 HB Firma</button>
+          <button onclick="descargarDespidoDeContrato('${it.key.replace(/'/g,"\\'")}')">⚖️ Despido</button>
+          <button class="del" onclick="deleteContract('${it.key.replace(/'/g,"\\'")}')">Eliminar</button>
+        </div>
+      </div>`;
+    }).join("");
+  }catch(e){
+    listEl.innerHTML = `<div class="empty-state">Todavía no hay contratos guardados.<br>Usa “➕ Crear contrato nuevo” para empezar.</div>`;
+  }
+}
+
+
+// ---------- PDF download with a clean, contract-specific suggested filename ----------
+// A web page can't choose the destination folder (the browser controls that for
+// security), but it CAN set the title the "Save as PDF" dialog suggests as the
+// filename — this makes every contract download with a clear, consistent name
+// instead of the app's generic page title.
+function nombreArchivoContrato(){
+  const partes = ["Contrato_SDG"];
+  if (data.NOMBRE_TRABAJADOR) partes.push(data.NOMBRE_TRABAJADOR.trim().replace(/\s+/g, "_"));
+  if (data.PUESTO) partes.push(data.PUESTO.trim().replace(/\s+/g, "_"));
+  if (partes.length === 1) partes.push(new Date().toISOString().slice(0,10));
+  return partes.join("_").replace(/[\/\\:*?"<>|]/g, "");
+}
+
+// ===========================================================================
+// Congelado de documentos emitidos
+//
+// La app no produce un PDF: renderiza HTML y se imprime desde el navegador.
+// Así que lo que se archiva es ESE HTML, con el CSS incrustado, de modo que
+// dentro de cinco años se abra exactamente igual que el día que se firmó.
+//
+// A propósito NO se regenera desde las plantillas: si una plantilla cambia en
+// marzo, regenerar un contrato de enero produciría un documento distinto del
+// que la persona firmó, que para un expediente laboral no sirve de nada.
+// ===========================================================================
+let _cssCongelado = null;
+
+async function cssParaCongelar(){
+  if (_cssCongelado !== null) return _cssCongelado;
+  try{
+    const res = await fetch("style.css");
+    _cssCongelado = res.ok ? await res.text() : "";
+  }catch(e){
+    _cssCongelado = "";
+  }
+  return _cssCongelado;
+}
+
+// Arma un HTML autocontenido a partir de lo que ya está en pantalla.
+async function documentoAutocontenido(rootId, titulo){
+  const root = document.getElementById(rootId);
+  if (!root || !root.innerHTML.trim()) return null;
+
+  const css = await cssParaCongelar();
+  const estiloPagina = document.getElementById("dynamic-page-style");
+  const escaparTitulo = String(titulo).replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${escaparTitulo}</title>
+<style>
+${css}
+${estiloPagina ? estiloPagina.textContent : ""}
+/* El documento archivado se muestra solo, sin la interfaz de la app. */
+body{ background:#fff; margin:0; padding:24px; }
+.doc{ max-width:none; min-width:0; }
+</style>
+</head>
+<body>
+<div class="doc"><div class="doc-scroll">${root.innerHTML}</div></div>
+</body>
+</html>`;
+}
+
+// Congela y archiva. Nunca interrumpe la impresión: si falla, avisa y sigue,
+// porque perder el documento impreso sería peor que perder la copia archivada.
+async function congelarEmitido(rootId, meta){
+  if (!CON_BACKEND) return;
+  if (window.sdgApi && !window.sdgApi.puedeEditar()) return;
+  try{
+    const html = await documentoAutocontenido(rootId, meta.titulo);
+    if (!html){ return; }
+    const blob = new Blob([html], { type: "text/html" });
+    const r = await window.sdgApi.congelarDocumento(blob, {
+      tipo: meta.tipo,
+      titulo: meta.titulo,
+      nombreArchivo: meta.nombreArchivo + ".html",
+      claveOrigen: meta.claveOrigen || null,
+      empleadoCedula: meta.empleadoCedula || null,
+      empleadoNombre: meta.empleadoNombre || null,
+    });
+    statusMsg("Documento archivado en el histórico (huella " + r.sha256.slice(0, 12) + "…).", true);
+  }catch(e){
+    statusMsg("El documento se generó, pero no se pudo archivar: " + (e.message || "error"), false);
+  }
+}
+
+function descargarPDFConNombre(){
+  const original = document.title;
+  document.title = nombreArchivoContrato();
+  renderPreview();
+  document.getElementById("preview-wrap").style.display = "block";
+  document.getElementById("constancia-wrap").style.display = "none";
+  document.getElementById("despido-wrap").style.display = "none";
+  document.getElementById("recomendacion-wrap").style.display = "none";
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  congelarEmitido("doc-root", {
+    tipo: "contrato",
+    titulo: "Contrato de trabajo — " + (data.NOMBRE_TRABAJADOR || "sin nombre"),
+    nombreArchivo: nombreArchivoContrato(),
+    empleadoCedula: data.IDENTIFICACION || null,
+    empleadoNombre: data.NOMBRE_TRABAJADOR || null,
+  });
+}
+
+function renderConstancia(){
+  const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
+  const t = lang === "en" ? {
+    titulo1: "THE COSTA RICA COLLECTION", titulo2: "A HOSPITALITY GROUP",
+    titulo3: "TEAM MEMBER HANDBOOK", titulo4: "ACKNOWLEDGMENT OF RECEIPT",
+    p1: `This certifies that the team member has received, read, and fully understood the Team Member Handbook of The Costa Rica Collection, which establishes the guidelines, internal policies, code of conduct, dress code, and other applicable provisions.`,
+    p2: `This document reflects the principles of The Costa Rica Collection as the parent company and applies to the project and contracting entity detailed below.`,
+    campos: [
+      ["Project name:", data.PROPIEDADES || ""],
+      ["Contracting company name:", data.EMPRESA || ""],
+      ["Legal entity ID:", data.CEDULA_JURIDICA_EMPRESA || ""],
+      ["Team member's name:", data.NOMBRE_TRABAJADOR || ""],
+      ["ID number:", data.IDENTIFICACION || ""],
+      ["Position:", data.PUESTO_EN || data.PUESTO || ""],
+      ["Start date:", (data.DIA_INICIO && data.MES_INICIO && data.ANIO_INICIO) ? `${data.DIA_INICIO} ${mesEnIdioma(data.MES_INICIO,"en")} ${data.ANIO_INICIO}` : ""],
+    ],
+    p3: `The team member states that they have had access to the content of the Handbook, understand its scope, and that compliance with it is mandatory as part of their employment relationship.`,
+    p4: `They further acknowledge that failure to comply with its provisions may result in the corresponding disciplinary measures in accordance with internal policy and applicable labor legislation.`,
+    firma1: "Team member's signature", firma2: "Representative's / employer's signature",
+    nombreFecha: "Name: ______________________  Date: ______________________",
+    nota: "This document must be kept on file as a record of the induction and Handbook acceptance process.",
+  } : {
+    titulo1: "THE COSTA RICA COLLECTION", titulo2: "A HOSPITALITY GROUP",
+    titulo3: "HANDBOOK PARA MIEMBROS DEL EQUIPO", titulo4: "CONSTANCIA DE ENTREGA Y RECIBIDO",
+    p1: `Por medio de la presente, se deja constancia de que el(la) colaborador(a) ha recibido, leído y comprendido en su totalidad el Handbook para Miembros del Equipo de The Costa Rica Collection, el cual establece los lineamientos, políticas internas, código de conducta, normas de vestimenta y demás disposiciones aplicables.`,
+    p2: `Este documento responde a los principios de The Costa Rica Collection como empresa pilar y es de aplicación para el proyecto y entidad contratante que se detallan a continuación.`,
+    campos: [
+      ["Nombre del proyecto:", data.PROPIEDADES || ""],
+      ["Nombre de la empresa contratante:", data.EMPRESA || ""],
+      ["Cédula jurídica:", data.CEDULA_JURIDICA_EMPRESA || ""],
+      ["Nombre del colaborador:", data.NOMBRE_TRABAJADOR || ""],
+      ["Número de identificación:", data.IDENTIFICACION || ""],
+      ["Puesto:", data.PUESTO || ""],
+      ["Fecha de ingreso:", (data.DIA_INICIO && data.MES_INICIO && data.ANIO_INICIO) ? `${data.DIA_INICIO} de ${data.MES_INICIO} del ${data.ANIO_INICIO}` : ""],
+    ],
+    p3: `El(la) colaborador(a) manifiesta que ha tenido acceso al contenido del Handbook, que comprende su alcance y que su cumplimiento es obligatorio como parte de su relación laboral.`,
+    p4: `Asimismo, reconoce que el incumplimiento de sus disposiciones podrá dar lugar a las medidas disciplinarias correspondientes conforme a la normativa interna y la legislación laboral vigente.`,
+    firma1: "Firma del colaborador", firma2: "Firma del representante / contratante",
+    nombreFecha: "Nombre: ______________________  Fecha: ______________________",
+    nota: "Este documento debe ser resguardado como respaldo del proceso de inducción y aceptación del Handbook.",
+  };
+
+  const campoHtml = (label, val) => `<div class="constancia-campo"><b>${label}</b> ${val ? escapeHtml(val) : '<span class="missing">[' + tr('pendiente','pending') + ']</span>'}</div>`;
+
+  let html = logoHeaderHtml();
+  html += `
+    <div style="text-align:center; margin-bottom:18px;">
+      <div style="font-weight:700; font-size:calc(var(--doc-font-size) + 1px);">${t.titulo1}</div>
+      <div style="font-size:calc(var(--doc-font-size) - 1.5px); letter-spacing:.5px; color:#555;">${t.titulo2}</div>
+    </div>
+    <h2 class="doc-title" style="margin-bottom:4px;">${t.titulo3}</h2>
+    <div style="text-align:center; font-weight:700; margin-bottom:16px;">${t.titulo4}</div>
+    <p style="text-align:justify; margin:0 0 10px;">${t.p1}</p>
+    <p style="text-align:justify; margin:0 0 16px;">${t.p2}</p>
+    <div class="constancia-campos">${t.campos.map(c => campoHtml(c[0], c[1])).join("")}</div>
+    <p style="text-align:justify; margin:16px 0 10px;">${t.p3}</p>
+    <p style="text-align:justify; margin:0 0 20px;">${t.p4}</p>
+    <div class="firma-espacio-block">
+      <div class="firma-espacio-col">
+        <div class="firma-espacio-linea"></div>
+        <div class="firma-espacio-titulo">${t.firma1}</div>
+        <div class="firma-espacio-detalle">${t.nombreFecha}</div>
+      </div>
+      <div class="firma-espacio-col">
+        <div class="firma-espacio-linea"></div>
+        <div class="firma-espacio-titulo">${t.firma2}</div>
+        <div class="firma-espacio-detalle">${t.nombreFecha}</div>
+      </div>
+    </div>
+    <p style="text-align:justify; margin-top:24px; font-style:italic; font-size:calc(var(--doc-font-size) - 1.5px);">${t.nota}</p>
+  `;
+  document.getElementById("constancia-root").innerHTML = html;
+}
+
+function descargarConstanciaPDF(){
+  const original = document.title;
+  const nombreBase = data.NOMBRE_TRABAJADOR ? data.NOMBRE_TRABAJADOR.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Constancia_Handbook_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  renderConstancia();
+  document.getElementById("constancia-wrap").style.display = "block";
+  document.getElementById("preview-wrap").style.display = "none";
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  congelarEmitido("constancia-root", {
+    tipo: "constancia_handbook",
+    titulo: "Constancia de Handbook — " + (data.NOMBRE_TRABAJADOR || "sin nombre"),
+    nombreArchivo: "Constancia_Handbook_" + nombreBase,
+    empleadoCedula: data.IDENTIFICACION || null,
+    empleadoNombre: data.NOMBRE_TRABAJADOR || null,
+  });
+}
+
+function cargarDatosDeContrato(loaded){
+  FIELDS_META.forEach(f => { if (f[0] !== "grp") data[f[0]] = loaded[f[0]] !== undefined ? loaded[f[0]] : ""; });
+  CATALOGS.empresas.fields.forEach(f => { data[f[0]] = loaded[f[0]] !== undefined ? loaded[f[0]] : ""; });
+  CATALOGS.puestos.fields.forEach(f => { data[f[0]] = loaded[f[0]] !== undefined ? loaded[f[0]] : ""; });
+  data.SALARIO_MINISTERIO = loaded.SALARIO_MINISTERIO || "";
+  data.DEPARTAMENTO_MINISTERIO = loaded.DEPARTAMENTO_MINISTERIO || "";
+  data.SALARIO_MODO = loaded.SALARIO_MODO || "";
+  data.PROPIEDADES_DETALLE = loaded.PROPIEDADES_DETALLE || "";
+  data.PROPIEDADES_KEYS = loaded.PROPIEDADES_KEYS || "";
+  data.PUESTO_EN = loaded.PUESTO_EN || "";
+  data.RESPONSABILIDADES_EN = loaded.RESPONSABILIDADES_EN || "";
+  data.TAREAS_APOYO_EN = loaded.TAREAS_APOYO_EN || "";
+  data.JEFE_INMEDIATO_EN = loaded.JEFE_INMEDIATO_EN || "";
+  data.DISTRITO_FIRMA = loaded.DISTRITO_FIRMA || "";
+  data.CANTON_FIRMA = loaded.CANTON_FIRMA || "";
+  data.PROVINCIA_FIRMA = loaded.PROVINCIA_FIRMA || "";
+  data.LIDER_DIRECTOR = DIRECTOR_PROYECTO_FIJO;
+  data.LIDER_DIRECTOR_EN = DIRECTOR_PROYECTO_FIJO_EN;
+}
+
+function mostrarSoloConstancia(){
+  ["inicio-panel","contracts-panel","form-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","colillas-panel","preview-wrap","despido-wrap","recomendacion-wrap","format-panel"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("constancia-wrap");
+  if (wrap) wrap.style.display = "block";
+  const toolbar = document.getElementById("form-toolbar");
+  if (toolbar) toolbar.style.display = "none";
+}
+
+async function descargarConstanciaDeContrato(key){
+  try{
+    const res = await window.storage.get(key, false);
+    if (!res || !res.value){ statusMsg("No se pudo generar la constancia.", false); return; }
+    cargarDatosDeContrato(JSON.parse(res.value));
+    currentKey = key;
+    mostrarSoloConstancia();
+    descargarConstanciaPDF();
+    statusMsg("Constancia de Handbook generada para “" + key.replace("contrato:", "") + "”.");
+  }catch(e){ statusMsg("No se pudo generar la constancia.", false); }
+}
+
+// ---------- termination letter (Art. 81 CT causales database) ----------
+function renderDespido(){
+  const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
+  const esSin = data.TIPO_DESPIDO === "sin_responsabilidad";
+  const causal = CAUSALES_DESPIDO_81.find(c => c.id === data.CAUSAL_DESPIDO);
+  const empresaTxt = resolveField("EMPRESA", lang);
+  const direccionTxt = resolveField("DIRECCION_EMPRESA", lang);
+  const cedulaJuridicaTxt = resolveField("CEDULA_JURIDICA_EMPRESA", lang);
+
+  const tieneFecha = data.DIA_DESPIDO && data.MES_DESPIDO && data.ANIO_DESPIDO;
+  const diaNum = Number(data.DIA_DESPIDO), anioNum = Number(data.ANIO_DESPIDO);
+  const mesTxt = lang === "en" ? mesEnIdioma(data.MES_DESPIDO,"en") : data.MES_DESPIDO;
+  const diaLetras = tieneFecha ? (lang === "en" ? numeroALetrasEn(diaNum) : numeroALetrasEs(diaNum)) : "";
+  const anioLetras = tieneFecha ? (lang === "en" ? numeroALetrasEn(anioNum) : numeroALetrasEs(anioNum)) : "";
+  const fechaNumeros = tieneFecha ? `${String(data.DIA_DESPIDO).padStart(2,"0")}/${MESES.indexOf(data.MES_DESPIDO)>=0 ? String(MESES.indexOf(data.MES_DESPIDO)+1).padStart(2,"0") : "--"}/${data.ANIO_DESPIDO}` : "";
+  const fechaCompleta = tieneFecha
+    ? tr(`día ${diaLetras} (${data.DIA_DESPIDO}) de ${mesTxt} del año ${anioLetras} (${fechaNumeros})`,
+         `the ${diaLetras} (${data.DIA_DESPIDO}) day of ${mesTxt}, ${anioLetras} (${fechaNumeros})`)
+    : `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
+
+  const hechos = data.DESCRIPCION_HECHOS
+    ? escapeHtml(data.DESCRIPCION_HECHOS)
+    : `<span class="missing">[${tr("descripción de los hechos pendiente","description of facts pending")}]</span>`;
+  const motivoCon = data.MOTIVO_DESPIDO_CON
+    ? (lang === "en" ? (MOTIVOS_DESPIDO_CON_EN[data.MOTIVO_DESPIDO_CON.trim().toLowerCase()] || data.MOTIVO_DESPIDO_CON) : data.MOTIVO_DESPIDO_CON)
+    : `<span class="missing">[${tr("motivo pendiente","reason pending")}]</span>`;
+
+  const titulo = tr("CARTA DE DESPIDO","TERMINATION LETTER");
+  const fBox = FIRMANTE_DESPIDO;
+
+  let responsabilidadTxt, observacionesHtml;
+  if (esSin){
+    const causalTxt = causal
+      ? `${tr("el artículo","article")} ${causal.articulo} ${tr("del Código de Trabajo","of the Labor Code")}`
+      : `<span class="missing">[${tr("causal pendiente","cause pending")}]</span>`;
+    responsabilidadTxt = tr(
+      `Este despido se realiza <b>sin responsabilidad patronal</b>, según lo establecido en ${causalTxt} de Costa Rica.`,
+      `This dismissal is <b>without employer liability</b>, pursuant to ${causalTxt} of Costa Rica.`
+    );
+    observacionesHtml = tr(
+      `<p><b>Observaciones — hechos que fundamentan este despido:</b> ${hechos}</p>
+       <p>De conformidad con el artículo 82 del Código de Trabajo, únicamente los hechos aquí descritos podrán alegarse posteriormente como fundamento de este despido ante cualquier instancia. Se procederá al pago de vacaciones y aguinaldo proporcionales correspondientes; no procede el pago de preaviso ni auxilio de cesantía.</p>`,
+      `<p><b>Remarks — facts supporting this dismissal:</b> ${hechos}</p>
+       <p>In accordance with article 82 of the Labor Code, only the facts described here may later be alleged as grounds for this dismissal before any authority. Proportional vacation and Christmas bonus (Aguinaldo) will be paid; no preaviso or cesantía applies.</p>`
+    );
+  } else {
+    responsabilidadTxt = tr(
+      `Este despido se realiza <b>con responsabilidad patronal</b>, según lo establecido en el artículo 85 inciso d) del Código de Trabajo de Costa Rica.`,
+      `This dismissal is <b>with employer liability</b>, pursuant to article 85, subsection d) of the Labor Code of Costa Rica.`
+    );
+    observacionesHtml = tr(
+      `<p><b>Observaciones:</b> ${motivoCon}.</p>
+       <p>Se procederá al pago de preaviso, auxilio de cesantía, vacaciones y aguinaldo proporcionales, conforme a la legislación laboral vigente.</p>`,
+      `<p><b>Remarks:</b> ${motivoCon}.</p>
+       <p>Preaviso, auxilio de cesantía, and proportional vacation and Christmas bonus (Aguinaldo) will be paid, in accordance with current labor legislation.</p>`
+    );
+  }
+
+  const html = logoHeaderHtml() + `
+    <div style="margin-bottom:4px;">
+      <div style="font-weight:800; font-size:calc(var(--doc-font-size) + 1px);">${empresaTxt}</div>
+      <div style="font-size:calc(var(--doc-font-size) - 1px); color:#333;">${direccionTxt}</div>
+    </div>
+    <h2 class="doc-title" style="margin:18px 0 20px;">${titulo}</h2>
+    <p style="margin:0 0 3px;"><b>${tr("Señor(a):","Mr./Ms.:")}</b> ${escapeHtml(data.NOMBRE_TRABAJADOR || "")}</p>
+    <p style="margin:0 0 3px;"><b>${tr("Puesto:","Position:")}</b> ${escapeHtml((lang==="en" ? data.PUESTO_EN : data.PUESTO) || "")}</p>
+    <p style="margin:0 0 18px;"><b>${tr("Cédula:","ID:")}</b> ${escapeHtml(data.IDENTIFICACION || "")}</p>
+
+    <p>${tr(
+      `Por medio de la presente se le comunica que su empleador <b>${empresaTxt}</b>, cédula jurídica <b>${cedulaJuridicaTxt}</b>, en calidad de patrono, ha decidido dar por terminada su relación laboral a partir del ${fechaCompleta}.`,
+      `This letter informs you that your employer <b>${empresaTxt}</b>, legal entity ID <b>${cedulaJuridicaTxt}</b>, in its capacity as employer, has decided to terminate your employment relationship effective ${fechaCompleta}.`
+    )}</p>
+    <p>${responsabilidadTxt}</p>
+    ${observacionesHtml}
+    <p>${tr("Este acto se hará efectivo a partir del día de emisión de este documento.","This action shall take effect as of the date this document is issued.")}</p>
+    <p style="margin-top:16px;">${tr("Sin otro particular,","Sincerely,")}</p>
+
+    <div class="firma-espacio-block" style="margin-top:44px;">
+      <div class="firma-espacio-col">
+        <div class="firma-espacio-linea"></div>
+        <div class="firma-espacio-titulo">${tr("Firma Recibido:","Signature received:")}</div>
+        <div class="firma-espacio-detalle" style="font-weight:700;">${fBox.nombre}</div>
+        <div class="firma-espacio-detalle">${fBox.cedula}</div>
+        <div class="firma-espacio-detalle">${lang==="en" ? fBox.puestoEn : fBox.puesto}</div>
+        <div class="firma-espacio-detalle">${fBox.etiquetaEmpresa}</div>
+      </div>
+      <div class="firma-espacio-col">
+        <div class="firma-espacio-linea"></div>
+        <div class="firma-espacio-titulo">&nbsp;</div>
+        <div class="firma-espacio-detalle" style="font-weight:700;">${escapeHtml(data.NOMBRE_TRABAJADOR || "")}</div>
+        <div class="firma-espacio-detalle">${escapeHtml(data.IDENTIFICACION || "")}</div>
+        <div class="firma-espacio-detalle">${tr("Trabajador","Employee")}${data.PUESTO ? " — " + escapeHtml((lang==="en" ? data.PUESTO_EN : data.PUESTO)) : ""}</div>
+      </div>
+    </div>
+  `;
+  document.getElementById("despido-root").innerHTML = html;
+}
+
+function mostrarSoloDespido(){
+  ALL_MAIN_PANELS.filter(id => id !== "despido-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("despido-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function revisarRiesgoDespido(){
+  if (data.TIPO_DESPIDO !== "sin_responsabilidad") return true;
+  const texto = (data.DESCRIPCION_HECHOS || "").trim();
+  const palabras = texto.split(/\s+/).filter(Boolean).length;
+  const tieneFecha = /\d{1,2}[\/\-]\d{1,2}([\/\-]\d{2,4})?|\d{1,2}\s+de\s+\w+|\d{4}/.test(texto);
+  const problemas = [];
+  if (palabras < 15) problemas.push("la descripción es muy breve (menos de 15 palabras)");
+  if (!tieneFecha) problemas.push("no se detecta una fecha específica en los hechos");
+  if (problemas.length > 0){
+    return confirm("⚠️ Revisión de riesgo antes de descargar:\n\n" + problemas.join(" y ") + ".\n\nUna descripción vaga o sin fecha es justo lo que después se cuestiona ante el Ministerio de Trabajo (solo lo escrito aquí podrá alegarse después, Art. 82 CT).\n\n¿Deseas descargar de todas formas?");
+  }
+  return true;
+}
+
+function descargarDespidoPDF(){
+  if (!revisarRiesgoDespido()) return;
+  const original = document.title;
+  const nombreBase = data.NOMBRE_TRABAJADOR ? data.NOMBRE_TRABAJADOR.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Carta_Despido_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  renderDespido();
+  document.getElementById("despido-wrap").style.display = "block";
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  if (currentEmpKeyForLetter){
+    const tipoTxt = data.TIPO_DESPIDO === "sin_responsabilidad" ? "sin responsabilidad patronal" : "con responsabilidad patronal";
+    agregarBitacora(currentEmpKeyForLetter, "Carta de despido generada (" + tipoTxt + ").");
+  }
+  congelarEmitido("despido-root", {
+    tipo: "carta_despido",
+    titulo: "Carta de despido — " + (data.NOMBRE_TRABAJADOR || "sin nombre"),
+    nombreArchivo: "Carta_Despido_" + nombreBase,
+    claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
+    empleadoCedula: data.IDENTIFICACION || null,
+    empleadoNombre: data.NOMBRE_TRABAJADOR || null,
+  });
+}
+
+async function descargarDespidoDeContrato(key){
+  try{
+    const res = await window.storage.get(key, false);
+    if (!res || !res.value){ statusMsg("No se pudo generar la carta de despido.", false); return; }
+    cargarDatosDeContrato(JSON.parse(res.value));
+    currentKey = key;
+    if (!data.TIPO_DESPIDO){
+      showTab("despidoform");
+      statusMsg("Antes de generar la carta, completa el tipo de despido, la causal (si aplica) y los hechos.", false);
+      return;
+    }
+    mostrarSoloDespido();
+    descargarDespidoPDF();
+    statusMsg("Carta de despido generada para “" + key.replace("contrato:", "") + "”.");
+  }catch(e){ statusMsg("No se pudo generar la carta de despido.", false); }
+}
+
+// ---------- employment recommendation letter (fixed signer) ----------
+function renderRecomendacion(){
+  const f = FIRMANTE_RECOMENDACION;
+  const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
+  const nombre = data.NOMBRE_RECOM || `<span class="missing">[${tr("nombre pendiente","name pending")}]</span>`;
+  const cedula = data.CEDULA_RECOM || `<span class="missing">[${tr("cédula pendiente","ID pending")}]</span>`;
+  const puesto = data.PUESTO_RECOM || `<span class="missing">[${tr("puesto pendiente","position pending")}]</span>`;
+  const depto = data.DEPARTAMENTO_RECOM || `<span class="missing">[${tr("departamento pendiente","department pending")}]</span>`;
+  const fechaIni = data.FECHA_INICIO_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
+  const fechaFin = data.FECHA_FIN_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
+  const razon = data.RAZON_SALIDA_RECOM || `<span class="missing">[${tr("razón pendiente","reason pending")}]</span>`;
+  const desempeno = data.DESEMPENO_RECOM || tr("un buen desempeño en sus funciones","good performance in their duties");
+  const cualidades = data.CUALIDADES_RECOM || tr("responsable y comprometida","responsible and committed");
+  const lugarFirma = data.LUGAR_FIRMA_RECOM || `<span class="missing">[${tr("lugar pendiente","place pending")}]</span>`;
+  const fechaFirma = data.FECHA_FIRMA_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
+  const empresaTxt = lang === "en" ? f.empresaEn : f.empresa;
+  const puestoFirmanteTxt = lang === "en" ? f.puestoEn : f.puesto;
+
+  const cuerpo = tr(
+    `<p>El suscrito <b>${f.nombre}</b>, cédula de identidad <b>${f.cedula}</b>, mayor, en calidad de <b>${puestoFirmanteTxt}</b> de la empresa <b>${empresaTxt}</b> con cédula jurídica <b>${f.cedulaJuridica}</b>, hago constar que <b>${nombre}</b>, cédula número <b>${cedula}</b>, laboró como <b>${puesto}</b> y dependiente de <b>${depto}</b> desde el <b>${fechaIni}</b> al <b>${fechaFin}</b>, desempeñando ${escapeHtml(desempeno)}. La razón de su salida corresponde a ${escapeHtml(razon)}.</p>
+    <p>Por tanto, confío plenamente que podrá realizar cualquier labor que se le encomiende sin ningún problema; ${nombre} es una persona ${escapeHtml(cualidades)}.</p>
+    <p>Les agradezco de antemano cualquier oportunidad que se le brinde.</p>
+    <p>Para que así conste, firmo en ${lugarFirma}, ${fechaFirma}.</p>`,
+    `<p>I, the undersigned, <b>${f.nombre}</b>, holder of identity card <b>${f.cedula}</b>, of legal age, in my capacity as <b>${puestoFirmanteTxt}</b> of the company <b>${empresaTxt}</b> with legal entity ID <b>${f.cedulaJuridica}</b>, hereby certify that <b>${nombre}</b>, ID number <b>${cedula}</b>, worked as <b>${puesto}</b> reporting to <b>${depto}</b> from <b>${fechaIni}</b> to <b>${fechaFin}</b>, delivering ${escapeHtml(desempeno)}. The reason for their departure was ${escapeHtml(razon)}.</p>
+    <p>I am fully confident that they can carry out any work assigned to them without any issue; ${nombre} is a ${escapeHtml(cualidades)} person.</p>
+    <p>I thank you in advance for any opportunity extended to them.</p>
+    <p>In witness whereof, I sign in ${lugarFirma}, ${fechaFirma}.</p>`
+  );
+
+  const html = logoHeaderHtml() + `
+    <h2 class="doc-title" style="margin-bottom:2px;">${tr("RECOMENDACIÓN LABORAL","EMPLOYMENT RECOMMENDATION")}</h2>
+    <div style="text-align:center; font-weight:700; margin-bottom:18px;">${tr("A QUIEN INTERESE","TO WHOM IT MAY CONCERN")}</div>
+    ${cuerpo}
+    <div style="margin-top:50px;">
+      <div style="border-bottom:1px solid #000; width:260px; height:2px; margin-bottom:4px;"></div>
+      <div style="font-weight:700;">${f.nombre}</div>
+      <div>${f.cedula}</div>
+      <div>${puestoFirmanteTxt}</div>
+      <div>${f.telefono}</div>
+      <div>${f.correo}</div>
+    </div>
+  `;
+  document.getElementById("recomendacion-root").innerHTML = html;
+}
+
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","recomform-panel","permisoform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","colillas-panel","preview-wrap","constancia-wrap","despido-wrap","recomendacion-wrap","permiso-wrap","format-panel"];
+const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","recomform-toolbar","permisoform-toolbar"];
+
+function mostrarSoloRecomendacion(){
+  ALL_MAIN_PANELS.filter(id => id !== "recomendacion-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("recomendacion-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function mostrarSoloPermiso(){
+  ALL_MAIN_PANELS.filter(id => id !== "permiso-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("permiso-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function fechaCortaDDMMYYYY(dia, mesNombre, anio){
+  if (!dia || !mesNombre || !anio) return "";
+  const mIdx = MESES.indexOf(mesNombre);
+  if (mIdx < 0) return "";
+  const dd = String(dia).padStart(2, "0");
+  const mm = String(mIdx + 1).padStart(2, "0");
+  return `${dd}/${mm}/${anio}`;
+}
+
+// Auto-incrementing "AP-2026-001" style numbering, one counter per calendar
+// year. Storage is already scoped per property, so each property gets its
+// own independent sequence.
+async function siguienteNumeroAccion(){
+  const year = new Date().getFullYear();
+  const key = "contador_accion_personal:" + year;
+  let n = 1;
+  try{
+    const res = await window.storage.get(key, false);
+    if (res && res.value) n = parseInt(res.value, 10) + 1;
+  }catch(e){ /* first one of the year */ }
+  try{ await window.storage.set(key, String(n), false); }catch(e){ /* best effort */ }
+  return `AP-${year}-${String(n).padStart(3, "0")}`;
+}
+
+function renderAccionPersonal(){
+  const empresaInfo = FIRMANTE_RECOMENDACION; // fixed company legal info (name + cédula jurídica)
+  const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
+  const nombre = data.NOMBRE_PERMISO || "";
+  const cedula = data.CEDULA_PERMISO || "";
+  const puesto = data.PUESTO_PERMISO || "";
+  const depto = data.DEPARTAMENTO_PERMISO || "";
+  const dias = data.TOTAL_DIAS_PERMISO || "0";
+  const propiedad = getPropiedadActual();
+  const propiedadNombre = propiedad ? propiedad.nombre : "";
+  const empresaTxt = lang === "en" ? empresaInfo.empresaEn : empresaInfo.empresa;
+  // The signer is whichever Gerente Operativo is configured for the active
+  // property (Puestos → Firmante) — resolved once in generarPermisoDeEmpleado()
+  // and stored in `data`, falling back to the fixed reference signer if none
+  // has been configured yet.
+  const firmanteNombre = data.FIRMANTE_PERMISO_NOMBRE || FIRMANTE_RECOMENDACION.nombre;
+  const firmantePuesto = data.FIRMANTE_PERMISO_PUESTO || FIRMANTE_RECOMENDACION.puesto;
+  const fIni = fechaCortaDDMMYYYY(data.DIA_INICIO_PERMISO, data.MES_INICIO_PERMISO, data.ANIO_INICIO_PERMISO);
+  const fFin = fechaCortaDDMMYYYY(data.DIA_FIN_PERMISO, data.MES_FIN_PERMISO, data.ANIO_FIN_PERMISO);
+  const numeroAccion = data.NUMERO_ACCION_PERMISO || "";
+  const fechaEmision = fmtFecha(new Date().toISOString());
+
+  const html = `<div class="ap-page">
+    ${logoHeaderHtml()}
+    <div class="ap-title">${tr("ACCIÓN DE PERSONAL","PERSONNEL ACTION")}</div>
+    <div class="ap-subtitle">${tr("PERMISO SIN GOCE SALARIAL","UNPAID LEAVE")}</div>
+    <div class="ap-company">${escapeHtml(empresaTxt)}</div>
+    <div class="ap-companyid">${tr("Cédula Jurídica. No.","Legal Entity ID No.")} ${empresaInfo.cedulaJuridica}</div>
+
+    <div class="ap-infobox">
+      <div class="row"><b>${tr("Empleado","Employee")}:</b> ${cedula ? escapeHtml(cedula)+" " : ""}<u>${escapeHtml(nombre)}</u></div>
+      <div class="row"><b>${tr("Fecha de emisión","Issue date")}:</b> ${fechaEmision}</div>
+      <div class="row"><b>${tr("No. de Acción","Action No.")}:</b> ${escapeHtml(numeroAccion)}</div>
+      <div class="row"><b>${tr("Departamento","Department")}:</b> ${escapeHtml(depto)}</div>
+      <div class="row"><b>${tr("Puesto","Position")}:</b> ${escapeHtml(puesto)}</div>
+      <div class="row"><b>${tr("Propiedad","Property")}:</b> ${escapeHtml(propiedadNombre)}</div>
+    </div>
+
+    <div class="ap-section-title">1 - ${tr("PERÍODO DE PERMISO SOLICITADO","REQUESTED LEAVE PERIOD")}</div>
+    <table class="ap-lines">
+      <tr>
+        <td class="ap-desc">${tr("PERMISO SIN GOCE SALARIAL","UNPAID LEAVE")}</td>
+        <td class="ap-num">${escapeHtml(dias)}</td>
+        <td class="ap-unit">${tr("Días","Days")}</td>
+        <td style="text-align:right; color:var(--ink-soft); font-size:11.5px;">${tr("Del","From")} ${fIni} ${tr("al","to")} ${fFin}</td>
+      </tr>
+      <tr class="ap-total-row">
+        <td class="ap-desc">${tr("Total","Total")}</td>
+        <td colspan="2" style="text-align:right; padding-right:64px;">1 - ${tr("PERÍODO SOLICITADO","REQUESTED PERIOD")}</td>
+        <td class="ap-num" style="text-align:right;">${escapeHtml(dias)}</td>
+      </tr>
+    </table>
+
+    <div class="ap-grand-total">
+      <div class="ap-label">${tr("TOTAL DÍAS SIN GOCE SALARIAL","TOTAL UNPAID LEAVE DAYS")}</div>
+      <div class="ap-dots"></div>
+      <div class="ap-box">${escapeHtml(dias)}</div>
+    </div>
+
+    <div class="ap-signatures">
+      <div class="ap-sig">
+        <div class="ap-line"></div>
+        <div class="ap-lbl">${tr("Firma de quien autoriza","Authorized by")}</div>
+        <div class="ap-sub">${escapeHtml(firmanteNombre)} — ${escapeHtml(firmantePuesto)}</div>
+      </div>
+      <div class="ap-sig">
+        <div class="ap-line"></div>
+        <div class="ap-lbl">${tr("Firma del colaborador","Employee signature")}</div>
+        <div class="ap-sub">${escapeHtml(nombre)} — ${tr("Recibido conforme","Received and accepted")}</div>
+      </div>
+    </div>
+
+    <div class="ap-footer">${tr("Este documento constituye respaldo de Recursos Humanos y debe conservarse firmado en el expediente del colaborador.","This document constitutes an HR record and must be kept signed in the employee's file.")}</div>
+  </div>`;
+  document.getElementById("permiso-root").innerHTML = html;
+}
+
+async function guardarPermisoEnHistorial(key){
+  try{
+    const fullKey = CATALOGS.empleados.prefix + key;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value) return;
+    const emp = JSON.parse(res.value);
+    if (!Array.isArray(emp.PERMISOS_HISTORIAL)) emp.PERMISOS_HISTORIAL = [];
+    emp.PERMISOS_HISTORIAL.unshift({
+      numeroAccion: data.NUMERO_ACCION_PERMISO,
+      fechaEmision: fmtFecha(new Date().toISOString()),
+      diaInicio: data.DIA_INICIO_PERMISO, mesInicio: data.MES_INICIO_PERMISO, anioInicio: data.ANIO_INICIO_PERMISO,
+      diaFin: data.DIA_FIN_PERMISO, mesFin: data.MES_FIN_PERMISO, anioFin: data.ANIO_FIN_PERMISO,
+      totalDias: data.TOTAL_DIAS_PERMISO,
+      pdfFirmado: null, pdfNombre: null,
+    });
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+  }catch(e){ /* best effort — the printable document already went out either way */ }
+}
+
+async function descargarPermisoPDF(){
+  if (!data.TOTAL_DIAS_PERMISO || Number(data.TOTAL_DIAS_PERMISO) <= 0){
+    statusMsg("Completa las fechas de inicio y fin del permiso antes de descargar (el total de días debe ser mayor a cero).", false);
+    return;
+  }
+  if (!data.NUMERO_ACCION_PERMISO){
+    data.NUMERO_ACCION_PERMISO = await siguienteNumeroAccion();
+  }
+  const original = document.title;
+  const nombreBase = data.NOMBRE_PERMISO ? data.NOMBRE_PERMISO.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Accion_Personal_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  renderAccionPersonal();
+  mostrarSoloPermiso();
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  if (currentEmpKeyForLetter){
+    await guardarPermisoEnHistorial(currentEmpKeyForLetter);
+    agregarBitacora(currentEmpKeyForLetter, "Acción de personal generada: permiso sin goce salarial de " + data.TOTAL_DIAS_PERMISO + " día(s) (" + data.NUMERO_ACCION_PERMISO + ").");
+  }
+  await congelarEmitido("permiso-root", {
+    tipo: "accion_personal",
+    titulo: "Acción de personal " + (data.NUMERO_ACCION_PERMISO || "") + " — " + (data.NOMBRE_PERMISO || "sin nombre"),
+    nombreArchivo: "Accion_Personal_" + nombreBase,
+    claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
+    empleadoCedula: data.CEDULA_PERMISO || null,
+    empleadoNombre: data.NOMBRE_PERMISO || null,
+  });
+}
+
+// ---------- generic signed-PDF backup uploads (contrato / permiso / salida) ----------
+// Shared by any place in the app that needs to attach a signed PDF to an
+// employee record, independent of the Handbook upload flow above.
+let pendingPdfUpload = null; // { tipo: "contrato"|"permiso"|"salida", key, index }
+
+function leerArchivoComoDataUrl(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function iniciarSubidaPdfGenerica(tipo, key, index){
+  pendingPdfUpload = { tipo, key, index: (index === undefined ? null : index) };
+  document.getElementById("generic-pdf-input").click();
+}
+
+function subirContratoFirmado(key){
+  iniciarSubidaPdfGenerica("contrato", key);
+}
+
+function subirSalidaFirmadaArchivo(key){
+  iniciarSubidaPdfGenerica("salida", key);
+}
+
+function subirPermisoFirmado(key, index){
+  iniciarSubidaPdfGenerica("permiso", key, index);
+}
+
+async function onGenericPdfSelected(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  const ctx = pendingPdfUpload;
+  inputEl.value = "";
+  pendingPdfUpload = null;
+  if (!file || !ctx) return;
+  const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if (!esPdf){ statusMsg("Solo se aceptan archivos PDF.", false); return; }
+  if (file.size > 3.5 * 1024 * 1024){ statusMsg("El PDF pesa más de 3.5MB — el almacenamiento del navegador es limitado. Comprime el PDF o escanea en menor resolución.", false); return; }
+  try{
+    const dataUrl = await leerArchivoComoDataUrl(file);
+    const fullKey = CATALOGS.empleados.prefix + ctx.key;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
+    if (ctx.tipo === "contrato"){
+      emp.CONTRATO_PDF_FIRMADO = dataUrl;
+      emp.CONTRATO_PDF_NOMBRE = file.name;
+      emp.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: `Contrato firmado adjuntado ("${file.name}").` });
+      statusMsg("Contrato firmado guardado para " + (emp.NOMBRE_EMP || "el empleado") + ".");
+    } else if (ctx.tipo === "permiso"){
+      if (Array.isArray(emp.PERMISOS_HISTORIAL) && emp.PERMISOS_HISTORIAL[ctx.index]){
+        emp.PERMISOS_HISTORIAL[ctx.index].pdfFirmado = dataUrl;
+        emp.PERMISOS_HISTORIAL[ctx.index].pdfNombre = file.name;
+        emp.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: `Permiso sin goce salarial firmado adjuntado ("${file.name}").` });
+      }
+      statusMsg("Permiso firmado guardado.");
+    } else if (ctx.tipo === "salida"){
+      emp.SALIDA_PDF_FIRMADO = dataUrl;
+      emp.SALIDA_PDF_NOMBRE = file.name;
+      emp.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: `Carta de salida firmada adjuntada ("${file.name}").` });
+      statusMsg("Carta de salida firmada guardada.");
+    }
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    const archivoVisible = document.getElementById("archivo-panel").style.display !== "none";
+    if (archivoVisible) renderArchivoList(); else renderCatalogTab("empleados");
+    if (typeof perfilActualKey !== "undefined" && perfilActualKey === ctx.key && typeof renderPerfilEmpleado === "function"){
+      renderPerfilEmpleado();
+    }
+  }catch(e){
+    statusMsg("No se pudo guardar el PDF.", false);
+  }
+}
+
+function descargarRecomendacionPDF(){
+  const original = document.title;
+  const nombreBase = data.NOMBRE_RECOM ? data.NOMBRE_RECOM.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Recomendacion_Laboral_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  renderRecomendacion();
+  document.getElementById("recomendacion-wrap").style.display = "block";
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  if (currentEmpKeyForLetter){
+    agregarBitacora(currentEmpKeyForLetter, "Recomendación laboral generada.");
+  }
+  congelarEmitido("recomendacion-root", {
+    tipo: "recomendacion",
+    titulo: "Recomendación laboral — " + (data.NOMBRE_RECOM || "sin nombre"),
+    nombreArchivo: "Recomendacion_Laboral_" + nombreBase,
+    claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
+    empleadoNombre: data.NOMBRE_RECOM || null,
+  });
+}
+
+let currentEmpKeyForLetter = null;
+
+// Tracks which employee record (if any) the CONTRACT currently open is linked
+// to. Null means "no employee link" — the legitimate case for a brand-new
+// contract that precedes someone existing as an employee (e.g. a job offer).
+// When set, the name/cédula fields are shown locked (read-only) so they can
+// never silently drift away from the Empleados catalog.
+let currentEmpKeyForContract = null;
+
+// Finds the employee catalog record whose cédula matches, using the same
+// digits-only comparison the import routine uses (so dashes/spaces in either
+// value never cause a false "no match").
+async function buscarEmpleadoPorCedula(cedula){
+  const target = (cedula || "").replace(/\D/g, "");
+  if (!target) return null;
+  try{
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const keys = (res && res.keys) || [];
+    for (const k of keys){
+      const r = await window.storage.get(k, false);
+      if (!r || !r.value) continue;
+      const emp = JSON.parse(r.value);
+      if ((emp.IDENTIFICACION_EMP || "").replace(/\D/g, "") === target){
+        return { key: k.replace(CATALOGS.empleados.prefix, ""), emp };
+      }
+    }
+  }catch(e){ /* no match found — treat as unlinked */ }
+  return null;
+}
+
+// Finds the Gerente Operativo configured to sign documents for the CURRENTLY
+// ACTIVE property (any puesto in this property's own catalog whose
+// FIRMANTE_NOMBRE was filled in). Falls back to the one fixed reference
+// signer already used for recommendation letters if none is configured yet —
+// this is a bridge until real per-user login exists (see Empleador/Trabajadores
+// plan): once that's connected, the logged-in person's own name replaces this.
+async function buscarFirmanteAccionesPropiedad(){
+  try{
+    const res = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const keys = (res && res.keys) || [];
+    for (const k of keys){
+      const r = await window.storage.get(k, false);
+      if (!r || !r.value) continue;
+      const puesto = JSON.parse(r.value);
+      if ((puesto.FIRMANTE_NOMBRE || "").trim()){
+        return {
+          nombre: puesto.FIRMANTE_NOMBRE.trim(),
+          cedula: (puesto.FIRMANTE_CEDULA || "").trim(),
+          puesto: puesto.PUESTO || "Gerente Operativo",
+          puestoEn: puesto.PUESTO || "Operations Manager",
+        };
+      }
+    }
+  }catch(e){ /* fall through to default below */ }
+  return {
+    nombre: FIRMANTE_RECOMENDACION.nombre,
+    cedula: FIRMANTE_RECOMENDACION.cedula,
+    puesto: FIRMANTE_RECOMENDACION.puesto,
+    puestoEn: FIRMANTE_RECOMENDACION.puestoEn,
+  };
+}
+
+async function generarRecomendacionDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    if (!emp.ARCHIVADO){
+      statusMsg("La recomendación laboral solo aplica cuando el empleado ya salió de la empresa. Archívalo primero desde Empleados → Acciones → Archivar.", false);
+      return;
+    }
+    data.NOMBRE_RECOM = emp.NOMBRE_EMP || "";
+    data.CEDULA_RECOM = emp.IDENTIFICACION_EMP || "";
+    data.PUESTO_RECOM = emp.DEPARTAMENTO_EMP || "";
+    data.DEPARTAMENTO_RECOM = emp.DEPARTAMENTO_EMP || "";
+    data.FECHA_INICIO_RECOM = emp.FECHA_INGRESO_EMP || "";
+    data.FECHA_FIN_RECOM = emp.FECHA_SALIDA_EMP || "";
+    if (!data.LUGAR_FIRMA_RECOM) data.LUGAR_FIRMA_RECOM = "Sierpe de Osa";
+    currentEmpKeyForLetter = key;
+    showTab("recomform");
+    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados. Revisa los campos y descarga desde el botón dorado de arriba.");
+  }catch(e){ statusMsg("No se pudo generar la recomendación.", false); }
+}
+
+async function generarDespidoDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    data.NOMBRE_TRABAJADOR = emp.NOMBRE_EMP || data.NOMBRE_TRABAJADOR || "";
+    data.IDENTIFICACION = emp.IDENTIFICACION_EMP || data.IDENTIFICACION || "";
+    data.PUESTO = emp.DEPARTAMENTO_EMP || data.PUESTO || "";
+
+    // pull employer data from the linked contract (by cédula) so RH never re-types it
+    await buildContratosPorCedulaIndex();
+    const vinculados = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
+    if (vinculados.length){
+      try{
+        const cRes = await window.storage.get(vinculados[0].key, false);
+        if (cRes && cRes.value){
+          const c = JSON.parse(cRes.value);
+          data.EMPRESA = c.EMPRESA || data.EMPRESA || "";
+          data.DIRECCION_EMPRESA = c.DIRECCION_EMPRESA || data.DIRECCION_EMPRESA || "";
+          data.CEDULA_JURIDICA_EMPRESA = c.CEDULA_JURIDICA_EMPRESA || data.CEDULA_JURIDICA_EMPRESA || "";
+          data.TIPO_CEDULA_EMPRESA = c.TIPO_CEDULA_EMPRESA || data.TIPO_CEDULA_EMPRESA || "";
+          if (!data.PUESTO) data.PUESTO = c.PUESTO || "";
+          data.PUESTO_EN = c.PUESTO_EN || data.PUESTO_EN || "";
+        }
+      }catch(e){ /* keep whatever was already loaded */ }
+    }
+
+    // the effective/issue date is always today — RH shouldn't have to type it
+    const hoy = new Date();
+    data.DIA_DESPIDO = String(hoy.getDate());
+    data.MES_DESPIDO = MESES[hoy.getMonth()];
+    data.ANIO_DESPIDO = String(hoy.getFullYear());
+
+    currentEmpKeyForLetter = key;
+    showTab("despidoform");
+    statusMsg("Listo — solo elige la modalidad y el motivo para " + (emp.NOMBRE_EMP || "el empleado") + ". El resto ya está completo.");
+  }catch(e){ statusMsg("No se pudo preparar la carta de despido.", false); }
+}
+
+// ---------- Perfil 360 ----------
+let perfilActualKey = null;
+
+function parseFechaFlexible(str){
+  if (!str) return null;
+  const s = String(str).trim();
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m){
+    // ambiguous MM/DD/YYYY (Excel-style) vs DD/MM/YYYY — prefer MM/DD if first part <=12, matching the Excel source format
+    const a = Number(m[1]), b = Number(m[2]), y = Number(m[3]);
+    if (a <= 12) return new Date(y, a - 1, b);
+    return new Date(y, b - 1, a);
+  }
+  m = s.match(/(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i);
+  if (m && MESES.map(x=>x.toLowerCase()).includes(m[2].toLowerCase())){
+    return new Date(Number(m[3]), MESES.map(x=>x.toLowerCase()).indexOf(m[2].toLowerCase()), Number(m[1]));
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function buscarSalarioMinimoPorDepartamento(depto){
+  if (!depto) return null;
+  const d = depto.toLowerCase();
+  const match = MINISTERIO_PUESTOS.find(p => d.includes(p.puestoEs.toLowerCase()) || p.puestoEs.toLowerCase().includes(d));
+  return match || null;
+}
+
+async function verPerfilEmpleado(key){
+  perfilActualKey = key;
+  await renderPerfilEmpleado();
+  showTab("perfil");
+}
+
+async function renderPerfilEmpleado(){
+  const panel = document.getElementById("perfil-panel");
+  if (!perfilActualKey){ panel.innerHTML = `<div class="empty-state">Selecciona un empleado desde la lista.</div>`; return; }
+  panel.innerHTML = `<div class="empty-state">Cargando perfil…</div>`;
+  try{
+    const fullKey = CATALOGS.empleados.prefix + perfilActualKey;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ panel.innerHTML = `<div class="empty-state">No se encontró ese empleado.</div>`; return; }
+    const emp = JSON.parse(res.value);
+    await buildContratosPorCedulaIndex();
+    const contratos = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
+
+    // compliance alerts
+    let alertas = [];
+    const salarioNum = Number(String(emp.SALARIO_EMP||"").replace(/[^0-9.]/g,""));
+    const refMin = buscarSalarioMinimoPorDepartamento(emp.DEPARTAMENTO_EMP);
+    if (refMin && refMin.salarioMin && salarioNum && salarioNum < refMin.salarioMin){
+      alertas.push(`⚠️ El salario guardado (₡${salarioNum.toLocaleString("es-CR")}) está por debajo del mínimo legal MTSS para ${escapeHtml(refMin.puestoEs)} (₡${Math.round(refMin.salarioMin).toLocaleString("es-CR")}).`);
+    }
+    const fechaIngreso = parseFechaFlexible(emp.FECHA_INGRESO_EMP);
+    if (fechaIngreso && !emp.ARCHIVADO){
+      const finPrueba = new Date(fechaIngreso); finPrueba.setMonth(finPrueba.getMonth()+3);
+      const diasRestantes = Math.round((finPrueba - new Date())/86400000);
+      if (diasRestantes >= 0 && diasRestantes <= 15){
+        alertas.push(`⏳ El período de prueba (3 meses) termina en ${diasRestantes} día(s), el ${fmtFecha(finPrueba.toISOString())}.`);
+      }
+    }
+    if (!emp.HANDBOOK_FIRMADO_FECHA) alertas.push(`📋 Handbook pendiente de firma.`);
+    if (contratos.length === 0) alertas.push(`📄 No hay un contrato registrado con esta cédula.`);
+
+    const checklistItem = (label, checked) => `<div style="display:flex; align-items:center; gap:8px; padding:4px 0;">
+      <span style="font-size:16px;">${checked ? "✅" : "⬜"}</span><span style="font-size:13px;">${label}</span>
+    </div>`;
+
+    const historial = Array.isArray(emp.HISTORIAL) ? emp.HISTORIAL : [];
+
+    panel.innerHTML = `
+      <button class="btn" onclick="showTab('empleados')" style="margin-bottom:12px;">← Volver a Empleados</button>
+      <div class="section-card" style="border-color:var(--leaf);">
+        <div class="section-body">
+          <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">${escapeHtml(emp.NOMBRE_EMP||"")}</div>
+          <div style="font-size:12.5px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(emp.DEPARTAMENTO_EMP||"")} · ${escapeHtml(emp.IDENTIFICACION_EMP||"")}</div>
+          <div style="font-size:12.5px; color:var(--ink-soft);">Salario: ${salarioNum ? "₡"+salarioNum.toLocaleString("es-CR") : "—"} · Ingreso: ${escapeHtml(emp.FECHA_INGRESO_EMP||"—")}</div>
+        </div>
+      </div>
+
+      ${alertas.length ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; color:#8a6d1f; margin-bottom:4px;">Alertas de cumplimiento</div>
+        ${alertas.map(a => `<div style="font-size:12.5px; margin-bottom:3px;">${a}</div>`).join("")}
+      </div></div>` : `<div class="section-card" style="border-color:var(--leaf); margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:var(--leaf);">✅ Sin alertas de cumplimiento pendientes.</div></div>`}
+
+      <div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:6px;">Checklist de ingreso</div>
+        ${checklistItem("Contrato registrado", contratos.length > 0)}
+        ${checklistItem("Handbook firmado", !!emp.HANDBOOK_FIRMADO_FECHA)}
+        ${checklistItem("Correo / contacto registrado", !!emp.CORREO_EMP)}
+        ${emp.ARCHIVADO ? checklistItem("Salida archivada", true) : ""}
+        ${emp.HANDBOOK_FIRMADO_FECHA ? (emp.HANDBOOK_PDF_FIRMADO
+          ? `<button class="btn" style="width:100%; margin-top:6px;" onclick="descargarHandbookPDF('${perfilActualKey}')">📎 Ver PDF del Handbook firmado</button>`
+          : `<div class="hint" style="margin-top:4px;">⚠️ Handbook confirmado sin PDF adjunto — usa "Confirmar firma handbook" para subirlo.</div>`) : ""}
+      </div></div>
+
+      <div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:8px;">Acciones</div>
+        <div class="emp-acciones-menu open" style="border:none; margin:0; padding:0;">
+          <button onclick="generarDespidoDeEmpleado('${perfilActualKey}')">⚖️ Carta de despido</button>
+          ${emp.ARCHIVADO ? `<button onclick="generarRecomendacionDeEmpleado('${perfilActualKey}')">📝 Recomendación laboral</button>` : ""}
+          <button onclick="actualizarContratoDeEmpleado('${perfilActualKey}')">📄 Actualizar contrato</button>
+          <button onclick="actualizarHandbookDeEmpleado('${perfilActualKey}')">📋 Actualizar handbook</button>
+          ${!emp.ARCHIVADO ? `<button onclick="generarPermisoDeEmpleado('${perfilActualKey}')">🗓️ Permiso sin goce salarial</button>` : ""}
+          <button onclick="openCatalogForm('empleados','${perfilActualKey}')">✏️ Editar datos</button>
+          <button onclick="confirmarFirmaHandbook('${perfilActualKey}')">✍️ Confirmar firma handbook</button>
+          <button onclick="subirContratoFirmado('${perfilActualKey}')">📎 Subir contrato firmado (PDF)</button>
+          ${!emp.ARCHIVADO ? `<button onclick="archivarEmpleado('${perfilActualKey}')">🗄️ Archivar</button>` : ""}
+        </div>
+        ${!emp.ARCHIVADO ? `<div class="hint" style="margin-top:6px;">📝 La recomendación laboral se habilita cuando el empleado pasa a Archivo (salida de la empresa).</div>` : ""}
+        ${contratos.length > 0 ? `<button class="btn" style="width:100%; margin-top:8px;" onclick="openContract('${contratos[0].key.replace(/'/g,"\\'")}')">📄 Abrir contrato vinculado</button>` : ""}
+        ${emp.CONTRATO_PDF_FIRMADO ? `<button class="btn" style="width:100%; margin-top:6px;" onclick="descargarContratoFirmado('${perfilActualKey}')">📎 Ver contrato firmado (${escapeHtml(emp.CONTRATO_PDF_NOMBRE||'PDF')})</button>` : ""}
+        ${emp.ARCHIVADO && emp.SALIDA_PDF_FIRMADO ? `<button class="btn" style="width:100%; margin-top:6px;" onclick="descargarSalidaFirmada('${perfilActualKey}')">📎 Ver carta de salida firmada (${escapeHtml(emp.SALIDA_PDF_NOMBRE||'PDF')})</button>` : ""}
+        ${emp.ARCHIVADO && emp.TIPO_SALIDA ? `<div class="hint" style="margin-top:6px;">Tipo de salida: <b>${escapeHtml(emp.TIPO_SALIDA)}</b>${!emp.SALIDA_PDF_FIRMADO ? " — sin carta firmada adjunta todavía." : ""}</div>` : ""}
+      </div></div>
+
+      ${Array.isArray(emp.PERMISOS_HISTORIAL) && emp.PERMISOS_HISTORIAL.length > 0 ? `
+      <div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:8px;">🗓️ Permisos sin goce salarial</div>
+        ${emp.PERMISOS_HISTORIAL.map((p, i) => `
+          <div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <div>
+              <b>${escapeHtml(p.numeroAccion||"")}</b> — ${escapeHtml(String(p.totalDias||""))} día(s)
+              <div style="color:var(--ink-soft);">${escapeHtml(fechaCortaDDMMYYYY(p.diaInicio,p.mesInicio,p.anioInicio))} al ${escapeHtml(fechaCortaDDMMYYYY(p.diaFin,p.mesFin,p.anioFin))}</div>
+            </div>
+            ${p.pdfFirmado
+              ? `<button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="descargarPermisoFirmado('${perfilActualKey}', ${i})">📎 Ver PDF</button>`
+              : `<button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="subirPermisoFirmado('${perfilActualKey}', ${i})">📎 Subir firmado</button>`}
+          </div>`).join("")}
+      </div></div>` : ""}
+
+      <div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:6px;">🕒 Bitácora</div>
+        ${historial.length === 0 ? `<div style="font-size:12px; color:var(--ink-soft);">Sin movimientos registrados todavía.</div>` :
+          historial.map(h => `<div style="font-size:12px; padding:4px 0; border-bottom:1px solid var(--paper-line);"><b>${escapeHtml(h.fecha)}</b> — ${escapeHtml(h.texto)}</div>`).join("")}
+      </div></div>
+    `;
+  }catch(e){ panel.innerHTML = `<div class="empty-state">No se pudo cargar el perfil.</div>`; }
+}
+
+function toggleEmpAcciones(key){
+  const menu = document.getElementById("emp-acciones-" + key);
+  if (!menu) return;
+  const isOpen = menu.classList.contains("open");
+  document.querySelectorAll(".emp-acciones-menu.open").forEach(m => m.classList.remove("open"));
+  if (!isOpen) menu.classList.add("open");
+}
+
+async function actualizarContratoDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+
+    // if this employee already has a contract (matched by cédula), open that one directly
+    // instead of starting a duplicate — avoids double data entry either way.
+    await buildContratosPorCedulaIndex();
+    const vinculados = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
+    if (vinculados.length){
+      await openContract(vinculados[0].key);
+      statusMsg("Se abrió el contrato ya existente de " + (emp.NOMBRE_EMP || "el empleado") + " para actualizarlo.");
+      return;
+    }
+
+    // no contract yet: start a new one, pre-filled with the employee's data —
+    // including their linked puesto (jefatura, jornada, tareas, responsabilidades)
+    // so RH never has to type any of this twice.
+    if (emp.PUESTO_KEY){
+      await usePuesto(emp.PUESTO_KEY);
+    }
+    data.NOMBRE_TRABAJADOR = emp.NOMBRE_EMP || "";
+    data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+    currentEmpKeyForContract = key;
+    if (!emp.PUESTO_KEY && !data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
+    const fechaIngreso = parseFechaFlexible(emp.FECHA_INGRESO_EMP);
+    if (fechaIngreso){
+      data.DIA_INICIO = String(fechaIngreso.getDate());
+      data.MES_INICIO = MESES[fechaIngreso.getMonth()];
+      data.ANIO_INICIO = String(fechaIngreso.getFullYear());
+    }
+    currentKey = null;
+    updateUpdateBtn();
+    renderForm();
+    showTab("form");
+    statusMsg("Contrato nuevo iniciado con los datos de " + (emp.NOMBRE_EMP || "el empleado") + " y su puesto. Completa empresa, propiedad y salario para terminarlo.");
+  }catch(e){ statusMsg("No se pudo cargar ese empleado.", false); }
+}
+
+async function actualizarHandbookDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    data.NOMBRE_TRABAJADOR = emp.NOMBRE_EMP || "";
+    data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+    if (!data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
+    if (!data.DIA_INICIO && emp.FECHA_INGRESO_EMP){
+      // best-effort: leave dates as-is if not parseable, HR can complete them in the Formulario
+    }
+    showTab("constancia");
+    statusMsg("Handbook actualizado con los datos de " + (emp.NOMBRE_EMP || "el empleado") + ".");
+  }catch(e){ statusMsg("No se pudo cargar ese empleado.", false); }
+}
+
+// Confirming the handbook signature now requires attaching the signed PDF —
+// clicking the button opens the file picker directly; the actual save
+// happens in onHandbookPdfSelected() once a valid PDF is chosen.
+let handbookPdfPendingKey = null;
+
+function confirmarFirmaHandbook(key){
+  handbookPdfPendingKey = key;
+  document.getElementById("handbook-pdf-input").click();
+}
+
+async function onHandbookPdfSelected(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  const key = handbookPdfPendingKey;
+  inputEl.value = "";
+  handbookPdfPendingKey = null;
+  if (!file || !key) return;
+  const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if (!esPdf){
+    statusMsg("Solo se aceptan archivos PDF para el Handbook firmado.", false);
+    return;
+  }
+  if (file.size > 3.5 * 1024 * 1024){
+    statusMsg("El PDF pesa más de 3.5MB — el almacenamiento del navegador es limitado. Escanea en menor resolución o comprime el PDF e inténtalo de nuevo.", false);
+    return;
+  }
+  try{
+    const fullKey = CATALOGS.empleados.prefix + key;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+      reader.readAsDataURL(file);
+    });
+    emp.HANDBOOK_PDF_FIRMADO = dataUrl;
+    emp.HANDBOOK_PDF_NOMBRE = file.name;
+    emp.HANDBOOK_FIRMADO_FECHA = fmtFecha(new Date().toISOString());
+    if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
+    emp.HISTORIAL.unshift({ fecha: emp.HANDBOOK_FIRMADO_FECHA, texto: `Firma del Handbook confirmada — PDF firmado adjuntado ("${file.name}").` });
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    statusMsg("Firma del Handbook confirmada y PDF guardado para " + (emp.NOMBRE_EMP || "el empleado") + ".");
+    renderCatalogTab("empleados");
+    if (typeof perfilActualKey !== "undefined" && perfilActualKey === key && typeof renderPerfilEmpleado === "function"){
+      renderPerfilEmpleado();
+    }
+  }catch(e){
+    statusMsg("No se pudo guardar el PDF del Handbook.", false);
+  }
+}
+
+async function descargarHandbookPDF(key){
+  try{
+    const fullKey = CATALOGS.empleados.prefix + key;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    if (!emp.HANDBOOK_PDF_FIRMADO){ statusMsg("Ese empleado no tiene un PDF de Handbook guardado todavía.", false); return; }
+    const a = document.createElement("a");
+    a.href = emp.HANDBOOK_PDF_FIRMADO;
+    a.download = emp.HANDBOOK_PDF_NOMBRE || ("handbook-firmado-" + key + ".pdf");
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }catch(e){
+    statusMsg("No se pudo abrir el PDF guardado.", false);
+  }
+}
+
+function descargarDataUrlComoArchivo(dataUrl, nombre){
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function descargarContratoFirmado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    if (!emp.CONTRATO_PDF_FIRMADO){ statusMsg("Ese empleado no tiene un contrato firmado guardado todavía.", false); return; }
+    descargarDataUrlComoArchivo(emp.CONTRATO_PDF_FIRMADO, emp.CONTRATO_PDF_NOMBRE || ("contrato-firmado-" + key + ".pdf"));
+  }catch(e){ statusMsg("No se pudo abrir el PDF guardado.", false); }
+}
+
+async function descargarSalidaFirmada(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    if (!emp.SALIDA_PDF_FIRMADO){ statusMsg("Ese empleado no tiene una carta de salida firmada guardada todavía.", false); return; }
+    descargarDataUrlComoArchivo(emp.SALIDA_PDF_FIRMADO, emp.SALIDA_PDF_NOMBRE || ("salida-firmada-" + key + ".pdf"));
+  }catch(e){ statusMsg("No se pudo abrir el PDF guardado.", false); }
+}
+
+async function descargarPermisoFirmado(key, index){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    const entry = Array.isArray(emp.PERMISOS_HISTORIAL) ? emp.PERMISOS_HISTORIAL[index] : null;
+    if (!entry || !entry.pdfFirmado){ statusMsg("Ese permiso no tiene un PDF firmado guardado todavía.", false); return; }
+    descargarDataUrlComoArchivo(entry.pdfFirmado, entry.pdfNombre || ((entry.numeroAccion || "permiso") + ".pdf"));
+  }catch(e){ statusMsg("No se pudo abrir el PDF guardado.", false); }
+}
+
+let archivarPendingKey = null;
+let archivarPendingPdfDataUrl = null;
+let archivarPendingPdfNombre = null;
+
+function archivarEmpleado(key){
+  archivarPendingKey = key;
+  archivarPendingPdfDataUrl = null;
+  archivarPendingPdfNombre = null;
+  const sel = document.getElementById("archivar-tipo-salida");
+  if (sel) sel.value = "Renuncia voluntaria";
+  const label = document.getElementById("archivar-pdf-label");
+  if (label) label.textContent = "";
+  document.getElementById("modal-archivar").classList.add("open");
+}
+
+function cerrarModalArchivar(){
+  document.getElementById("modal-archivar").classList.remove("open");
+  archivarPendingKey = null;
+}
+
+function onArchivarPdfSelected(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  inputEl.value = "";
+  if (!file) return;
+  const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if (!esPdf){ statusMsg("Solo se aceptan archivos PDF.", false); return; }
+  if (file.size > 3.5 * 1024 * 1024){ statusMsg("El PDF pesa más de 3.5MB — comprímelo o escanea en menor resolución.", false); return; }
+  const reader = new FileReader();
+  reader.onload = function(){
+    archivarPendingPdfDataUrl = reader.result;
+    archivarPendingPdfNombre = file.name;
+    const label = document.getElementById("archivar-pdf-label");
+    if (label) label.textContent = "✅ " + file.name;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function confirmarArchivarEmpleado(){
+  const key = archivarPendingKey;
+  if (!key) return;
+  const tipoSalida = (document.getElementById("archivar-tipo-salida") || {}).value || "Renuncia voluntaria";
+  try{
+    const fullKey = CATALOGS.empleados.prefix + key;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    emp.ARCHIVADO = true;
+    emp.ESTADO_EMP = "Inactivo";
+    emp.FECHA_ARCHIVADO = fmtFecha(new Date().toISOString());
+    emp.TIPO_SALIDA = tipoSalida;
+    if (archivarPendingPdfDataUrl){
+      emp.SALIDA_PDF_FIRMADO = archivarPendingPdfDataUrl;
+      emp.SALIDA_PDF_NOMBRE = archivarPendingPdfNombre;
+    }
+    if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
+    emp.HISTORIAL.unshift({
+      fecha: emp.FECHA_ARCHIVADO,
+      texto: `Archivado — ${tipoSalida}.` + (archivarPendingPdfDataUrl ? ` Carta firmada adjuntada ("${archivarPendingPdfNombre}").` : ""),
+    });
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    cerrarModalArchivar();
+    renderCatalogTab("empleados");
+    statusMsg((emp.NOMBRE_EMP || "El empleado") + " fue archivado.", true, async function(){
+      await reactivarEmpleado(key);
+    });
+  }catch(e){ statusMsg("No se pudo archivar.", false); }
+}
+
+async function reactivarEmpleado(key){
+  try{
+    const fullKey = CATALOGS.empleados.prefix + key;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    emp.ARCHIVADO = false;
+    emp.ESTADO_EMP = "Activo";
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    const empleadosVisible = document.getElementById("empleados-panel").style.display !== "none";
+    if (empleadosVisible) renderCatalogTab("empleados"); else renderArchivoList();
+    statusMsg((emp.NOMBRE_EMP || "El empleado") + " fue reactivado.");
+  }catch(e){ statusMsg("No se pudo reactivar.", false); }
+}
+
+async function renderArchivoList(){
+  const panel = document.getElementById("archivo-panel");
+  panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const keys = (res && res.keys) ? res.keys : [];
+    const items = await Promise.all(keys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix, ""), ...v };
+    }));
+    const archivados = items.filter(it => it.ARCHIVADO);
+    if (archivados.length === 0){
+      panel.innerHTML = `<div class="empty-state">No hay empleados archivados todavía. Cuando archives una salida desde Empleados, aparecerá aquí.</div>`;
+      return;
+    }
+    panel.innerHTML = archivados.map(it => {
+      const k2 = it.key.replace(/'/g,"\\'");
+      const meta = [it.DEPARTAMENTO_EMP, it.IDENTIFICACION_EMP, it.FECHA_ARCHIVADO ? "Archivado: " + it.FECHA_ARCHIVADO : "", it.TIPO_SALIDA || ""].filter(Boolean).join(" · ");
+      return `<div class="catalog-item">
+        <div class="row1">
+          <div class="info">
+            <div class="name">${escapeHtml(it.NOMBRE_EMP || it.key)}</div>
+            ${meta ? `<div class="meta">${escapeHtml(meta)}</div>` : ""}
+            ${it.SALIDA_PDF_FIRMADO ? `<div style="margin-top:3px;"><button class="link-badge" onclick="descargarSalidaFirmada('${k2}')">📎 Ver carta firmada</button></div>` : `<div class="hint" style="margin:2px 0 0;">⚠️ Sin carta de salida firmada adjunta</div>`}
+          </div>
+          <div class="actions">
+            <button onclick="generarDespidoDeEmpleado('${k2}')">⚖️ Despido</button>
+            <button onclick="generarRecomendacionDeEmpleado('${k2}')">📝 Recomendación</button>
+            <button onclick="subirSalidaFirmadaArchivo('${k2}')">📎 Subir carta</button>
+            <button onclick="reactivarEmpleado('${k2}')">♻️ Reactivar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+  }catch(e){ panel.innerHTML = `<div class="empty-state">No hay empleados archivados todavía.</div>`; }
+}
+
+async function descargarContrato(key){
+  try{
+    const res = await window.storage.get(key, false);
+    if (!res || !res.value){ statusMsg("No se pudo abrir ese contrato.", false); return; }
+    cargarDatosDeContrato(JSON.parse(res.value));
+    currentKey = key;
+    renderPreview();
+    showTab("preview");
+    setTimeout(() => descargarPDFConNombre(), 350);
+  }catch(e){
+    statusMsg("No se pudo descargar ese contrato.", false);
+  }
+}
+
+async function openContract(key){
+  try{
+    const res = await window.storage.get(key, false);
+    if (res && res.value){
+      const loaded = JSON.parse(res.value);
+      FIELDS_META.forEach(f => { if (f[0] !== "grp") data[f[0]] = loaded[f[0]] !== undefined ? loaded[f[0]] : ""; });
+      CATALOGS.empresas.fields.forEach(f => { data[f[0]] = loaded[f[0]] !== undefined ? loaded[f[0]] : ""; });
+      CATALOGS.puestos.fields.forEach(f => { data[f[0]] = loaded[f[0]] !== undefined ? loaded[f[0]] : ""; });
+      data.SALARIO_MINISTERIO = loaded.SALARIO_MINISTERIO || "";
+      data.DEPARTAMENTO_MINISTERIO = loaded.DEPARTAMENTO_MINISTERIO || "";
+      data.SALARIO_MODO = loaded.SALARIO_MODO || "";
+      data.PROPIEDADES_DETALLE = loaded.PROPIEDADES_DETALLE || "";
+      data.PROPIEDADES_KEYS = loaded.PROPIEDADES_KEYS || "";
+      data.PUESTO_EN = loaded.PUESTO_EN || "";
+      data.RESPONSABILIDADES_EN = loaded.RESPONSABILIDADES_EN || "";
+      data.TAREAS_APOYO_EN = loaded.TAREAS_APOYO_EN || "";
+      data.JEFE_INMEDIATO_EN = loaded.JEFE_INMEDIATO_EN || "";
+    data.DISTRITO_FIRMA = loaded.DISTRITO_FIRMA || "";
+    data.CANTON_FIRMA = loaded.CANTON_FIRMA || "";
+    data.PROVINCIA_FIRMA = loaded.PROVINCIA_FIRMA || "";
+      data._createdAt = loaded._createdAt || "";
+      data._updatedAt = loaded._updatedAt || "";
+      data.LIDER_DIRECTOR = DIRECTOR_PROYECTO_FIJO; // fixed for every contract
+      data.LIDER_DIRECTOR_EN = DIRECTOR_PROYECTO_FIJO_EN;
+      currentKey = key;
+      // auto-detect whether this contract's cédula matches an existing employee
+      // record, so reopening a saved contract also locks the identity fields
+      // when it genuinely belongs to someone already in Empleados.
+      const match = await buscarEmpleadoPorCedula(data.IDENTIFICACION);
+      currentEmpKeyForContract = match ? match.key : null;
+      updateUpdateBtn();
+      renderForm();
+      renderPreview();
+      showTab("form");
+      statusMsg("Borrador cargado: " + key.replace("contrato:", ""));
+    }
+  }catch(e){
+    statusMsg("No se pudo abrir ese contrato.", false);
+  }
+}
+
+async function deleteContract(key){
+  const name = key.replace("contrato:", "");
+  if (!confirm("¿Eliminar el contrato “" + name + "”?")) return;
+  try{
+    const res = await window.storage.get(key, false);
+    const backup = res ? res.value : null;
+    await window.storage.delete(key, false);
+    if (currentKey === key){ currentKey = null; currentEmpKeyForContract = null; updateUpdateBtn(); }
+    renderContractsList();
+    statusMsg("Contrato “" + name + "” eliminado.", true, backup ? async function(){
+      await window.storage.set(key, backup, false);
+      renderContractsList();
+      statusMsg("Se restauró “" + name + "”.");
+    } : null);
+  }catch(e){
+    statusMsg("No se pudo eliminar.", false);
+  }
+}
+
+function createNewFromTab(){
+  const keepIds = new Set([...CATALOGS.empresas.fields.map(f=>f[0]), ...CATALOGS.puestos.fields.map(f=>f[0]), "SALARIO_MINISTERIO", "DEPARTAMENTO_MINISTERIO", "PROPIEDADES_DETALLE", "PROPIEDADES_KEYS", "PUESTO_EN", "RESPONSABILIDADES_EN", "TAREAS_APOYO_EN", "JEFE_INMEDIATO_EN"]);
+  const keep = {};
+  keepIds.forEach(id => { keep[id] = data[id]; });
+  FIELDS_META.forEach(f => { if (f[0] !== "grp") data[f[0]] = ""; });
+  Object.assign(data, keep);
+  data.COMISION_SI_NO = "NO";
+  data.TELETRABAJO_SI_NO = "NO";
+  data.EXCLUSIVIDAD_SI_NO = "NO";
+  data.TIPO_CONTRATO = "indeterminado";
+  data.DIA_FIN = ""; data.MES_FIN = ""; data.ANIO_FIN = "";
+  data.MONEDA = "USD";
+  data.SALARIO_MODO = "";
+  data.LIDER_DIRECTOR = DIRECTOR_PROYECTO_FIJO;
+  data.LIDER_DIRECTOR_EN = DIRECTOR_PROYECTO_FIJO_EN;
+  data.REPRESENTANTE_LEGAL = REPRESENTANTE_LEGAL_FIJO.nombre;
+  data.PUESTO_REPRESENTANTE_LEGAL = REPRESENTANTE_LEGAL_FIJO.puesto;
+  currentKey = null;
+  currentEmpKeyForContract = null; // blank contract — legitimate pre-employee case (e.g. a job offer)
+  updateUpdateBtn();
+  renderForm();
+  renderPreview();
+  showTab("form");
+  statusMsg("Contrato nuevo listo para completar (se conservaron empresa y puesto actuales).");
+}
+
+function updateUpdateBtn(){
+  const btn = document.getElementById("update-btn");
+  if (currentKey){
+    btn.style.display = "inline-flex";
+    btn.textContent = "🔄 Actualizar “" + currentKey.replace("contrato:", "") + "”";
+  } else {
+    btn.style.display = "none";
+  }
+}
+
+function validacionesAntesDeGuardar(){
+  const errores = [validarCedula(), validarFechasContrato()].filter(Boolean);
+  if (errores.length){
+    statusMsg(tr("No se pudo guardar: ","Couldn't save: ") + errores.join(" "), false);
+    showTab("form");
+    updateValidationHints();
+    return false;
+  }
+  return true;
+}
+
+async function saveAsContract(){
+  if (!validacionesAntesDeGuardar()) return;
+  const suggested = data.NOMBRE_TRABAJADOR ? data.NOMBRE_TRABAJADOR : "contrato-sin-nombre";
+  const name = prompt("Nombre para guardar este borrador:", suggested);
+  if (!name) return;
+  const key = "contrato:" + name.trim();
+  try{
+    const now = new Date().toISOString();
+    if (!data._createdAt) data._createdAt = now;
+    data._updatedAt = now;
+    const res = await window.storage.set(key, JSON.stringify(data), false);
+    if (res){
+      currentKey = key;
+      updateUpdateBtn();
+      statusMsg("Guardado como “" + name.trim() + "”.");
+    } else {
+      statusMsg("No se pudo guardar. Intenta de nuevo.", false);
+    }
+  }catch(e){
+    statusMsg("Error al guardar: " + e.message, false);
+  }
+}
+
+async function updateContract(){
+  if (!currentKey) return saveAsContract();
+  if (!validacionesAntesDeGuardar()) return;
+  try{
+    if (!data._createdAt) data._createdAt = new Date().toISOString();
+    data._updatedAt = new Date().toISOString();
+    const res = await window.storage.set(currentKey, JSON.stringify(data), false);
+    if (res){
+      statusMsg("Actualizado “" + currentKey.replace("contrato:", "") + "”.");
+    } else {
+      statusMsg("No se pudo actualizar. Intenta de nuevo.", false);
+    }
+  }catch(e){
+    statusMsg("Error al actualizar: " + e.message, false);
+  }
+}
+
+async function duplicarContrato(key){
+  try{
+    const res = await window.storage.get(key, false);
+    if (!res || !res.value){ statusMsg("No se pudo duplicar ese contrato.", false); return; }
+    const original = JSON.parse(res.value);
+    const oldName = key.replace("contrato:", "");
+    const suggested = oldName + " (copia)";
+    const name = prompt("Nombre para la copia:", suggested);
+    if (!name) return;
+    const newKey = "contrato:" + name.trim();
+    const copy = Object.assign({}, original);
+    const now = new Date().toISOString();
+    copy._createdAt = now;
+    copy._updatedAt = now;
+    const saveRes = await window.storage.set(newKey, JSON.stringify(copy), false);
+    if (saveRes){
+      statusMsg("Duplicado como “" + name.trim() + "”.");
+      renderContractsList();
+    } else {
+      statusMsg("No se pudo duplicar. Intenta de nuevo.", false);
+    }
+  }catch(e){
+    statusMsg("Error al duplicar: " + e.message, false);
+  }
+}
+
+// ---------- init ----------
+// ---------- reference data (puestos, funciones, responsabilidades) ----------
+// This is the content that grows over time — separate from the fixed contract
+// text and app logic, so it can be updated by importing a small JSON file
+// instead of re-downloading the whole app.
+const REFERENCE_ARRAY_KEYS = ["MINISTERIO_PUESTOS", "PUESTOS_LIDERAZGO", "PUESTOS_LIDERAZGO_EN"];
+const REFERENCE_OBJECT_KEYS = ["EXCLUSIVIDAD_POR_DEPTO", "TIPO_CEDULA_EN", "TIPO_IDENTIFICACION_EN", "ESTADO_CIVIL_EN", "NACIONALIDAD_EN", "MONEDA_TEXTO_EN", "RESPONSABILIDADES_SUGERIDAS", "RESPONSABILIDADES_SUGERIDAS_EN", "TAREAS_APOYO_SUGERIDAS", "TAREAS_APOYO_SUGERIDAS_EN"];
+const REFERENCE_VARS = {
+  MINISTERIO_PUESTOS, PUESTOS_LIDERAZGO, PUESTOS_LIDERAZGO_EN,
+  EXCLUSIVIDAD_POR_DEPTO, TIPO_CEDULA_EN, TIPO_IDENTIFICACION_EN, ESTADO_CIVIL_EN, NACIONALIDAD_EN, MONEDA_TEXTO_EN,
+  RESPONSABILIDADES_SUGERIDAS, RESPONSABILIDADES_SUGERIDAS_EN, TAREAS_APOYO_SUGERIDAS, TAREAS_APOYO_SUGERIDAS_EN,
+};
+
+function applyReferenceOverride(bundle){
+  REFERENCE_ARRAY_KEYS.forEach(key => {
+    if (Array.isArray(bundle[key])){
+      const target = REFERENCE_VARS[key];
+      target.length = 0;
+      bundle[key].forEach(item => target.push(item));
+    }
+  });
+  REFERENCE_OBJECT_KEYS.forEach(key => {
+    if (bundle[key] && typeof bundle[key] === "object"){
+      Object.assign(REFERENCE_VARS[key], bundle[key]);
+    }
+  });
+}
+
+async function loadContentOverrides(){
+  try{
+    const res = await window.storage.get("content-overrides", false);
+    if (res && res.value){
+      applyReferenceOverride(JSON.parse(res.value));
+    }
+  }catch(e){ /* no overrides saved yet — using the built-in reference data */ }
+}
+
+function exportarDatosReferencia(){
+  const bundle = { _app: "generador_contratos_sdg", _type: "reference-data", _exportedAt: new Date().toISOString() };
+  [...REFERENCE_ARRAY_KEYS, ...REFERENCE_OBJECT_KEYS].forEach(key => { bundle[key] = REFERENCE_VARS[key]; });
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "datos_referencia_" + new Date().toISOString().slice(0,10) + ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  statusMsg("Datos de referencia exportados — edítalos y vuelve a importarlos cuando quieras actualizar la app.");
+}
+
+async function importarDatosReferenciaFile(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  try{
+    const text = await file.text();
+    const bundle = JSON.parse(text);
+    applyReferenceOverride(bundle);
+    // persist the FULL merged reference data, not just the diff, so it survives reloads
+    // even without the original import file present.
+    const fullSnapshot = {};
+    [...REFERENCE_ARRAY_KEYS, ...REFERENCE_OBJECT_KEYS].forEach(key => { fullSnapshot[key] = REFERENCE_VARS[key]; });
+    await window.storage.set("content-overrides", JSON.stringify(fullSnapshot), false);
+    statusMsg("Datos de referencia actualizados. Recargando…");
+    setTimeout(() => location.reload(), 1200);
+  }catch(e){
+    statusMsg("No se pudo leer ese archivo de actualización.", false);
+  }
+  inputEl.value = "";
+}
+
+
+async function continuarInicioApp(){
+  if (!currentPropiedadId){
+    abrirPropiedadGate();
+  } else {
+    renderPropiedadBadge();
+  }
+  await loadContentOverrides();
+  await loadPdfConfig();
+  renderForm();
+  renderPreview();
+  updateUpdateBtn();
+  showTab("inicio");
+}
+
+(async function init(){
+  if (!CON_BACKEND){
+    // Sin backend (carpeta estática suelta): la app se comporta como siempre,
+    // con selector manual de propiedad y datos en el navegador.
+    await continuarInicioApp();
+    return;
+  }
+
+  // Con backend: la cookie de sesión decide. Si sigue viva se entra directo;
+  // si no, se pide login. El navegador nunca decide esto por su cuenta.
+  const gate = document.getElementById("login-gate");
+  try{
+    const info = await window.sdgApi.me();
+    if (info){ await entrarConSesion(); return; }
+  }catch(e){ /* sin sesión: cae a la pantalla de login */ }
+
+  if (gate) gate.classList.add("open");
+
+  // Enter en el campo de contraseña envía el formulario.
+  const passEl = document.getElementById("login-pass");
+  if (passEl){
+    passEl.addEventListener("keydown", function(ev){
+      if (ev.key === "Enter") hacerLoginTrabajador();
+    });
+  }
+})();
