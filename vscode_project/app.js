@@ -238,6 +238,12 @@ function aplicarModoSegunRol(rol){
   const soloLectura = rol === "colaborador";
   document.body.classList.toggle("solo-lectura", soloLectura);
 
+  // El panel de usuarios vive en otra página y no tenía enlace: había que
+  // saberse la URL de memoria. Solo se ofrece a quien puede entrar — el
+  // servidor igual lo verifica, esto es para no mostrar una puerta cerrada.
+  const btnEmpleador = document.getElementById("nav-btn-empleador");
+  if (btnEmpleador) btnEmpleador.style.display = rol === "admin" ? "block" : "none";
+
   const etiquetas = { admin: "Administrador", gerente: "Gerente", colaborador: "Colaborador" };
   let barra = document.getElementById("barra-rol");
   if (!barra){
