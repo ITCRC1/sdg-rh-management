@@ -10,7 +10,7 @@
 
 <style>
   :root{
-    --navy-deep:#3C2B23; --gold:#C2A15A; --leaf:#4C5D39; --paper:#F6F3EC;
+    --navy-deep:#3C2B23; --navy:#4C5D39; --gold:#C2A15A; --leaf:#4C5D39; --paper:#F6F3EC;
     --paper-line:#E4DBC8; --ink:#3C2B23; --ink-soft:#8C8478;
     --field-bg:#FBF8F2; --field-border:#D9C9A8;
   }
@@ -51,8 +51,106 @@
   .select-rol{ font-size:11.5px; padding:4px 6px; border-radius:7px; width:auto; }
   .hint{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
   #app{ display:none; }
-  #login-screen{ display:flex; }
   #setup-warning{ display:none; }
+
+  /* --- Autenticación: mismo lenguaje visual que index.html --- */
+  .auth-gate{
+    display:none; position:fixed; inset:0; z-index:320;
+    align-items:center; justify-content:center;
+    overflow-y:auto; padding:32px 18px;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(76,93,57,.13), transparent 46%),
+      radial-gradient(circle at 88% 92%, rgba(194,161,90,.17), transparent 48%),
+      var(--paper);
+  }
+  .auth-shell{ width:100%; max-width:396px; margin:auto; }
+  .auth-card{
+    background:#fff; border:1px solid var(--paper-line); border-radius:18px;
+    overflow:hidden;
+    box-shadow:0 18px 44px rgba(60,43,35,.13), 0 2px 6px rgba(60,43,35,.06);
+  }
+  .auth-head{
+    background:
+      radial-gradient(circle at 18% 20%, rgba(111,145,116,.38), transparent 58%),
+      linear-gradient(135deg,var(--navy-deep),var(--navy) 78%);
+    color:#fff; padding:26px 28px 24px; position:relative; overflow:hidden;
+  }
+  .auth-head::after{
+    content:"🏢"; position:absolute; right:-6px; top:-10px;
+    font-size:96px; opacity:.12; transform:rotate(-10deg); pointer-events:none;
+  }
+  .auth-brand{
+    display:inline-flex; align-items:center; gap:6px; position:relative;
+    font-size:10px; letter-spacing:1.7px; text-transform:uppercase;
+    color:var(--gold); font-weight:700; margin-bottom:9px;
+  }
+  .auth-brand::before{ content:"🌴"; font-size:11px; }
+  .auth-title{
+    margin:0; position:relative; font-family:Georgia,"Times New Roman",serif;
+    font-size:21px; font-weight:700; letter-spacing:.2px; line-height:1.25;
+  }
+  .auth-sub{
+    margin:8px 0 0; position:relative; max-width:34ch;
+    font-size:12.5px; line-height:1.5; color:#D9E3D6;
+  }
+  .auth-body{ padding:24px 28px 26px; }
+  .auth-field{ margin-bottom:15px; }
+  .auth-field label{
+    display:block; margin:0 0 6px; font-size:10.5px; font-weight:700;
+    letter-spacing:.7px; text-transform:uppercase; color:var(--ink-soft);
+  }
+  .auth-input-wrap{ position:relative; display:flex; align-items:center; }
+  .auth-gate input{
+    width:100%; padding:12px 13px; font-size:14.5px; font-family:inherit;
+    color:var(--ink); background:var(--field-bg);
+    border:1.5px solid var(--field-border); border-radius:10px;
+    transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+  }
+  .auth-gate input::placeholder{ color:#B6AC9C; }
+  .auth-gate input:focus{
+    outline:none; background:#fff; border-color:var(--navy);
+    box-shadow:0 0 0 3px rgba(76,93,57,.16);
+  }
+  .auth-input-wrap.con-toggle input{ padding-right:46px; }
+  .auth-ver{
+    position:absolute; right:5px; background:none; border:none; cursor:pointer;
+    font-size:15px; line-height:1; padding:8px; border-radius:8px; opacity:.55;
+    margin:0; transition:opacity .15s ease, background-color .15s ease;
+  }
+  .auth-ver:hover{ opacity:1; background:var(--paper); }
+  .auth-btn{
+    width:100%; margin-top:7px; padding:13px 16px;
+    font-family:inherit; font-size:14px; font-weight:700; letter-spacing:.2px;
+    color:#fff; background:var(--navy); border:1px solid var(--navy);
+    border-radius:24px; cursor:pointer;
+    transition:background-color .15s ease, transform .12s ease, box-shadow .15s ease;
+  }
+  .auth-btn:hover:not(:disabled){
+    background:var(--navy-deep); border-color:var(--navy-deep);
+    transform:translateY(-1px); box-shadow:0 6px 16px rgba(60,43,35,.2);
+  }
+  .auth-btn:active:not(:disabled){ transform:translateY(0); box-shadow:none; }
+  .auth-btn:disabled{ opacity:.6; cursor:progress; }
+  .auth-gate .msg{ margin-top:14px; }
+  .auth-nota{
+    margin-top:16px; padding-top:14px; border-top:1px solid var(--paper-line);
+    font-size:11.5px; line-height:1.5; color:var(--ink-soft);
+  }
+  .auth-pie{
+    margin:16px 6px 0; text-align:center;
+    font-size:10.5px; letter-spacing:.4px; line-height:1.5;
+    color:var(--ink-soft); opacity:.9;
+  }
+  @media (max-width:430px){
+    .auth-gate{ padding:20px 14px; }
+    .auth-head{ padding:22px 20px 20px; }
+    .auth-body{ padding:20px 20px 22px; }
+    .auth-title{ font-size:19.5px; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    .auth-btn, .auth-gate input, .auth-ver{ transition:none; }
+    .auth-btn:hover:not(:disabled){ transform:none; }
+  }
 </style>
 </head>
 <body>
@@ -64,33 +162,87 @@
 
 <div class="wrap">
 
-  <div class="card" id="login-screen" style="display:none;">
-    <h2>🔑 Iniciar sesión como Empleador</h2>
-    <label>Correo</label>
-    <input type="email" id="login-email" placeholder="correo@empresa.com" autocomplete="username">
-    <label>Contraseña</label>
-    <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
-    <button class="btn btn-primary" onclick="hacerLogin()">Iniciar sesión</button>
-    <div id="login-msg"></div>
-    <div class="hint">
-      Solo las cuentas con rol de administrador pueden entrar aquí. La primera se crea
-      sola al arrancar el servidor con las variables <code>ADMIN_EMAIL</code> y
-      <code>ADMIN_PASSWORD</code> (ver DESPLIEGUE_RAILWAY.md).
+  <div class="auth-gate" id="login-screen" style="display:none;">
+    <div class="auth-shell">
+      <div class="auth-card">
+        <div class="auth-head">
+          <div class="auth-brand">SDG · Panel de Empleador</div>
+          <h1 class="auth-title">Iniciar sesión</h1>
+          <p class="auth-sub">Administración de usuarios y bitácora de accesos.</p>
+        </div>
+        <div class="auth-body">
+          <form id="login-form" autocomplete="on" novalidate>
+            <div class="auth-field">
+              <label for="login-email">Correo</label>
+              <div class="auth-input-wrap">
+                <input type="email" id="login-email" name="email" placeholder="correo@empresa.com"
+                       autocomplete="username" autocapitalize="none" spellcheck="false" required>
+              </div>
+            </div>
+            <div class="auth-field">
+              <label for="login-pass">Contraseña</label>
+              <div class="auth-input-wrap con-toggle">
+                <input type="password" id="login-pass" name="password" placeholder="••••••••"
+                       autocomplete="current-password" required>
+                <button type="button" class="auth-ver" data-objetivo="login-pass"
+                        aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+              </div>
+            </div>
+            <button type="submit" class="auth-btn" id="login-btn">Iniciar sesión</button>
+          </form>
+          <div id="login-msg" role="status" aria-live="polite"></div>
+          <p class="auth-nota">
+            Esta sección es solo para cuentas con rol de administrador. Si necesitas acceso,
+            pídeselo a otro administrador de la organización.
+          </p>
+        </div>
+      </div>
+      <p class="auth-pie">The Costa Rica Collection · Gestión de Recursos Humanos</p>
     </div>
   </div>
 
-  <div class="card" id="cambio-password" style="display:none;">
-    <h2>🔒 Cambia tu contraseña</h2>
-    <div class="hint">Tu contraseña es temporal. Define una propia para continuar.</div>
-    <label>Contraseña temporal</label>
-    <input type="password" id="cp-actual" autocomplete="current-password">
-    <label>Nueva contraseña</label>
-    <input type="password" id="cp-nueva" autocomplete="new-password">
-    <label>Repite la nueva contraseña</label>
-    <input type="password" id="cp-repetir" autocomplete="new-password">
-    <button class="btn btn-primary" onclick="guardarPasswordNueva()">Guardar y entrar</button>
-    <div id="cp-msg"></div>
-    <div class="hint">Mínimo 10 caracteres, combinando letras y números.</div>
+  <div class="auth-gate" id="cambio-password" style="display:none;">
+    <div class="auth-shell">
+      <div class="auth-card">
+        <div class="auth-head">
+          <div class="auth-brand">SDG · Panel de Empleador</div>
+          <h1 class="auth-title">Cambia tu contraseña</h1>
+          <p class="auth-sub">Tu contraseña es temporal. Define una propia para continuar.</p>
+        </div>
+        <div class="auth-body">
+          <form id="cp-form" novalidate>
+            <div class="auth-field">
+              <label for="cp-actual">Contraseña temporal</label>
+              <div class="auth-input-wrap con-toggle">
+                <input type="password" id="cp-actual" autocomplete="current-password" required>
+                <button type="button" class="auth-ver" data-objetivo="cp-actual"
+                        aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+              </div>
+            </div>
+            <div class="auth-field">
+              <label for="cp-nueva">Nueva contraseña</label>
+              <div class="auth-input-wrap con-toggle">
+                <input type="password" id="cp-nueva" autocomplete="new-password" required>
+                <button type="button" class="auth-ver" data-objetivo="cp-nueva"
+                        aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+              </div>
+            </div>
+            <div class="auth-field">
+              <label for="cp-repetir">Repite la nueva contraseña</label>
+              <div class="auth-input-wrap con-toggle">
+                <input type="password" id="cp-repetir" autocomplete="new-password" required>
+                <button type="button" class="auth-ver" data-objetivo="cp-repetir"
+                        aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+              </div>
+            </div>
+            <button type="submit" class="auth-btn" id="cp-btn">Guardar y entrar</button>
+          </form>
+          <div id="cp-msg" role="status" aria-live="polite"></div>
+          <p class="auth-nota">Mínimo 10 caracteres, combinando letras y números.</p>
+        </div>
+      </div>
+      <p class="auth-pie">The Costa Rica Collection · Gestión de Recursos Humanos</p>
+    </div>
   </div>
 
   <div id="app">
@@ -165,9 +317,29 @@ function esc(s){
 }
 
 function mostrarPantalla(cual){
+  // Las dos pantallas de autenticación son overlays a pantalla completa, así
+  // que van en flex para quedar centradas; el panel es flujo normal.
   document.getElementById("login-screen").style.display = cual === "login" ? "flex" : "none";
-  document.getElementById("cambio-password").style.display = cual === "password" ? "block" : "none";
+  document.getElementById("cambio-password").style.display = cual === "password" ? "flex" : "none";
   document.getElementById("app").style.display = cual === "app" ? "block" : "none";
+
+  if (cual === "login"){
+    const el = document.getElementById("login-email");
+    if (el) el.focus();
+  } else if (cual === "password"){
+    const el = document.getElementById("cp-actual");
+    if (el) el.focus();
+  }
+}
+
+// Muestra u oculta una contraseña, conservando el foco en el botón.
+function alternarVerPassword(btn){
+  const input = document.getElementById(btn.dataset.objetivo);
+  if (!input) return;
+  const oculta = input.type === "password";
+  input.type = oculta ? "text" : "password";
+  btn.textContent = oculta ? "🙈" : "👁️";
+  btn.setAttribute("aria-label", oculta ? "Ocultar contraseña" : "Mostrar contraseña");
 }
 
 // storage-api.js llama a esto si la sesión expira mientras se usa el panel.
@@ -183,14 +355,18 @@ window.mostrarPantallaLogin = function(mensaje){
 async function hacerLogin(){
   const email = document.getElementById("login-email").value.trim();
   const pass = document.getElementById("login-pass").value;
+  const btn = document.getElementById("login-btn");
   if (!email || !pass){ mostrarMsg("login-msg", "Completa correo y contraseña.", false); return; }
   mostrarMsg("login-msg", "Verificando…", true);
+  if (btn){ btn.disabled = true; btn.textContent = "Verificando…"; }
   try{
     await api.login(email, pass);
     document.getElementById("login-pass").value = "";
     await arrancar();
   }catch(e){
     mostrarMsg("login-msg", e.message || "No se pudo iniciar sesión.", false);
+  }finally{
+    if (btn){ btn.disabled = false; btn.textContent = "Iniciar sesión"; }
   }
 }
 
@@ -200,16 +376,20 @@ async function guardarPasswordNueva(){
   const actual = document.getElementById("cp-actual").value;
   const nueva = document.getElementById("cp-nueva").value;
   const repetir = document.getElementById("cp-repetir").value;
+  const btn = document.getElementById("cp-btn");
+  if (!actual || !nueva){ mostrarMsg("cp-msg", "Completa todos los campos.", false); return; }
   if (nueva !== repetir){
     mostrarMsg("cp-msg", "Las dos contraseñas nuevas no coinciden.", false);
     return;
   }
   mostrarMsg("cp-msg", "Guardando…", true);
+  if (btn){ btn.disabled = true; btn.textContent = "Guardando…"; }
   try{
     await api.cambiarPassword(actual, nueva);
     location.reload();
   }catch(e){
     mostrarMsg("cp-msg", e.message || "No se pudo cambiar la contraseña.", false);
+    if (btn){ btn.disabled = false; btn.textContent = "Guardar y entrar"; }
   }
 }
 
@@ -410,8 +590,15 @@ async function arrancar(){
   await cargarBitacora();
 }
 
-document.getElementById("login-pass").addEventListener("keydown", ev => {
-  if (ev.key === "Enter") hacerLogin();
+// Ahora son <form>: Enter en cualquier campo envía solo, y el navegador
+// reconoce el par correo/contraseña para ofrecer guardarlo en su gestor.
+document.getElementById("login-form").addEventListener("submit", ev => {
+  ev.preventDefault();
+  hacerLogin();
+});
+document.getElementById("cp-form").addEventListener("submit", ev => {
+  ev.preventDefault();
+  guardarPasswordNueva();
 });
 
 arrancar();

@@ -150,18 +150,42 @@ try{ currentPropiedadId = localStorage.getItem("gcw:propiedad-actual"); }catch(e
 const CON_BACKEND = !!(window.sdgApi && window.storage && window.storage.__esApi);
 let trabajadorActual = null; // { nombre, cedula, puesto, propiedad, email } una vez dentro
 
+// Mensajes de las pantallas de autenticación. textContent y no innerHTML: el
+// texto puede venir de un error del servidor, y ahí no se arma HTML.
+function authMsg(id, texto, tipo){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = "auth-msg" + (texto ? " " + (tipo || "info") : "");
+  el.textContent = texto || "";
+}
+
+// Muestra u oculta una contraseña. El botón conserva el foco y anuncia el
+// estado, para que no sea un adorno inaccesible.
+function alternarVerPassword(btn){
+  const input = document.getElementById(btn.dataset.objetivo);
+  if (!input) return;
+  const oculta = input.type === "password";
+  input.type = oculta ? "text" : "password";
+  btn.textContent = oculta ? "🙈" : "👁️";
+  btn.setAttribute("aria-label", oculta ? "Ocultar contraseña" : "Mostrar contraseña");
+}
+
 async function hacerLoginTrabajador(){
   const email = document.getElementById("login-email").value.trim();
   const pass = document.getElementById("login-pass").value;
-  const msgEl = document.getElementById("login-trabajador-msg");
-  if (!email || !pass){ msgEl.innerHTML = `<span style="color:#963527;">Completa correo y contraseña.</span>`; return; }
-  msgEl.innerHTML = `<span style="color:var(--ink-soft);">Verificando…</span>`;
+  const btn = document.getElementById("login-btn");
+  if (!email || !pass){ authMsg("login-trabajador-msg", "Completa correo y contraseña.", "err"); return; }
+
+  authMsg("login-trabajador-msg", "Verificando…", "info");
+  if (btn){ btn.disabled = true; btn.textContent = "Verificando…"; }
   try{
     await window.sdgApi.login(email, pass);
     document.getElementById("login-pass").value = "";
     await entrarConSesion();
   }catch(e){
-    msgEl.innerHTML = `<span style="color:#963527;">${String(e.message||"No se pudo iniciar sesión.").replace(/</g,"")}</span>`;
+    authMsg("login-trabajador-msg", String(e.message || "No se pudo iniciar sesión."), "err");
+  }finally{
+    if (btn){ btn.disabled = false; btn.textContent = "Iniciar sesión"; }
   }
 }
 
@@ -176,8 +200,7 @@ function hacerLogoutTrabajador(){
 window.mostrarPantallaLogin = function(mensaje){
   const gate = document.getElementById("login-gate");
   if (gate) gate.classList.add("open");
-  const msgEl = document.getElementById("login-trabajador-msg");
-  if (msgEl && mensaje) msgEl.innerHTML = `<span style="color:#963527;">${String(mensaje).replace(/</g,"")}</span>`;
+  if (mensaje) authMsg("login-trabajador-msg", String(mensaje), "err");
 };
 
 // Con sesión ya validada: fija la propiedad y arranca la app.
@@ -235,44 +258,73 @@ function aplicarModoSegunRol(rol){
 // Contraseña temporal: hasta cambiarla, la API rechaza todo lo demás, así que
 // no tiene sentido dejar entrar a la app.
 function mostrarCambioPasswordObligatorio(){
-  const inner = document.querySelector("#login-gate .propiedad-gate-inner");
-  if (!inner) return;
+  const shell = document.querySelector("#login-gate .auth-shell");
+  if (!shell) return;
   document.getElementById("login-gate").classList.add("open");
-  inner.innerHTML = `
-    <div class="propiedad-gate-title">🔒 Cambia tu contraseña</div>
-    <div class="propiedad-gate-sub">Tu contraseña es temporal. Define una propia para continuar.</div>
-    <div class="field" style="text-align:left;">
-      <label>Contraseña temporal</label>
-      <input type="password" id="cp-actual" autocomplete="current-password">
+  shell.innerHTML = `
+    <div class="auth-card">
+      <div class="auth-head">
+        <div class="auth-brand">SDG · RH Management</div>
+        <h1 class="auth-title">Cambia tu contraseña</h1>
+        <p class="auth-sub">Tu contraseña es temporal. Define una propia para continuar.</p>
+      </div>
+      <div class="auth-body">
+        <form id="cp-form" novalidate>
+          <div class="auth-field">
+            <label for="cp-actual">Contraseña temporal</label>
+            <div class="auth-input-wrap con-toggle">
+              <input type="password" id="cp-actual" autocomplete="current-password" required>
+              <button type="button" class="auth-ver" data-objetivo="cp-actual"
+                      aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+            </div>
+          </div>
+          <div class="auth-field">
+            <label for="cp-nueva">Nueva contraseña</label>
+            <div class="auth-input-wrap con-toggle">
+              <input type="password" id="cp-nueva" autocomplete="new-password" required>
+              <button type="button" class="auth-ver" data-objetivo="cp-nueva"
+                      aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+            </div>
+          </div>
+          <div class="auth-field">
+            <label for="cp-repetir">Repite la nueva contraseña</label>
+            <div class="auth-input-wrap con-toggle">
+              <input type="password" id="cp-repetir" autocomplete="new-password" required>
+              <button type="button" class="auth-ver" data-objetivo="cp-repetir"
+                      aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="auth-btn" id="cp-btn">Guardar y entrar</button>
+        </form>
+        <div id="cp-msg" class="auth-msg" role="status" aria-live="polite"></div>
+        <p class="auth-nota">Mínimo 10 caracteres, combinando letras y números.</p>
+      </div>
     </div>
-    <div class="field" style="text-align:left;">
-      <label>Nueva contraseña</label>
-      <input type="password" id="cp-nueva" autocomplete="new-password">
-      <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Mínimo 10 caracteres, con letras y números.</div>
-    </div>
-    <div class="field" style="text-align:left;">
-      <label>Repite la nueva contraseña</label>
-      <input type="password" id="cp-repetir" autocomplete="new-password">
-    </div>
-    <button class="btn primary" style="width:100%;" onclick="guardarPasswordNueva()">Guardar y entrar</button>
-    <div id="cp-msg" style="margin-top:10px; font-size:12px;"></div>`;
+    <p class="auth-pie">The Costa Rica Collection · Gestión de Recursos Humanos</p>`;
+
+  document.getElementById("cp-form").addEventListener("submit", function(ev){
+    ev.preventDefault();
+    guardarPasswordNueva();
+  });
+  document.getElementById("cp-actual").focus();
 }
 
 async function guardarPasswordNueva(){
   const actual = document.getElementById("cp-actual").value;
   const nueva = document.getElementById("cp-nueva").value;
   const repetir = document.getElementById("cp-repetir").value;
-  const msgEl = document.getElementById("cp-msg");
-  if (nueva !== repetir){
-    msgEl.innerHTML = `<span style="color:#963527;">Las dos contraseñas nuevas no coinciden.</span>`;
-    return;
-  }
-  msgEl.innerHTML = `<span style="color:var(--ink-soft);">Guardando…</span>`;
+  const btn = document.getElementById("cp-btn");
+  if (!actual || !nueva){ authMsg("cp-msg", "Completa todos los campos.", "err"); return; }
+  if (nueva !== repetir){ authMsg("cp-msg", "Las dos contraseñas nuevas no coinciden.", "err"); return; }
+
+  authMsg("cp-msg", "Guardando…", "info");
+  if (btn){ btn.disabled = true; btn.textContent = "Guardando…"; }
   try{
     await window.sdgApi.cambiarPassword(actual, nueva);
     location.reload();
   }catch(e){
-    msgEl.innerHTML = `<span style="color:#963527;">${String(e.message||"No se pudo cambiar.").replace(/</g,"")}</span>`;
+    authMsg("cp-msg", String(e.message || "No se pudo cambiar."), "err");
+    if (btn){ btn.disabled = false; btn.textContent = "Guardar y entrar"; }
   }
 }
 
@@ -5258,11 +5310,16 @@ async function continuarInicioApp(){
 
   if (gate) gate.classList.add("open");
 
-  // Enter en el campo de contraseña envía el formulario.
-  const passEl = document.getElementById("login-pass");
-  if (passEl){
-    passEl.addEventListener("keydown", function(ev){
-      if (ev.key === "Enter") hacerLoginTrabajador();
+  // Es un <form>, así que Enter en cualquier campo envía solo — ya no hace
+  // falta escuchar la tecla a mano, y de paso el navegador ofrece guardar
+  // la contraseña en su gestor.
+  const form = document.getElementById("login-form");
+  if (form){
+    form.addEventListener("submit", function(ev){
+      ev.preventDefault();
+      hacerLoginTrabajador();
     });
   }
+  const emailEl = document.getElementById("login-email");
+  if (emailEl) emailEl.focus();
 })();

@@ -168,6 +168,124 @@
   }
   .propiedad-actual-badge img{ height:16px; width:auto; }
 
+  /* ---------------------------------------------------------------------
+     AUTENTICACIÓN — pantalla de ingreso y cambio de contraseña.
+     Bloque propio y no reutilizado del selector de propiedad: aquel es una
+     rejilla de tarjetas, este es un formulario centrado. Mezclarlos era lo
+     que dejaba el login sin identidad visual.
+     --------------------------------------------------------------------- */
+  .auth-gate{
+    display:none; position:fixed; inset:0; z-index:320;
+    overflow-y:auto; padding:32px 18px;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(76,93,57,.13), transparent 46%),
+      radial-gradient(circle at 88% 92%, rgba(194,161,90,.17), transparent 48%),
+      var(--paper);
+  }
+  .auth-gate.open{ display:flex; align-items:center; justify-content:center; }
+  .auth-shell{ width:100%; max-width:396px; margin:auto; }
+
+  .auth-card{
+    background:#fff; border:1px solid var(--paper-line); border-radius:18px;
+    overflow:hidden;
+    box-shadow:0 18px 44px rgba(60,43,35,.13), 0 2px 6px rgba(60,43,35,.06);
+  }
+
+  .auth-head{
+    background:
+      radial-gradient(circle at 18% 20%, rgba(111,145,116,.38), transparent 58%),
+      linear-gradient(135deg,var(--navy-deep),var(--navy) 78%);
+    color:#fff; padding:26px 28px 24px; position:relative; overflow:hidden;
+  }
+  .auth-head::after{
+    content:"🌿"; position:absolute; right:-8px; top:-18px;
+    font-size:104px; opacity:.13; transform:rotate(-12deg); pointer-events:none;
+  }
+  .auth-brand{
+    display:inline-flex; align-items:center; gap:6px; position:relative;
+    font-size:10px; letter-spacing:1.7px; text-transform:uppercase;
+    color:var(--gold); font-weight:700; margin-bottom:9px;
+  }
+  .auth-brand::before{ content:"🌴"; font-size:11px; }
+  .auth-title{
+    margin:0; position:relative; font-family:Georgia,"Times New Roman",serif;
+    font-size:21px; font-weight:700; letter-spacing:.2px; line-height:1.25;
+  }
+  .auth-sub{
+    margin:8px 0 0; position:relative; max-width:34ch;
+    font-size:12.5px; line-height:1.5; color:#D9E3D6;
+  }
+
+  .auth-body{ padding:24px 28px 26px; }
+  .auth-field{ margin-bottom:15px; }
+  .auth-field label{
+    display:block; font-size:10.5px; font-weight:700; letter-spacing:.7px;
+    text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;
+  }
+  .auth-input-wrap{ position:relative; display:flex; align-items:center; }
+  .auth-gate input[type=email],
+  .auth-gate input[type=password],
+  .auth-gate input[type=text]{
+    width:100%; padding:12px 13px; font-size:14.5px; font-family:inherit;
+    color:var(--ink); background:var(--field-bg);
+    border:1.5px solid var(--field-border); border-radius:10px;
+    transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+  }
+  .auth-gate input::placeholder{ color:#B6AC9C; }
+  .auth-gate input:focus{
+    outline:none; background:#fff; border-color:var(--navy);
+    box-shadow:0 0 0 3px rgba(76,93,57,.16);
+  }
+  .auth-input-wrap.con-toggle input{ padding-right:46px; }
+  .auth-ver{
+    position:absolute; right:5px; background:none; border:none; cursor:pointer;
+    font-size:15px; line-height:1; padding:8px; border-radius:8px; opacity:.55;
+    transition:opacity .15s ease, background-color .15s ease;
+  }
+  .auth-ver:hover{ opacity:1; background:var(--paper); }
+  .auth-ver:focus-visible{ outline:2px solid var(--navy); outline-offset:1px; opacity:1; }
+
+  .auth-btn{
+    width:100%; margin-top:7px; padding:13px 16px;
+    font-family:inherit; font-size:14px; font-weight:700; letter-spacing:.2px;
+    color:#fff; background:var(--navy); border:1px solid var(--navy);
+    border-radius:24px; cursor:pointer;
+    transition:background-color .15s ease, transform .12s ease, box-shadow .15s ease;
+  }
+  .auth-btn:hover:not(:disabled){
+    background:var(--navy-deep); border-color:var(--navy-deep);
+    transform:translateY(-1px); box-shadow:0 6px 16px rgba(60,43,35,.2);
+  }
+  .auth-btn:active:not(:disabled){ transform:translateY(0); box-shadow:none; }
+  .auth-btn:disabled{ opacity:.6; cursor:progress; }
+
+  .auth-msg{ margin-top:14px; font-size:12.5px; line-height:1.45; border-radius:9px; }
+  .auth-msg:empty{ display:none; }
+  .auth-msg.err{ background:#F7E3DF; color:#963527; border:1px solid #E9C9C2; padding:9px 11px; }
+  .auth-msg.ok{ background:#E7F0E2; color:#3F5030; border:1px solid #CFE0C6; padding:9px 11px; }
+  .auth-msg.info{ color:var(--ink-soft); padding:2px 1px; }
+
+  .auth-nota{
+    margin-top:16px; padding-top:14px; border-top:1px solid var(--paper-line);
+    font-size:11.5px; line-height:1.5; color:var(--ink-soft);
+  }
+  .auth-pie{
+    margin:16px 6px 0; text-align:center;
+    font-size:10.5px; letter-spacing:.4px; line-height:1.5;
+    color:var(--ink-soft); opacity:.9;
+  }
+
+  @media (max-width:430px){
+    .auth-gate{ padding:20px 14px; }
+    .auth-head{ padding:22px 20px 20px; }
+    .auth-body{ padding:20px 20px 22px; }
+    .auth-title{ font-size:19.5px; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    .auth-btn, .auth-gate input, .auth-ver{ transition:none; }
+    .auth-btn:hover:not(:disabled){ transform:none; }
+  }
+
   .completeness-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; }
   .dot-ok{ background:var(--leaf); }
   .dot-warn{ background:#D9A54A; }
@@ -248,7 +366,11 @@
     display:block; font-size:11.5px; font-weight:700; color:var(--ink-soft);
     margin-bottom:4px; text-transform:uppercase; letter-spacing:.3px;
   }
-  .field input[type=text], .field input[type=number], .field textarea, .field select{
+  /* Se listaban los tipos uno por uno y faltaban email, password y date: esos
+     campos quedaban con el estilo por defecto del navegador. Invertir el
+     selector evita que vuelva a pasar al agregar un tipo nuevo. */
+  .field input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  .field textarea, .field select{
     width:100%; padding:9px 10px; font-size:14px; border-radius:7px;
     border:1px solid var(--field-border); background:var(--field-bg); color:var(--ink);
     font-family:inherit;

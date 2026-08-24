@@ -148,20 +148,42 @@
 <input type="file" id="handbook-pdf-input" accept="application/pdf" style="display:none;" onchange="onHandbookPdfSelected(this)">
 <input type="file" id="generic-pdf-input" accept="application/pdf" style="display:none;" onchange="onGenericPdfSelected(this)">
 
-<div class="propiedad-gate" id="login-gate">
-  <div class="propiedad-gate-inner" style="max-width:340px;">
-    <div class="propiedad-gate-title">🔑 Iniciar sesión</div>
-    <div class="propiedad-gate-sub">Acceso solo para usuarios Trabajadores autorizados por el Empleador.</div>
-    <div class="field" style="text-align:left;">
-      <label>Correo</label>
-      <input type="email" id="login-email" placeholder="tu.correo@empresa.com" autocomplete="username">
+<div class="auth-gate" id="login-gate">
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-head">
+        <div class="auth-brand">SDG · RH Management</div>
+        <h1 class="auth-title">Iniciar sesión</h1>
+        <p class="auth-sub">Acceso exclusivo para colaboradores autorizados por el Empleador.</p>
+      </div>
+      <div class="auth-body">
+        <form id="login-form" autocomplete="on" novalidate>
+          <div class="auth-field">
+            <label for="login-email">Correo</label>
+            <div class="auth-input-wrap">
+              <input type="email" id="login-email" name="email" placeholder="tu.correo@empresa.com"
+                     autocomplete="username" autocapitalize="none" spellcheck="false" required>
+            </div>
+          </div>
+          <div class="auth-field">
+            <label for="login-pass">Contraseña</label>
+            <div class="auth-input-wrap con-toggle">
+              <input type="password" id="login-pass" name="password" placeholder="••••••••"
+                     autocomplete="current-password" required>
+              <button type="button" class="auth-ver" data-objetivo="login-pass"
+                      aria-label="Mostrar contraseña" onclick="alternarVerPassword(this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="auth-btn" id="login-btn">Iniciar sesión</button>
+        </form>
+        <div id="login-trabajador-msg" class="auth-msg" role="status" aria-live="polite"></div>
+        <p class="auth-nota">
+          ¿Sin cuenta o contraseña olvidada? Escríbele a tu administrador de RH: las
+          cuentas se crean y se restablecen desde el panel del Empleador.
+        </p>
+      </div>
     </div>
-    <div class="field" style="text-align:left;">
-      <label>Contraseña</label>
-      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
-    </div>
-    <button class="btn primary" style="width:100%;" onclick="hacerLoginTrabajador()">Iniciar sesión</button>
-    <div id="login-trabajador-msg" style="margin-top:10px; font-size:12px;"></div>
+    <p class="auth-pie">The Costa Rica Collection · Gestión de Recursos Humanos</p>
   </div>
 </div>
 
