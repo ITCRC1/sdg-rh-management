@@ -24,11 +24,14 @@
 <meta property="og:title" content="Generador de Contratos — SDG RH Management">
 <meta property="og:description" content="Gestión de contratos y documentos laborales de The Costa Rica Collection. Acceso restringido a personal autorizado.">
 <meta property="og:locale" content="es_CR">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- Empaquetadas dentro del proyecto (vendor/) en vez de cargarlas desde cdnjs.cloudflare.com:
+     un firewall corporativo o un bloqueador de anuncios que frene ese dominio dejaba
+     "XLSX" sin definir y el import de empleados fallaba en silencio para quien lo sufriera. -->
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/pdf.min.js"></script>
 <script>
   if (window.pdfjsLib){
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
   }
 </script>
 <!-- Capa de datos contra el backend. Define window.storage y window.sdgApi, y

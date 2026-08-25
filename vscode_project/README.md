@@ -52,15 +52,18 @@ Si se quita `<script src="storage-api.js">` de `index.html`, la app cae a
 para probar la interfaz sin levantar nada, pero **los datos quedan solo en ese
 navegador** — no usar en producción.
 
-## Librerías externas
+## Librerías de terceros
 
-Se cargan desde CDN la primera vez que se usan:
+Empaquetadas en `vendor/` (no se cargan desde ningún CDN):
 
 - **xlsx.js** — leer archivos Excel al importar empleados
 - **pdf.js** — leer los PDF de las colillas de pago
 
-Si el servidor no tiene salida a internet, esas dos funciones no operan; el
-resto de la app sigue normal.
+Antes se cargaban desde cdnjs.cloudflare.com; un firewall corporativo o un
+bloqueador de anuncios que frenara ese dominio dejaba a algunas personas sin
+poder importar Excel, en silencio. Al vivir dentro del propio proyecto, esas
+dos funciones ya no dependen de la red de quien las use — solo de que el
+servidor esté arriba, igual que el resto de la app.
 
 ## Roles
 

@@ -20,9 +20,11 @@ app.disable("x-powered-by");
 
 app.use(express.json({ limit: "20mb" }));
 
-// Cabeceras de seguridad. La CSP permite los CDN que la app ya usaba
-// (xlsx.js y pdf.js); 'unsafe-inline' sigue siendo necesario porque el HTML
-// trae manejadores onclick — quitarlos es una limpieza aparte.
+// Cabeceras de seguridad. xlsx.js y pdf.js viven en vscode_project/vendor/ (ya no
+// se cargan desde un CDN externo, así que no hace falta abrir la CSP para eso —
+// un firewall o bloqueador de anuncios que frenara cdnjs.cloudflare.com dejaba a
+// algunos usuarios sin poder importar Excel). 'unsafe-inline' sigue siendo
+// necesario porque el HTML trae manejadores onclick — quitarlos es una limpieza aparte.
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -31,11 +33,11 @@ app.use((req, res, next) => {
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+      "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
-      "connect-src 'self' https://cdnjs.cloudflare.com",
+      "connect-src 'self'",
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
