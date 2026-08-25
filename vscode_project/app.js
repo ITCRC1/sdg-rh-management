@@ -2259,8 +2259,8 @@ async function importarEmpleadosExcel(inputEl){
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
   const esCSV = /\.csv$/i.test(file.name);
+  let rows;
   try{
-    let rows;
     if (esCSV){
       // CSV needs no external library — always works, online or offline.
       const text = await file.text();
@@ -2268,6 +2268,7 @@ async function importarEmpleadosExcel(inputEl){
     } else {
       if (typeof XLSX === "undefined"){
         statusMsg("No se pudo cargar el lector de Excel (necesita internet la primera vez). Si no tienes internet ahora, guarda el archivo como CSV desde Excel (Archivo → Guardar como → CSV) y súbelo así — el CSV no necesita internet.", false);
+        inputEl.value = "";
         return;
       }
       const buf = await file.arrayBuffer();
@@ -2275,11 +2276,20 @@ async function importarEmpleadosExcel(inputEl){
       const sheet = wb.Sheets[wb.SheetNames[0]];
       rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
     }
+  }catch(e){
+    statusMsg("No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
+    inputEl.value = "";
+    return;
+  }
+  // Separado del try de lectura a propósito: si el archivo se leyó bien pero
+  // el guardado falla (ej. sesión vencida, sin propiedad asignada), el
+  // mensaje debe decir eso — no culpar al archivo, que no tuvo la culpa.
+  try{
     const count = await guardarFilasEmpleados(rows);
     statusMsg(`Importados ${count} empleados desde el ${esCSV ? "CSV" : "Excel"}.`);
     renderCatalogTab("empleados");
   }catch(e){
-    statusMsg("No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
+    statusMsg("El archivo se leyó bien, pero no se pudo guardar: " + e.message, false);
   }
   inputEl.value = "";
 }
@@ -2352,10 +2362,14 @@ function renderPuestosPdfPreviewHtml(){
 async function confirmarPuestosPdfPreview(){
   if (!puestosPdfPreview || !puestosPdfPreview.length) return;
   const rows = puestosPdfPreview.map(f => ({ PUESTO: f.puesto, SALARIO: f.salario }));
-  const count = await guardarFilasPuestos(rows);
-  puestosPdfPreview = null;
-  statusMsg(`Actualizados ${count} puestos desde el PDF.`);
-  renderCatalogTab("puestos");
+  try{
+    const count = await guardarFilasPuestos(rows);
+    puestosPdfPreview = null;
+    statusMsg(`Actualizados ${count} puestos desde el PDF.`);
+    renderCatalogTab("puestos");
+  }catch(e){
+    statusMsg("No se pudo guardar: " + e.message, false);
+  }
 }
 
 // Heurística de lectura: por cada línea de texto del PDF, busca un monto al
@@ -2384,8 +2398,9 @@ async function importarPuestosArchivo(inputEl){
   if (!file) return;
   const esPDF = /\.pdf$/i.test(file.name);
   const esCSV = /\.csv$/i.test(file.name);
-  try{
-    if (esPDF){
+
+  if (esPDF){
+    try{
       const texto = await extraerTextoPDF(file);
       const filas = parsearTextoSalariosPuestos(texto);
       if (!filas.length){
@@ -2395,27 +2410,43 @@ async function importarPuestosArchivo(inputEl){
         renderCatalogTab("puestos");
         statusMsg(`Se detectaron ${filas.length} fila(s) del PDF — revísalas antes de guardar.`, true);
       }
+    }catch(e){
+      statusMsg("No se pudo leer ese PDF. Verifica que sea el formato esperado.", false);
+    }
+    inputEl.value = "";
+    return;
+  }
+
+  let rows;
+  try{
+    if (esCSV){
+      const text = await file.text();
+      rows = parseCSV(text);
     } else {
-      let rows;
-      if (esCSV){
-        const text = await file.text();
-        rows = parseCSV(text);
-      } else {
-        if (typeof XLSX === "undefined"){
-          statusMsg("No se pudo cargar el lector de Excel (necesita internet la primera vez). Si no tienes internet ahora, guarda el archivo como CSV desde Excel (Archivo → Guardar como → CSV) y súbelo así — el CSV no necesita internet.", false);
-          return;
-        }
-        const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: "array" });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      if (typeof XLSX === "undefined"){
+        statusMsg("No se pudo cargar el lector de Excel (necesita internet la primera vez). Si no tienes internet ahora, guarda el archivo como CSV desde Excel (Archivo → Guardar como → CSV) y súbelo así — el CSV no necesita internet.", false);
+        inputEl.value = "";
+        return;
       }
-      const count = await guardarFilasPuestos(rows);
-      statusMsg(`Actualizados ${count} puestos desde el ${esCSV ? "CSV" : "Excel"}.`);
-      renderCatalogTab("puestos");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
     }
   }catch(e){
     statusMsg("No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
+    inputEl.value = "";
+    return;
+  }
+  // Separado del try de lectura a propósito: si el archivo se leyó bien pero
+  // el guardado falla (ej. sesión vencida, sin propiedad asignada), el
+  // mensaje debe decir eso — no culpar al archivo, que no tuvo la culpa.
+  try{
+    const count = await guardarFilasPuestos(rows);
+    statusMsg(`Actualizados ${count} puestos desde el ${esCSV ? "CSV" : "Excel"}.`);
+    renderCatalogTab("puestos");
+  }catch(e){
+    statusMsg("El archivo se leyó bien, pero no se pudo guardar: " + e.message, false);
   }
   inputEl.value = "";
 }
