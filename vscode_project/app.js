@@ -589,8 +589,7 @@ const CATALOGS = {
       ["CORREO_EMP","text","7. Correo electrónico",""],
       ["grp", "Cuenta bancaria"],
       ["BANCO_EMP","select_banco_cr","8. Banco",""],
-      ["CUENTA_CLIENTE_EMP","cuenta_cliente_emp","Número de cuenta cliente","17 dígitos"],
-      ["CUENTA_IBAN_EMP","cuenta_iban_emp","Número de cuenta IBAN","CR + 20 dígitos"],
+      ["NUMERO_CUENTA_EMP","cuenta_bancaria_emp","Número de cuenta","Elige el tipo y escribe el número"],
       ["grp", "Adjuntos"],
       ["ADJUNTO_ID_EMP","file_adjunto_emp","9. Foto de cédula / pasaporte / permiso laboral",""],
       ["ADJUNTO_CUENTA_EMP","file_adjunto_emp","Foto de la cuenta bancaria (para doble confirmación)",""],
@@ -1643,26 +1642,48 @@ function catalogFieldHtml(meta){
           else { catalogEditing.values['${id}']=this.value; }
         ">${opts}</select>`;
     }
-  } else if (type === "cuenta_cliente_emp"){
-    const digitos = val.replace(/\D/g,"");
-    const ok = digitos.length === 17;
-    control = `<input type="text" value="${escapeHtml(val)}" placeholder="17 dígitos" oninput="
-        let v = this.value.replace(/[^0-9]/g,'').slice(0,17);
-        this.value = v; catalogEditing.values['${id}'] = v;
-        document.getElementById('hint-${id}').textContent = v.length === 17 ? '' : ('Incompleto: ' + v.length + ' de 17 dígitos.');
+  } else if (type === "cuenta_bancaria_emp"){
+    // Migración perezosa: registros viejos guardaban cuenta cliente e IBAN
+    // como dos campos separados y pedían ambos formatos. Si este registro
+    // todavía no tiene TIPO_CUENTA_EMP, se infiere del que tenga dato.
+    if (catalogEditing.values.TIPO_CUENTA_EMP === undefined){
+      if (catalogEditing.values.CUENTA_IBAN_EMP){
+        catalogEditing.values.TIPO_CUENTA_EMP = "iban";
+        catalogEditing.values.NUMERO_CUENTA_EMP = catalogEditing.values.CUENTA_IBAN_EMP;
+      } else if (catalogEditing.values.CUENTA_CLIENTE_EMP){
+        catalogEditing.values.TIPO_CUENTA_EMP = "cliente";
+        catalogEditing.values.NUMERO_CUENTA_EMP = catalogEditing.values.CUENTA_CLIENTE_EMP;
+      } else {
+        catalogEditing.values.TIPO_CUENTA_EMP = "iban";
+      }
+    }
+    const tipoCuenta = catalogEditing.values.TIPO_CUENTA_EMP || "iban";
+    const esIban = tipoCuenta === "iban";
+    const valCuenta = catalogEditing.values.NUMERO_CUENTA_EMP || "";
+    const okIban = /^CR\d{20}$/.test(valCuenta.replace(/\s/g,"").toUpperCase());
+    control = `<select onchange="
+        catalogEditing.values.TIPO_CUENTA_EMP = this.value;
+        catalogEditing.values.CUENTA_IBAN_EMP = this.value === 'iban' ? (catalogEditing.values.NUMERO_CUENTA_EMP || '') : '';
+        catalogEditing.values.CUENTA_CLIENTE_EMP = this.value === 'cliente' ? (catalogEditing.values.NUMERO_CUENTA_EMP || '') : '';
+        renderCatalogTab('empleados');
+      " style="margin-bottom:8px;">
+        <option value="iban" ${esIban?"selected":""}>Cuenta IBAN (CR + 20 dígitos)</option>
+        <option value="cliente" ${!esIban?"selected":""}>Cuenta electrónica (número de cuenta)</option>
+      </select>
+      <input type="text" value="${escapeHtml(valCuenta)}" placeholder="${esIban ? "CR + 20 dígitos" : "Número de cuenta"}" oninput="
+        let v = this.value;
+        ${esIban ? "v = v.toUpperCase().replace(/\\s/g,'');" : "v = v.replace(/[^0-9]/g,'');"}
+        this.value = v;
+        catalogEditing.values['${id}'] = v;
+        // Se guardan en espejo en los campos viejos para que el resto de la app
+        // (ej. 'Ver datos incompletos') siga leyendo lo mismo sin duplicar lógica.
+        catalogEditing.values.CUENTA_IBAN_EMP = ${esIban} ? v : '';
+        catalogEditing.values.CUENTA_CLIENTE_EMP = ${esIban} ? '' : v;
+        document.getElementById('hint-${id}').textContent = ${esIban}
+          ? (/^CR\\d{20}$/.test(v) ? '' : 'Incompleto — debe ser CR + 20 dígitos.')
+          : '';
       ">
-      <div class="hint-error" id="hint-${id}">${val ? (ok ? "" : "Incompleto: " + digitos.length + " de 17 dígitos.") : ""}</div>`;
-  } else if (type === "cuenta_iban_emp"){
-    const soloDigitos = val.replace(/^CR/i,"").replace(/\D/g,"");
-    const ok = /^CR\d{20}$/i.test(val.replace(/\s/g,""));
-    control = `<input type="text" value="${escapeHtml(val)}" placeholder="CR + 20 dígitos" oninput="
-        let raw = this.value.toUpperCase().replace(/\\s/g,'');
-        let digits = raw.replace(/^CR/,'').replace(/[^0-9]/g,'').slice(0,20);
-        let v = 'CR' + digits;
-        this.value = v; catalogEditing.values['${id}'] = v;
-        document.getElementById('hint-${id}').textContent = digits.length === 20 ? '' : ('Incompleto: ' + digits.length + ' de 20 dígitos después de CR.');
-      ">
-      <div class="hint-error" id="hint-${id}">${val ? (ok ? "" : "Incompleto: " + soloDigitos.length + " de 20 dígitos después de CR.") : ""}</div>`;
+      <div class="hint-error" id="hint-${id}">${esIban && valCuenta ? (okIban ? "" : "Incompleto — debe ser CR + 20 dígitos.") : ""}</div>`;
   } else if (type === "file_adjunto_emp"){
     // Tres estados posibles: vacío, referencia al almacén ("doc:<id>"), o un
     // base64 heredado de antes del backend. Los tres se muestran distinto.
@@ -3554,8 +3575,11 @@ function evaluarCamposFaltantes(e){
   if (!e.CELULAR_EMP) faltan.push("Teléfono personal");
   if (!e.CORREO_EMP) faltan.push("Correo electrónico");
   if (!e.BANCO_EMP) faltan.push("Banco");
-  if (!e.CUENTA_CLIENTE_EMP || e.CUENTA_CLIENTE_EMP.replace(/\D/g,"").length !== 17) faltan.push("Cuenta cliente (17 dígitos)");
-  if (!e.CUENTA_IBAN_EMP || e.CUENTA_IBAN_EMP.replace(/^CR/i,"").replace(/\D/g,"").length !== 20) faltan.push("Cuenta IBAN (20 dígitos)");
+  if (!e.NUMERO_CUENTA_EMP){
+    faltan.push("Número de cuenta");
+  } else if ((e.TIPO_CUENTA_EMP || "iban") === "iban" && !/^CR\d{20}$/.test(e.NUMERO_CUENTA_EMP.replace(/\s/g,"").toUpperCase())){
+    faltan.push("Cuenta IBAN (CR + 20 dígitos)");
+  }
   if (!e.ADJUNTO_ID_EMP) faltan.push("Foto de cédula/pasaporte");
   if (!e.ADJUNTO_CUENTA_EMP) faltan.push("Foto de cuenta bancaria");
   if (!e.ESTADO_CIVIL_EMP) faltan.push("Estado civil");
