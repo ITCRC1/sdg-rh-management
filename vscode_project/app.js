@@ -528,7 +528,7 @@ const CATALOGS = {
     fields: [
       ["EMPRESA","text","Nombre de la empresa",""],
       ["DIRECCION_EMPRESA","direccion_empresa","Dirección de oficinas centrales",""],
-      ["ACTIVIDAD_EMPRESA","text","Actividad de la empresa",""],
+      ["ACTIVIDAD_EMPRESA","text","Actividad de la empresa","","libre"],
       ["PROPIEDADES","select_properties","Propiedades en el portafolio de la empresa",""],
       ["TIPO_CEDULA_EMPRESA","text","Tipo de cédula","jurídica / física"],
       ["CEDULA_JURIDICA_EMPRESA","text","Número de cédula","0-000-000000"],
@@ -550,8 +550,8 @@ const CATALOGS = {
       ["SALARIO_PUESTO","salario_num_emp","Salario asignado a este puesto",""],
       ["MODALIDAD_JORNADA","select_modalidad","Modalidad de jornada laboral (Art. 136 Código de Trabajo)",""],
       ["JEFE_INMEDIATO","select_puesto_lider","Jefatura inmediata (solo el puesto, no el nombre de la persona)",""],
-      ["TAREAS_APOYO","textarea","Tareas específicas de apoyo a la jefatura inmediata",""],
-      ["RESPONSABILIDADES","textarea","Responsabilidades del puesto (una por línea, para el Anexo 2)","Ej. Supervisar el equipo de housekeeping"],
+      ["TAREAS_APOYO","textarea","Tareas específicas de apoyo a la jefatura inmediata","","libre"],
+      ["RESPONSABILIDADES","textarea","Responsabilidades del puesto (una por línea, para el Anexo 2)","Ej. Supervisar el equipo de housekeeping","libre"],
     ],
     metaFields: ["JEFE_INMEDIATO"],
   },
@@ -561,8 +561,8 @@ const CATALOGS = {
     nameField: "nombre",
     fields: [
       ["nombre","text","Nombre de la propiedad",""],
-      ["distrito","text","Distrito",""],
-      ["canton","text","Cantón",""],
+      ["distrito","text","Distrito","","libre"],
+      ["canton","text","Cantón","","libre"],
       ["provincia","select_provincia","Provincia",""],
     ],
     metaFields: ["distrito","provincia"],
@@ -574,11 +574,11 @@ const CATALOGS = {
     noApply: true,
     fields: [
       ["grp", "Datos del puesto"],
-      ["NOMBRE_EMP","text_nombre_emp","1. Nombre (Apellidos, Primer nombre, Segundo nombre)","Ej. QUIROS MORA, ISAAC"],
+      ["NOMBRE_EMP","text_nombre_emp","1. Nombre (Apellidos, Primer nombre, Segundo nombre)","Ej. QUIROS MORA, ISAAC","mayus"],
       ["TIPO_IDENTIFICACION_EMP","select_tipo_identificacion_emp","Tipo de identidad",""],
       ["IDENTIFICACION_EMP","text_cedula_emp","2. Número de cédula","Formato: 1-1112-1111"],
       ["PUESTO_KEY","select_puesto_catalogo","3. Puesto a contratar",""],
-      ["DEPARTAMENTO_EMP","text","Puesto / departamento (texto libre, se llena solo al elegir arriba)",""],
+      ["DEPARTAMENTO_EMP","text","Puesto / departamento (texto libre, se llena solo al elegir arriba)","","libre"],
       ["NUMERO_EMPLEADO","text","Número de empleado (planilla)",""],
       ["FECHA_INGRESO_DATE","date_ingreso_emp","4. Fecha de ingreso",""],
       ["grp", "Salario"],
@@ -600,14 +600,14 @@ const CATALOGS = {
       ["MEDICAMENTOS_CRONICOS_EMP","select_sino_detalle","¿Toma medicamentos para enfermedades crónicas?",""],
       ["FECHA_NACIMIENTO_EMP","date","13. Fecha de nacimiento",""],
       ["grp", "Contacto de emergencia"],
-      ["CONTACTO_EMERGENCIA_NOMBRE","text","14. Nombre del contacto de emergencia",""],
+      ["CONTACTO_EMERGENCIA_NOMBRE","text","14. Nombre del contacto de emergencia","","mayus"],
       ["CONTACTO_EMERGENCIA_ID","text_cedula_emp","Identificación del contacto de emergencia","Formato: 1-1112-1111"],
       ["CONTACTO_EMERGENCIA_TEL","text","Teléfono del contacto de emergencia",""],
-      ["CONTACTO_EMERGENCIA_PARENTESCO","text","Parentesco del contacto de emergencia",""],
+      ["CONTACTO_EMERGENCIA_PARENTESCO","text","Parentesco del contacto de emergencia","","libre"],
       ["grp", "Estado"],
       ["FECHA_SALIDA_EMP","text","Fecha de salida (si ya no está activo)",""],
       ["ESTADO_EMP","text","Estado (Activo / Inactivo)","Activo"],
-      ["COMENTARIOS_EMP","textarea","Comentarios / notas internas",""],
+      ["COMENTARIOS_EMP","textarea","Comentarios / notas internas","","libre"],
     ],
     metaFields: ["DEPARTAMENTO_EMP","IDENTIFICACION_EMP"],
   },
@@ -1566,6 +1566,28 @@ function slugify(s){
   return String(s).trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-_.]/g,"");
 }
 
+// Estandariza texto al guardar (no mientras se escribe, para no pelear con
+// quien está tecleando) — dos reglas, según el tipo de dato:
+//
+// - Nombres de persona: TODO EN MAYÚSCULA. Así los imprime la cédula
+//   costarricense; es el estándar real para "Nombre del Trabajador" en
+//   documentos de RH, no una preferencia estética.
+// - Texto libre (direcciones, descripciones, comentarios): mayúscula
+//   sostenida se ve mal y cuesta leer en un documento legal. Se capitaliza
+//   solo la primera letra de cada oración y el resto queda en minúscula.
+//
+// Nombres propios con mayúsculas intencionales (siglas, marcas — ej. "SCP
+// Corcovado Wilderness Lodge") NO pasan por ninguna de las dos: un algoritmo
+// no puede distinguir una sigla a propósito de un error de tecleo, así que
+// esos campos se dejan tal como los escribe la persona.
+function formatearNombrePropio(s){
+  return String(s || "").trim().toUpperCase();
+}
+function formatearTextoLibre(s){
+  const t = String(s || "").trim().toLowerCase();
+  return t.replace(/(^\s*[a-záéíóúñü]|[.!?\n]\s*[a-záéíóúñü])/g, (m) => m.toUpperCase());
+}
+
 // ---------- generic catalog field renderer (used inside the inline add/edit form) ----------
 const PROVINCIAS_CR = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Puntarenas", "Limón"];
 const BANCOS_CR = [
@@ -2076,6 +2098,26 @@ async function onSelectPuestoCatalogo(val){
 
 async function saveCatalogItem(type){
   const cfg = CATALOGS[type];
+  // Estandariza mayúscula/minúscula al guardar (ver formatearNombrePropio /
+  // formatearTextoLibre) — nunca mientras se escribe, para no pelearle a
+  // quien está tecleando.
+  cfg.fields.forEach(f => {
+    if (f[0] === "grp") return;
+    const [fid, , , , formato] = f;
+    if (formato === "mayus") catalogEditing.values[fid] = formatearNombrePropio(catalogEditing.values[fid]);
+    else if (formato === "libre") catalogEditing.values[fid] = formatearTextoLibre(catalogEditing.values[fid]);
+  });
+  if (type === "empresas"){
+    // Las 3 partes de la dirección no son un field propio (se combinan en
+    // DIRECCION_EMPRESA al vuelo) — se formatean aparte y se recompone.
+    ["CANTON_EMPRESA","DISTRITO_EMPRESA","SENAS_EMPRESA"].forEach(k => {
+      if (catalogEditing.values[k]) catalogEditing.values[k] = formatearTextoLibre(catalogEditing.values[k]);
+    });
+    catalogEditing.values.DIRECCION_EMPRESA = [
+      catalogEditing.values.PROVINCIA_EMPRESA, catalogEditing.values.CANTON_EMPRESA,
+      catalogEditing.values.DISTRITO_EMPRESA, catalogEditing.values.SENAS_EMPRESA,
+    ].filter(Boolean).join(", ");
+  }
   const name = (catalogEditing.values[cfg.nameField] || "").trim();
   if (!name){ statusMsg("Escribe un nombre antes de guardar.", false); return; }
   if (type === "puestos" && catalogEditing.ministerioRef && catalogEditing.ministerioRef.salarioMin){
@@ -2158,6 +2200,7 @@ async function useEmpresa(key){
       // of which company record it came from — never asked per contract.
       data.REPRESENTANTE_LEGAL = REPRESENTANTE_LEGAL_FIJO.nombre;
       data.PUESTO_REPRESENTANTE_LEGAL = REPRESENTANTE_LEGAL_FIJO.puesto;
+      data.PUESTO_REPRESENTANTE_LEGAL_EN = REPRESENTANTE_LEGAL_FIJO.puestoEn;
       await syncLugarFirmaFromPropiedades(data.PROPIEDADES_KEYS);
       renderForm();
       renderPreview();
@@ -2957,13 +3000,22 @@ function renderPropiedadesList(lang){
 }
 
 function renderFirmaBlock(lang){
+  // Antes esto mostraba un texto de relleno fijo ("Nombre del patrono / ...")
+  // sin importar los datos reales — data.REPRESENTANTE_LEGAL, data.NOMBRE_TRABAJADOR
+  // y data.PUESTO ya existen (los usa el resto del contrato), solo faltaba
+  // leerlos aquí. resolveField ya resuelve el "[FALTA_ESTE_DATO]" en rojo
+  // cuando de verdad no hay dato, igual que en el resto de la vista previa.
   const empresa = resolveField("EMPRESA", lang);
-  const patrono = lang === "en"
-    ? { titulo: "THE EMPLOYER", nombre: "(Name of the employer / legal representative)", puesto: "General Attorney-in-Fact" }
-    : { titulo: "EL PATRONO", nombre: "(Nombre del patrono / representante legal)", puesto: "Apoderado Generalísimo" };
-  const trabajador = lang === "en"
-    ? { titulo: "THE EMPLOYEE", nombre: "(Name of the employee)", puesto: "(Position of the employee to be performed)" }
-    : { titulo: "EL TRABAJADOR", nombre: "(Nombre del colaborador)", puesto: "(Puesto del colaborador a desempeñar)" };
+  const patrono = {
+    titulo: lang === "en" ? "THE EMPLOYER" : "EL PATRONO",
+    nombre: resolveField("REPRESENTANTE_LEGAL", lang),
+    puesto: resolveField("PUESTO_REPRESENTANTE_LEGAL", lang),
+  };
+  const trabajador = {
+    titulo: lang === "en" ? "THE EMPLOYEE" : "EL TRABAJADOR",
+    nombre: resolveField("NOMBRE_TRABAJADOR", lang),
+    puesto: resolveField("PUESTO", lang),
+  };
   return `<div class="firma-espacio-block">
     <div class="firma-espacio-col">
       <div class="firma-espacio-linea"></div>
