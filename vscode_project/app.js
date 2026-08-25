@@ -1830,6 +1830,10 @@ async function importFromMinisterio(){
   const p = MINISTERIO_PUESTOS[idx];
   if (!p) return;
   const values = { PUESTO: p.puestoEs, PUESTO_EN: p.puestoEn };
+  if (p.salarioMin){
+    values.SALARIO_PUESTO = String(Math.round(p.salarioMin));
+    values.SALARIO_PUESTO_LETRAS = salarioEnLetras(p.salarioMin, "colones", "es");
+  }
   if (RESPONSABILIDADES_SUGERIDAS[p.puestoEs]){
     values.RESPONSABILIDADES = RESPONSABILIDADES_SUGERIDAS[p.puestoEs];
   }
