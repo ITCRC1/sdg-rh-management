@@ -2762,7 +2762,8 @@ async function renderCatalogTab(type){
               <button onclick="openCatalogForm('empleados','${k2}')">5. ✏️ Editar datos (puesto, salario, contacto...)</button>
               <button onclick="confirmarFirmaHandbook('${k2}')">6. ✍️ Confirmar firma handbook</button>
               <button onclick="subirContratoFirmado('${k2}')">7. 📎 Subir contrato firmado (PDF)</button>
-              <button onclick="archivarEmpleado('${k2}')">8. 🗄️ Archivar</button>
+              <button onclick="descargarDatosCCSS('${k2}')">8. 📊 Descargar datos para planilla CCSS (Excel)</button>
+              <button onclick="archivarEmpleado('${k2}')">9. 🗄️ Archivar</button>
             </div>
           </div>`;
         }).join("");
@@ -5068,6 +5069,43 @@ async function buscarFirmanteAccionesPropiedad(){
   };
 }
 
+// Exporta los datos de un empleado a Excel para incluirlo en la planilla de la
+// CCSS. No hay una plantilla oficial confirmada todavía — estas son las
+// columnas típicas que pide una inclusión de trabajador (cédula, nombre,
+// fechas, puesto, salario). Si el formato exacto que pide el portal de la
+// CCSS es distinto, hay que ajustar las columnas de acá.
+async function descargarDatosCCSS(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    if (typeof XLSX === "undefined"){
+      statusMsg("No se pudo cargar el lector de Excel. Recarga la página e intenta de nuevo.", false);
+      return;
+    }
+    const fila = {
+      "Cédula": emp.IDENTIFICACION_EMP || "",
+      "Tipo de identificación": emp.TIPO_IDENTIFICACION_EMP || "",
+      "Nombre completo": emp.NOMBRE_EMP || "",
+      "Fecha de nacimiento": emp.FECHA_NACIMIENTO_EMP || "",
+      "Fecha de ingreso": emp.FECHA_INGRESO_EMP || "",
+      "Puesto / Ocupación": emp.DEPARTAMENTO_EMP || "",
+      "Salario bruto mensual": emp.SALARIO_EMP ? Number(String(emp.SALARIO_EMP).replace(/[^0-9.]/g,"")) : "",
+      "Estado civil": emp.ESTADO_CIVIL_EMP || "",
+      "Teléfono": emp.CELULAR_EMP || "",
+      "Correo electrónico": emp.CORREO_EMP || "",
+    };
+    const ws = XLSX.utils.json_to_sheet([fila]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "CCSS");
+    const nombreArchivo = "CCSS_" + String(emp.NOMBRE_EMP || "empleado").replace(/[^a-zA-Z0-9]+/g,"_") + ".xlsx";
+    XLSX.writeFile(wb, nombreArchivo);
+    statusMsg("Descargado. Revisa que las columnas calcen con lo que pide el portal de la CCSS antes de subirlo — este formato es un punto de partida, no la plantilla oficial confirmada.", true);
+  }catch(e){
+    statusMsg("No se pudo generar el Excel: " + e.message, false);
+  }
+}
+
 async function generarRecomendacionDeEmpleado(key){
   try{
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
@@ -5270,6 +5308,7 @@ async function renderPerfilEmpleado(){
           <button onclick="openCatalogForm('empleados','${perfilActualKey}')">✏️ Editar datos</button>
           <button onclick="confirmarFirmaHandbook('${perfilActualKey}')">✍️ Confirmar firma handbook</button>
           <button onclick="subirContratoFirmado('${perfilActualKey}')">📎 Subir contrato firmado (PDF)</button>
+          <button onclick="descargarDatosCCSS('${perfilActualKey}')">📊 Descargar datos para planilla CCSS (Excel)</button>
           ${!emp.ARCHIVADO ? `<button onclick="archivarEmpleado('${perfilActualKey}')">🗄️ Archivar</button>` : ""}
         </div>
         ${!emp.ARCHIVADO ? `<div class="hint" style="margin-top:6px;">📝 La recomendación laboral se habilita cuando el empleado pasa a Archivo (salida de la empresa).</div>` : ""}
