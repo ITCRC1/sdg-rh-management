@@ -3595,6 +3595,10 @@ async function renderColillasImporter(){
     <button class="btn primary" style="width:100%; margin-bottom:8px;" onclick="document.getElementById('colillas-pdf-input').click()">📄 Subir PDF(s) de colillas</button>
     <input type="file" id="colillas-pdf-input" accept=".pdf" multiple style="display:none;" onchange="onColillasPdfSelected(this)">
     <div id="colillas-pdf-status" style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button class="btn" style="flex:1;" onclick="mostrarModalColillasArchivadas()">📋 Ver colillas archivadas</button>
+      <button class="btn" style="flex:1;" onclick="mostrarModalColillasFaltantes()">⚠️ Ver faltantes</button>
+    </div>
     <details style="margin-bottom:10px;">
       <summary style="font-size:11.5px; color:var(--ink-soft); cursor:pointer;">¿No tienes el PDF a mano? Pega el texto manualmente</summary>
       <div class="field" style="margin-top:8px;">
@@ -3765,6 +3769,89 @@ async function onColillasPdfSelected(inputEl){
     statusEl.textContent = "";
   }
   inputEl.value = "";
+}
+
+// ---------- colillas archivadas: ver y descargar ----------
+// Reutiliza el mismo modal genérico que "Datos incompletos" / "Duplicados"
+// (index.html: #modal-incompletos), solo cambiando título y contenido.
+async function mostrarModalColillasArchivadas(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "📋 Colillas de pago archivadas";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const docs = await window.sdgApi.documentos({ tipo: "colilla_pago" });
+    window._colillasArchivadasCache = docs;
+    if (!docs.length){
+      body.innerHTML = `<div class="empty-state">Todavía no hay colillas archivadas — se archivan solas la próxima vez que subas un PDF de planilla en "Subir PDF(s) de colillas".</div>`;
+      return;
+    }
+    docs.sort((a,b) => (b.emitido_en||"").localeCompare(a.emitido_en||""));
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${docs.length} colilla(s) archivada(s).</div>
+      <button class="btn primary" style="width:100%; margin-bottom:10px;" onclick="descargarTodasLasColillas()">⬇️ Descargar todas (${docs.length})</button>` +
+      docs.map(d => `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+          <div style="min-width:0;">
+            <div style="font-weight:700; font-size:12.5px;">${escapeHtml(d.empleado_nombre || d.titulo)}</div>
+            <div style="font-size:11px; color:var(--ink-soft);">${d.emitido_en ? new Date(d.emitido_en).toLocaleDateString("es-CR") : "—"} · ${escapeHtml(d.titulo)}</div>
+          </div>
+          <a class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">⬇️</a>
+        </div>`).join("");
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar la lista: ${escapeHtml(e.message)}</div>`; }
+}
+
+async function descargarTodasLasColillas(){
+  const docs = window._colillasArchivadasCache || [];
+  for (const d of docs){
+    const a = document.createElement("a");
+    a.href = window.sdgApi.urlDescarga(d.id);
+    a.download = d.nombre_archivo || "colilla.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    await new Promise(r => setTimeout(r, 300)); // da tiempo entre una y otra para que el navegador no las bloquee
+  }
+}
+
+// ---------- colillas faltantes: quién no tiene la del período más reciente ----------
+// "Período actual" se infiere de la fecha en que se archivó el lote más reciente
+// de colillas (todas las de una misma subida quedan archivadas casi al mismo
+// tiempo) — no hay un campo de período propio en documentos_emitidos.
+async function mostrarModalColillasFaltantes(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "⚠️ Colillas de pago faltantes";
+  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const [empleadosDB, docs] = await Promise.all([
+      cargarEmpleadosDB(),
+      window.sdgApi.documentos({ tipo: "colilla_pago" }),
+    ]);
+    const activos = empleadosDB.filter(e => !e.ARCHIVADO);
+    if (!docs.length){
+      body.innerHTML = `<div class="empty-state">Todavía no se ha archivado ninguna colilla — subí un PDF de planilla primero.</div>`;
+      return;
+    }
+    const ultimaFecha = docs.reduce((max, d) => (d.emitido_en||"") > max ? d.emitido_en : max, docs[0].emitido_en || "");
+    const diaActual = (ultimaFecha || "").slice(0, 10);
+    const cedulasConColilla = new Set(
+      docs.filter(d => (d.emitido_en || "").slice(0,10) === diaActual)
+          .map(d => d.empleado_cedula).filter(Boolean)
+    );
+    const faltantes = activos.filter(e => e.IDENTIFICACION_EMP && !cedulasConColilla.has(e.IDENTIFICACION_EMP));
+    const fechaTexto = diaActual ? new Date(diaActual + "T00:00:00").toLocaleDateString("es-CR") : "—";
+
+    if (faltantes.length === 0){
+      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados activos tienen su colilla del ${fechaTexto} archivada.</div>`;
+      return;
+    }
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${faltantes.length} de ${activos.length} empleados activos no tienen colilla archivada del ${fechaTexto}.</div>` +
+      faltantes.map(e => `
+        <div id="faltante-${escapeHtml(e.key)}" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+          <div style="font-size:12.5px;"><b>${escapeHtml(e.NOMBRE_EMP)}</b> — falta colilla de pago</div>
+          <button class="btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="document.getElementById('faltante-${escapeHtml(e.key)}').remove();">Aceptar</button>
+        </div>`).join("");
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista: ${escapeHtml(e.message)}</div>`; }
 }
 
 // ---------- missing-data popup ----------
