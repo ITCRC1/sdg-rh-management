@@ -1861,13 +1861,23 @@ async function openCatalogForm(type, key){
     catalogEditing.propertyOptions = await loadPropertyOptions();
   }
   if (type === "empleados"){
-    const res2 = await window.storage.list(CATALOGS.puestos.prefix, false);
-    const keys2 = (res2 && res2.keys) || [];
-    catalogEditing.puestoOptions = await Promise.all(keys2.map(async k => {
-      const r = await window.storage.get(k, false);
-      const v = r && r.value ? JSON.parse(r.value) : {};
-      return { key: k.replace(CATALOGS.puestos.prefix,""), nombre: v.PUESTO || k };
-    }));
+    // Si esto falla (sesión, red, o un registro de puesto corrupto) NO debe
+    // impedir que se abra el formulario — antes una excepción aquí dejaba el
+    // botón "Agregar empleado" sin efecto visible, sin ningún aviso.
+    try{
+      const res2 = await window.storage.list(CATALOGS.puestos.prefix, false);
+      const keys2 = (res2 && res2.keys) || [];
+      catalogEditing.puestoOptions = (await Promise.all(keys2.map(async k => {
+        try{
+          const r = await window.storage.get(k, false);
+          const v = r && r.value ? JSON.parse(r.value) : {};
+          return { key: k.replace(CATALOGS.puestos.prefix,""), nombre: v.PUESTO || k };
+        }catch(e){ return null; } // un registro de puesto corrupto no debe tumbar a los demás
+      }))).filter(Boolean);
+    }catch(e){
+      catalogEditing.puestoOptions = [];
+      statusMsg("No se pudo cargar el catálogo de puestos — el campo 'Puesto a contratar' quedó vacío. " + e.message, false);
+    }
   }
   renderCatalogTab(type);
 }
