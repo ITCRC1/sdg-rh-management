@@ -126,7 +126,8 @@
   <button class="btn gold" onclick="mostrarSoloDespido(); descargarDespidoPDF();">⚖️ Descargar carta de despido</button>
 </div>
 <div class="toolbar" id="recomform-toolbar" style="display:none;">
-  <button class="btn gold" onclick="descargarRecomendacionPDF()">📝 Descargar recomendación</button>
+  <button class="btn" onclick="guardarBorradorRecomendacion()">💾 Guardar</button>
+  <button class="btn gold" onclick="mostrarSoloRecomendacion(); descargarRecomendacionPDF();">📝 Descargar recomendación</button>
 </div>
 <div class="toolbar" id="permisoform-toolbar" style="display:none;">
   <button class="btn gold" onclick="descargarPermisoPDF()">🗓️ Descargar acción de personal</button>
@@ -265,7 +266,7 @@
   </div>
 
   <div id="recomendacion-wrap" style="display:none;">
-    <div class="toolbar"><button class="btn gold" onclick="descargarRecomendacionPDF()">⬇️ Descargar Recomendación PDF</button></div>
+    <div class="toolbar"><button class="btn gold" onclick="mostrarSoloRecomendacion(); descargarRecomendacionPDF();">⬇️ Descargar Recomendación PDF</button></div>
     <div class="doc-scroll"><div class="doc" id="recomendacion-root"></div></div>
   </div>
 

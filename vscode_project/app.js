@@ -4485,9 +4485,9 @@ function renderRecomendacion(){
   const depto = data.DEPARTAMENTO_RECOM || `<span class="missing">[${tr("departamento pendiente","department pending")}]</span>`;
   const fechaIni = data.FECHA_INICIO_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const fechaFin = data.FECHA_FIN_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
-  const razon = data.RAZON_SALIDA_RECOM || `<span class="missing">[${tr("razón pendiente","reason pending")}]</span>`;
-  const desempeno = data.DESEMPENO_RECOM || tr("un buen desempeño en sus funciones","good performance in their duties");
-  const cualidades = data.CUALIDADES_RECOM || tr("responsable y comprometida","responsible and committed");
+  const razon = (data.RAZON_SALIDA_RECOM || "").trim() || `<span class="missing">[${tr("razón pendiente","reason pending")}]</span>`;
+  const desempeno = (data.DESEMPENO_RECOM || "").trim() || tr("un buen desempeño en sus funciones","good performance in their duties");
+  const cualidades = (data.CUALIDADES_RECOM || "").trim() || tr("responsable y comprometida","responsible and committed");
   const lugarFirma = data.LUGAR_FIRMA_RECOM || `<span class="missing">[${tr("lugar pendiente","place pending")}]</span>`;
   const fechaFirma = data.FECHA_FIRMA_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const empresaTxt = lang === "en" ? f.empresaEn : f.empresa;
@@ -4871,11 +4871,45 @@ async function generarRecomendacionDeEmpleado(key){
     data.DEPARTAMENTO_RECOM = emp.DEPARTAMENTO_EMP || "";
     data.FECHA_INICIO_RECOM = emp.FECHA_INGRESO_EMP || "";
     data.FECHA_FIN_RECOM = emp.FECHA_SALIDA_EMP || "";
-    if (!data.LUGAR_FIRMA_RECOM) data.LUGAR_FIRMA_RECOM = "Sierpe de Osa";
+    // Restaura el borrador guardado con "💾 Guardar" (si hay uno) para no
+    // tener que volver a escribir la razón de salida, el desempeño, etc.
+    data.RAZON_SALIDA_RECOM = emp.RECOM_RAZON_SALIDA || data.RAZON_SALIDA_RECOM || "";
+    data.DESEMPENO_RECOM = emp.RECOM_DESEMPENO || data.DESEMPENO_RECOM || "";
+    data.CUALIDADES_RECOM = emp.RECOM_CUALIDADES || data.CUALIDADES_RECOM || "";
+    if (emp.RECOM_FECHA_FIRMA) data.FECHA_FIRMA_RECOM = emp.RECOM_FECHA_FIRMA;
+    if (!data.LUGAR_FIRMA_RECOM) data.LUGAR_FIRMA_RECOM = emp.RECOM_LUGAR_FIRMA || "Sierpe de Osa";
     currentEmpKeyForLetter = key;
     showTab("recomform");
-    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados. Revisa los campos y descarga desde el botón dorado de arriba.");
+    const tieneBorrador = emp.RECOM_RAZON_SALIDA || emp.RECOM_DESEMPENO || emp.RECOM_CUALIDADES;
+    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados" +
+      (tieneBorrador ? " (con el borrador guardado)" : "") + ". Revisa los campos y descarga desde el botón dorado de arriba.");
   }catch(e){ statusMsg("No se pudo generar la recomendación.", false); }
+}
+
+// Guarda el contenido escrito (razón de salida, desempeño, cualidades, lugar
+// y fecha de firma) en el registro del empleado, para no perderlo si hay que
+// volver a generar esta recomendación más adelante — no genera ni archiva
+// ningún documento, solo guarda lo escrito en el formulario hasta ahora.
+async function guardarBorradorRecomendacion(){
+  if (!currentEmpKeyForLetter){
+    statusMsg("Elige un empleado archivado desde 'Recomendación laboral' antes de guardar.", false);
+    return;
+  }
+  try{
+    const fullKey = CATALOGS.empleados.prefix + currentEmpKeyForLetter;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ statusMsg("No se pudo guardar: ese empleado ya no existe.", false); return; }
+    const emp = JSON.parse(res.value);
+    emp.RECOM_RAZON_SALIDA = data.RAZON_SALIDA_RECOM || "";
+    emp.RECOM_DESEMPENO = data.DESEMPENO_RECOM || "";
+    emp.RECOM_CUALIDADES = data.CUALIDADES_RECOM || "";
+    emp.RECOM_LUGAR_FIRMA = data.LUGAR_FIRMA_RECOM || "";
+    emp.RECOM_FECHA_FIRMA = data.FECHA_FIRMA_RECOM || "";
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    statusMsg("Borrador guardado — la próxima vez que generes la recomendación de " + (emp.NOMBRE_EMP || "este empleado") + " ya vendrá con estos datos.", true);
+  }catch(e){
+    statusMsg("No se pudo guardar el borrador: " + e.message, false);
+  }
 }
 
 async function generarDespidoDeEmpleado(key){

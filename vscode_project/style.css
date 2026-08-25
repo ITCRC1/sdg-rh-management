@@ -507,7 +507,7 @@
   .doc-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
 
   @media print{
-    .app-header, .tabs, .toolbar, .status-msg, #form-panel, #contracts-panel, #empresas-panel, #puestos-panel, #propiedades-panel, #empleados-panel, #format-panel, .doc-footer-note{ display:none !important; }
+    .app-header, .tabs, .toolbar, .status-msg, .toast, #form-panel, #contracts-panel, #empresas-panel, #puestos-panel, #propiedades-panel, #empleados-panel, #format-panel, .doc-footer-note{ display:none !important; }
     body{ background:#fff; }
     .doc{ max-width:none; min-width:0; padding:0; }
     .doc-scroll{ overflow-x:visible; }
