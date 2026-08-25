@@ -593,9 +593,11 @@ const CATALOGS = {
       ["CONTACTO_EMERGENCIA_NOMBRE","text","14. Nombre del contacto de emergencia",""],
       ["CONTACTO_EMERGENCIA_ID","text_cedula_emp","Identificación del contacto de emergencia","Formato: 1-1112-1111"],
       ["CONTACTO_EMERGENCIA_TEL","text","Teléfono del contacto de emergencia",""],
+      ["CONTACTO_EMERGENCIA_PARENTESCO","text","Parentesco del contacto de emergencia",""],
       ["grp", "Estado"],
       ["FECHA_SALIDA_EMP","text","Fecha de salida (si ya no está activo)",""],
       ["ESTADO_EMP","text","Estado (Activo / Inactivo)","Activo"],
+      ["COMENTARIOS_EMP","textarea","Comentarios / notas internas",""],
     ],
     metaFields: ["DEPARTAMENTO_EMP","IDENTIFICACION_EMP"],
   },
@@ -2213,6 +2215,14 @@ async function guardarFilasEmpleados(rows){
       SALARIO_EMP: String(row["SALARIO"] || "").trim() || existente.SALARIO_EMP || "",
       CORREO_EMP: String(row["CORREO"] || "").trim() || existente.CORREO_EMP || "",
       CELULAR_EMP: String(row["CELULAR PERSONAL"] || "").trim() || existente.CELULAR_EMP || "",
+      BANCO_EMP: String(row["BANCO DE ORIGEN"] || "").trim() || existente.BANCO_EMP || "",
+      CUENTA_CLIENTE_EMP: String(row["CUENTA BANCARIA"] || "").trim() || existente.CUENTA_CLIENTE_EMP || "",
+      CUENTA_IBAN_EMP: String(row["CUENTA IBAN"] || "").trim() || existente.CUENTA_IBAN_EMP || "",
+      CONTACTO_EMERGENCIA_NOMBRE: String(row["CONTACTO DE EMERGENCIA"] || "").trim() || existente.CONTACTO_EMERGENCIA_NOMBRE || "",
+      CONTACTO_EMERGENCIA_ID: String(row["ID CONTACTO EMERGENCIA"] || "").trim() || existente.CONTACTO_EMERGENCIA_ID || "",
+      CONTACTO_EMERGENCIA_TEL: String(row["TELEFONO DE EMERGENCIA"] || "").trim() || existente.CONTACTO_EMERGENCIA_TEL || "",
+      CONTACTO_EMERGENCIA_PARENTESCO: String(row["PARENTESCO"] || "").trim() || existente.CONTACTO_EMERGENCIA_PARENTESCO || "",
+      COMENTARIOS_EMP: String(row["COMENTARIOS"] || "").trim() || existente.COMENTARIOS_EMP || "",
       ESTADO_EMP: existente.ESTADO_EMP || "Activo",
     });
     delete value.key;
@@ -2319,7 +2329,7 @@ async function renderCatalogTab(type){
 
   if (type === "empleados"){
     html += `<div class="section-card" style="border-color:var(--leaf);"><div class="section-body">
-        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Importa tu lista de empleados activos (columnas: NOMBRE, DEPARTAMENTO, IDENTIFICACION, FECHA DE INGRESO, SALARIO, CORREO, CELULAR PERSONAL). Alimenta las Recomendaciones Laborales, Amonestaciones y Cartas de Despido.</p>
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Importa tu lista de empleados activos (columnas: NOMBRE, DEPARTAMENTO, IDENTIFICACION, FECHA DE INGRESO, SALARIO, CORREO, CELULAR PERSONAL, CONTACTO DE EMERGENCIA, PARENTESCO, TELEFONO DE EMERGENCIA, BANCO DE ORIGEN, ID CONTACTO EMERGENCIA, CUENTA BANCARIA, CUENTA IBAN, COMENTARIOS). Alimenta las Recomendaciones Laborales, Amonestaciones y Cartas de Despido.</p>
         <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px;"><b>Recomendado: sube un archivo CSV</b> (Excel → Archivo → Guardar como → CSV) — funciona siempre, sin necesitar internet. El Excel (.xlsx) también funciona, pero necesita internet la primera vez.</p>
         <button class="btn primary" onclick="document.getElementById('empleados-file-input').click()">📥 Importar empleados (CSV o Excel)</button>
         <input type="file" id="empleados-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarEmpleadosExcel(this)">
