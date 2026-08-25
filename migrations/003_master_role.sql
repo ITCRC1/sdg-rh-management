@@ -8,9 +8,13 @@
 --   colaborador  solo lectura, solo su propiedad — sin cambios
 -- ===========================================================================
 
--- El CHECK viejo hay que quitarlo ANTES de actualizar las filas, porque
--- 'master' todavía no es un valor permitido para él.
+-- Los DOS CHECK hay que quitarlos ANTES de actualizar las filas. El segundo
+-- todavía compara contra el texto literal 'admin': si sigue activo cuando el
+-- UPDATE cambia el rol a 'master', rechaza esa misma fila porque un admin
+-- real no tiene propiedad_id (es NULL) — exactamente lo que pasó la primera
+-- vez que se corrió esta migración.
 ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_rol_check;
+ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_propiedad_segun_rol;
 
 UPDATE usuarios SET rol = 'master' WHERE rol = 'admin';
 
@@ -19,7 +23,6 @@ ALTER TABLE usuarios ADD CONSTRAINT usuarios_rol_check
 
 -- Solo master trabaja sin propiedad asignada; gerente y colaborador siempre
 -- pertenecen a una.
-ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_propiedad_segun_rol;
 ALTER TABLE usuarios ADD CONSTRAINT usuarios_propiedad_segun_rol
   CHECK (rol = 'master' OR propiedad_id IS NOT NULL);
 
