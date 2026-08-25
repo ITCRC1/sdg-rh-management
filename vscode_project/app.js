@@ -535,6 +535,7 @@ const CATALOGS = {
     nameField: "PUESTO",
     fields: [
       ["PUESTO","text","Nombre del puesto",""],
+      ["SALARIO_PUESTO","salario_num_emp","Salario asignado a este puesto",""],
       ["MODALIDAD_JORNADA","select_modalidad","Modalidad de jornada laboral (Art. 136 Código de Trabajo)",""],
       ["JEFE_INMEDIATO","select_puesto_lider","Jefatura inmediata (solo el puesto, no el nombre de la persona)",""],
       ["TAREAS_APOYO","textarea","Tareas específicas de apoyo a la jefatura inmediata",""],
@@ -1616,8 +1617,8 @@ function catalogFieldHtml(meta){
       <button type="button" class="${modo==='otro'?'active':''}" onclick="setSalarioModoEmp('otro')">Otro monto</button>
     </div>`;
   } else if (type === "salario_num_emp"){
-    control = `<input type="text" value="${escapeHtml(val)}" placeholder="Monto bruto mensual" oninput="onSalarioEmpInput(this.value)">
-      ${catalogEditing.values.SALARIO_EMP_LETRAS ? `<div class="hint">${escapeHtml(catalogEditing.values.SALARIO_EMP_LETRAS)}</div>` : ""}`;
+    control = `<input type="text" value="${escapeHtml(val)}" placeholder="Monto bruto mensual" oninput="onSalarioEmpInput('${id}', this.value)">
+      <div class="hint" id="letras-${id}">${escapeHtml(catalogEditing.values[id + "_LETRAS"] || "")}</div>`;
   } else if (type === "select_banco_cr"){
     const isManual = !!(catalogEditing.manualFields && catalogEditing.manualFields[id]);
     const matches = BANCOS_CR.includes(val);
@@ -1935,13 +1936,13 @@ function setSalarioModoEmp(modo){
   renderCatalogTab("empleados");
 }
 
-function onSalarioEmpInput(val){
-  catalogEditing.values.SALARIO_EMP = val;
+function onSalarioEmpInput(id, val){
+  catalogEditing.values[id] = val;
   const monto = parseFloat(String(val).replace(/,/g,""));
   if (monto && !isNaN(monto)){
-    catalogEditing.values.SALARIO_EMP_LETRAS = salarioEnLetras(monto, "colones", "es");
-    const hintEl = document.querySelector('[placeholder="Monto bruto mensual"]');
-    if (hintEl && hintEl.nextElementSibling) hintEl.nextElementSibling.textContent = catalogEditing.values.SALARIO_EMP_LETRAS;
+    catalogEditing.values[id + "_LETRAS"] = salarioEnLetras(monto, "colones", "es");
+    const hintEl = document.getElementById("letras-" + id);
+    if (hintEl) hintEl.textContent = catalogEditing.values[id + "_LETRAS"];
   }
 }
 
@@ -2271,6 +2272,142 @@ async function importarEmpleadosExcel(inputEl){
   inputEl.value = "";
 }
 
+// ---------- Puestos y salarios: import masivo por Excel/CSV o PDF ----------
+
+// Guarda/actualiza puestos por nombre (no hay cédula ni ID único para un puesto,
+// así que el nombre normalizado en mayúsculas hace de llave de coincidencia —
+// igual de espíritu que el match por cédula en guardarFilasEmpleados).
+async function guardarFilasPuestos(rows){
+  const res = await window.storage.list(CATALOGS.puestos.prefix, false);
+  const keys = (res && res.keys) || [];
+  const existentes = await Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    const v = r && r.value ? JSON.parse(r.value) : {};
+    return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+  }));
+  const porNombre = {};
+  existentes.forEach(e => { if (e.PUESTO) porNombre[e.PUESTO.trim().toUpperCase()] = e; });
+
+  let count = 0;
+  for (const row of rows){
+    const nombre = String(row["PUESTO"] || row["NOMBRE DEL PUESTO"] || row["NOMBRE"] || "").trim();
+    if (!nombre) continue;
+    const salarioRaw = String(row["SALARIO"] || row["SALARIO_PUESTO"] || "").trim();
+    if (!salarioRaw) continue;
+    const monto = parseFloat(salarioRaw.replace(/,/g, "").replace(/[^0-9.]/g, ""));
+    if (!monto || isNaN(monto)) continue;
+
+    const existente = porNombre[nombre.toUpperCase()] || {};
+    const key = CATALOGS.puestos.prefix + (existente.key || nombre.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, ""));
+
+    const value = Object.assign({}, existente, {
+      PUESTO: existente.PUESTO || nombre,
+      SALARIO_PUESTO: String(monto),
+      SALARIO_PUESTO_LETRAS: salarioEnLetras(monto, "colones", "es"),
+    });
+    delete value.key;
+    await window.storage.set(key, JSON.stringify(value), false);
+    count++;
+  }
+  return count;
+}
+
+// Filas pendientes de revisión tras leer un PDF — nada se guarda hasta que la
+// persona confirme cada fila. La lectura de PDF es aproximada (formatos de
+// tabla varían mucho entre documentos), así que aquí no se aplica nada a
+// ciegas: se muestra lo detectado y se corrige a mano antes de guardar.
+let puestosPdfPreview = null;
+
+function renderPuestosPdfPreviewHtml(){
+  if (!puestosPdfPreview) return "";
+  const filas = puestosPdfPreview.map((f, i) => `
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+      <input type="text" value="${escapeHtml(f.puesto)}" style="flex:2;" oninput="puestosPdfPreview[${i}].puesto=this.value">
+      <input type="text" value="${escapeHtml(String(f.salario))}" style="flex:1;" oninput="puestosPdfPreview[${i}].salario=this.value">
+      <button type="button" class="btn" style="padding:4px 8px;" onclick="puestosPdfPreview.splice(${i},1); renderCatalogTab('puestos');">✕</button>
+    </div>`).join("");
+  return `<div class="section-card" style="border-color:var(--gold);"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:6px;">📄 ${puestosPdfPreview.length} fila(s) leídas del PDF — revisa y corrige antes de guardar</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">Nada se ha guardado todavía. Corrige el nombre del puesto o el salario donde haga falta, quita las filas que no correspondan, y guarda.</div>
+      ${filas || '<div class="empty-state">No quedan filas por guardar.</div>'}
+      <div class="catalog-toolbar" style="margin-top:10px;">
+        <button class="btn primary" onclick="confirmarPuestosPdfPreview()">💾 Guardar ${puestosPdfPreview.length} puesto(s)</button>
+        <button class="btn" onclick="puestosPdfPreview=null; renderCatalogTab('puestos');">Cancelar</button>
+      </div>
+    </div></div>`;
+}
+
+async function confirmarPuestosPdfPreview(){
+  if (!puestosPdfPreview || !puestosPdfPreview.length) return;
+  const rows = puestosPdfPreview.map(f => ({ PUESTO: f.puesto, SALARIO: f.salario }));
+  const count = await guardarFilasPuestos(rows);
+  puestosPdfPreview = null;
+  statusMsg(`Actualizados ${count} puestos desde el PDF.`);
+  renderCatalogTab("puestos");
+}
+
+// Heurística de lectura: por cada línea de texto del PDF, busca un monto al
+// final (₡, miles con punto o coma, opcionalmente "colones"/"CRC") y toma el
+// resto de la línea como nombre del puesto. Líneas sin un monto plausible
+// (muy chico o muy grande para un salario mensual) o sin texto de puesto se
+// descartan — es preferible perder una fila rara a inventar un dato mal.
+function parsearTextoSalariosPuestos(texto){
+  const lineas = String(texto || "").split(/\n/).map(l => l.trim()).filter(Boolean);
+  const reMonto = /([\d]{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)\s*(?:colones|crc|₡)?\s*$/i;
+  const filas = [];
+  lineas.forEach(linea => {
+    const m = reMonto.exec(linea);
+    if (!m) return;
+    const monto = parseFloat(m[1].replace(/,/g, ""));
+    if (!monto || isNaN(monto) || monto < 50000 || monto > 10000000) return;
+    const nombre = linea.slice(0, m.index).replace(/[-:.\s₡]+$/, "").trim();
+    if (!nombre || nombre.length < 3 || nombre.length > 80) return;
+    filas.push({ puesto: nombre.toUpperCase(), salario: monto });
+  });
+  return filas;
+}
+
+async function importarPuestosArchivo(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const esPDF = /\.pdf$/i.test(file.name);
+  const esCSV = /\.csv$/i.test(file.name);
+  try{
+    if (esPDF){
+      const texto = await extraerTextoPDF(file);
+      const filas = parsearTextoSalariosPuestos(texto);
+      if (!filas.length){
+        statusMsg("No se detectó ninguna fila de puesto + salario en ese PDF. Prueba con Excel/CSV, o revisa que el PDF tenga texto seleccionable (no una imagen escaneada).", false);
+      } else {
+        puestosPdfPreview = filas;
+        renderCatalogTab("puestos");
+        statusMsg(`Se detectaron ${filas.length} fila(s) del PDF — revísalas antes de guardar.`, true);
+      }
+    } else {
+      let rows;
+      if (esCSV){
+        const text = await file.text();
+        rows = parseCSV(text);
+      } else {
+        if (typeof XLSX === "undefined"){
+          statusMsg("No se pudo cargar el lector de Excel (necesita internet la primera vez). Si no tienes internet ahora, guarda el archivo como CSV desde Excel (Archivo → Guardar como → CSV) y súbelo así — el CSV no necesita internet.", false);
+          return;
+        }
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      }
+      const count = await guardarFilasPuestos(rows);
+      statusMsg(`Actualizados ${count} puestos desde el ${esCSV ? "CSV" : "Excel"}.`);
+      renderCatalogTab("puestos");
+    }
+  }catch(e){
+    statusMsg("No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
+  }
+  inputEl.value = "";
+}
+
 // ---------- cross-data linking (Empleados <-> Contratos, by cédula) ----------
 let contratosPorCedulaCache = null;
 async function buildContratosPorCedulaIndex(){
@@ -2369,7 +2506,14 @@ async function renderCatalogTab(type){
         </div>
       </div>`;
   }
-  if (type === "puestos"){
+  if (type === "puestos" && !(catalogEditing && catalogEditing.type === "puestos")){
+    html += `<div class="section-card" style="border-color:var(--leaf);"><div class="section-body">
+        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;"><b>Actualizar Datos Salarios y puestos</b> — sube un Excel/CSV (columnas: PUESTO, SALARIO) o un PDF de tu escala salarial. Actualiza el salario de los puestos que ya existen (por nombre) y crea los que falten.</p>
+        <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px;">El PDF se lee de forma aproximada: antes de guardar nada te muestro la tabla detectada para que la revises y corrijas.</p>
+        <button class="btn primary" onclick="document.getElementById('puestos-file-input').click()">📥 Actualizar Datos Salarios y puestos</button>
+        <input type="file" id="puestos-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarPuestosArchivo(this)">
+      </div></div>`;
+    html += renderPuestosPdfPreviewHtml();
     html = html.replace('<div class="catalog-toolbar">', `<div class="field" style="margin-bottom:10px;">
         <input type="text" placeholder="🔍 Buscar puesto por nombre o jefatura…" value="${escapeHtml(puestosSearchTerm)}" oninput="filtrarPuestosInput(this.value)">
       </div><div class="catalog-toolbar">`);
@@ -2399,6 +2543,10 @@ async function renderCatalogTab(type){
         }
         if (type === "empleados" && v.SALARIO_EMP){
           const n = Number(String(v.SALARIO_EMP).replace(/[^0-9.]/g, ""));
+          if (n) metaParts.push("₡" + n.toLocaleString("es-CR"));
+        }
+        if (type === "puestos" && v.SALARIO_PUESTO){
+          const n = Number(String(v.SALARIO_PUESTO).replace(/[^0-9.]/g, ""));
           if (n) metaParts.push("₡" + n.toLocaleString("es-CR"));
         }
         return { key: short, name: v[cfg.nameField] || short, meta: metaParts.join(" · "), raw: v };
