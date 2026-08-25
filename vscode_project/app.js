@@ -3432,6 +3432,56 @@ function buscarCoincidenciaDifusa(nombreColilla, empleadosDB){
   return (mejor && mejorScore > 0 && mejorScore <= 2) ? mejor : null;
 }
 
+// Carga el catálogo de empleados de la propiedad activa. Factorizado porque lo
+// usan tanto la actualización de salarios como el archivado individual de colillas.
+async function cargarEmpleadosDB(){
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  const keys = (res && res.keys) || [];
+  return Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    const v = r && r.value ? JSON.parse(r.value) : {};
+    return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
+  }));
+}
+
+function construirIndicesEmpleados(empleadosDB){
+  const porNumero = {}, porCedula = {}, porNombre = {};
+  empleadosDB.forEach(e => {
+    if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).trim().replace(/^0+/,"")] = e;
+    if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
+    porNombre[normalizarNombre(e.NOMBRE_EMP)] = e;
+  });
+  return { porNumero, porCedula, porNombre };
+}
+
+// Mismo criterio de emparejado (número → cédula → nombre exacto → nombre con
+// pequeños errores de tipeo) usado tanto para actualizar salarios como para
+// archivar la colilla individual de cada quien.
+function emparejarRegistroColilla(p, indices, empleadosDB){
+  let match = null, nombreCorregido = null, matchedBy = null;
+  if (p.numero && indices.porNumero[p.numero.replace(/^0+/,"")]){
+    match = indices.porNumero[p.numero.replace(/^0+/,"")];
+    matchedBy = "número de empleado";
+  }
+  if (!match && p.cedula && indices.porCedula[p.cedula.replace(/\D/g,"")]){
+    match = indices.porCedula[p.cedula.replace(/\D/g,"")];
+    matchedBy = "cédula";
+  }
+  if (!match){
+    match = indices.porNombre[normalizarNombre(p.nombre)] || null;
+    if (match) matchedBy = "nombre";
+  }
+  if (!match){
+    const fuzzy = buscarCoincidenciaDifusa(p.nombre, empleadosDB);
+    if (fuzzy){
+      match = fuzzy;
+      nombreCorregido = { anterior: fuzzy.NOMBRE_EMP, nuevo: p.nombre };
+      matchedBy = "nombre (con corrección)";
+    }
+  }
+  return { match, nombreCorregido, matchedBy };
+}
+
 async function procesarColillas(){
   const text = document.getElementById("colillas-textarea").value;
   if (!text.trim()){ statusMsg("Pega primero el texto de la(s) colilla(s).", false); return; }
@@ -3447,55 +3497,15 @@ async function procesarColillas(){
 
   let empleadosDB;
   try{
-    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
-    const keys = (res && res.keys) || [];
-    empleadosDB = await Promise.all(keys.map(async k => {
-      const r = await window.storage.get(k, false);
-      const v = r && r.value ? JSON.parse(r.value) : {};
-      return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
-    }));
+    empleadosDB = await cargarEmpleadosDB();
   }catch(e){
     statusMsg("No se pudo cargar la lista de empleados para comparar: " + e.message, false);
     return;
   }
-  const porNumero = {};
-  const porCedula = {};
-  const porNombre = {};
-  empleadosDB.forEach(e => {
-    if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).trim().replace(/^0+/,"")] = e;
-    if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
-    porNombre[normalizarNombre(e.NOMBRE_EMP)] = e;
-  });
+  const indices = construirIndicesEmpleados(empleadosDB);
 
   colillasResultadosCache = parsed.map(p => {
-    let match = null;
-    let nombreCorregido = null;
-    let matchedBy = null;
-
-    // 1) most reliable: match by employee number, if we've already linked it before
-    if (p.numero && porNumero[p.numero.replace(/^0+/,"")]){
-      match = porNumero[p.numero.replace(/^0+/,"")];
-      matchedBy = "número de empleado";
-    }
-    // 2) match by cédula, if the colilla happens to include one
-    if (!match && p.cedula && porCedula[p.cedula.replace(/\D/g,"")]){
-      match = porCedula[p.cedula.replace(/\D/g,"")];
-      matchedBy = "cédula";
-    }
-    // 3) exact name match
-    if (!match){
-      match = porNombre[normalizarNombre(p.nombre)] || null;
-      if (match) matchedBy = "nombre";
-    }
-    // 4) fuzzy name match (small typos only)
-    if (!match){
-      const fuzzy = buscarCoincidenciaDifusa(p.nombre, empleadosDB);
-      if (fuzzy){
-        match = fuzzy;
-        nombreCorregido = { anterior: fuzzy.NOMBRE_EMP, nuevo: p.nombre };
-        matchedBy = "nombre (con corrección)";
-      }
-    }
+    const { match, nombreCorregido, matchedBy } = emparejarRegistroColilla(p, indices, empleadosDB);
     const puestoCoincide = match ? (normalizarNombre(match.DEPARTAMENTO_EMP) === normalizarNombre(p.ocupacion)) : null;
     return Object.assign({}, p, { match, puestoCoincide, nombreCorregido, matchedBy });
   });
@@ -3596,6 +3606,28 @@ async function renderColillasImporter(){
   `;
 }
 
+// PDF text fragments don't always come in left-to-right reading order internally —
+// group them into visual lines by vertical (Y) position, then sort each line by
+// horizontal (X) position so the words come out in the order they're actually shown.
+// Factorizado de extraerTextoPDF para poder leer una sola página a la vez (lo
+// necesita el archivado individual de colillas, página por página).
+function textoDePagina(content){
+  const lineas = [];
+  content.items.forEach(item => {
+    if (!item.str || !item.str.trim()) return;
+    const x = item.transform ? item.transform[4] : 0;
+    const y = item.transform ? item.transform[5] : 0;
+    let linea = lineas.find(l => Math.abs(l.y - y) <= 2);
+    if (!linea){ linea = { y, items: [] }; lineas.push(linea); }
+    linea.items.push({ x, str: item.str });
+  });
+  lineas.sort((a, b) => b.y - a.y); // PDF Y grows upward, so higher Y = higher on the page
+  return lineas.map(l => {
+    l.items.sort((a, b) => a.x - b.x);
+    return l.items.map(it => it.str).join(" ");
+  }).join("\n");
+}
+
 async function extraerTextoPDF(file){
   if (typeof pdfjsLib === "undefined"){
     throw new Error("El lector de PDF necesita conexión a internet la primera vez que se usa en este navegador.");
@@ -3606,26 +3638,86 @@ async function extraerTextoPDF(file){
   for (let i = 1; i <= pdf.numPages; i++){
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    // PDF text fragments don't always come in left-to-right reading order internally —
-    // group them into visual lines by vertical (Y) position, then sort each line by
-    // horizontal (X) position so the words come out in the order they're actually shown.
-    const lineas = [];
-    content.items.forEach(item => {
-      if (!item.str || !item.str.trim()) return;
-      const x = item.transform ? item.transform[4] : 0;
-      const y = item.transform ? item.transform[5] : 0;
-      let linea = lineas.find(l => Math.abs(l.y - y) <= 2);
-      if (!linea){ linea = { y, items: [] }; lineas.push(linea); }
-      linea.items.push({ x, str: item.str });
-    });
-    lineas.sort((a, b) => b.y - a.y); // PDF Y grows upward, so higher Y = higher on the page
-    lineas.forEach(l => {
-      l.items.sort((a, b) => a.x - b.x);
-      texto += l.items.map(it => it.str).join(" ") + "\n";
-    });
-    texto += "\n";
+    texto += textoDePagina(content) + "\n\n";
   }
   return texto;
+}
+
+// Igual que parseColillas, pero para el texto de UNA sola página (una colilla),
+// y agrega el rango de fechas del período — se usa para archivar cada colilla
+// bajo su empleado, con nombre de archivo que diga a qué quincena pertenece.
+function parseColillaConPeriodo(texto){
+  const chunks = texto.split(/Empleado:\s*/).slice(1);
+  if (!chunks.length) return null;
+  const chunk = chunks[0];
+  const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)(?:\s+(\d{2}\/\d{2}\/\d{4})\s+Al\s*:\s*(\d{2}\/\d{2}\/\d{4}))?/s);
+  if (!m) return null;
+  const numero = m[1];
+  const nombre = m[2].replace(/\s+/g," ").trim();
+  const salario = parseFloat(m[3].replace(/,/g,""));
+  const cedulaMatch = chunk.match(/[Cc]édula\D{0,10}(\d[\d-]{7,10}\d)/);
+  return {
+    numero, nombre, salario: isNaN(salario) ? 0 : salario,
+    periodoInicio: m[4] || "", periodoFin: m[5] || "",
+    cedula: cedulaMatch ? cedulaMatch[1].trim() : "",
+  };
+}
+
+// Lee un PDF de colillas página por página (cada página = una colilla), recorta
+// la página de cada empleado que logre emparejar con el catálogo de Empleados
+// como su propio PDF de una hoja, y la archiva en documentos_emitidos — igual
+// que ya se archivan los contratos y cartas, solo con tipo "colilla_pago".
+// La página del PDF original NUNCA se modifica, solo se copia.
+async function archivarColillasPDF(file){
+  if (typeof pdfjsLib === "undefined" || typeof PDFLib === "undefined"){
+    throw new Error("El lector/escritor de PDF no está disponible en este navegador.");
+  }
+  const bufLectura = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: bufLectura }).promise;
+  const registros = [];
+  for (let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const parsed = parseColillaConPeriodo(textoDePagina(content));
+    if (parsed) registros.push(Object.assign({ pageIndex: i - 1 }, parsed));
+  }
+  if (!registros.length) return { archivados: 0, sinCoincidencia: [], total: 0 };
+
+  const empleadosDB = await cargarEmpleadosDB();
+  const indices = construirIndicesEmpleados(empleadosDB);
+
+  const bufEscritura = await file.arrayBuffer(); // copia aparte: pdf.js puede dejar inservible el buffer que ya usó
+  const { PDFDocument } = PDFLib;
+  const srcDoc = await PDFDocument.load(bufEscritura);
+
+  let archivados = 0;
+  const sinCoincidencia = [];
+  for (const reg of registros){
+    const { match } = emparejarRegistroColilla(reg, indices, empleadosDB);
+    if (!match){ sinCoincidencia.push(reg); continue; }
+
+    const nuevoDoc = await PDFDocument.create();
+    const [copiada] = await nuevoDoc.copyPages(srcDoc, [reg.pageIndex]);
+    nuevoDoc.addPage(copiada);
+    const bytes = await nuevoDoc.save();
+    const blob = new Blob([bytes], { type: "application/pdf" });
+
+    const periodoTxt = (reg.periodoInicio && reg.periodoFin) ? (reg.periodoInicio + " al " + reg.periodoFin) : "";
+    try{
+      await window.sdgApi.congelarDocumento(blob, {
+        tipo: "colilla_pago",
+        titulo: "Colilla de pago" + (periodoTxt ? " — " + periodoTxt : "") + " — " + match.NOMBRE_EMP,
+        nombreArchivo: "Colilla_" + String(match.NOMBRE_EMP || "").replace(/[^a-zA-Z0-9]+/g,"_") + "_" + reg.periodoInicio.replace(/\//g,"-") + ".pdf",
+        claveOrigen: CATALOGS.empleados.prefix + match.key,
+        empleadoCedula: match.IDENTIFICACION_EMP || null,
+        empleadoNombre: match.NOMBRE_EMP || null,
+      });
+      archivados++;
+    }catch(e){
+      sinCoincidencia.push(Object.assign({}, reg, { errorArchivo: e.message }));
+    }
+  }
+  return { archivados, sinCoincidencia, total: registros.length };
 }
 
 async function onColillasPdfSelected(inputEl){
@@ -3634,6 +3726,8 @@ async function onColillasPdfSelected(inputEl){
   const statusEl = document.getElementById("colillas-pdf-status");
   let textoCombinado = "";
   let leidos = [];
+  let archivadosTotal = 0;
+  let sinArchivarTotal = 0;
   for (const file of files){
     statusEl.textContent = `Leyendo ${file.name} (${leidos.length + 1} de ${files.length})…`;
     try{
@@ -3642,6 +3736,18 @@ async function onColillasPdfSelected(inputEl){
       leidos.push(file.name);
     }catch(e){
       statusMsg(`No se pudo leer "${file.name}": ${e.message} — como alternativa, abre ese PDF, copia el texto y pégalo abajo.`, false);
+      continue;
+    }
+    // Archiva la colilla individual de cada empleado que aparezca en este PDF —
+    // aparte de actualizar el salario (abajo), para que quede un PDF descargable
+    // por persona. Si esto falla, no debe impedir que el salario sí se actualice.
+    try{
+      statusEl.textContent = `Archivando colillas individuales de ${file.name}…`;
+      const resultado = await archivarColillasPDF(file);
+      archivadosTotal += resultado.archivados;
+      sinArchivarTotal += resultado.sinCoincidencia.length;
+    }catch(e){
+      statusMsg(`Se leyó "${file.name}" pero no se pudieron archivar las colillas individuales: ${e.message}`, false);
     }
   }
   if (leidos.length > 0){
@@ -3649,7 +3755,9 @@ async function onColillasPdfSelected(inputEl){
     statusEl.textContent = `PDF(s) leído(s): ${leidos.join(", ")}. Procesando…`;
     try{
       await procesarColillas();
-      statusEl.textContent = "✅ " + leidos.length + " PDF(s) procesado(s): " + leidos.join(", ");
+      statusEl.textContent = "✅ " + leidos.length + " PDF(s) procesado(s): " + leidos.join(", ") +
+        (archivadosTotal ? ` — ${archivadosTotal} colilla(s) individual(es) archivada(s)` +
+          (sinArchivarTotal ? ` (${sinArchivarTotal} sin coincidencia)` : "") + "." : "");
     }catch(e){
       statusEl.textContent = "⚠️ El PDF se leyó pero no se pudo procesar: " + e.message;
     }
