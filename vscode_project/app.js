@@ -190,8 +190,12 @@ async function hacerLoginTrabajador(){
 }
 
 function hacerLogoutTrabajador(){
-  if (CON_BACKEND){ window.sdgApi.logout(); return; }
+  // Limpia siempre la propiedad activa guardada: si no, en una computadora
+  // compartida la siguiente persona que entre (sobre todo otro master)
+  // heredaría en silencio la propiedad con la que quedó trabajando la
+  // sesión anterior, en vez de que se le pida elegir.
   try{ localStorage.removeItem("gcw:propiedad-actual"); }catch(e){}
+  if (CON_BACKEND){ window.sdgApi.logout(); return; }
   location.reload();
 }
 

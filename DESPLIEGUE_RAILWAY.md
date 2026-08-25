@@ -139,11 +139,11 @@ las credenciales de la base de datos.
 
 ## Roles
 
-| **Colaborador** | sí | no | no |
 | Rol | Leer | Editar y subir | Administrar usuarios | Propiedades |
 |---|---|---|---|---|
 | **Master** | sí | sí | sí | todas |
 | **Gerente** | sí | sí | no | solo la suya |
+| **Colaborador** | sí | no | no | solo la suya |
 
 El master además puede consultar cualquier propiedad — pero tiene que fijar
 con cuál está trabajando en cada momento (menú Ajustes → Cambiar de
