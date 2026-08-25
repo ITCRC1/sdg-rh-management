@@ -552,8 +552,6 @@ const CATALOGS = {
       ["JEFE_INMEDIATO","select_puesto_lider","Jefatura inmediata (solo el puesto, no el nombre de la persona)",""],
       ["TAREAS_APOYO","textarea","Tareas específicas de apoyo a la jefatura inmediata",""],
       ["RESPONSABILIDADES","textarea","Responsabilidades del puesto (una por línea, para el Anexo 2)","Ej. Supervisar el equipo de housekeeping"],
-      ["FIRMANTE_NOMBRE","text","Nombre de quien ocupa este puesto (si firma Acciones de Personal)","Ej. Andrey Flores Pizarro — deja en blanco si este puesto no firma documentos"],
-      ["FIRMANTE_CEDULA","text","Cédula de quien ocupa este puesto","Solo si llenaste el nombre de arriba"],
     ],
     metaFields: ["JEFE_INMEDIATO"],
   },
@@ -4720,12 +4718,12 @@ async function buscarEmpleadoPorCedula(cedula){
   return null;
 }
 
-// Finds the Gerente Operativo configured to sign documents for the CURRENTLY
-// ACTIVE property (any puesto in this property's own catalog whose
-// FIRMANTE_NOMBRE was filled in). Falls back to the one fixed reference
-// signer already used for recommendation letters if none is configured yet —
-// this is a bridge until real per-user login exists (see Empleador/Trabajadores
-// plan): once that's connected, the logged-in person's own name replaces this.
+// Legacy fallback for the no-backend demo mode only (see README "Modo sin
+// backend") — with a real session, trabajadorActual always wins (the logged-in
+// person IS the signer) and this never runs. FIRMANTE_NOMBRE/FIRMANTE_CEDULA
+// no longer have a field in the Puestos form (removed — they confused people
+// into thinking a "puesto" was tied to one specific person), so this only
+// finds something if an old record still has that data from before.
 async function buscarFirmanteAccionesPropiedad(){
   try{
     const res = await window.storage.list(CATALOGS.puestos.prefix, false);
