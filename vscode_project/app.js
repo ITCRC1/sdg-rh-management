@@ -537,7 +537,7 @@ const CATALOGS = {
       ["TIPO_IDENTIFICACION_REPRESENTANTE","text","Tipo de identificación","De Blake Adam Delatte — sí se usa en el contrato"],
       ["IDENTIFICACION_REPRESENTANTE","text","Número de identificación","De Blake Adam Delatte — sí se usa en el contrato"],
       ["DIRECCION_REPRESENTANTE_LEGAL","textarea","Dirección del representante (Provincia, Cantón, Distrito, Señas)","De Blake Adam Delatte — sí se usa en el contrato"],
-      ["PUESTO_REPRESENTANTE_LEGAL","text","Puesto del representante en la empresa","Se sobrescribe automáticamente con \"Gerente Generalísimo y Apoderado Legal\" — este campo es solo de referencia"],
+      ["PUESTO_REPRESENTANTE_LEGAL","text","Puesto del representante en la empresa","Se sobrescribe automáticamente con \"Gerente Generalísimo\" — este campo es solo de referencia"],
     ],
     metaFields: ["ACTIVIDAD_EMPRESA","REPRESENTANTE_LEGAL","PROPIEDADES"],
   },
@@ -623,10 +623,14 @@ const DIRECTOR_PROYECTO_FIJO_EN = "Manager on Duty";
 
 // Fixed legal representative who signs every employment contract, regardless
 // of which company/property it's for — set by the person, not asked per contract.
+// El puesto es solo el título de la persona — la capacidad legal para firmar
+// ("representante legal con facultades de Apoderado Generalísimo sin límite
+// de suma...") ya la declara la cláusula del contrato por su cuenta, así que
+// repetir "Apoderado" aquí duplicaba la misma idea dos veces en una frase.
 const REPRESENTANTE_LEGAL_FIJO = {
   nombre: "Blake Adam Delatte",
-  puesto: "Gerente Generalísimo y Apoderado Legal",
-  puestoEn: "Managing Director and Legal Representative",
+  puesto: "Gerente Generalísimo",
+  puestoEn: "Managing Director",
 };
 
 
