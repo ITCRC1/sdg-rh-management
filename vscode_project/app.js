@@ -527,7 +527,7 @@ const CATALOGS = {
     nameField: "EMPRESA",
     fields: [
       ["EMPRESA","text","Nombre de la empresa",""],
-      ["DIRECCION_EMPRESA","select_provincia","Provincia de oficinas centrales",""],
+      ["DIRECCION_EMPRESA","direccion_empresa","Dirección de oficinas centrales",""],
       ["ACTIVIDAD_EMPRESA","text","Actividad de la empresa",""],
       ["PROPIEDADES","select_properties","Propiedades en el portafolio de la empresa",""],
       ["TIPO_CEDULA_EMPRESA","text","Tipo de cédula","jurídica / física"],
@@ -1735,6 +1735,28 @@ function catalogFieldHtml(meta){
     let opts = `<option value="">Seleccionar provincia…</option>` + PROVINCIAS_CR.map(p =>
       `<option value="${escapeHtml(p)}" ${val===p?"selected":""}>${escapeHtml(p)}</option>`).join("");
     control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
+  } else if (type === "direccion_empresa"){
+    // Migración perezosa: antes esto era un solo select de provincia. Si el
+    // registro no tiene PROVINCIA_EMPRESA todavía pero el valor viejo calza
+    // con una provincia real, se arranca desde ahí.
+    if (catalogEditing.values.PROVINCIA_EMPRESA === undefined){
+      catalogEditing.values.PROVINCIA_EMPRESA = PROVINCIAS_CR.includes(val) ? val : "";
+    }
+    const provincia = catalogEditing.values.PROVINCIA_EMPRESA || "";
+    const canton = catalogEditing.values.CANTON_EMPRESA || "";
+    const distrito = catalogEditing.values.DISTRITO_EMPRESA || "";
+    const senas = catalogEditing.values.SENAS_EMPRESA || "";
+    let optsProv = `<option value="">Seleccionar provincia…</option>` + PROVINCIAS_CR.map(p =>
+      `<option value="${escapeHtml(p)}" ${provincia===p?"selected":""}>${escapeHtml(p)}</option>`).join("");
+    // Recompone la dirección completa en DIRECCION_EMPRESA cada vez que
+    // cambia alguna parte — es lo que sigue leyendo el resto de la app
+    // (contratos, cartas de despido) sin que haya que tocar nada más ahí.
+    const recomponer = `catalogEditing.values['${id}'] = [catalogEditing.values.PROVINCIA_EMPRESA, catalogEditing.values.CANTON_EMPRESA, catalogEditing.values.DISTRITO_EMPRESA, catalogEditing.values.SENAS_EMPRESA].filter(Boolean).join(', ');`;
+    control = `
+      <select onchange="catalogEditing.values.PROVINCIA_EMPRESA=this.value; ${recomponer}" style="margin-bottom:8px;">${optsProv}</select>
+      <input type="text" value="${escapeHtml(canton)}" placeholder="Cantón" style="margin-bottom:8px;" oninput="catalogEditing.values.CANTON_EMPRESA=this.value; ${recomponer}">
+      <input type="text" value="${escapeHtml(distrito)}" placeholder="Distrito" style="margin-bottom:8px;" oninput="catalogEditing.values.DISTRITO_EMPRESA=this.value; ${recomponer}">
+      <textarea placeholder="Otras señas (ej. 100 metros norte del Banco Nacional)" oninput="catalogEditing.values.SENAS_EMPRESA=this.value; ${recomponer}">${escapeHtml(senas)}</textarea>`;
   } else if (type === "select_modalidad"){
     let opts = `<option value="">Seleccionar modalidad…</option>` + Object.keys(MODALIDADES_JORNADA).map(k =>
       `<option value="${k}" ${val===k?"selected":""}>${escapeHtml(MODALIDADES_JORNADA[k].label)}</option>`).join("");
