@@ -3436,15 +3436,28 @@ async function procesarColillas(){
   const text = document.getElementById("colillas-textarea").value;
   if (!text.trim()){ statusMsg("Pega primero el texto de la(s) colilla(s).", false); return; }
   const parsed = parseColillas(text);
-  if (parsed.length === 0){ statusMsg("No se reconoció ningún registro de empleado en ese texto.", false); return; }
+  if (parsed.length === 0){
+    statusMsg("No se reconoció ningún registro con el formato esperado (\"Empleado: N Nombre Salario Mensual: monto\"). Si el PDF es de otro sistema de planillas o cambió de formato, revisa el texto extraído abajo y avisa para ajustar el lector.", false);
+    document.getElementById("colillas-resultados").innerHTML = `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
+      <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">⚠️ No se reconoció ningún empleado en este texto</div>
+      <div style="font-size:12px; color:var(--ink-soft);">El texto se leyó (${text.length} caracteres) pero no calza con el formato esperado. Revísalo en el cuadro de arriba — si es de un sistema de planillas distinto, compártelo para ajustar el lector.</div>
+    </div></div>`;
+    return;
+  }
 
-  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
-  const keys = (res && res.keys) || [];
-  const empleadosDB = await Promise.all(keys.map(async k => {
-    const r = await window.storage.get(k, false);
-    const v = r && r.value ? JSON.parse(r.value) : {};
-    return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
-  }));
+  let empleadosDB;
+  try{
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const keys = (res && res.keys) || [];
+    empleadosDB = await Promise.all(keys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
+    }));
+  }catch(e){
+    statusMsg("No se pudo cargar la lista de empleados para comparar: " + e.message, false);
+    return;
+  }
   const porNumero = {};
   const porCedula = {};
   const porNombre = {};
@@ -3634,8 +3647,12 @@ async function onColillasPdfSelected(inputEl){
   if (leidos.length > 0){
     document.getElementById("colillas-textarea").value = textoCombinado;
     statusEl.textContent = `PDF(s) leído(s): ${leidos.join(", ")}. Procesando…`;
-    await procesarColillas();
-    statusEl.textContent = "✅ " + leidos.length + " PDF(s) procesado(s): " + leidos.join(", ");
+    try{
+      await procesarColillas();
+      statusEl.textContent = "✅ " + leidos.length + " PDF(s) procesado(s): " + leidos.join(", ");
+    }catch(e){
+      statusEl.textContent = "⚠️ El PDF se leyó pero no se pudo procesar: " + e.message;
+    }
   } else {
     statusEl.textContent = "";
   }
