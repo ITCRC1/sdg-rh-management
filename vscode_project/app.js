@@ -226,7 +226,8 @@ async function entrarConSesion(){
   if (logoutSep) logoutSep.style.display = "block";
 
   // La propiedad la manda el servidor según la cuenta; el cliente solo la
-  // refleja en la interfaz. Un admin sin propiedad asignada sí la elige.
+  // refleja en la interfaz. Un master sin propiedad asignada sí la elige,
+  // y esa elección viaja en cada llamada a la API (ver storage-api.js).
   if (u.propiedadId) setPropiedadActual(u.propiedadId);
   aplicarModoSegunRol(u.rol);
   await continuarInicioApp();
@@ -242,9 +243,16 @@ function aplicarModoSegunRol(rol){
   // saberse la URL de memoria. Solo se ofrece a quien puede entrar — el
   // servidor igual lo verifica, esto es para no mostrar una puerta cerrada.
   const btnEmpleador = document.getElementById("nav-btn-empleador");
-  if (btnEmpleador) btnEmpleador.style.display = rol === "admin" ? "block" : "none";
+  if (btnEmpleador) btnEmpleador.style.display = rol === "master" ? "block" : "none";
 
-  const etiquetas = { admin: "Administrador", gerente: "Gerente", colaborador: "Colaborador" };
+  // Cambiar de propiedad solo tiene sentido para master: gerente/colaborador
+  // tienen la suya fija en la cuenta, y el servidor ignora cualquier otra que
+  // elijan aquí — mostrar el selector solo confundiría (branding de una
+  // propiedad, datos reales de otra).
+  const btnCambiarPropiedad = document.getElementById("nav-btn-cambiar-propiedad");
+  if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = rol === "master" ? "block" : "none";
+
+  const etiquetas = { master: "Master", gerente: "Gerente", colaborador: "Colaborador" };
   let barra = document.getElementById("barra-rol");
   if (!barra){
     barra = document.createElement("div");
@@ -3031,9 +3039,14 @@ function renderPropiedadBadge(){
     wrap.innerHTML = "";
     return;
   }
-  wrap.innerHTML = `<div class="propiedad-actual-badge" onclick="event.stopPropagation(); abrirPropiedadGate();">
+  // Solo master puede cambiar de propiedad: gerente/colaborador tienen la
+  // suya fija en la cuenta, y el servidor ignora cualquier otra que el
+  // badge les deje elegir aquí.
+  const esMaster = window.sdgApi && window.sdgApi.rol() === "master";
+  const onclick = esMaster ? `onclick="event.stopPropagation(); abrirPropiedadGate();"` : "";
+  wrap.innerHTML = `<div class="propiedad-actual-badge" ${onclick}>
     <img src="${p.logo}" alt="">
-    <span>${escapeHtml(p.nombre)} · Cambiar</span>
+    <span>${escapeHtml(p.nombre)}${esMaster ? " · Cambiar" : ""}</span>
   </div>`;
   if (brandTag) brandTag.textContent = "🏠 " + p.nombre;
 }

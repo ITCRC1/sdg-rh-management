@@ -173,7 +173,7 @@ router.post("/password", A.requiereSesion, async (req, res, next) => {
 });
 
 // ==========================================================================
-// Administración de usuarios (solo admin)
+// Administración de usuarios (solo master)
 // ==========================================================================
 router.get("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, next) => {
   try {
@@ -200,9 +200,9 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
     }
     if (!nombre) return res.status(400).json({ error: "El nombre es obligatorio." });
     if (!A.rolValido(rol)) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser admin, gerente o colaborador." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente o colaborador." });
     }
-    if (rol !== "admin" && !propiedadId) {
+    if (rol !== "master" && !propiedadId) {
       return res.status(400).json({ error: "Gerentes y colaboradores deben tener una propiedad asignada." });
     }
     const problema = A.validarPassword(password);
@@ -243,11 +243,11 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
     if (id === req.usuario.id && b.activo === false) {
       return res.status(400).json({ error: "No puedes desactivar tu propia cuenta." });
     }
-    if (id === req.usuario.id && b.rol && b.rol !== "admin") {
-      return res.status(400).json({ error: "No puedes quitarte a ti mismo el rol de administrador." });
+    if (id === req.usuario.id && b.rol && b.rol !== "master") {
+      return res.status(400).json({ error: "No puedes quitarte a ti mismo el rol de master." });
     }
     if (b.rol !== undefined && !A.rolValido(String(b.rol))) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser admin, gerente o colaborador." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente o colaborador." });
     }
 
     const campos = [];
@@ -301,7 +301,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
   }
 });
 
-// Bitácora de accesos (solo admin)
+// Bitácora de accesos (solo master)
 router.get("/bitacora", A.requiereSesion, A.requiereAdmin, async (req, res, next) => {
   try {
     const limite = Math.min(Number(req.query.limite) || 100, 500);

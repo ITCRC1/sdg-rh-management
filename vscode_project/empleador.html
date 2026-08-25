@@ -45,7 +45,7 @@
   .user-meta{ font-size:11.5px; color:var(--ink-soft); }
   .badge-inactivo{ background:#eee; color:#888; border-radius:6px; padding:1px 6px; font-size:10px; margin-left:6px; }
   .badge-rol{ border-radius:6px; padding:1px 6px; font-size:10px; margin-left:6px; font-weight:600; }
-  .badge-admin{ background:#e6ddf0; color:#5b3f7a; }
+  .badge-master{ background:#e6ddf0; color:#5b3f7a; }
   .badge-gerente{ background:#e7f0e2; color:#4C5D39; }
   .badge-colaborador{ background:#f0ece0; color:#8a7a52; }
   .select-rol{ font-size:11.5px; padding:4px 6px; border-radius:7px; width:auto; }
@@ -192,8 +192,8 @@
           </form>
           <div id="login-msg" role="status" aria-live="polite"></div>
           <p class="auth-nota">
-            Esta sección es solo para cuentas con rol de administrador. Si necesitas acceso,
-            pídeselo a otro administrador de la organización.
+            Esta sección es solo para cuentas con rol de master. Si necesitas acceso,
+            pídeselo a otro master de la organización.
           </p>
         </div>
       </div>
@@ -269,7 +269,7 @@
       <select id="new-rol" onchange="alCambiarRol()">
         <option value="colaborador">Colaborador — solo lectura</option>
         <option value="gerente">Gerente — lee, edita y sube archivos</option>
-        <option value="admin">Administrador — todo lo anterior + gestiona usuarios</option>
+        <option value="master">Master — todo lo anterior + gestiona usuarios + todas las propiedades</option>
       </select>
       <div class="hint" id="rol-explica"></div>
       <label>Propiedad asignada</label>
@@ -301,7 +301,7 @@
 <script>
 // =====================================================================
 // Panel de administración. Todo pasa por la API: este archivo no tiene
-// ninguna llave ni candado propio. Que solo un admin pueda listar o crear
+// ninguna llave ni candado propio. Que solo un master pueda listar o crear
 // usuarios lo hace el servidor (requiereAdmin) — esconder botones aquí es
 // comodidad visual, no seguridad.
 // =====================================================================
@@ -400,15 +400,15 @@ async function guardarPasswordNueva(){
 // Usuarios
 // ---------------------------------------------------------------------
 const ROLES = {
-  admin:       { nombre: "Administrador", desc: "Lee, edita, sube archivos y administra usuarios." },
+  master:      { nombre: "Master",        desc: "Lee, edita, sube archivos, administra usuarios y ve todas las propiedades." },
   gerente:     { nombre: "Gerente",       desc: "Lee, edita y sube archivos. No puede crear ni modificar usuarios." },
   colaborador: { nombre: "Colaborador",   desc: "Solo lectura: puede consultar y descargar, pero no modificar nada." },
 };
 
 function alCambiarRol(){
   const rol = document.getElementById("new-rol").value;
-  // Un admin no está atado a una propiedad; los demás roles siempre lo están.
-  document.getElementById("new-propiedad").disabled = (rol === "admin");
+  // Un master no está atado a una propiedad; los demás roles siempre lo están.
+  document.getElementById("new-propiedad").disabled = (rol === "master");
   document.getElementById("rol-explica").textContent = ROLES[rol] ? ROLES[rol].desc : "";
 }
 
@@ -434,7 +434,7 @@ async function crearTrabajador(){
     password: document.getElementById("new-pass").value,
     puesto: document.getElementById("new-puesto").value.trim(),
     rol,
-    propiedadId: rol === "admin" ? null : document.getElementById("new-propiedad").value,
+    propiedadId: rol === "master" ? null : document.getElementById("new-propiedad").value,
   };
   if (!datos.nombre || !datos.email || !datos.password){
     mostrarMsg("crear-msg", "Nombre, correo y contraseña temporal son obligatorios.", false);
@@ -467,7 +467,7 @@ async function cargarUsuarios(){
             ${u.activo ? "" : '<span class="badge-inactivo">inactivo</span>'}
           </div>
           <div class="user-meta">
-            ${esc(u.email)} · ${u.rol === "admin" ? "todas las propiedades" : esc(nombrePropiedad(u.propiedadId))}
+            ${esc(u.email)} · ${u.rol === "master" ? "todas las propiedades" : esc(nombrePropiedad(u.propiedadId))}
             ${u.ultimoAcceso ? " · último acceso " + new Date(u.ultimoAcceso).toLocaleString("es-CR") : " · nunca ha entrado"}
           </div>
           <div style="margin-top:6px;">
@@ -513,12 +513,12 @@ async function cambiarRol(id, nuevoRol, rolAnterior){
   }
   try{
     // Al pasar a un rol con propiedad, el servidor exige que tenga una; si no
-    // la tenía (venía de admin), se le asigna la primera para no dejarlo en un
+    // la tenía (venía de master), se le asigna la primera para no dejarlo en un
     // estado inválido que la API rechazaría.
     const cambios = { rol: nuevoRol };
     const usuarios = await api.usuarios.listar();
     const u = usuarios.find(x => x.id === id);
-    if (nuevoRol !== "admin" && u && !u.propiedadId && propiedadesCache.length){
+    if (nuevoRol !== "master" && u && !u.propiedadId && propiedadesCache.length){
       cambios.propiedadId = propiedadesCache[0].id;
     }
     await api.usuarios.actualizar(id, cambios);
@@ -577,15 +577,15 @@ async function arrancar(){
   const u = info.usuario;
   if (u.debeCambiarPassword){ mostrarPantalla("password"); return; }
 
-  if (u.rol !== "admin"){
+  if (u.rol !== "master"){
     mostrarPantalla("login");
     mostrarMsg("login-msg",
-      "Tu cuenta no tiene permisos de administrador. Usa la app de contratos en /index.html", false);
+      "Tu cuenta no tiene permisos de master. Usa la app de contratos en /index.html", false);
     return;
   }
 
   document.getElementById("sesion-info").innerHTML =
-    `Conectado como <strong>${esc(u.nombre)}</strong> (${esc(u.email)}) — Administrador`;
+    `Conectado como <strong>${esc(u.nombre)}</strong> (${esc(u.email)}) — Master`;
   mostrarPantalla("app");
   alCambiarRol();
   await cargarPropiedades();

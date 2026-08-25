@@ -122,29 +122,30 @@ async function arrancar() {
   process.on("SIGINT", cerrar);
 }
 
-// Siembra el primer admin desde variables de entorno. Solo actúa si no existe
-// ningún admin todavía: nunca pisa ni reactiva una cuenta existente.
+// Siembra el primer master desde variables de entorno (se llaman ADMIN_* por
+// compatibilidad con lo ya documentado en Railway). Solo actúa si no existe
+// ningún master todavía: nunca pisa ni reactiva una cuenta existente.
 async function crearAdminInicial() {
   const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD || "";
   if (!email || !password) return;
 
-  const { rows } = await query("SELECT count(*)::int AS n FROM usuarios WHERE rol = 'admin'");
+  const { rows } = await query("SELECT count(*)::int AS n FROM usuarios WHERE rol = 'master'");
   if (rows[0].n > 0) return;
 
   const problema = A.validarPassword(password);
   if (problema) {
-    console.error("No se creó el admin inicial: " + problema);
+    console.error("No se creó el master inicial: " + problema);
     return;
   }
 
   await query(
     `INSERT INTO usuarios (email, nombre, rol, password_hash, debe_cambiar_password, activo)
-     VALUES ($1, $2, 'admin', $3, true, true)
+     VALUES ($1, $2, 'master', $3, true, true)
      ON CONFLICT DO NOTHING`,
     [email, process.env.ADMIN_NOMBRE || "Administrador", A.hashPassword(password)]
   );
-  console.log("Admin inicial creado: " + email + " (deberá cambiar la contraseña al entrar).");
+  console.log("Master inicial creado: " + email + " (deberá cambiar la contraseña al entrar).");
 }
 
 arrancar().catch((e) => {

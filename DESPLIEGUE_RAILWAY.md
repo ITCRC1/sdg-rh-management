@@ -38,7 +38,7 @@ Hazlo **privado**: aunque no hay secretos en el código, es software interno de 
 Con eso el servicio web ya sabe conectarse. Las migraciones corren solas al
 arrancar (`src/db.js`), así que no hay que ejecutar nada a mano.
 
-## Paso 4 — Crear el primer administrador
+## Paso 4 — Crear el primer master
 
 En **Variables** del servicio web, agrega:
 
@@ -46,13 +46,17 @@ En **Variables** del servicio web, agrega:
 |---|---|
 | `ADMIN_EMAIL` | `it@thecostaricacollection.com` |
 | `ADMIN_PASSWORD` | una contraseña temporal (mín. 10 caracteres, letras y números) |
-| `ADMIN_NOMBRE` | `Administrador SDG` |
+| `ADMIN_NOMBRE` | `Master SDG` |
 | `NODE_ENV` | `production` |
+
+Se llaman `ADMIN_*` por compatibilidad, pero crean el rol `master` (ve y
+administra todas las propiedades) — es el mismo rol que antes se llamaba
+"administrador".
 
 `NODE_ENV=production` **no es opcional**: activa el flag `Secure` en la cookie
 de sesión. Sin él la cookie viajaría sin esa protección.
 
-Esas tres variables `ADMIN_*` solo actúan **si no existe ningún admin todavía**.
+Esas tres variables `ADMIN_*` solo actúan **si no existe ningún master todavía**.
 Una vez creado, se pueden borrar — de hecho conviene borrarlas después del
 primer ingreso, para no dejar una contraseña en la configuración del proyecto.
 
@@ -79,8 +83,8 @@ con un CNAME.
 |---|---|---|
 | `DATABASE_URL` | sí | La inyecta Railway al referenciar Postgres |
 | `NODE_ENV` | sí | `production` activa la cookie `Secure` |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | primer arranque | Crea el admin inicial |
-| `ADMIN_NOMBRE` | no | Nombre del admin inicial |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | primer arranque | Crea el master inicial |
+| `ADMIN_NOMBRE` | no | Nombre del master inicial |
 | `SESION_HORAS` | no | Duración de sesión (por defecto 12) |
 | `PG_POOL_MAX` | no | Conexiones del pool (por defecto 10) |
 | `PGSSL` | no | `require` si el Postgres es externo a Railway |
@@ -135,14 +139,16 @@ las credenciales de la base de datos.
 
 ## Roles
 
-| Rol | Leer | Editar y subir | Administrar usuarios |
-|---|---|---|---|
-| **Administrador** | sí | sí | sí |
-| **Gerente** | sí | sí | no |
 | **Colaborador** | sí | no | no |
+| Rol | Leer | Editar y subir | Administrar usuarios | Propiedades |
+|---|---|---|---|---|
+| **Master** | sí | sí | sí | todas |
+| **Gerente** | sí | sí | no | solo la suya |
 
-El administrador además puede consultar cualquier propiedad; gerentes y
-colaboradores solo la suya.
+El master además puede consultar cualquier propiedad — pero tiene que fijar
+con cuál está trabajando en cada momento (menú Ajustes → Cambiar de
+propiedad); esa elección viaja en cada llamada a la API. Gerentes y
+colaboradores no eligen nada: su propiedad es la que tiene fija su cuenta.
 
 Los permisos los aplica el servidor en cada petición (`requiereEscritura`,
 `requiereAdmin`). El front esconde botones y marca la app en modo solo lectura,
@@ -152,7 +158,7 @@ Un cambio de rol surte efecto de inmediato, sin que la persona vuelva a entrar:
 las sesiones consultan el rol en cada petición, no lo llevan congelado en un
 token.
 
-`ADMIN_EMAIL` crea siempre un administrador. Los demás usuarios se crean desde
+`ADMIN_EMAIL` crea siempre un master. Los demás usuarios se crean desde
 `empleador.html` eligiendo su rol.
 
 ---
@@ -162,7 +168,7 @@ token.
 La propiedad **siempre sale de la sesión del usuario**, nunca de un parámetro
 del navegador. Un trabajador de Oxygen que manipule la petición para pedir
 `?propiedad=corcovado` recibe sus propios datos, no los de Corcovado. Solo un
-admin puede consultar otra propiedad.
+master puede consultar otra propiedad.
 
 Esto es lo que antes no existía: el candado vivía en el navegador, donde
 cualquiera con las herramientas de desarrollador podía saltárselo.

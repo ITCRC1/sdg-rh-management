@@ -67,11 +67,11 @@ servidor esté arriba, igual que el resto de la app.
 
 ## Roles
 
-| Rol | Leer | Editar y subir | Administrar usuarios |
-|---|---|---|---|
-| **Administrador** | sí | sí | sí |
-| **Gerente** | sí | sí | no |
-| **Colaborador** | sí | no | no |
+| Rol | Leer | Editar y subir | Administrar usuarios | Propiedades |
+|---|---|---|---|---|
+| **Master** | sí | sí | sí | todas (fija con cuál trabaja en Ajustes) |
+| **Gerente** | sí | sí | no | solo la suya |
+| **Colaborador** | sí | no | no | solo la suya |
 
 Los tres permisos los aplica el **servidor** en cada petición. La interfaz
 esconde botones y marca la app en modo solo lectura para los colaboradores,

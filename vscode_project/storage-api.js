@@ -19,12 +19,30 @@
 
   let sesion = null;
 
+  // La propiedad activa de un usuario master vive en localStorage (la
+  // fija app.js vía setPropiedadActual, clave "gcw:propiedad-actual") — el
+  // servidor solo la respeta si el rol es master (rutas-datos.js: propiedadDe),
+  // así que mandarla de más para gerente/colaborador es inofensivo. Sin esto
+  // ningún master podía guardar nada: el servidor siempre respondía "Sin
+  // propiedad asignada" porque el parámetro nunca viajaba.
+  function propiedadActivaParaApi() {
+    try {
+      return localStorage.getItem("gcw:propiedad-actual") || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
   // `sondeo: true` para las llamadas que solo PREGUNTAN si hay sesión. Sin esa
   // distinción, comprobar la sesión al cargar la página se interpretaría como
   // que la sesión se cayó, y en una página sin pantalla de login propia eso
   // provocaba un bucle infinito de recargas.
   async function pedir(ruta, opciones, sondeo) {
-    const res = await fetch(API + ruta, {
+    const propAct = propiedadActivaParaApi();
+    const rutaConPropiedad = propAct
+      ? ruta + (ruta.includes("?") ? "&" : "?") + "propiedad=" + encodeURIComponent(propAct)
+      : ruta;
+    const res = await fetch(API + rutaConPropiedad, {
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       ...opciones,
@@ -215,11 +233,11 @@
     // Los colaboradores son de solo lectura. Esto solo sirve para ajustar la
     // interfaz: el permiso real lo aplica el servidor en cada petición.
     puedeEditar() {
-      return sesion ? sesion.rol === "admin" || sesion.rol === "gerente" : false;
+      return sesion ? sesion.rol === "master" || sesion.rol === "gerente" : false;
     },
 
-    esAdmin() {
-      return sesion ? sesion.rol === "admin" : false;
+    esMaster() {
+      return sesion ? sesion.rol === "master" : false;
     },
 
     rol() {
@@ -277,7 +295,7 @@
       });
     },
 
-    // Administración (solo admin)
+    // Administración (solo master)
     usuarios: {
       listar: () => pedir("/auth/usuarios").then((r) => r.usuarios),
       crear: (datos) =>

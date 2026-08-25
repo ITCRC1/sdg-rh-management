@@ -236,24 +236,25 @@ async function requiereSesion(req, res, next) {
 // --------------------------------------------------------------------------
 // Roles
 //
-//   admin        lee, edita, sube archivos Y administra usuarios
-//   gerente      lee, edita, sube archivos
-//   colaborador  solo lectura
+//   master       lee, edita, sube archivos Y administra usuarios (ve todas
+//                las propiedades — antes se llamaba 'admin')
+//   gerente      lee, edita, sube archivos, solo su propiedad
+//   colaborador  solo lectura, solo su propiedad
 //
 // Estas comprobaciones son las que de verdad mandan. Que el front esconda
 // botones es comodidad visual: quien manipule la petición choca aquí.
 // --------------------------------------------------------------------------
-const ROLES = ["admin", "gerente", "colaborador"];
-const PUEDEN_ESCRIBIR = new Set(["admin", "gerente"]);
+const ROLES = ["master", "gerente", "colaborador"];
+const PUEDEN_ESCRIBIR = new Set(["master", "gerente"]);
 
 function rolValido(rol) {
   return ROLES.includes(rol);
 }
 
 function requiereAdmin(req, res, next) {
-  if (req.usuario?.rol !== "admin") {
+  if (req.usuario?.rol !== "master") {
     return res.status(403).json({
-      error: "Requiere permisos de administrador.",
+      error: "Requiere permisos de master.",
       codigo: "requiere_admin",
     });
   }

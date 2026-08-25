@@ -5,7 +5,7 @@
 // Regla transversal: la propiedad SIEMPRE sale de la sesión del usuario,
 // nunca de un parámetro que mande el navegador. Así el aislamiento entre
 // Corcovado / Oxygen / Ojochal / Amarena lo hace el servidor, no el cliente.
-// Un admin puede mirar otra propiedad pasando ?propiedad=, y solo un admin.
+// Un master puede mirar otra propiedad pasando ?propiedad=, y solo un master.
 
 const express = require("express");
 const crypto = require("crypto");
@@ -22,7 +22,7 @@ router.use(A.requiereSesion, A.exigeCambioPassword);
 // Resuelve sobre qué propiedad trabaja esta petición.
 function propiedadDe(req) {
   const pedida = req.query.propiedad || req.body?.propiedad;
-  if (pedida && req.usuario.rol === "admin") return String(pedida);
+  if (pedida && req.usuario.rol === "master") return String(pedida);
   return req.usuario.propiedadId;
 }
 
@@ -332,7 +332,7 @@ emitidos.get("/:id/archivo", async (req, res, next) => {
     );
     const d = rows[0];
     if (!d) return res.status(404).json({ error: "Documento no encontrado." });
-    if (d.propiedad_id !== propiedad && req.usuario.rol !== "admin") {
+    if (d.propiedad_id !== propiedad && req.usuario.rol !== "master") {
       return res.status(403).json({ error: "Ese documento pertenece a otra propiedad." });
     }
 
