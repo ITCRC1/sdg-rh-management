@@ -2419,6 +2419,14 @@ function normalizarNombreParaMatch(nombre){
     .trim();
 }
 
+// El número de empleado puede traer texto alrededor ("ID-017") y venir con
+// menos o más ceros a la izquierda que como está guardado ("00000017" vs
+// "17", el formato corto que suelen dar las máquinas de marcación) — se
+// comparan solo los dígitos significativos, igual en ambos lados.
+function normalizarCodigoEmpleado(v){
+  return String(v == null ? "" : v).replace(/\D/g, "").replace(/^0+/, "");
+}
+
 // Índice de empleados existentes por cédula / número de empleado / nombre —
 // lo usan las importaciones del menú Datos para decidir si una fila es
 // alguien nuevo o alguien que ya está en la lista.
@@ -2433,7 +2441,7 @@ async function construirIndicesEmpleadosPorFila(){
   const porCedula = {}, porNumero = {}, porNombre = {};
   existentes.forEach(e => {
     if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
-    if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).replace(/^0+/,"")] = e;
+    if (e.NUMERO_EMPLEADO) porNumero[normalizarCodigoEmpleado(e.NUMERO_EMPLEADO)] = e;
     if (e.NOMBRE_EMP) porNombre[normalizarNombreParaMatch(e.NOMBRE_EMP)] = e;
   });
   return { existentes, porCedula, porNumero, porNombre };
@@ -2443,7 +2451,7 @@ function buscarEmpleadoExistentePorFila(row, indices){
   const cedulaFila = String(row["IDENTIFICACION"] || "").trim();
   const numeroFila = String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim();
   if (cedulaFila && indices.porCedula[cedulaFila.replace(/\D/g,"")]) return indices.porCedula[cedulaFila.replace(/\D/g,"")];
-  if (numeroFila && indices.porNumero[numeroFila.replace(/^0+/,"")]) return indices.porNumero[numeroFila.replace(/^0+/,"")];
+  if (numeroFila && indices.porNumero[normalizarCodigoEmpleado(numeroFila)]) return indices.porNumero[normalizarCodigoEmpleado(numeroFila)];
   return null;
 }
 
@@ -4799,10 +4807,17 @@ function detectarColumnaMarcacion(headers, patrones){
 // La máquina de marcación puede entregar la columna de horas extra ya
 // calculada, o solo entrada/salida (entonces se calculan contra la jornada
 // diaria configurada — lo que pase de ahí se toma como extra).
+// Las máquinas de marcación suelen dar el ID del empleado en una columna con
+// un encabezado muy corto (ID, No., PIN) — no siempre dice "código" ni
+// "empleado" como el resto de la app. Se incluyen esos formatos cortos
+// además de los ya usados en otras importaciones.
 function detectarColumnasHorasExtra(rows){
   const headers = rows.length ? Object.keys(rows[0]) : [];
   return {
-    codigo: detectarColumnaMarcacion(headers, [/c[oó]digo/i, /n[uú]mero.*empleado/i, /id.*empleado/i]),
+    codigo: detectarColumnaMarcacion(headers, [
+      /c[oó]digo/i, /n[uú]mero.*empleado/i, /id.*empleado/i, /empleado.*id/i,
+      /^id$/i, /id.*usuario/i, /usuario.*id/i, /^no\.?$/i, /^n[uú]m(ero)?\.?$/i, /\bpin\b/i,
+    ]),
     nombre: detectarColumnaMarcacion(headers, [/nombre/i, /^trabajador$/i, /^colaborador$/i, /^empleado$/i]),
     cedula: detectarColumnaMarcacion(headers, [/c[eé]dula/i, /identificaci[oó]n/i]),
     fecha: detectarColumnaMarcacion(headers, [/fecha/i, /^date$/i]),
@@ -4845,7 +4860,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     }
     if (!horas || horas <= 0) continue;
 
-    const numeroSinCeros = codigoRaw.replace(/^0+/, "");
+    const numeroSinCeros = normalizarCodigoEmpleado(codigoRaw);
     const nombreNormalizado = normalizarNombreParaMatch(nombreRaw);
     const cedulaDigits = cedulaRaw.replace(/\D/g, "");
     const identificador = numeroSinCeros || nombreNormalizado || cedulaDigits;
@@ -4900,7 +4915,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     else if (existente) actualizadas++;
     else creadas++;
   }
-  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar };
+  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, cols };
 }
 
 async function importarHorasExtraArchivo(inputEl){
@@ -4926,6 +4941,15 @@ async function importarHorasExtraArchivo(inputEl){
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
+    // Para poder revisar rápido si el archivo se leyó como se esperaba —
+    // sobre todo cuál columna se usó como número de empleado, la fuente más
+    // común de "sin identificar" cuando el encabezado no es de los usuales.
+    const colsUsadas = [
+      r.cols.codigo ? `número/código = "${r.cols.codigo}"` : "",
+      r.cols.nombre ? `nombre = "${r.cols.nombre}"` : "",
+      r.cols.cedula ? `cédula = "${r.cols.cedula}"` : "",
+    ].filter(Boolean).join(", ");
+    if (colsUsadas) msg += ` (Columnas usadas para identificar: ${colsUsadas}.)`;
     statusMsg(msg);
     renderHorasExtrasPanel();
   }catch(e){
