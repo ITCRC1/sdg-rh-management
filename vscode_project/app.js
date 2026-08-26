@@ -5769,6 +5769,21 @@ function renderAmonestacionForm(){
   const inf = AMONESTACIONES_CATALOGO.find(i => i.id === data.INFRACCION_ID_AMONESTACION);
   const esOtro = data.INFRACCION_ID_AMONESTACION === "otro";
 
+  // Mismas secciones plegables con chevrón que usan Contrato y Despido
+  // (toggleSection/collapsedSections compartidos), para que el formulario se
+  // sienta parte de la misma familia de documentos, no una pantalla aparte.
+  const seccion = (titulo) => {
+    const isCollapsed = collapsedSections.has(titulo);
+    return {
+      abre: `<div class="section-card">
+        <div class="section-head ${isCollapsed?"collapsed":""}" onclick="toggleSection('${titulo.replace(/'/g,"\\'")}')">
+          <span>${titulo}</span><span class="chev">▾</span>
+        </div>
+        <div class="section-body ${isCollapsed?"collapsed":""}">`,
+      cierra: `</div></div>`,
+    };
+  };
+
   let html = renderEmpleadoVinculadoCard(data.NOMBRE_AMONESTACION, data.CEDULA_AMONESTACION, data.PUESTO_AMONESTACION);
   html += `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
     <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
@@ -5776,7 +5791,8 @@ function renderAmonestacionForm(){
     </div>
   </div>`;
 
-  html += `<div class="section-card"><div class="section-head">Falta cometida</div><div class="section-body">
+  let sec = seccion("Falta cometida");
+  html += sec.abre + `
     <div class="field">
       <label>Selecciona del listado del Reglamento Interno / Handbook</label>
       <select onchange="seleccionarInfraccionAmonestacion(this.value)">
@@ -5794,9 +5810,10 @@ function renderAmonestacionForm(){
       <label>Gravedad (a tu criterio, proporcional a la conducta)</label>
       <input type="text" value="${escapeHtml(data.GRAVEDAD_AMONESTACION||"")}" placeholder="Ej. Leve / Moderada / Grave" oninput="data.GRAVEDAD_AMONESTACION=this.value;">
     </div>` : ""}
-  </div></div>`;
+  ` + sec.cierra;
 
-  html += `<div class="section-card"><div class="section-head">Tipo de amonestación</div><div class="section-body">
+  sec = seccion("Tipo de amonestación");
+  html += sec.abre + `
     <div class="sino-toggle">
       <button type="button" class="${data.TIPO_AMONESTACION==='verbal'?'active':''}" onclick="setTipoAmonestacion('verbal')">🗣️ Verbal</button>
       <button type="button" class="${data.TIPO_AMONESTACION==='escrita'?'active':''}" onclick="setTipoAmonestacion('escrita')">✍️ Escrita</button>
@@ -5806,9 +5823,10 @@ function renderAmonestacionForm(){
       <input type="checkbox" ${data.REINCIDENCIA_AMONESTACION?"checked":""} onchange="toggleReincidenciaAmonestacion()">
       ¿Es reincidencia de una falta anterior ya amonestada?
     </label>
-  </div></div>`;
+  ` + sec.cierra;
 
-  html += `<div class="section-card"><div class="section-head">Hechos</div><div class="section-body">
+  sec = seccion("Hechos");
+  html += sec.abre + `
     <div class="field">
       <label>Fecha en que ocurrieron los hechos</label>
       <input type="text" data-field="FECHA_HECHOS_AMONESTACION" value="${escapeHtml(data.FECHA_HECHOS_AMONESTACION||"")}" placeholder="Ej. 14 de agosto de 2026" oninput="data.FECHA_HECHOS_AMONESTACION=this.value;">
@@ -5822,7 +5840,7 @@ function renderAmonestacionForm(){
       <label>Medida adicional (opcional — ej. suspensión sin goce salarial)</label>
       <input type="text" value="${escapeHtml(data.MEDIDA_ADICIONAL_AMONESTACION||"")}" placeholder="Déjalo vacío si no aplica" oninput="data.MEDIDA_ADICIONAL_AMONESTACION=this.value;">
     </div>
-  </div></div>`;
+  ` + sec.cierra;
 
   document.getElementById("amonestacionform-panel").innerHTML = html;
 }
