@@ -4005,21 +4005,41 @@ async function mostrarModalColillasArchivadas(){
       return;
     }
     docs.sort((a,b) => (b.emitido_en||"").localeCompare(a.emitido_en||""));
-    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${docs.length} colilla(s) archivada(s).</div>
-      <button class="btn primary" style="width:100%; margin-bottom:10px;" onclick="descargarTodasLasColillas()">⬇️ Descargar todas (${docs.length})</button>` +
-      docs.map(d => `
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-          <div style="min-width:0;">
-            <div style="font-weight:700; font-size:12.5px;">${escapeHtml(d.empleado_nombre || d.titulo)}</div>
-            <div style="font-size:11px; color:var(--ink-soft);">${d.emitido_en ? new Date(d.emitido_en).toLocaleDateString("es-CR") : "—"} · ${escapeHtml(d.titulo)}</div>
+
+    // Agrupadas por empleado (cédula si la hay, si no la clave del registro,
+    // si no el nombre) — así "Descargar todas" puede ser por trabajador y no
+    // arrastrar las de todo el mundo cuando solo se quiere una persona.
+    const grupos = [];
+    const porClave = {};
+    docs.forEach(d => {
+      const claveGrupo = d.empleado_cedula || d.clave_origen || d.empleado_nombre || d.id;
+      if (!porClave[claveGrupo]){
+        porClave[claveGrupo] = { nombre: d.empleado_nombre || "Sin nombre", docs: [] };
+        grupos.push(porClave[claveGrupo]);
+      }
+      porClave[claveGrupo].docs.push(d);
+    });
+    grupos.sort((a,b) => a.nombre.localeCompare(b.nombre, "es"));
+
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${docs.length} colilla(s) archivada(s) de ${grupos.length} trabajador(es).</div>
+      <button class="btn" style="width:100%; margin-bottom:12px;" onclick="descargarTodasLasColillas()">⬇️ Descargar absolutamente todas (${docs.length})</button>` +
+      grupos.map((g, gi) => `
+        <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
+            <div style="font-weight:700; font-size:12.5px;">${escapeHtml(g.nombre)} <span style="color:var(--ink-soft); font-weight:400;">(${g.docs.length})</span></div>
+            <button class="btn primary" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="descargarColillasDeGrupo(${gi})">⬇️ Descargar todas de este trabajador</button>
           </div>
-          <a class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">⬇️</a>
+          ${g.docs.map(d => `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0;">
+              <div style="font-size:11px; color:var(--ink-soft); min-width:0;">${d.emitido_en ? new Date(d.emitido_en).toLocaleDateString("es-CR") : "—"} · ${escapeHtml(d.titulo)}</div>
+              <a class="btn" style="padding:4px 9px; font-size:10.5px; flex-shrink:0;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">⬇️</a>
+            </div>`).join("")}
         </div>`).join("");
+    window._colillasArchivadasGrupos = grupos;
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar la lista: ${escapeHtml(e.message)}</div>`; }
 }
 
-async function descargarTodasLasColillas(){
-  const docs = window._colillasArchivadasCache || [];
+async function descargarVariasColillas(docs){
   for (const d of docs){
     const a = document.createElement("a");
     a.href = window.sdgApi.urlDescarga(d.id);
@@ -4029,6 +4049,16 @@ async function descargarTodasLasColillas(){
     a.remove();
     await new Promise(r => setTimeout(r, 300)); // da tiempo entre una y otra para que el navegador no las bloquee
   }
+}
+
+async function descargarTodasLasColillas(){
+  await descargarVariasColillas(window._colillasArchivadasCache || []);
+}
+
+async function descargarColillasDeGrupo(idx){
+  const grupo = (window._colillasArchivadasGrupos || [])[idx];
+  if (!grupo) return;
+  await descargarVariasColillas(grupo.docs);
 }
 
 // ---------- colillas faltantes: quién no tiene la del período más reciente ----------
