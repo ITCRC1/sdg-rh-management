@@ -584,6 +584,7 @@ const CATALOGS = {
       ["grp", "Salario"],
       ["SALARIO_MODO_EMP","select_salario_modo_emp","5. Salario",""],
       ["SALARIO_EMP","salario_num_emp","Monto bruto mensual",""],
+      ["SALARIO_USD_EMP","text","Salario mensual en dólares (si aplica)","Se llena solo cuando la colilla de pago trae el monto en USD — es informativo, no se mezcla con el salario en colones de arriba."],
       ["grp", "Contacto"],
       ["CELULAR_EMP","text","6. Teléfono personal",""],
       ["CORREO_EMP","text","7. Correo electrónico",""],
@@ -3382,28 +3383,50 @@ function normalizarNombre(s){
     .split(/\s+/).filter(Boolean).sort().join(" ");
 }
 
+// El nombre del archivo es la única pista de moneda que trae la colilla — el
+// texto de la boleta en sí es idéntico en colones y en dólares, solo cambia
+// el monto. Sigue el patrón ya usado por el negocio: "... (colones).pdf" /
+// "... (dólares).pdf". Si el nombre no dice nada, se asume colones (igual que
+// siempre se hizo, antes de que existiera esta distinción).
+function detectarMonedaArchivo(nombreArchivo){
+  const n = (nombreArchivo || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  if (/\b(dolar|dolares|usd)\b/.test(n)) return "USD";
+  return "CRC";
+}
+
+// onColillasPdfSelected marca el inicio del texto de cada archivo con
+// "[[MONEDA:CRC]]" o "[[MONEDA:USD]]" antes de concatenarlo — así, aunque se
+// suban varios PDF a la vez (uno en colones y otro en dólares), cada registro
+// sabe en qué moneda venía su boleta. Si se pega texto a mano no hay marca,
+// así que todo se trata como colones, como siempre.
 function parseColillas(text){
-  const chunks = text.split(/Empleado:\s*/).slice(1);
   const empleados = [];
-  chunks.forEach(chunk => {
-    // name is capped to a reasonable length as a safety net — a genuine full name
-    // never runs 60+ characters, so this stops a broken line-join from swallowing
-    // the rest of the payslip into the name/occupation fields.
-    const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)/s);
-    if (!m) return;
-    const numero = m[1];
-    const nombre = m[2].replace(/\s+/g," ").trim();
-    const salario = parseFloat(m[3].replace(/,/g,""));
-    const deptMatch = chunk.match(/Departamento\s*:\s*([^\n]{1,60})/);
-    const ocupMatch = chunk.match(/Ocupaci[oó]n:\s*([^\n]{1,60})/);
-    const cedulaMatch = chunk.match(/[Cc]édula\D{0,10}(\d[\d-]{7,10}\d)/);
-    empleados.push({
-      numero, nombre, salario: isNaN(salario) ? 0 : salario,
-      departamento: deptMatch ? deptMatch[1].trim() : "",
-      ocupacion: ocupMatch ? ocupMatch[1].trim() : "",
-      cedula: cedulaMatch ? cedulaMatch[1].trim() : "",
+  const partes = text.split(/\[\[MONEDA:(CRC|USD)\]\]/);
+  let monedaActual = "CRC";
+  for (let i = 0; i < partes.length; i++){
+    if (i % 2 === 1){ monedaActual = partes[i]; continue; }
+    const chunks = partes[i].split(/Empleado:\s*/).slice(1);
+    chunks.forEach(chunk => {
+      // name is capped to a reasonable length as a safety net — a genuine full name
+      // never runs 60+ characters, so this stops a broken line-join from swallowing
+      // the rest of the payslip into the name/occupation fields.
+      const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)/s);
+      if (!m) return;
+      const numero = m[1];
+      const nombre = m[2].replace(/\s+/g," ").trim();
+      const salario = parseFloat(m[3].replace(/,/g,""));
+      const deptMatch = chunk.match(/Departamento\s*:\s*([^\n]{1,60})/);
+      const ocupMatch = chunk.match(/Ocupaci[oó]n:\s*([^\n]{1,60})/);
+      const cedulaMatch = chunk.match(/[Cc]édula\D{0,10}(\d[\d-]{7,10}\d)/);
+      empleados.push({
+        numero, nombre, salario: isNaN(salario) ? 0 : salario,
+        departamento: deptMatch ? deptMatch[1].trim() : "",
+        ocupacion: ocupMatch ? ocupMatch[1].trim() : "",
+        cedula: cedulaMatch ? cedulaMatch[1].trim() : "",
+        moneda: monedaActual,
+      });
     });
-  });
+  }
   return empleados;
 }
 
@@ -3508,13 +3531,13 @@ async function procesarColillas(){
   colillasResultadosCache = parsed.map(p => {
     const { match, nombreCorregido, matchedBy } = emparejarRegistroColilla(p, indices, empleadosDB);
     const puestoCoincide = match ? (normalizarNombre(match.DEPARTAMENTO_EMP) === normalizarNombre(p.ocupacion)) : null;
-    // Un salario que cae a menos de un tercio del que ya tenía guardado (o que
-    // se triplica) casi nunca es un cambio real — el caso típico es una colilla
-    // en dólares que el lector leyó como si fueran colones (ej. $2,127 vs
-    // ₡500.000 ya guardados). Estos NO se aplican solos: hay que confirmarlos
-    // uno por uno para no pisar un salario real con un monto sin convertir.
+    // Un salario en colones que cae a menos de un tercio del que ya tenía
+    // guardado (o que se triplica) casi nunca es un cambio real dentro de la
+    // misma moneda — el caso típico es una colilla en dólares sin marcar como
+    // tal. Solo se evalúa para registros en colones: los de USD van a su
+    // propio campo (SALARIO_USD_EMP) y nunca se comparan contra el de colones.
     let salarioSospechoso = false;
-    if (match && match.SALARIO_EMP){
+    if (p.moneda !== "USD" && match && match.SALARIO_EMP){
       const anterior = Number(String(match.SALARIO_EMP).replace(/[^0-9.]/g,""));
       if (anterior > 0 && (p.salario < anterior * 0.3 || p.salario > anterior * 3)) salarioSospechoso = true;
     }
@@ -3526,14 +3549,34 @@ async function procesarColillas(){
 function renderColillasPreview(){
   const wrap = document.getElementById("colillas-resultados");
   const todosEncontrados = colillasResultadosCache.filter(r => r.match);
-  const encontrados = todosEncontrados.filter(r => !r.salarioSospechoso);
-  const sospechosos = todosEncontrados.filter(r => r.salarioSospechoso);
+  const usd = todosEncontrados.filter(r => r.moneda === "USD");
+  const resto = todosEncontrados.filter(r => r.moneda !== "USD");
+  const encontrados = resto.filter(r => !r.salarioSospechoso);
+  const sospechosos = resto.filter(r => r.salarioSospechoso);
   const noEncontrados = colillasResultadosCache.filter(r => !r.match);
 
   let html = `<div class="section-card" style="border-color:var(--leaf); margin-top:12px;"><div class="section-body">
     <div style="font-weight:700; margin-bottom:4px;">Resumen</div>
-    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} con salario sospechoso</b>` : ""}</div>
+    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} con salario sospechoso</b>` : ""}${usd.length ? ` · <b style="color:var(--navy-deep);">${usd.length} en dólares</b>` : ""}</div>
   </div></div>`;
+
+  if (usd.length){
+    html += `<div class="section-card" style="margin-top:10px; border-color:var(--navy-deep);"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:6px;">💵 Se actualizará el salario en dólares de:</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Este PDF se detectó como colilla en dólares por su nombre de archivo. El monto se guarda aparte, en "Salario mensual en dólares" — nunca toca el salario en colones de la ficha.</div>
+      ${usd.map(r => {
+        const anteriorUsd = r.match.SALARIO_USD_EMP;
+        const cambia = String(anteriorUsd||"").trim() !== String(r.salario).trim();
+        return `<div style="font-size:12px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
+          <b>${escapeHtml(r.match.NOMBRE_EMP)}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
+          ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
+          Salario en dólares: ${anteriorUsd ? "$"+Number(anteriorUsd).toLocaleString("en-US") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">$${r.salario.toLocaleString("en-US")}</b>
+          ${r.puestoCoincide === false ? `<br><span style="color:#8a6d1f;">⚠️ Puesto distinto — catálogo: "${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}" / colilla: "${escapeHtml(r.ocupacion)}"</span>` : ""}
+        </div>`;
+      }).join("")}
+      <button class="btn primary" style="width:100%; margin-top:10px;" onclick="aplicarColillasUSD()">💵 Aplicar ${usd.length} actualización(es) en dólares</button>
+    </div></div>`;
+  }
 
   if (sospechosos.length){
     html += `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
@@ -3597,8 +3640,35 @@ async function aplicarColillaIndividual(idx){
   renderColillasPreview();
 }
 
+// Aplica en bloque los registros marcados como dólares (por el nombre del
+// archivo) — escribe en SALARIO_USD_EMP, nunca en SALARIO_EMP (colones).
+async function aplicarColillasUSD(){
+  const usd = colillasResultadosCache.filter(r => r.match && r.moneda === "USD");
+  let count = 0;
+  for (const r of usd){
+    const fullKey = CATALOGS.empleados.prefix + r.match.key;
+    const anteriorUsd = r.match.SALARIO_USD_EMP || "—";
+    r.match.SALARIO_USD_EMP = String(r.salario);
+    if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
+    if (r.nombreCorregido) r.match.NOMBRE_EMP = r.nombreCorregido.nuevo;
+    await window.storage.set(fullKey, JSON.stringify(r.match), false);
+    if (r.nombreCorregido){
+      await agregarBitacora(r.match.key, `Nombre corregido automáticamente desde colilla: "${r.nombreCorregido.anterior}" → "${r.nombreCorregido.nuevo}".`);
+    }
+    if (String(anteriorUsd) !== String(r.salario)){
+      await agregarBitacora(r.match.key, `Salario en dólares actualizado desde colilla de pago: ${anteriorUsd} → ${r.salario} (№ empleado ${r.numero}).`);
+    }
+    count++;
+  }
+  statusMsg(`Actualizado el salario en dólares de ${count} empleado(s).`);
+  colillasResultadosCache = colillasResultadosCache.map(r => (r.match && r.moneda === "USD") ? Object.assign({}, r, { match: null }) : r);
+  renderColillasPreview();
+}
+
 async function aplicarColillas(){
-  const encontrados = colillasResultadosCache.filter(r => r.match);
+  // Los de salario sospechoso, y los de dólares (que van por su propio botón
+  // "Aplicar ... en dólares" arriba), quedan fuera del botón masivo en colones.
+  const encontrados = colillasResultadosCache.filter(r => r.match && !r.salarioSospechoso && r.moneda !== "USD");
   let count = 0;
   const numerosSospechosos = [];
   for (const r of encontrados){
@@ -3797,8 +3867,9 @@ async function onColillasPdfSelected(inputEl){
     statusEl.textContent = `Leyendo ${file.name} (${leidos.length + 1} de ${files.length})…`;
     try{
       const texto = await extraerTextoPDF(file);
-      textoCombinado += texto + "\n";
-      leidos.push(file.name);
+      const moneda = detectarMonedaArchivo(file.name);
+      textoCombinado += `\n[[MONEDA:${moneda}]]\n` + texto + "\n";
+      leidos.push(file.name + (moneda === "USD" ? " (dólares)" : ""));
     }catch(e){
       statusMsg(`No se pudo leer "${file.name}": ${e.message} — como alternativa, abre ese PDF, copia el texto y pégalo abajo.`, false);
       continue;
