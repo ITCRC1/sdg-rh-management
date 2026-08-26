@@ -3400,16 +3400,23 @@ function logoHeaderHtml(){
 // ---------- multi-property gate ----------
 function renderPropiedadGate(){
   const grid = document.getElementById("propiedad-gate-grid");
-  // Retraso escalonado por tarjeta (0, 90, 180... ms) para que el giro de
-  // cada logo no arranque exactamente al mismo tiempo — se ve más orgánico
-  // que si giraran todos en bloque perfectamente sincronizados.
-  grid.innerHTML = PROPIEDADES_MAESTRAS.map((p, i) => `
-    <div class="propiedad-card" onclick="seleccionarPropiedad('${p.id}')">
-      <div class="propiedad-card-logo" style="animation-delay:${i * 90}ms;">
+  // Los logos se ubican en círculo, empezando arriba (12 en punto) y
+  // avanzando en sentido horario. Los 5 giran juntos y al mismo tiempo
+  // porque ninguno lleva retraso — CSS ve todos los <div> como "recién
+  // insertados" a la vez y corre la animación de girarLogoPropiedad en sync.
+  const cx = 150, cy = 150, r = 110;
+  grid.innerHTML = PROPIEDADES_MAESTRAS.map((p, i) => {
+    const angulo = (-90 + i * (360 / PROPIEDADES_MAESTRAS.length)) * Math.PI / 180;
+    const x = cx + r * Math.cos(angulo);
+    const y = cy + r * Math.sin(angulo);
+    return `
+    <div class="propiedad-card" style="left:${x}px; top:${y}px;" onclick="seleccionarPropiedad('${p.id}')">
+      <div class="propiedad-card-logo">
         <img src="${p.logo}" alt="${escapeHtml(p.nombre)}">
       </div>
       <div class="propiedad-card-name">${escapeHtml(p.nombre)}</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 function abrirPropiedadGate(){
