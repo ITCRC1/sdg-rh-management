@@ -1,8 +1,9 @@
 # Generador de Contratos SDG
 
-App de RH para generar contratos, acciones de personal y permisos de las cuatro
-propiedades (Corcovado, Oxygen, Ojochal, Amarena), con usuarios, base de datos y
-histórico legal.
+App de RH para generar contratos, acciones de personal y permisos de las
+propiedades del grupo (Corcovado, Oxygen, Ojochal, Amarena, y la agencia de
+viajes The Costa Rica Collections), con usuarios, base de datos y histórico
+legal.
 
 ## Archivos de esta carpeta (el front)
 
