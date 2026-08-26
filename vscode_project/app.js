@@ -528,13 +528,14 @@ const CATALOGS = {
     nameField: "PUESTO",
     fields: [
       ["PUESTO","text","Nombre del puesto",""],
+      ["DEPARTAMENTO_MINISTERIO","select_departamento","Departamento (agrupa a quién le aprueba horas extra cada jefatura)",""],
       ["SALARIO_PUESTO","salario_num_emp","Salario asignado a este puesto",""],
       ["MODALIDAD_JORNADA","select_modalidad","Modalidad de jornada laboral (Art. 136 Código de Trabajo)",""],
       ["JEFE_INMEDIATO","select_puesto_lider","Jefatura inmediata (solo el puesto, no el nombre de la persona)",""],
       ["TAREAS_APOYO","textarea","Tareas específicas de apoyo a la jefatura inmediata","","libre"],
       ["RESPONSABILIDADES","textarea","Responsabilidades del puesto (una por línea, para el Anexo 2)","Ej. Supervisar el equipo de housekeeping","libre"],
     ],
-    metaFields: ["JEFE_INMEDIATO"],
+    metaFields: ["JEFE_INMEDIATO","DEPARTAMENTO_MINISTERIO"],
   },
   propiedades: {
     prefix: "cat_propiedad:",
@@ -748,6 +749,14 @@ const PUESTOS_LIDERAZGO = [
   "Supervisor de Guías de turismo",
   "Guía Naturalista Líder",
 ];
+
+// Departamentos reales de operación (COCINA, LIMPIEZA, RECEPCIÓN...), derivados
+// de MINISTERIO_PUESTOS — es la misma agrupación que ya trae el catálogo del
+// Ministerio de Trabajo (ej. COCINA engloba Cocinero A, Cocinero B, Panadero y
+// Steward). Se usa para agrupar a quién le aprueba horas extra cada jefatura,
+// y para que un puesto creado a mano también pueda quedar en un departamento
+// aunque no se haya elegido de la lista del Ministerio.
+const DEPARTAMENTOS_MINISTERIO = [...new Set(MINISTERIO_PUESTOS.map(p => p.departamento))].sort();
 
 // data object: covers every FIELDS_META field plus the company/legal-rep fields,
 // which now live only in the Empresas catalog and are never asked again in Formulario.
@@ -1880,6 +1889,13 @@ function catalogFieldHtml(meta){
   } else if (type === "select_modalidad"){
     let opts = `<option value="">Seleccionar modalidad…</option>` + Object.keys(MODALIDADES_JORNADA).map(k =>
       `<option value="${k}" ${val===k?"selected":""}>${escapeHtml(MODALIDADES_JORNADA[k].label)}</option>`).join("");
+    control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
+  } else if (type === "select_departamento"){
+    // Se llena solo al elegir un puesto del Ministerio de Trabajo (trae su
+    // propio departamento); este select deja corregirlo o ponerlo a mano en
+    // un puesto creado libremente, para que igual quede agrupado.
+    let opts = `<option value="">— Sin departamento —</option>` + DEPARTAMENTOS_MINISTERIO.map(d =>
+      `<option value="${escapeHtml(d)}" ${val===d?"selected":""}>${escapeHtml(d)}</option>`).join("");
     control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
   } else if (type === "select_puesto_catalogo"){
     const opts = (catalogEditing.puestoOptions || []).map(p =>
@@ -4845,6 +4861,18 @@ function parsearLineaMarcacionPDF(linea){
   };
 }
 
+// "15/08 20:52" a partir de un timestamp construido con Date.UTC — se lee
+// de vuelta con los getters UTC, no los locales, para no correr la fecha ni
+// la hora por el huso horario del navegador.
+function formatoFechaHoraCortaUTC(ts){
+  const d = new Date(ts);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${dd}/${mm} ${hh}:${mi}`;
+}
+
 // Convierte el PDF de marcas sueltas en filas "por día" listas para
 // guardarFilasHorasExtra. Las marcas se emparejan de dos en dos POR
 // EMPLEADO en orden cronológico (sin cortar por fecha civil): un turno
@@ -4884,14 +4912,15 @@ async function leerRegistrosMarcacionPDF(file){
       // ignora ese par en vez de inventar un turno absurdo.
       if (horas <= 0 || horas > 20){ sinPar += 2; continue; }
       const key = codigo + "|" + marcas[i].fecha;
-      if (!porDia[key]) porDia[key] = { codigo, nombre: info.nombre, fecha: marcas[i].fecha, horas: 0 };
+      if (!porDia[key]) porDia[key] = { codigo, nombre: info.nombre, fecha: marcas[i].fecha, horas: 0, marcas: [] };
       porDia[key].horas += horas;
+      porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcas[i].ts), salida: formatoFechaHoraCortaUTC(marcas[i + 1].ts) });
     }
     if (marcas.length % 2 === 1) sinPar += 1; // última marca del período sin su pareja
   });
 
   const filas = Object.values(porDia)
-    .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS EXTRA": Math.max(0, d.horas - cfg.JORNADA_DIARIA_HORAS) }))
+    .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS EXTRA": Math.max(0, d.horas - cfg.JORNADA_DIARIA_HORAS), MARCAS: d.marcas }))
     .filter(f => f["HORAS EXTRA"] > 0);
 
   return { filas, sinPar };
@@ -4948,11 +4977,15 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     if (!fecha) continue;
 
     let horas = 0;
+    let marcasFila = Array.isArray(row.MARCAS) ? row.MARCAS : null; // ya vienen armadas (PDF de marcación)
     if (cols.horasExtra){
       horas = parsearHorasDecimal(row[cols.horasExtra]);
     } else {
-      const trabajadas = parsearHorasDecimal(row[cols.salida]) - parsearHorasDecimal(row[cols.entrada]);
+      const entradaRaw = String(row[cols.entrada] ?? "").trim();
+      const salidaRaw = String(row[cols.salida] ?? "").trim();
+      const trabajadas = parsearHorasDecimal(salidaRaw) - parsearHorasDecimal(entradaRaw);
       horas = trabajadas > cfg.JORNADA_DIARIA_HORAS ? trabajadas - cfg.JORNADA_DIARIA_HORAS : 0;
+      if (horas > 0) marcasFila = [{ entrada: entradaRaw, salida: salidaRaw }];
     }
     if (!horas || horas <= 0) continue;
 
@@ -4977,9 +5010,11 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
         EMPLEADO_KEY: empleado ? empleado.key : null,
         FECHA: fecha,
         HORAS_EXTRA: 0,
+        MARCAS: [],
       };
     }
     acumulado[accKey].HORAS_EXTRA += horas;
+    if (marcasFila) acumulado[accKey].MARCAS.push(...marcasFila);
   }
 
   let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0;
@@ -5002,6 +5037,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
       EMPLEADO_KEY: info.EMPLEADO_KEY,
       FECHA: info.FECHA,
       HORAS_EXTRA: Math.round(info.HORAS_EXTRA * 100) / 100,
+      MARCAS: info.MARCAS,
       ESTADO: "pendiente",
       ORIGEN_ARCHIVO: nombreArchivo,
       IMPORTADO_EN: new Date().toISOString(),
@@ -5093,6 +5129,23 @@ async function renderHorasExtrasPanel(){
     const empleadosPorKey = {};
     empleados.forEach(e => { empleadosPorKey[e.key] = e; });
 
+    // Departamento de cada empleado (para agrupar la lista) — sale del
+    // puesto que tiene asignado, vía DEPARTAMENTO_MINISTERIO.
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {};
+    puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const departamentoDeEmpleado = emp => {
+      if (!emp || !emp.PUESTO_KEY) return "Sin departamento";
+      const p = puestosPorKey[emp.PUESTO_KEY];
+      return (p && p.DEPARTAMENTO_MINISTERIO) || "Sin departamento";
+    };
+
     const pendientes = registros.filter(r => r.ESTADO === "pendiente" && r.EMPLEADO_KEY);
     const sinMatch = registros.filter(r => r.ESTADO === "pendiente" && !r.EMPLEADO_KEY);
     const aprobadas = registros.filter(r => r.ESTADO === "aprobada");
@@ -5165,39 +5218,70 @@ async function renderHorasExtrasPanel(){
     else lista = pendientes;
     lista = lista.slice().sort((a,b) => (b.FECHA || "").localeCompare(a.FECHA || ""));
 
+    const renderFilaHorasExtra = r => {
+      const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
+      const nombre = emp ? (emp.NOMBRE_EMP || "") : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "");
+      const puesto = emp ? (emp.DEPARTAMENTO_EMP || "") : "";
+      const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / cfg.JORNADA_DIARIA_HORAS) : null;
+      const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * cfg.TARIFA_MULTIPLICADOR * r.HORAS_EXTRA) : null;
+      const keyEsc = String(r.key).replace(/'/g, "\\'");
+      let acciones = "";
+      if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
+        acciones = `<button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
+          <button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>
+          <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
+      } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
+        acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
+          <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Descartar</button>`;
+      } else if (r.ESTADO === "aprobada"){
+        acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")}</span>`;
+      } else if (r.ESTADO === "rechazada"){
+        acciones = `<span class="meta">${escapeHtml(r.MOTIVO_RECHAZO || "Rechazada")}</span>`;
+      }
+      const marcasHtml = (Array.isArray(r.MARCAS) && r.MARCAS.length)
+        ? `<details style="margin-top:3px;">
+            <summary style="font-size:11px; color:var(--ink-soft); cursor:pointer;">Ver marcas (${r.MARCAS.length})</summary>
+            <div style="font-size:11px; color:var(--ink-soft); margin-top:3px; line-height:1.5;">
+              ${r.MARCAS.map(m => `${escapeHtml(m.entrada || "?")} → ${escapeHtml(m.salida || "?")}`).join("<br>")}
+            </div>
+          </details>`
+        : "";
+      return `<div class="catalog-item">
+        <div class="row1">
+          <div class="info">
+            <div class="name">${escapeHtml(nombre || r.CEDULA || "(sin nombre)")} — ${fmtFechaSimple(r.FECHA)}</div>
+            <div class="meta">${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}</div>
+            ${marcasHtml}
+          </div>
+          <div class="actions">${acciones}</div>
+        </div>
+      </div>`;
+    };
+
     if (!lista.length){
       html += `<div class="empty-state">No hay registros en esta vista.</div>`;
+    } else if (horasExtraFiltro === "sinmatch"){
+      // Sin empleado identificado todavía — no hay departamento que resolver.
+      html += lista.map(renderFilaHorasExtra).join("");
     } else {
-      html += lista.map(r => {
+      // Agrupado por departamento — para master/gerente, que ven varios a la
+      // vez; para jefatura da igual, porque el servidor ya le filtra solo el
+      // suyo, así que aquí sale un único grupo.
+      const grupos = {};
+      lista.forEach(r => {
         const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
-        const nombre = emp ? (emp.NOMBRE_EMP || "") : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "");
-        const puesto = emp ? (emp.DEPARTAMENTO_EMP || "") : "";
-        const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / cfg.JORNADA_DIARIA_HORAS) : null;
-        const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * cfg.TARIFA_MULTIPLICADOR * r.HORAS_EXTRA) : null;
-        const keyEsc = String(r.key).replace(/'/g, "\\'");
-        let acciones = "";
-        if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
-          acciones = `<button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
-            <button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>
-            <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
-        } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
-          acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
-            <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Descartar</button>`;
-        } else if (r.ESTADO === "aprobada"){
-          acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")}</span>`;
-        } else if (r.ESTADO === "rechazada"){
-          acciones = `<span class="meta">${escapeHtml(r.MOTIVO_RECHAZO || "Rechazada")}</span>`;
-        }
-        return `<div class="catalog-item">
-          <div class="row1">
-            <div class="info">
-              <div class="name">${escapeHtml(nombre || r.CEDULA || "(sin nombre)")} — ${fmtFechaSimple(r.FECHA)}</div>
-              <div class="meta">${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}</div>
-            </div>
-            <div class="actions">${acciones}</div>
-          </div>
-        </div>`;
-      }).join("");
+        const depto = departamentoDeEmpleado(emp);
+        (grupos[depto] = grupos[depto] || []).push(r);
+      });
+      const deptosOrdenados = Object.keys(grupos).sort((a, b) => {
+        if (a === "Sin departamento") return 1;
+        if (b === "Sin departamento") return -1;
+        return a.localeCompare(b);
+      });
+      html += deptosOrdenados.map(depto => `
+        <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px; margin:12px 0 4px;">${escapeHtml(depto)} (${grupos[depto].length})</div>
+        ${grupos[depto].map(renderFilaHorasExtra).join("")}
+      `).join("");
     }
 
     panel.innerHTML = html;
@@ -7092,6 +7176,7 @@ async function renderPerfilEmpleado(){
           <button onclick="confirmarFirmaHandbook('${perfilActualKey}')">✍️ Confirmar handbook</button>
           <button onclick="subirContratoFirmado('${perfilActualKey}')">📎 Subir contrato firmado (PDF)</button>
           <button onclick="descargarDatosCCSS('${perfilActualKey}')">📊 Descargar datos para planilla CCSS (Excel)</button>
+          ${(window.sdgApi && window.sdgApi.esMaster() && !emp.ARCHIVADO) ? `<button onclick="mostrarModalDesignarJefatura('${perfilActualKey}')">👑 Designar como jefatura</button>` : ""}
           ${!emp.ARCHIVADO ? `<button onclick="archivarEmpleado('${perfilActualKey}')">🗄️ Archivar</button>` : ""}
         </div>
         ${!emp.ARCHIVADO ? `<div class="hint" style="margin-top:6px;">📝 La recomendación laboral se habilita cuando el empleado pasa a Archivo (salida de la empresa).</div>` : ""}
@@ -7324,6 +7409,79 @@ async function descargarPermisoFirmado(key, index){
 let archivarPendingKey = null;
 let archivarPendingPdfDataUrl = null;
 let archivarPendingPdfNombre = null;
+
+// Crea una cuenta de acceso (rol "jefatura") a partir de un empleado ya
+// existente, en vez de mandar a Master a llenar el mismo formulario desde
+// cero en el panel de Empleador — precarga nombre, cédula y correo, y
+// sugiere el departamento a partir del puesto que ya tiene asignado.
+async function mostrarModalDesignarJefatura(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "👑 Designar como jefatura";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    const emp = res && res.value ? JSON.parse(res.value) : null;
+    if (!emp){ body.innerHTML = `<div class="empty-state">Ese empleado ya no existe.</div>`; return; }
+
+    let departamentoSugerido = "";
+    if (emp.PUESTO_KEY){
+      try{
+        const rp = await window.storage.get(CATALOGS.puestos.prefix + emp.PUESTO_KEY, false);
+        const puesto = rp && rp.value ? JSON.parse(rp.value) : null;
+        departamentoSugerido = (puesto && puesto.DEPARTAMENTO_MINISTERIO) || "";
+      }catch(e){ /* el puesto no tiene departamento asignado — se deja vacío */ }
+    }
+
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Esto crea una cuenta de acceso para <b>${escapeHtml(emp.NOMBRE_EMP||"")}</b> con el rol Jefatura: verá el portal en modo solo lectura, y podrá aprobar, corregir o rechazar las horas extra de su departamento.</div>
+      <div class="field">
+        <label>Correo de acceso</label>
+        <input type="email" id="jefatura-email" value="${escapeHtml(emp.CORREO_EMP||"")}" placeholder="correo@empresa.com">
+      </div>
+      <div class="field">
+        <label>Departamento que lidera</label>
+        <select id="jefatura-departamento">
+          <option value="">— Selecciona —</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}" ${d===departamentoSugerido?"selected":""}>${escapeHtml(d)}</option>`).join("")}
+        </select>
+        ${departamentoSugerido ? "" : `<div class="hint">Su puesto no tiene un departamento asignado — elígelo a mano, o complétalo primero en el catálogo de Puestos.</div>`}
+      </div>
+      <div class="field">
+        <label>Contraseña temporal</label>
+        <input type="text" id="jefatura-password" placeholder="Mínimo 10 caracteres, letras y números">
+      </div>
+      <button class="btn primary" style="margin-top:8px;" onclick="confirmarDesignarJefatura('${key.replace(/'/g,"\\'")}')">Crear cuenta de jefatura</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarDesignarJefatura(key){
+  const email = (document.getElementById("jefatura-email").value || "").trim();
+  const departamento = document.getElementById("jefatura-departamento").value;
+  const password = document.getElementById("jefatura-password").value;
+  if (!email || !departamento || !password){
+    statusMsg("Completa correo, departamento y contraseña temporal.", false);
+    return;
+  }
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    const emp = res && res.value ? JSON.parse(res.value) : null;
+    const prop = getPropiedadActual();
+    await window.sdgApi.usuarios.crear({
+      nombre: emp ? emp.NOMBRE_EMP : "",
+      email,
+      cedula: emp ? emp.IDENTIFICACION_EMP : "",
+      password,
+      puesto: departamento,
+      rol: "jefatura",
+      propiedadId: prop ? prop.id : null,
+    });
+    cerrarModalIncompletos();
+    statusMsg("Cuenta de jefatura creada. Deberá cambiar la contraseña al entrar.");
+  }catch(e){
+    statusMsg(e.message || "No se pudo crear la cuenta.", false);
+  }
+}
 
 function archivarEmpleado(key){
   archivarPendingKey = key;

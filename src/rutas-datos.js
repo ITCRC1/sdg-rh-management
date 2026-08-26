@@ -57,12 +57,15 @@ async function valorDeClave(propiedad, clave) {
   }
 }
 
-// ¿El empleado dueño de esta clave de horas_extra reporta a la jefatura que
-// ocupa `puestoLider`? Un registro "sinmatch-" (todavía sin empleado
-// identificado) nunca pertenece a ninguna jefatura — esa asignación es
-// trabajo de master/gerente.
-async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, puestoLider) {
-  if (!puestoLider) return false;
+// ¿El empleado dueño de esta clave de horas_extra pertenece al departamento
+// que lidera esta jefatura? El departamento sale de DEPARTAMENTO_MINISTERIO
+// en el puesto del empleado (ej. "COCINA" agrupa Cocinero A, Cocinero B,
+// Panadero y Steward — así lo clasifica el catálogo del Ministerio de
+// Trabajo). Un registro "sinmatch-" (todavía sin empleado identificado)
+// nunca pertenece a ninguna jefatura — esa asignación es trabajo de
+// master/gerente.
+async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departamentoLider) {
+  if (!departamentoLider) return false;
   const empleadoKey = claveHorasExtra.split(":")[1] || "";
   if (!empleadoKey || empleadoKey.startsWith("sinmatch-")) return false;
 
@@ -72,12 +75,14 @@ async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, puestoLider
   const puesto = await valorDeClave(propiedad, PUESTO_PREFIX + empleado.PUESTO_KEY);
   if (!puesto) return false;
 
-  return puesto.JEFE_INMEDIATO === puestoLider;
+  return puesto.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
 
 // ¿Puede este usuario escribir en esta clave? master/gerente: todo, como
-// siempre. jefatura: solo horas_extra: de su propio equipo. Cualquier otro
-// caso (incluido colaborador) queda fuera.
+// siempre. jefatura: solo horas_extra: de su propio departamento (guardado
+// en usuarios.puesto — pese al nombre de la columna, para una cuenta de
+// jefatura ese campo guarda el departamento que lidera, no un puesto
+// puntual). Cualquier otro caso (incluido colaborador) queda fuera.
 async function puedeEscribirClave(usuario, propiedad, clave) {
   if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {

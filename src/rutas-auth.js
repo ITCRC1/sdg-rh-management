@@ -207,7 +207,7 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
     }
     if (rol === "jefatura" && !String(b.puesto || "").trim()) {
       return res.status(400).json({
-        error: "Las cuentas de jefatura necesitan el puesto que lideran (el mismo texto exacto que \"Jefatura inmediata\" en el catálogo de Puestos), para saber a quién le aprueban horas.",
+        error: "Las cuentas de jefatura necesitan el departamento que lideran (el mismo departamento que el puesto de sus subalternos en el catálogo de Puestos), para saber a quién le aprueban horas.",
       });
     }
     const problema = A.validarPassword(password);
@@ -265,7 +265,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
       }
       if (!puestoFinal) {
         return res.status(400).json({
-          error: "Las cuentas de jefatura necesitan el puesto que lideran (el mismo texto exacto que \"Jefatura inmediata\" en el catálogo de Puestos), para saber a quién le aprueban horas.",
+          error: "Las cuentas de jefatura necesitan el departamento que lideran (el mismo departamento que el puesto de sus subalternos en el catálogo de Puestos), para saber a quién le aprueban horas.",
         });
       }
     }
