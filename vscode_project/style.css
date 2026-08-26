@@ -159,8 +159,28 @@
     cursor:pointer; transition:border-color .15s, transform .1s; text-align:center;
   }
   .propiedad-card:hover{ border-color:var(--gold); transform:translateY(-2px); }
-  .propiedad-card img{ max-width:100%; max-height:60px; object-fit:contain; margin-bottom:10px; }
+  .propiedad-card-logo{
+    width:74px; height:74px; margin:0 auto 10px; border-radius:50%; overflow:hidden;
+    background:#fff; border:1px solid var(--paper-line); box-shadow:0 1px 4px rgba(0,0,0,.08);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .propiedad-card-logo img{ max-width:76%; max-height:76%; object-fit:contain; }
   .propiedad-card-name{ font-size:12.5px; font-weight:700; color:var(--ink); }
+
+  /* Un giro completo al entrar al selector de propiedades — cada logo con un
+     pequeño retraso escalonado (ver estilo inline "animation-delay" en el JS)
+     para que no giren todos en bloque, se ve más orgánico. Se reproduce solo
+     una vez porque renderPropiedadGate() vuelve a construir el DOM cada vez
+     que se abre el selector, así el navegador siempre la ve como "recién
+     insertada" y la corre de nuevo. */
+  @keyframes girarLogoPropiedad{
+    from{ transform:rotate(0deg); }
+    to{ transform:rotate(360deg); }
+  }
+  .propiedad-card-logo{ animation:girarLogoPropiedad .7s ease-out both; }
+  @media (prefers-reduced-motion: reduce){
+    .propiedad-card-logo{ animation:none; }
+  }
   .propiedad-actual-badge{
     display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.14);
     border-radius:20px; padding:4px 12px; font-size:11px; font-weight:700; color:#fff;

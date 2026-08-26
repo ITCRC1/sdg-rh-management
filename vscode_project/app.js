@@ -3401,9 +3401,14 @@ function logoHeaderHtml(){
 // ---------- multi-property gate ----------
 function renderPropiedadGate(){
   const grid = document.getElementById("propiedad-gate-grid");
-  grid.innerHTML = PROPIEDADES_MAESTRAS.map(p => `
+  // Retraso escalonado por tarjeta (0, 90, 180... ms) para que el giro de
+  // cada logo no arranque exactamente al mismo tiempo — se ve más orgánico
+  // que si giraran todos en bloque perfectamente sincronizados.
+  grid.innerHTML = PROPIEDADES_MAESTRAS.map((p, i) => `
     <div class="propiedad-card" onclick="seleccionarPropiedad('${p.id}')">
-      <img src="${p.logo}" alt="${escapeHtml(p.nombre)}">
+      <div class="propiedad-card-logo" style="animation-delay:${i * 90}ms;">
+        <img src="${p.logo}" alt="${escapeHtml(p.nombre)}">
+      </div>
       <div class="propiedad-card-name">${escapeHtml(p.nombre)}</div>
     </div>`).join("");
 }
