@@ -47,6 +47,12 @@
 </head>
 <body>
 
+<!-- app-shell: columna izquierda fija (app-header + main-navbar, reetiquetados
+     visualmente como sidebar vía CSS) + columna derecha con todo lo demás.
+     Ningún id ni la lógica de showTab/toggleNavMenu cambia — solo se
+     reubica visualmente lo mismo que ya existía. -->
+<div class="app-shell">
+<aside class="app-sidebar">
 <div class="app-header">
   <div onclick="showTab('inicio')" style="cursor:pointer;" title="Ir al Inicio">
     <div class="brand-tag" id="brand-tag">🏠 SDG RH Management · Osa Peninsula</div>
@@ -116,6 +122,10 @@
     </div>
   </div>
 </div>
+</aside>
+
+<div class="app-main">
+<div class="app-topbar" id="app-topbar"></div>
 
 <div class="toolbar" id="form-toolbar" style="display:none;">
   <button class="btn primary" id="update-btn" onclick="updateContract()" style="display:none;">🔄 Actualizar</button>
@@ -346,6 +356,9 @@
     <p style="font-size:11.5px;color:var(--ink-soft); padding:0 4px 12px;">El PDF se genera exactamente igual a como se ve en la Vista previa (mismas columnas, colores y saltos de página). Si necesitas números de página automáticos, actívalos con la casilla "Encabezados y pies de página" del propio diálogo de impresión del navegador.</p>
   </div>
 </main>
+
+</div><!-- /app-main -->
+</div><!-- /app-shell -->
 
 <script src="app.js"></script>
 </body>

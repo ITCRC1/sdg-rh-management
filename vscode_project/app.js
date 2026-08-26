@@ -238,6 +238,7 @@ async function entrarConSesion(){
   // y esa elección viaja en cada llamada a la API (ver storage-api.js).
   if (u.propiedadId) setPropiedadActual(u.propiedadId);
   aplicarModoSegunRol(u.rol);
+  renderAppTopbar();
   await continuarInicioApp();
 }
 
@@ -3428,6 +3429,7 @@ async function seleccionarPropiedad(id){
   setPropiedadActual(id);
   document.getElementById("propiedad-gate").classList.remove("open");
   renderPropiedadBadge();
+  renderAppTopbar();
   currentKey = null;
   currentEmpKeyForContract = null;
   currentEmpKeyForLetter = null;
@@ -4561,6 +4563,78 @@ function renderFaqLaboral(){
   panel.innerHTML = html;
 }
 
+// Traduce el prefijo de una clave guardada ("contrato:...", "empleados:...")
+// a una etiqueta legible para el feed de actividad — la clave técnica no le
+// dice nada a quien está leyendo el dashboard.
+function etiquetaClaveActividad(clave){
+  const c = String(clave || "");
+  if (c.startsWith("contrato:")) return "un contrato";
+  if (c.startsWith(CATALOGS.empleados.prefix)) return "un empleado";
+  if (c.startsWith(CATALOGS.empresas.prefix)) return "una empresa";
+  if (c.startsWith(CATALOGS.puestos.prefix)) return "un puesto";
+  if (c.startsWith("permiso:")) return "una acción de personal";
+  return "un documento";
+}
+function etiquetaAccionActividad(accion){
+  const a = String(accion || "").toLowerCase();
+  if (a.includes("crear")) return "creó";
+  if (a.includes("elimin")) return "eliminó";
+  if (a.includes("archiv")) return "archivó";
+  return "actualizó";
+}
+// Relativo tipo "Hace 25 min" para el feed de actividad; cae a fecha/hora
+// normal pasada una semana, donde "hace X días" deja de ser útil de un vistazo.
+function formatoRelativoActividad(iso){
+  if (!iso) return "";
+  try{
+    const d = new Date(iso);
+    const diffMs = Date.now() - d.getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return "Recién";
+    if (min < 60) return `Hace ${min} min`;
+    const horas = Math.floor(min / 60);
+    if (horas < 24) return `Hace ${horas} h`;
+    const dias = Math.floor(horas / 24);
+    if (dias < 7) return `Hace ${dias} d`;
+    return d.toLocaleDateString("es-CR", { day:"2-digit", month:"2-digit" });
+  }catch(e){ return ""; }
+}
+
+// Barra fija arriba del contenido (fuera de inicio-panel, por eso vive
+// aparte de renderInicio): propiedad activa, campana de alertas y quién
+// tiene la sesión abierta. Se refresca en login, al cambiar de propiedad y
+// cada vez que se entra a Inicio.
+async function renderAppTopbar(){
+  const wrap = document.getElementById("app-topbar");
+  if (!wrap) return;
+  const prop = getPropiedadActual();
+  const rol = window.sdgApi ? window.sdgApi.rol() : null;
+  const nombre = (trabajadorActual && trabajadorActual.nombre) || "";
+  const inicial = nombre ? nombre.trim().charAt(0).toUpperCase() : "?";
+  const etiquetasRol = { master: "Master", gerente: "Gerente", colaborador: "Colaborador" };
+
+  let alertas = 0;
+  try{
+    if (rol === "master" || rol === "gerente"){
+      const { faltantes } = await evaluarColillasFaltantes();
+      alertas += faltantes.length;
+    }
+    const contratosRes = await window.storage.list("contrato:", false);
+    const contratoKeys = (contratosRes && contratosRes.keys) || [];
+    const contratos = await Promise.all(contratoKeys.map(async k => {
+      try{ const r = await window.storage.get(k, false); return r && r.value ? JSON.parse(r.value) : {}; }catch(e){ return {}; }
+    }));
+    alertas += contratos.filter(d => estadoVencimiento(d)).length;
+  }catch(e){ /* si falla el conteo, se muestra el topbar igual sin marcar la campana */ }
+
+  wrap.innerHTML = `
+    <div class="topbar-left">${prop ? `🏨 Trabajando en <b>${escapeHtml(prop.nombre)}</b>` : ""}</div>
+    <div class="topbar-right">
+      <div class="topbar-bell" title="${alertas} alerta(s) pendiente(s)" onclick="showTab('inicio');">🔔${alertas > 0 ? `<span class="n">${alertas}</span>` : ""}</div>
+      <div class="topbar-who"><div class="av">${inicial}</div><div>${escapeHtml(nombre || "—")}<span class="rol">${etiquetasRol[rol] || ""}</span></div></div>
+    </div>`;
+}
+
 async function renderInicio(){
   const panel = document.getElementById("inicio-panel");
   panel.innerHTML = `<div class="empty-state">Cargando resumen…</div>`;
@@ -4586,27 +4660,18 @@ async function renderInicio(){
     const empleadosArchivados = empleados.filter(e => e.ARCHIVADO);
     const handbooksPendientes = empleadosActivos.filter(e => !e.HANDBOOK_FIRMADO_FECHA);
 
-    const card = (icono, numero, etiqueta, accion, color) => `
-      <div class="section-card" style="border-color:${color || 'var(--paper-line)'}; cursor:pointer;" onclick="${accion}">
-        <div class="section-body" style="display:flex; align-items:center; gap:12px; padding:14px;">
-          <div style="font-size:26px;">${icono}</div>
-          <div>
-            <div style="font-size:20px; font-weight:800; color:var(--navy-deep); line-height:1;">${numero}</div>
-            <div style="font-size:12px; color:var(--ink-soft);">${etiqueta}</div>
-          </div>
-        </div>
-      </div>`;
-
     // Banner "toca subir colillas" — solo master/gerente (quienes pueden
     // subirlas), y solo mientras el período activo del calendario fijo (1 y
     // 16) siga con empleados elegibles sin colilla archivada. No tiene botón
     // de "ocultar por ahora" a propósito: desaparece solo cuando de verdad
     // queda resuelto, para que nadie lo posponga indefinidamente.
     let bannerColillasHtml = "";
+    let colillasFaltantesCount = 0;
     const rolActualInicio = window.sdgApi ? window.sdgApi.rol() : null;
     if (rolActualInicio === "master" || rolActualInicio === "gerente"){
       try{
         const { faltantes, periodoTexto } = await evaluarColillasFaltantes();
+        colillasFaltantesCount = faltantes.length;
         if (faltantes.length > 0){
           bannerColillasHtml = `<div class="section-card" style="border-color:#B3261E; margin-bottom:14px; cursor:pointer;" onclick="mostrarModalColillasFaltantes();">
             <div class="section-body" style="padding:14px; display:flex; align-items:center; gap:12px;">
@@ -4621,39 +4686,64 @@ async function renderInicio(){
       }catch(e){ /* si falla el chequeo, no se muestra el banner — nunca debe romper el portal */ }
     }
 
-    let html = bannerColillasHtml + `<div style="margin-bottom:14px;">
-      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">👋 Resumen general</div>
-      <div style="font-size:12px; color:var(--ink-soft);">Toca cualquier tarjeta para ir directo a esa sección.</div>
-    </div>`;
-    html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">`;
-    html += card("🗂️", contratoKeys.length, "Contratos guardados", "showTab('contracts')");
-    html += card("👥", empleadosActivos.length, "Empleados activos", "showTab('empleados')");
-    html += card("🏨", empresaKeys.length, "Empresas registradas", "showTab('empresas')");
-    html += card("🗄️", empleadosArchivados.length, "Empleados archivados", "showTab('archivo')");
-    html += `</div>`;
+    const propActualInicio = getPropiedadActual();
+    const nombreUsuario = ((trabajadorActual && trabajadorActual.nombre) || "").split(" ")[0];
+    const saludo = nombreUsuario ? `Buenos días, ${escapeHtml(nombreUsuario)} 👋` : "👋 Resumen general";
 
+    let html = bannerColillasHtml + `<div style="margin-bottom:14px;">
+      <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">${saludo}</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Centro de control de Recursos Humanos${propActualInicio ? " — " + escapeHtml(propActualInicio.nombre) : ""}</div>
+    </div>`;
+
+    html += `<div class="kpi-grid">
+      <div class="kpi-card c-navy" onclick="showTab('empleados')"><div class="ic">👥</div><div class="val">${empleadosActivos.length}</div><div class="lbl">Empleados activos</div></div>
+      <div class="kpi-card c-gold" onclick="showTab('contracts')"><div class="ic">🗂️</div><div class="val">${contratoKeys.length}</div><div class="lbl">Contratos guardados</div></div>
+      <div class="kpi-card c-warn" onclick="mostrarModalColillasFaltantes();"><div class="ic">💰</div><div class="val">${colillasFaltantesCount}</div><div class="lbl">Colillas pendientes</div></div>
+      <div class="kpi-card c-danger" onclick="showTab('archivo')"><div class="ic">🗄️</div><div class="val">${empleadosArchivados.length}</div><div class="lbl">Empleados archivados</div></div>
+    </div>`;
+
+    const alertRows = [];
     if (vencenPronto.length > 0){
-      html += `<div class="section-card" style="border-color:#D9A54A; margin-bottom:12px; cursor:pointer;" onclick="showTab('contracts')">
-        <div class="section-body" style="padding:14px;">
-          <div style="font-weight:700; color:#8a6d1f;">⚠️ ${vencenPronto.length} contrato(s) por vencer o vencidos</div>
-          <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">Toca para revisarlos en Contratos.</div>
-        </div>
-      </div>`;
+      alertRows.push(`<div class="dash-alert-row" onclick="showTab('contracts')"><span class="sev d"></span><span class="txt">${vencenPronto.length} contrato(s) por vencer o vencidos</span><span class="go">Ver →</span></div>`);
     }
     if (handbooksPendientes.length > 0){
-      html += `<div class="section-card" style="border-color:#D9A54A; margin-bottom:12px; cursor:pointer;" onclick="showTab('empleados')">
-        <div class="section-body" style="padding:14px;">
-          <div style="font-weight:700; color:#8a6d1f;">📋 ${handbooksPendientes.length} empleado(s) sin firmar el Handbook</div>
-          <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">Toca para revisarlos en Empleados.</div>
-        </div>
-      </div>`;
+      alertRows.push(`<div class="dash-alert-row" onclick="showTab('empleados')"><span class="sev w"></span><span class="txt">${handbooksPendientes.length} empleado(s) sin firmar el Handbook</span><span class="go">Ver →</span></div>`);
     }
+    if (colillasFaltantesCount > 0){
+      alertRows.push(`<div class="dash-alert-row" onclick="mostrarModalColillasFaltantes();"><span class="sev w"></span><span class="txt">${colillasFaltantesCount} empleado(s) sin colilla del período actual</span><span class="go">Ver →</span></div>`);
+    }
+
+    let actividadHtml = `<div class="empty-state" style="padding:10px 0; font-size:12px;">Sin actividad reciente.</div>`;
+    try{
+      const hist = window.sdgApi ? await window.sdgApi.historial(null, 6) : null;
+      const filas = (hist && hist.actividad) || [];
+      if (filas.length){
+        actividadHtml = filas.map(f => {
+          const quien = (f.actor_email || "").split("@")[0] || "—";
+          const inicial = quien.charAt(0).toUpperCase();
+          return `<div class="dash-activity-row"><div class="av2">${escapeHtml(inicial)}</div><div><span class="who2">${escapeHtml(quien)}</span> ${etiquetaAccionActividad(f.accion)} ${etiquetaClaveActividad(f.clave)}</div><div class="when">${formatoRelativoActividad(f.creado_en)}</div></div>`;
+        }).join("");
+      }
+    }catch(e){ /* si falla el historial, se deja el estado vacío por defecto */ }
+
+    html += `<div class="dash-row">
+      <div class="dash-panel">
+        <div class="dash-panel-title">⚠️ Alertas de RR.HH.</div>
+        ${alertRows.length ? alertRows.join("") : `<div class="empty-state" style="padding:10px 0; font-size:12px;">Sin alertas pendientes — todo al día.</div>`}
+      </div>
+      <div class="dash-panel">
+        <div class="dash-panel-title">Actividad reciente</div>
+        ${actividadHtml}
+      </div>
+    </div>`;
 
     html += `<button class="btn primary" style="width:100%; padding:14px; font-size:14.5px; margin-top:6px;" onclick="showTab('contracts'); createNewFromTab();">🌱 Crear contrato nuevo</button>`;
 
     panel.innerHTML = html;
+    renderAppTopbar();
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar el resumen.</div>`;
+    renderAppTopbar();
   }
 }
 

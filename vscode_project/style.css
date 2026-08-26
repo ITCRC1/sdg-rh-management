@@ -533,7 +533,8 @@
   .doc-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
 
   @media print{
-    .app-header, .tabs, .toolbar, .status-msg, .toast, #form-panel, #contracts-panel, #empresas-panel, #puestos-panel, #propiedades-panel, #empleados-panel, #format-panel, .doc-footer-note{ display:none !important; }
+    .app-sidebar, .app-topbar, .app-header, .tabs, .toolbar, .status-msg, .toast, #form-panel, #contracts-panel, #empresas-panel, #puestos-panel, #propiedades-panel, #empleados-panel, #format-panel, .doc-footer-note{ display:none !important; }
+    .app-shell, .app-main{ display:block !important; }
     body{ background:#fff; }
     .doc{ max-width:none; min-width:0; padding:0; }
     .doc-scroll{ overflow-x:visible; }
@@ -568,3 +569,118 @@ body.solo-lectura select{
 @media print{
   .barra-rol{ display:none !important; }
 }
+
+/* ==========================================================================
+   Centro de Control — skin de sidebar. app-header y #main-navbar (antes
+   una barra horizontal arriba) se reubican dentro de .app-sidebar sin
+   cambiar ningún id ni la lógica de showTab()/toggleNavMenu(); solo se
+   reposicionan visualmente. .app-main es la columna de contenido, con un
+   topbar liviano (propiedad + usuario + alertas) arriba de lo que ya existía.
+   ========================================================================== */
+.app-shell{ display:flex; align-items:stretch; min-height:100vh; }
+.app-sidebar{
+  flex:0 0 232px; width:232px; display:flex; flex-direction:column;
+  position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+}
+.app-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+
+.app-sidebar .app-header{ padding:20px 16px 14px; }
+.app-sidebar .app-header::after{ font-size:64px; right:-10px; top:-8px; }
+.app-sidebar .app-header h1{ font-size:14.5px; line-height:1.3; }
+
+.app-sidebar .tabs.navbar-dropdowns{
+  flex-direction:column; background:transparent; border-bottom:none;
+  position:static; overflow:visible; padding:4px 10px 16px; gap:2px; flex:1;
+}
+.app-sidebar .nav-dd{ flex:none; }
+.app-sidebar .nav-dd-btn{
+  width:100%; text-align:left; padding:10px 10px; font-size:12.5px; font-weight:700;
+  color:#D9E3D6; border-bottom:none; border-radius:8px;
+  display:flex; align-items:center; justify-content:space-between; gap:6px;
+}
+.app-sidebar .nav-dd-btn:hover{ background:rgba(255,255,255,.08); color:#fff; }
+.app-sidebar .nav-dd-btn.active{ background:var(--gold); color:var(--navy-deep); border-bottom:none; }
+.app-sidebar .nav-dd-menu{
+  position:static; display:none; min-width:0; max-width:none; margin:2px 0 4px;
+  background:rgba(0,0,0,.18); border:none; border-radius:8px; box-shadow:none;
+}
+.app-sidebar .nav-dd-menu.open{ display:block; animation:none; }
+.app-sidebar .nav-dd-menu button{
+  background:transparent; color:#EDE3D3; border-bottom:1px solid rgba(255,255,255,.08);
+  padding:9px 12px 9px 20px; font-size:12.5px;
+}
+.app-sidebar .nav-dd-menu button:last-child{ border-bottom:none; }
+.app-sidebar .nav-dd-menu button:hover{ background:rgba(255,255,255,.08); }
+.app-sidebar .nav-dd-sep{ background:transparent; color:#B9A98F; padding:8px 12px 2px 20px; border-bottom:none; }
+.app-sidebar #propiedad-actual-badge-wrap:empty{ display:none; }
+.app-sidebar #propiedad-actual-badge-wrap{ padding:0 16px 12px; }
+
+@media (max-width:880px){
+  .app-shell{ flex-direction:column; }
+  .app-sidebar{ position:static; width:100%; height:auto; flex:none; }
+  .app-sidebar .tabs.navbar-dropdowns{ padding-bottom:8px; }
+}
+
+/* ---------- Topbar ---------- */
+.app-topbar{
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:12px 20px; background:#fff; border-bottom:1px solid var(--paper-line);
+}
+.app-topbar:empty{ display:none; }
+.topbar-left{ font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; gap:8px; min-width:0; }
+.topbar-left b{ color:var(--ink); }
+.topbar-right{ display:flex; align-items:center; gap:16px; flex:0 0 auto; }
+.topbar-bell{ position:relative; font-size:16px; cursor:pointer; line-height:1; }
+.topbar-bell .n{
+  position:absolute; top:-7px; right:-9px; background:#B3261E; color:#fff; font-size:9px;
+  font-weight:700; border-radius:20px; padding:1px 5px; min-width:14px; text-align:center;
+}
+.topbar-who{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink); white-space:nowrap; }
+.topbar-who .av{
+  width:28px; height:28px; border-radius:50%; background:var(--navy); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11.5px; flex:0 0 28px;
+}
+.topbar-who .rol{ display:block; font-size:10.5px; color:var(--ink-soft); font-weight:400; }
+
+/* ---------- Dashboard: tarjetas KPI, alertas y actividad ---------- */
+.kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+@media (max-width:760px){ .kpi-grid{ grid-template-columns:1fr 1fr; } }
+.kpi-card{
+  background:#fff; border:1px solid var(--paper-line); border-radius:14px; padding:15px 16px;
+  cursor:pointer; transition:box-shadow .15s, transform .1s;
+}
+.kpi-card:hover{ box-shadow:0 4px 16px rgba(22,40,30,0.08); transform:translateY(-1px); }
+.kpi-card .ic{
+  width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+  font-size:15px; margin-bottom:9px;
+}
+.kpi-card.c-navy .ic{ background:rgba(76,93,57,.14); }
+.kpi-card.c-gold .ic{ background:rgba(194,161,90,.2); }
+.kpi-card.c-warn .ic{ background:rgba(184,134,59,.15); }
+.kpi-card.c-danger .ic{ background:rgba(179,38,30,.12); }
+.kpi-card .val{ font-family:Georgia,"Times New Roman",serif; font-size:22px; font-weight:700; color:var(--navy-deep); line-height:1; }
+.kpi-card .lbl{ font-size:11.5px; color:var(--ink-soft); margin-top:4px; }
+
+.dash-row{ display:grid; grid-template-columns:1.3fr 1fr; gap:14px; margin-bottom:14px; }
+@media (max-width:760px){ .dash-row{ grid-template-columns:1fr; } }
+.dash-panel{ background:#fff; border:1px solid var(--paper-line); border-radius:14px; padding:16px 18px; }
+.dash-panel-title{ font-size:13px; font-weight:800; color:var(--navy-deep); margin-bottom:10px; }
+
+.dash-alert-row{
+  display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--paper-line);
+  font-size:12.5px; cursor:pointer;
+}
+.dash-alert-row:last-child{ border-bottom:none; }
+.dash-alert-row .sev{ width:8px; height:8px; border-radius:50%; flex:0 0 8px; }
+.dash-alert-row .sev.d{ background:#B3261E; } .dash-alert-row .sev.w{ background:#B8863B; }
+.dash-alert-row .txt{ flex:1; color:var(--ink); }
+.dash-alert-row .go{ font-size:11px; color:#8a6c2c; font-weight:700; white-space:nowrap; }
+
+.dash-activity-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--paper-line); font-size:12px; }
+.dash-activity-row:last-child{ border-bottom:none; }
+.dash-activity-row .av2{
+  width:24px; height:24px; border-radius:50%; background:var(--paper); color:var(--ink-soft);
+  display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:700; flex:0 0 24px;
+}
+.dash-activity-row .who2{ font-weight:700; color:var(--ink); }
+.dash-activity-row .when{ margin-left:auto; color:var(--ink-soft); font-size:10.5px; white-space:nowrap; }
