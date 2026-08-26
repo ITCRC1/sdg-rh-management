@@ -85,6 +85,8 @@
       <div class="nav-dd-sep">Despidos</div>
       <button onclick="navCloseAndRun(function(){ prepararDespidoTipo('con_responsabilidad'); })">⚖️ Despido — Con responsabilidad</button>
       <button onclick="navCloseAndRun(function(){ prepararDespidoTipo('sin_responsabilidad'); })">⚖️ Despido — Sin responsabilidad</button>
+      <div class="nav-dd-sep">Amonestaciones</div>
+      <button onclick="navCloseAndRun(function(){ showTab('amonestacionform'); })">⚠️ Nueva amonestación</button>
       <div class="nav-dd-sep">Recomendación laboral</div>
       <button onclick="navCloseAndRun(function(){ showTab('recomform'); })">📝 Nueva recomendación</button>
       <div class="nav-dd-sep">Permiso sin goce salarial</div>
@@ -122,6 +124,9 @@
 </div>
 <div class="toolbar" id="despidoform-toolbar" style="display:none;">
   <button class="btn gold" onclick="mostrarSoloDespido(); descargarDespidoPDF();">⚖️ Descargar carta de despido</button>
+</div>
+<div class="toolbar" id="amonestacionform-toolbar" style="display:none;">
+  <button class="btn gold" onclick="descargarAmonestacionPDF()">⚠️ Generar y descargar amonestación</button>
 </div>
 <div class="toolbar" id="recomform-toolbar" style="display:none;">
   <button class="btn" onclick="guardarBorradorRecomendacion()">💾 Guardar</button>
@@ -232,6 +237,7 @@
   </div>
   <div id="form-panel" style="display:none;"></div>
   <div id="despidoform-panel" style="display:none;"></div>
+  <div id="amonestacionform-panel" style="display:none;"></div>
   <div id="recomform-panel" style="display:none;"></div>
   <div id="permisoform-panel" style="display:none;"></div>
 
@@ -264,6 +270,10 @@
 
   <div id="despido-wrap" style="display:none;">
     <div class="doc-scroll"><div class="doc" id="despido-root"></div></div>
+  </div>
+
+  <div id="amonestacion-wrap" style="display:none;">
+    <div class="doc-scroll"><div class="doc" id="amonestacion-root"></div></div>
   </div>
 
   <div id="recomendacion-wrap" style="display:none;">

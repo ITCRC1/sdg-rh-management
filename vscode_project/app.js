@@ -591,6 +591,58 @@ const CATALOGS = {
     metaFields: ["DEPARTAMENTO_EMP","IDENTIFICACION_EMP"],
   },
 };
+
+// Catálogo de faltas del Handbook/Reglamento Interno "THE COSTA RICA COLLECTION"
+// (2026), clasificadas por gravedad y por el tipo de amonestación que la
+// legislación laboral costarricense faculta para cada caso. La regla general:
+// una falta leve y corregible se amonesta VERBAL la primera vez; una falta que
+// se repite tras esa advertencia, o que ya es moderada/grave por sí misma, debe
+// quedar ESCRITA — el artículo 81 inciso i) del Código de Trabajo, en relación
+// con el 72, exige un apercibimiento previo por escrito para que la reincidencia
+// habilite el despido. Las faltas verdaderamente graves (violencia, hostigamiento
+// sexual, delito contra la propiedad, poner en riesgo la seguridad de terceros,
+// abandono de funciones) encajan directo en alguna causal del artículo 81 y no
+// requieren amonestación previa para proceder al despido — igual se documentan
+// por escrito porque solo lo escrito podrá alegarse después (art. 82 CT).
+// "tipo": "verbal" | "escrita" | "escrita_o_directa" (esta última = falta grave;
+// procede escrita+suspensión o, según la comprobación de los hechos, despido
+// directo sin necesidad de amonestación previa).
+const AMONESTACIONES_CATALOGO = [
+  { id: "conducta_leve", categoria: "Código de conducta", infraccion: "Incumplimiento leve de una política interna del manual, primera vez, sin daño ni riesgo para terceros.", gravedad: "Leve", tipo: "verbal", baseLegal: "Potestad disciplinaria del patrono, con proporcionalidad (Reglamento Interno; Código de Trabajo, principio general)." },
+  { id: "conducta_reincidente", categoria: "Código de conducta", infraccion: "Repetir una falta leve después de ya haber recibido una amonestación verbal por lo mismo.", gravedad: "Moderada", tipo: "escrita", baseLegal: "Art. 81 inciso i) en relación con el art. 72 CT — exige apercibimiento escrito previo para que la reincidencia habilite el despido." },
+  { id: "conflicto_interes_no_informado", categoria: "Conflictos de interés", infraccion: "No informar oportunamente un conflicto de interés real o aparente (relación comercial personal con proveedor/cliente, actividad externa que interfiere con el puesto).", gravedad: "Moderada", tipo: "escrita", baseLegal: "Reglamento Interno (Conflictos de Interés); puede escalar al art. 81 inciso l) CT si genera perjuicio comprobado a la empresa." },
+  { id: "regalo_no_autorizado", categoria: "Conflictos de interés", infraccion: "Aceptar regalos, comisiones, descuentos o beneficios de proveedores/huéspedes sin autorización expresa de Gerencia.", gravedad: "Moderada", tipo: "escrita", baseLegal: "Reglamento Interno (Conflictos de Interés); si hay apropiación indebida de fondos o bienes, aplica directo el art. 81 inciso d) CT." },
+  { id: "info_confidencial_beneficio", categoria: "Conflictos de interés", infraccion: "Usar información confidencial de la empresa para beneficio personal.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Art. 81 inciso e) CT (revelar secretos técnicos o comerciales) o inciso l) (falta grave a las obligaciones del contrato)." },
+  { id: "presentarse_bajo_efectos", categoria: "Drogas y alcohol", infraccion: "Presentarse a laborar bajo los efectos de drogas ilegales o alcohol.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Reglamento Interno (prohibición estricta); si compromete la seguridad propia o de terceros, art. 81 inciso f) CT (imprudencia o descuido inexcusable)." },
+  { id: "posesion_sustancias", categoria: "Drogas y alcohol", infraccion: "Poseer, consumir, distribuir o vender sustancias ilegales dentro de las instalaciones o durante actividades laborales.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Art. 81 inciso l) CT (falta grave a las obligaciones del contrato); puede constituir además delito." },
+  { id: "alcohol_actividad_autorizada", categoria: "Drogas y alcohol", infraccion: "Consumo de alcohol en una actividad autorizada por la empresa que afecta el comportamiento profesional, primera vez, sin incidente mayor.", gravedad: "Leve", tipo: "verbal", baseLegal: "Reglamento Interno (Drogas y Alcohol)." },
+  { id: "no_usar_epp", categoria: "Salud y seguridad ocupacional", infraccion: "No utilizar el equipo de protección personal (EPP) asignado para el puesto.", gravedad: "Leve", tipo: "verbal", baseLegal: "Reglamento Interno; reincidencia tras advertencia escala al art. 81 inciso h) CT (negativa manifiesta y reiterada a acatar medidas de seguridad)." },
+  { id: "no_reportar_incidente", categoria: "Salud y seguridad ocupacional", infraccion: "No reportar inmediatamente un accidente, lesión o condición insegura al supervisor.", gravedad: "Moderada", tipo: "escrita", baseLegal: "Reglamento Interno (Salud, Seguridad y Protección en el Lugar de Trabajo)." },
+  { id: "imprudencia_grave_seguridad", categoria: "Salud y seguridad ocupacional", infraccion: "Imprudencia o descuido inexcusable que compromete la seguridad de compañeros, huéspedes o de sí mismo.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Art. 81 inciso f) CT." },
+  { id: "negativa_normas_seguridad", categoria: "Salud y seguridad ocupacional", infraccion: "Negativa manifiesta y reiterada a seguir las medidas de seguridad o instrucciones claras de trabajo, tras haber sido advertido.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Art. 81 inciso h) CT." },
+  { id: "info_confidencial_mal_manejo", categoria: "Privacidad y datos", infraccion: "Acceso no autorizado, divulgación indebida, o manejo inseguro de información confidencial de clientes, colaboradores o la empresa.", gravedad: "Moderada", tipo: "escrita", baseLegal: "Ley N.° 8968 (Protección de Datos Personales); según el daño causado puede escalar al art. 81 inciso e) o l) CT." },
+  { id: "comentario_discriminatorio_aislado", categoria: "Inclusión y prevención del acoso", infraccion: "Comentario u observación discriminatoria, ofensiva o humillante, aislada — sin patrón de repetición comprobado.", gravedad: "Moderada", tipo: "escrita", baseLegal: "Reglamento Interno (Política de Inclusión, Diversidad y Prevención del Acoso — cero tolerancia); documentar por escrito desde la primera vez, dada la política declarada de la empresa." },
+  { id: "acoso_hostigamiento_reiterado", categoria: "Inclusión y prevención del acoso", infraccion: "Acoso u hostigamiento laboral reiterado: burlas, amenazas, intimidación, exclusión deliberada o maltrato laboral comprobado.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Art. 81 incisos b), c) o l) CT, según corresponda a quién se dirigió la conducta." },
+  { id: "hostigamiento_sexual", categoria: "Inclusión y prevención del acoso", infraccion: "Hostigamiento sexual comprobado (conducta sexual no deseada, reiterada o grave).", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Ley N.° 7476 contra el Hostigamiento Sexual en el Empleo y la Docencia; art. 81 inciso a) o l) CT — despido directo tras investigación con debido proceso." },
+  { id: "represalia_denuncia", categoria: "Inclusión y prevención del acoso", infraccion: "Represalias contra quien presentó una denuncia de buena fe, participó como testigo o colaboró en una investigación interna.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Ley N.° 7476; art. 81 inciso l) CT." },
+  { id: "uniforme_imagen", categoria: "Uniforme e imagen personal", infraccion: "No usar el uniforme oficial asignado, o incumplir las normas de presentación e higiene personal del manual.", gravedad: "Leve", tipo: "verbal", baseLegal: "Reglamento Interno (Código de Vestimenta e Imagen Personal)." },
+  { id: "uniforme_fuera_horario", categoria: "Uniforme e imagen personal", infraccion: "Usar el uniforme fuera del horario laboral o en actividades ajenas a la empresa, sin autorización.", gravedad: "Leve", tipo: "verbal", baseLegal: "Reglamento Interno (Código de Vestimenta e Imagen Personal)." },
+  { id: "reciclaje_residuos", categoria: "Sostenibilidad", infraccion: "No cumplir con la normativa de reciclaje y manejo responsable de residuos vigente en la propiedad.", gravedad: "Leve", tipo: "verbal", baseLegal: "Reglamento Interno (obligación explícita para todas las propiedades del grupo, sin excepción)." },
+  { id: "cwl_objeto_prohibido_leve", categoria: "CWL — ingreso a la propiedad", infraccion: "Ingresar a la propiedad con plástico de un solo uso u otro objeto prohibido de bajo riesgo (primera vez).", gravedad: "Leve", tipo: "verbal", baseLegal: "Apéndice A del Reglamento Interno (Normativa Específica SCP Corcovado Wilderness Lodge)." },
+  { id: "cwl_objeto_prohibido_grave", categoria: "CWL — ingreso a la propiedad", infraccion: "Ingresar a la propiedad con armas de fuego, instrumentos peligrosos, drogas o bebidas alcohólicas.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Apéndice A del Reglamento Interno; art. 81 inciso l) CT." },
+  { id: "cwl_sin_uniforme_ingreso", categoria: "CWL — ingreso a la propiedad", infraccion: "Ingresar a la propiedad en horas laborales sin el uniforme reglamentario.", gravedad: "Leve", tipo: "verbal", baseLegal: "Apéndice A del Reglamento Interno." },
+  { id: "cwl_sin_chaleco", categoria: "CWL — seguridad", infraccion: "No usar el chaleco salvavidas obligatorio durante el transporte en embarcaciones del hotel.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "Apéndice A del Reglamento Interno (riesgo real a la vida); art. 81 incisos f) y h) CT." },
+  { id: "cwl_habitacion_higiene", categoria: "CWL — convivencia residencial", infraccion: "Mantener la habitación asignada en mal estado de orden e higiene.", gravedad: "Leve", tipo: "verbal", baseLegal: "Apéndice A del Reglamento Interno (Convivencia en Habitaciones Residenciales)." },
+  { id: "cwl_ingreso_habitacion_ajena", categoria: "CWL — convivencia residencial", infraccion: "Ingresar a la habitación de otro colaborador sin permiso, especialmente de compañeros del sexo opuesto.", gravedad: "Grave", tipo: "escrita_o_directa", baseLegal: "El propio Reglamento Interno la tipifica expresamente como falta grave (amonestación escrita, suspensión o despido según la gravedad, Apéndice A)." },
+  { id: "cwl_ruido_nocturno", categoria: "CWL — convivencia residencial", infraccion: "Música/ruido después de las 10:00 p.m., o deambular por las instalaciones en horario nocturno.", gravedad: "Moderada", tipo: "escrita", baseLegal: "Apéndice A del Reglamento Interno — riesgo real por fauna silvestre; reincidencia o incidente real puede derivar en suspensión o despido sin responsabilidad patronal (art. 81 inciso f) CT)." },
+  { id: "cwl_salida_sin_aviso", categoria: "CWL — convivencia residencial", infraccion: "Salir de las instalaciones fuera de la jornada laboral sin avisar a gerencia para el registro de seguridad.", gravedad: "Leve", tipo: "verbal", baseLegal: "Apéndice A del Reglamento Interno." },
+  { id: "cwl_instalaciones_huespedes", categoria: "CWL — convivencia residencial", infraccion: "Usar instalaciones destinadas a huéspedes (piscinas, habitaciones, bar, restaurantes) sin autorización expresa de gerencia.", gravedad: "Moderada", tipo: "escrita", baseLegal: "Apéndice A del Reglamento Interno." },
+  { id: "cwl_no_marcar_asistencia", categoria: "CWL — horarios y asistencia", infraccion: "No marcar ingreso/salida en la máquina oficial, o presentar reportes alternativos de asistencia.", gravedad: "Leve", tipo: "verbal", baseLegal: "Apéndice A del Reglamento Interno (Horarios, Marcaje y Control de Asistencia)." },
+  { id: "cwl_horas_extra_sin_aprobar", categoria: "CWL — horarios y asistencia", infraccion: "Trabajar horas extra sin aprobación previa de la jefatura.", gravedad: "Moderada", tipo: "escrita", baseLegal: "El propio Reglamento Interno la tipifica expresamente como falta disciplinaria (Apéndice A)." },
+  { id: "cwl_no_marcar_dias_libres", categoria: "CWL — horarios y asistencia", infraccion: "No marcar la salida ni el regreso de los días libres para control de planilla.", gravedad: "Leve", tipo: "verbal", baseLegal: "Apéndice A del Reglamento Interno." },
+  { id: "otro", categoria: "Otro", infraccion: "Otra falta no listada — describir los hechos y elegir a criterio la gravedad y el tipo, según proporcionalidad.", gravedad: "", tipo: "", baseLegal: "Reglamento Interno; Código de Trabajo, principio de proporcionalidad y debido proceso." },
+];
+
 let catalogEditing = null; // { type, key } when the inline add/edit form is open
 let selectedProperties = new Set(); // property keys currently checked, for building PROPIEDADES text
 let collapsedSections = new Set(); // section titles currently collapsed (Formulario accordion)
@@ -2935,14 +2987,15 @@ async function renderCatalogTab(type){
             </div>
             <div class="emp-acciones-menu" id="emp-acciones-${escapeHtml(it.key)}">
               <button onclick="generarDespidoDeEmpleado('${k2}')">1. ⚖️ Carta de despido</button>
-              <button onclick="actualizarContratoDeEmpleado('${k2}')">2. 📄 ${contratosVinculados.length ? "Actualizar" : "Crear"} contrato</button>
-              <button onclick="actualizarHandbookDeEmpleado('${k2}')">3. 📋 Actualizar handbook</button>
-              <button onclick="generarPermisoDeEmpleado('${k2}')">4. 🗓️ Permiso sin goce salarial</button>
-              <button onclick="openCatalogForm('empleados','${k2}')">5. ✏️ Editar datos (puesto, salario, contacto...)</button>
-              <button onclick="confirmarFirmaHandbook('${k2}')">6. ✍️ Confirmar firma handbook</button>
-              <button onclick="subirContratoFirmado('${k2}')">7. 📎 Subir contrato firmado (PDF)</button>
-              <button onclick="descargarDatosCCSS('${k2}')">8. 📊 Descargar datos para planilla CCSS (Excel)</button>
-              <button onclick="archivarEmpleado('${k2}')">9. 🗄️ Archivar</button>
+              <button onclick="generarAmonestacionDeEmpleado('${k2}')">2. ⚠️ Amonestación</button>
+              <button onclick="actualizarContratoDeEmpleado('${k2}')">3. 📄 ${contratosVinculados.length ? "Actualizar" : "Crear"} contrato</button>
+              <button onclick="actualizarHandbookDeEmpleado('${k2}')">4. 📋 Actualizar handbook</button>
+              <button onclick="generarPermisoDeEmpleado('${k2}')">5. 🗓️ Permiso sin goce salarial</button>
+              <button onclick="openCatalogForm('empleados','${k2}')">6. ✏️ Editar datos (puesto, salario, contacto...)</button>
+              <button onclick="confirmarFirmaHandbook('${k2}')">7. ✍️ Confirmar firma handbook</button>
+              <button onclick="subirContratoFirmado('${k2}')">8. 📎 Subir contrato firmado (PDF)</button>
+              <button onclick="descargarDatosCCSS('${k2}')">9. 📊 Descargar datos para planilla CCSS (Excel)</button>
+              <button onclick="archivarEmpleado('${k2}')">10. 🗄️ Archivar</button>
             </div>
           </div>`;
         }).join("");
@@ -3391,6 +3444,7 @@ function showTab(which){
   document.getElementById("contracts-panel").style.display = which === "contracts" ? "block" : "none";
   document.getElementById("form-panel").style.display = which === "form" ? "block" : "none";
   document.getElementById("despidoform-panel").style.display = which === "despidoform" ? "block" : "none";
+  document.getElementById("amonestacionform-panel").style.display = which === "amonestacionform" ? "block" : "none";
   document.getElementById("recomform-panel").style.display = which === "recomform" ? "block" : "none";
   document.getElementById("permisoform-panel").style.display = which === "permisoform" ? "block" : "none";
   document.getElementById("empresas-panel").style.display = which === "empresas" ? "block" : "none";
@@ -3407,15 +3461,17 @@ function showTab(which){
   document.getElementById("recomendacion-wrap").style.display = which === "recomendacion" ? "block" : "none";
   document.getElementById("permiso-wrap").style.display = "none";
   document.getElementById("despido-wrap").style.display = "none";
+  document.getElementById("amonestacion-wrap").style.display = "none";
   document.getElementById("format-panel").style.display = which === "format" ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
+  document.getElementById("amonestacionform-toolbar").style.display = (which === "amonestacionform") ? "flex" : "none";
   document.getElementById("recomform-toolbar").style.display = (which === "recomform") ? "flex" : "none";
   document.getElementById("permisoform-toolbar").style.display = (which === "permisoform") ? "flex" : "none";
   const groupOf = {
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
     empleados:"empleados", archivo:"empleados", perfil:"empleados",
-    despidoform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos",
+    despidoform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos",
     datos:"datos",
     reporte:"ajustes", faq:"ajustes", format:"ajustes",
   };
@@ -3440,6 +3496,7 @@ function showTab(which){
   if (which === "faq") renderFaqLaboral();
   if (which === "datos") renderDatosTab();
   if (which === "despidoform") renderDespidoForm();
+  if (which === "amonestacionform") renderAmonestacionForm();
   if (which === "recomform") renderRecomForm();
   if (which === "permisoform") renderPermisoForm();
 }
@@ -4891,7 +4948,7 @@ function cargarDatosDeContrato(loaded){
 }
 
 function mostrarSoloConstancia(){
-  ["inicio-panel","contracts-panel","form-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","despido-wrap","recomendacion-wrap","format-panel"].forEach(id => {
+  ["inicio-panel","contracts-panel","form-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","format-panel"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
   });
@@ -5123,8 +5180,8 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","recomform-panel","permisoform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","recomendacion-wrap","permiso-wrap","format-panel"];
-const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","recomform-toolbar","permisoform-toolbar"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","format-panel"];
+const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar"];
 
 function mostrarSoloRecomendacion(){
   ALL_MAIN_PANELS.filter(id => id !== "recomendacion-wrap").forEach(id => {
@@ -5593,6 +5650,273 @@ async function generarDespidoDeEmpleado(key){
   }catch(e){ statusMsg("No se pudo preparar la carta de despido.", false); }
 }
 
+// ---------- Amonestaciones (verbal / escrita) ----------
+async function generarAmonestacionDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    data.NOMBRE_AMONESTACION = emp.NOMBRE_EMP || "";
+    data.CEDULA_AMONESTACION = emp.IDENTIFICACION_EMP || "";
+    data.PUESTO_AMONESTACION = emp.DEPARTAMENTO_EMP || "";
+
+    // pull employer data from the linked contract (by cédula), igual que la carta de despido
+    await buildContratosPorCedulaIndex();
+    const vinculados = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
+    data.EMPRESA_AMONESTACION = ""; data.DIRECCION_EMPRESA_AMONESTACION = ""; data.CEDULA_JURIDICA_EMPRESA_AMONESTACION = "";
+    if (vinculados.length){
+      try{
+        const cRes = await window.storage.get(vinculados[0].key, false);
+        if (cRes && cRes.value){
+          const c = JSON.parse(cRes.value);
+          data.EMPRESA_AMONESTACION = c.EMPRESA || "";
+          data.DIRECCION_EMPRESA_AMONESTACION = c.DIRECCION_EMPRESA || "";
+          data.CEDULA_JURIDICA_EMPRESA_AMONESTACION = c.CEDULA_JURIDICA_EMPRESA || "";
+        }
+      }catch(e){ /* letterhead queda en blanco si no hay contrato vinculado — no bloquea la amonestación */ }
+    }
+
+    const hoy = new Date();
+    data.DIA_AMONESTACION = String(hoy.getDate());
+    data.MES_AMONESTACION = MESES[hoy.getMonth()];
+    data.ANIO_AMONESTACION = String(hoy.getFullYear());
+    data.INFRACCION_ID_AMONESTACION = "";
+    data.GRAVEDAD_AMONESTACION = "";
+    data.BASE_LEGAL_AMONESTACION = "";
+    data.TIPO_AMONESTACION = "";
+    data.REINCIDENCIA_AMONESTACION = false;
+    data.DESCRIPCION_HECHOS_AMONESTACION = "";
+    data.FECHA_HECHOS_AMONESTACION = "";
+    data.MEDIDA_ADICIONAL_AMONESTACION = "";
+
+    // Quien tiene la sesión abierta firma como quien amonesta — igual que en
+    // permisos/acciones de personal, porque cualquier jefatura puede amonestar,
+    // no solo la gerencia general (a diferencia de la carta de despido).
+    if (trabajadorActual){
+      data.FIRMANTE_AMONESTACION_NOMBRE = trabajadorActual.nombre;
+      data.FIRMANTE_AMONESTACION_CEDULA = trabajadorActual.cedula;
+      data.FIRMANTE_AMONESTACION_PUESTO = trabajadorActual.puesto;
+    } else {
+      const firmante = await buscarFirmanteAccionesPropiedad();
+      data.FIRMANTE_AMONESTACION_NOMBRE = firmante.nombre;
+      data.FIRMANTE_AMONESTACION_CEDULA = firmante.cedula;
+      data.FIRMANTE_AMONESTACION_PUESTO = firmante.puesto;
+    }
+
+    currentEmpKeyForLetter = key;
+    showTab("amonestacionform");
+    statusMsg("Listo — elige la falta del listado (o \"Otro\") y describe los hechos para " + (emp.NOMBRE_EMP || "el empleado") + ".");
+  }catch(e){ statusMsg("No se pudo preparar la amonestación.", false); }
+}
+
+function seleccionarInfraccionAmonestacion(id){
+  data.INFRACCION_ID_AMONESTACION = id;
+  const inf = AMONESTACIONES_CATALOGO.find(i => i.id === id);
+  if (inf){
+    data.GRAVEDAD_AMONESTACION = inf.gravedad;
+    data.BASE_LEGAL_AMONESTACION = inf.baseLegal;
+    // "escrita_o_directa" sugiere escrita como piso — el despido directo, si
+    // procede, se tramita aparte como Carta de despido, no desde aquí.
+    data.TIPO_AMONESTACION = inf.tipo === "escrita_o_directa" ? "escrita" : (inf.tipo || "");
+  }
+  renderAmonestacionForm();
+}
+
+function setTipoAmonestacion(tipo){
+  data.TIPO_AMONESTACION = tipo;
+  renderAmonestacionForm();
+}
+
+function toggleReincidenciaAmonestacion(){
+  data.REINCIDENCIA_AMONESTACION = !data.REINCIDENCIA_AMONESTACION;
+  // La reincidencia tras una amonestación verbal es justo el supuesto que el
+  // art. 81 inciso i) + 72 CT exige documentar por escrito — se sugiere el
+  // cambio, pero queda a criterio de quien amonesta (por eso no es forzado).
+  if (data.REINCIDENCIA_AMONESTACION && data.TIPO_AMONESTACION === "verbal"){
+    statusMsg("Es reincidencia — la ley exige un apercibimiento por escrito para que una repetición futura habilite el despido. Considera cambiar el tipo a \"Escrita\".", false);
+  }
+  renderAmonestacionForm();
+}
+
+function renderAmonestacionForm(){
+  if (!data.NOMBRE_AMONESTACION || !data.CEDULA_AMONESTACION){
+    document.getElementById("amonestacionform-panel").innerHTML = renderElegirEmpleadoGate(
+      "La amonestación siempre se genera desde el registro del empleado, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados."
+    );
+    return;
+  }
+  const categorias = [...new Set(AMONESTACIONES_CATALOGO.map(i => i.categoria))];
+  const inf = AMONESTACIONES_CATALOGO.find(i => i.id === data.INFRACCION_ID_AMONESTACION);
+  const esOtro = data.INFRACCION_ID_AMONESTACION === "otro";
+
+  let html = renderEmpleadoVinculadoCard(data.NOMBRE_AMONESTACION, data.CEDULA_AMONESTACION, data.PUESTO_AMONESTACION);
+  html += `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
+    <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
+      ⚠️ Elige la falta del Reglamento Interno (o "Otro"), confirma el tipo de amonestación y describe los hechos para generar el documento.
+    </div>
+  </div>`;
+
+  html += `<div class="section-card"><div class="section-head">Falta cometida</div><div class="section-body">
+    <div class="field">
+      <label>Selecciona del listado del Reglamento Interno / Handbook</label>
+      <select onchange="seleccionarInfraccionAmonestacion(this.value)">
+        <option value="">— Seleccionar —</option>
+        ${categorias.map(cat => `<optgroup label="${escapeHtml(cat)}">${AMONESTACIONES_CATALOGO.filter(i => i.categoria === cat).map(i =>
+          `<option value="${i.id}" ${data.INFRACCION_ID_AMONESTACION===i.id?"selected":""}>${escapeHtml(i.infraccion.slice(0,90))}${i.infraccion.length>90?"…":""}</option>`
+        ).join("")}</optgroup>`).join("")}
+      </select>
+    </div>
+    ${inf && !esOtro ? `<div class="portfolio-box">
+      <b>Gravedad sugerida:</b> ${escapeHtml(inf.gravedad)}<br>
+      <b>Base legal:</b> ${escapeHtml(inf.baseLegal)}
+    </div>` : ""}
+    ${esOtro ? `<div class="field">
+      <label>Gravedad (a tu criterio, proporcional a la conducta)</label>
+      <input type="text" value="${escapeHtml(data.GRAVEDAD_AMONESTACION||"")}" placeholder="Ej. Leve / Moderada / Grave" oninput="data.GRAVEDAD_AMONESTACION=this.value;">
+    </div>` : ""}
+  </div></div>`;
+
+  html += `<div class="section-card"><div class="section-head">Tipo de amonestación</div><div class="section-body">
+    <div class="sino-toggle">
+      <button type="button" class="${data.TIPO_AMONESTACION==='verbal'?'active':''}" onclick="setTipoAmonestacion('verbal')">🗣️ Verbal</button>
+      <button type="button" class="${data.TIPO_AMONESTACION==='escrita'?'active':''}" onclick="setTipoAmonestacion('escrita')">✍️ Escrita</button>
+    </div>
+    <div class="hint">La sugerencia se llena sola al elegir la falta, pero la decisión final es de quien amonesta, según las circunstancias del caso.</div>
+    <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer; font-size:12.5px;">
+      <input type="checkbox" ${data.REINCIDENCIA_AMONESTACION?"checked":""} onchange="toggleReincidenciaAmonestacion()">
+      ¿Es reincidencia de una falta anterior ya amonestada?
+    </label>
+  </div></div>`;
+
+  html += `<div class="section-card"><div class="section-head">Hechos</div><div class="section-body">
+    <div class="field">
+      <label>Fecha en que ocurrieron los hechos</label>
+      <input type="text" data-field="FECHA_HECHOS_AMONESTACION" value="${escapeHtml(data.FECHA_HECHOS_AMONESTACION||"")}" placeholder="Ej. 14 de agosto de 2026" oninput="data.FECHA_HECHOS_AMONESTACION=this.value;">
+    </div>
+    <div class="field">
+      <label>Descripción de los hechos (quién, qué, cuándo, dónde — lo más específico posible)</label>
+      <textarea data-field="DESCRIPCION_HECHOS_AMONESTACION" oninput="data.DESCRIPCION_HECHOS_AMONESTACION=this.value;">${escapeHtml(data.DESCRIPCION_HECHOS_AMONESTACION||"")}</textarea>
+      <div class="hint">Solo lo escrito aquí podrá alegarse después ante el Ministerio de Trabajo (art. 82 CT) — igual que en una carta de despido.</div>
+    </div>
+    <div class="field">
+      <label>Medida adicional (opcional — ej. suspensión sin goce salarial)</label>
+      <input type="text" value="${escapeHtml(data.MEDIDA_ADICIONAL_AMONESTACION||"")}" placeholder="Déjalo vacío si no aplica" oninput="data.MEDIDA_ADICIONAL_AMONESTACION=this.value;">
+    </div>
+  </div></div>`;
+
+  document.getElementById("amonestacionform-panel").innerHTML = html;
+}
+
+function renderAmonestacionDoc(){
+  const empresaTxt = data.EMPRESA_AMONESTACION || `<span class="missing">[empresa pendiente — vincula un contrato a este empleado]</span>`;
+  const direccionTxt = data.DIRECCION_EMPRESA_AMONESTACION || "";
+  const tieneFecha = data.DIA_AMONESTACION && data.MES_AMONESTACION && data.ANIO_AMONESTACION;
+  const fechaEmision = tieneFecha ? `${data.DIA_AMONESTACION} de ${data.MES_AMONESTACION} del ${data.ANIO_AMONESTACION}` : `<span class="missing">[fecha pendiente]</span>`;
+  const tipoTxt = data.TIPO_AMONESTACION === "escrita" ? "ESCRITA" : (data.TIPO_AMONESTACION === "verbal" ? "VERBAL" : `<span class="missing">[tipo pendiente]</span>`);
+  const tipoTxtMin = data.TIPO_AMONESTACION === "escrita" ? "escrita" : (data.TIPO_AMONESTACION === "verbal" ? "verbal" : tipoTxt);
+  const inf = AMONESTACIONES_CATALOGO.find(i => i.id === data.INFRACCION_ID_AMONESTACION);
+  const motivoTxt = inf && inf.id !== "otro" ? inf.infraccion : (data.INFRACCION_ID_AMONESTACION === "otro" ? "falta no tipificada expresamente en el Reglamento Interno" : `<span class="missing">[falta pendiente]</span>`);
+  const baseLegalTxt = data.BASE_LEGAL_AMONESTACION && inf && inf.id !== "otro" ? data.BASE_LEGAL_AMONESTACION : "Reglamento Interno de Trabajo; Código de Trabajo de Costa Rica, principio de proporcionalidad y debido proceso.";
+  const hechos = data.DESCRIPCION_HECHOS_AMONESTACION ? escapeHtml(data.DESCRIPCION_HECHOS_AMONESTACION) : `<span class="missing">[descripción de los hechos pendiente]</span>`;
+  const fechaHechos = data.FECHA_HECHOS_AMONESTACION ? escapeHtml(data.FECHA_HECHOS_AMONESTACION) : `<span class="missing">[fecha de los hechos pendiente]</span>`;
+  const reincidenciaTxt = data.REINCIDENCIA_AMONESTACION
+    ? `<p>Se deja constancia de que esta falta constituye <b>reincidencia</b> respecto a una conducta previamente amonestada, conforme al artículo 81 inciso i) en relación con el artículo 72 del Código de Trabajo.</p>`
+    : "";
+  const medidaTxt = (data.MEDIDA_ADICIONAL_AMONESTACION || "").trim()
+    ? `<p><b>Medida adicional aplicada:</b> ${escapeHtml(data.MEDIDA_ADICIONAL_AMONESTACION)}.</p>`
+    : "";
+  const fBox = { nombre: data.FIRMANTE_AMONESTACION_NOMBRE || "", cedula: data.FIRMANTE_AMONESTACION_CEDULA || "", puesto: data.FIRMANTE_AMONESTACION_PUESTO || "" };
+
+  const html = logoHeaderHtml() + `
+    <div style="margin-bottom:4px;">
+      <div style="font-weight:800; font-size:calc(var(--doc-font-size) + 1px);">${empresaTxt}</div>
+      ${direccionTxt ? `<div style="font-size:calc(var(--doc-font-size) - 1px); color:#333;">${escapeHtml(direccionTxt)}</div>` : ""}
+    </div>
+    <h2 class="doc-title" style="margin:18px 0 6px;">AMONESTACIÓN ${tipoTxt}</h2>
+    <div style="text-align:center; font-size:calc(var(--doc-font-size) - 1px); color:#555; margin-bottom:18px;">${fechaEmision}</div>
+    <p style="margin:0 0 3px;"><b>Señor(a):</b> ${escapeHtml(data.NOMBRE_AMONESTACION || "")}</p>
+    <p style="margin:0 0 3px;"><b>Puesto:</b> ${escapeHtml(data.PUESTO_AMONESTACION || "")}</p>
+    <p style="margin:0 0 18px;"><b>Cédula:</b> ${escapeHtml(data.CEDULA_AMONESTACION || "")}</p>
+
+    <p>Por medio de la presente se le comunica una amonestación de tipo <b>${tipoTxtMin}</b> por incurrir en la siguiente falta: <b>${motivoTxt}</b>.</p>
+    <p><b>Fecha de los hechos:</b> ${fechaHechos}</p>
+    <p><b>Descripción de los hechos:</b> ${hechos}</p>
+    <p><b>Fundamento:</b> ${escapeHtml(baseLegalTxt)}</p>
+    ${reincidenciaTxt}
+    ${medidaTxt}
+    <p>Se le exhorta a corregir esta conducta de inmediato. Le recordamos que, conforme al artículo 81 inciso i) en relación con el artículo 72 del Código de Trabajo, la reincidencia en conductas ya amonestadas por escrito puede constituir causal de despido sin responsabilidad patronal. De conformidad con el artículo 82 del Código de Trabajo, únicamente los hechos aquí descritos podrán alegarse posteriormente ante cualquier instancia.</p>
+    <p style="margin-top:16px;">Sin otro particular,</p>
+
+    <div class="firma-espacio-block" style="margin-top:44px;">
+      <div class="firma-espacio-col">
+        <div class="firma-espacio-linea"></div>
+        <div class="firma-espacio-titulo">Firma de quien amonesta:</div>
+        <div class="firma-espacio-detalle" style="font-weight:700;">${escapeHtml(fBox.nombre)}</div>
+        <div class="firma-espacio-detalle">${escapeHtml(fBox.cedula)}</div>
+        <div class="firma-espacio-detalle">${escapeHtml(fBox.puesto)}</div>
+      </div>
+      <div class="firma-espacio-col">
+        <div class="firma-espacio-linea"></div>
+        <div class="firma-espacio-titulo">Firma Recibido (o "Se negó a firmar", con testigo):</div>
+        <div class="firma-espacio-detalle" style="font-weight:700;">${escapeHtml(data.NOMBRE_AMONESTACION || "")}</div>
+        <div class="firma-espacio-detalle">${escapeHtml(data.CEDULA_AMONESTACION || "")}</div>
+        <div class="firma-espacio-detalle">Trabajador${data.PUESTO_AMONESTACION ? " — " + escapeHtml(data.PUESTO_AMONESTACION) : ""}</div>
+      </div>
+    </div>
+  `;
+  document.getElementById("amonestacion-root").innerHTML = html;
+}
+
+function mostrarSoloAmonestacion(){
+  ALL_MAIN_PANELS.filter(id => id !== "amonestacion-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("amonestacion-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function revisarRiesgoAmonestacion(){
+  const texto = (data.DESCRIPCION_HECHOS_AMONESTACION || "").trim();
+  const palabras = texto.split(/\s+/).filter(Boolean).length;
+  const problemas = [];
+  if (!data.TIPO_AMONESTACION) problemas.push("no se eligió si es verbal o escrita");
+  if (!data.INFRACCION_ID_AMONESTACION) problemas.push("no se eligió la falta cometida");
+  if (palabras < 10) problemas.push("la descripción de los hechos es muy breve (menos de 10 palabras)");
+  if (!data.FECHA_HECHOS_AMONESTACION) problemas.push("no se indicó la fecha de los hechos");
+  if (problemas.length > 0){
+    return confirm("⚠️ Antes de generar el documento:\n\n" + problemas.join(", ") + ".\n\nSolo lo escrito aquí podrá alegarse después ante el Ministerio de Trabajo (Art. 82 CT).\n\n¿Deseas generar de todas formas?");
+  }
+  return true;
+}
+
+function descargarAmonestacionPDF(){
+  if (!revisarRiesgoAmonestacion()) return;
+  const original = document.title;
+  const nombreBase = data.NOMBRE_AMONESTACION ? data.NOMBRE_AMONESTACION.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  const tipoArchivo = data.TIPO_AMONESTACION === "escrita" ? "Escrita" : "Verbal";
+  document.title = ("Amonestacion_" + tipoArchivo + "_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  renderAmonestacionDoc();
+  mostrarSoloAmonestacion();
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  if (currentEmpKeyForLetter){
+    agregarBitacora(currentEmpKeyForLetter, "Amonestación " + tipoArchivo.toLowerCase() + " generada — " + (AMONESTACIONES_CATALOGO.find(i=>i.id===data.INFRACCION_ID_AMONESTACION)||{infraccion:"falta sin especificar"}).infraccion);
+  }
+  congelarEmitido("amonestacion-root", {
+    tipo: "amonestacion",
+    titulo: "Amonestación " + tipoArchivo + " — " + (data.NOMBRE_AMONESTACION || "sin nombre"),
+    nombreArchivo: "Amonestacion_" + tipoArchivo + "_" + nombreBase,
+    claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
+    empleadoCedula: data.CEDULA_AMONESTACION || null,
+    empleadoNombre: data.NOMBRE_AMONESTACION || null,
+  });
+}
+
 // ---------- Perfil 360 ----------
 let perfilActualKey = null;
 
@@ -5693,6 +6017,7 @@ async function renderPerfilEmpleado(){
         <div style="font-weight:700; margin-bottom:8px;">Acciones</div>
         <div class="emp-acciones-menu open" style="border:none; margin:0; padding:0;">
           <button onclick="generarDespidoDeEmpleado('${perfilActualKey}')">⚖️ Carta de despido</button>
+          <button onclick="generarAmonestacionDeEmpleado('${perfilActualKey}')">⚠️ Amonestación</button>
           ${emp.ARCHIVADO ? `<button onclick="generarRecomendacionDeEmpleado('${perfilActualKey}')">📝 Recomendación laboral</button>` : ""}
           <button onclick="actualizarContratoDeEmpleado('${perfilActualKey}')">📄 Actualizar contrato</button>
           <button onclick="actualizarHandbookDeEmpleado('${perfilActualKey}')">📋 Actualizar handbook</button>
