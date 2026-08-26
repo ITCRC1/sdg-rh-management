@@ -3023,13 +3023,12 @@ async function renderCatalogTab(type){
               <button onclick="generarDespidoDeEmpleado('${k2}')">1. ⚖️ Carta de despido</button>
               <button onclick="generarAmonestacionDeEmpleado('${k2}')">2. ⚠️ Amonestación</button>
               <button onclick="actualizarContratoDeEmpleado('${k2}')">3. 📄 ${contratosVinculados.length ? "Actualizar" : "Crear"} contrato</button>
-              <button onclick="actualizarHandbookDeEmpleado('${k2}')">4. 📋 Actualizar handbook</button>
-              <button onclick="generarPermisoDeEmpleado('${k2}')">5. 🗓️ Permiso sin goce salarial</button>
-              <button onclick="openCatalogForm('empleados','${k2}')">6. ✏️ Editar datos (puesto, salario, contacto...)</button>
-              <button onclick="confirmarFirmaHandbook('${k2}')">7. ✍️ Confirmar firma handbook</button>
-              <button onclick="subirContratoFirmado('${k2}')">8. 📎 Subir contrato firmado (PDF)</button>
-              <button onclick="descargarDatosCCSS('${k2}')">9. 📊 Descargar datos para planilla CCSS (Excel)</button>
-              <button onclick="archivarEmpleado('${k2}')">10. 🗄️ Archivar</button>
+              <button onclick="generarPermisoDeEmpleado('${k2}')">4. 🗓️ Permiso sin goce salarial</button>
+              <button onclick="openCatalogForm('empleados','${k2}')">5. ✏️ Editar datos (puesto, salario, contacto...)</button>
+              <button onclick="confirmarFirmaHandbook('${k2}')">6. ✍️ Confirmar handbook</button>
+              <button onclick="subirContratoFirmado('${k2}')">7. 📎 Subir contrato firmado (PDF)</button>
+              <button onclick="descargarDatosCCSS('${k2}')">8. 📊 Descargar datos para planilla CCSS (Excel)</button>
+              <button onclick="archivarEmpleado('${k2}')">9. 🗄️ Archivar</button>
             </div>
           </div>`;
         }).join("");
@@ -6224,10 +6223,9 @@ async function renderPerfilEmpleado(){
           <button onclick="generarAmonestacionDeEmpleado('${perfilActualKey}')">⚠️ Amonestación</button>
           ${emp.ARCHIVADO ? `<button onclick="generarRecomendacionDeEmpleado('${perfilActualKey}')">📝 Recomendación laboral</button>` : ""}
           <button onclick="actualizarContratoDeEmpleado('${perfilActualKey}')">📄 Actualizar contrato</button>
-          <button onclick="actualizarHandbookDeEmpleado('${perfilActualKey}')">📋 Actualizar handbook</button>
           ${!emp.ARCHIVADO ? `<button onclick="generarPermisoDeEmpleado('${perfilActualKey}')">🗓️ Permiso sin goce salarial</button>` : ""}
           <button onclick="openCatalogForm('empleados','${perfilActualKey}')">✏️ Editar datos</button>
-          <button onclick="confirmarFirmaHandbook('${perfilActualKey}')">✍️ Confirmar firma handbook</button>
+          <button onclick="confirmarFirmaHandbook('${perfilActualKey}')">✍️ Confirmar handbook</button>
           <button onclick="subirContratoFirmado('${perfilActualKey}')">📎 Subir contrato firmado (PDF)</button>
           <button onclick="descargarDatosCCSS('${perfilActualKey}')">📊 Descargar datos para planilla CCSS (Excel)</button>
           ${!emp.ARCHIVADO ? `<button onclick="archivarEmpleado('${perfilActualKey}')">🗄️ Archivar</button>` : ""}
@@ -6311,26 +6309,12 @@ async function actualizarContratoDeEmpleado(key){
   }catch(e){ statusMsg("No se pudo cargar ese empleado.", false); }
 }
 
-async function actualizarHandbookDeEmpleado(key){
-  try{
-    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
-    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
-    const emp = JSON.parse(res.value);
-    data.NOMBRE_TRABAJADOR = emp.NOMBRE_EMP || "";
-    data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
-    if (!data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
-    if (!data.DIA_INICIO && emp.FECHA_INGRESO_EMP){
-      // best-effort: leave dates as-is if not parseable, HR can complete them in the Formulario
-    }
-    showTab("constancia");
-    statusMsg("Handbook actualizado con los datos de " + (emp.NOMBRE_EMP || "el empleado") + ".");
-  }catch(e){ statusMsg("No se pudo cargar ese empleado.", false); }
-}
-
-// Confirming the handbook signature now requires attaching the signed PDF —
-// clicking the button opens the file picker directly; the actual save
-// happens in onHandbookPdfSelected() once a valid PDF is chosen.
+// "Confirmar handbook" ahora es un solo flujo de dos pasos: elegir el PDF
+// firmado, revisarlo (nombre del archivo, tamaño) y recién ahí guardarlo con
+// un botón "Confirmar" — antes se guardaba apenas se elegía el archivo, sin
+// oportunidad de darse cuenta si se había elegido el PDF equivocado.
 let handbookPdfPendingKey = null;
+let handbookPdfPendingFile = null;
 
 function confirmarFirmaHandbook(key){
   handbookPdfPendingKey = key;
@@ -6341,17 +6325,50 @@ async function onHandbookPdfSelected(inputEl){
   const file = inputEl.files && inputEl.files[0];
   const key = handbookPdfPendingKey;
   inputEl.value = "";
-  handbookPdfPendingKey = null;
   if (!file || !key) return;
   const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
   if (!esPdf){
     statusMsg("Solo se aceptan archivos PDF para el Handbook firmado.", false);
+    handbookPdfPendingKey = null;
     return;
   }
   if (file.size > 3.5 * 1024 * 1024){
     statusMsg("El PDF pesa más de 3.5MB — el almacenamiento del navegador es limitado. Escanea en menor resolución o comprime el PDF e inténtalo de nuevo.", false);
+    handbookPdfPendingKey = null;
     return;
   }
+  handbookPdfPendingFile = file;
+  await mostrarModalConfirmarHandbook(key, file);
+}
+
+async function mostrarModalConfirmarHandbook(key, file){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "✍️ Confirmar handbook";
+  let nombreEmp = "";
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    const emp = res && res.value ? JSON.parse(res.value) : {};
+    nombreEmp = emp.NOMBRE_EMP || "";
+  }catch(e){ /* si no se puede leer el nombre, igual se puede confirmar */ }
+  body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;">Vas a archivar este PDF como el Handbook firmado de <b>${escapeHtml(nombreEmp || "este empleado")}</b>:</div>
+    <div class="portfolio-box" style="margin-bottom:14px;">📎 ${escapeHtml(file.name)} (${(file.size/1024).toFixed(0)} KB)</div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn primary" style="flex:1;" onclick="guardarHandbookConfirmado()">✅ Confirmar y guardar</button>
+      <button class="btn" style="flex:1;" onclick="cancelarConfirmarHandbook()">Cancelar</button>
+    </div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+}
+
+function cancelarConfirmarHandbook(){
+  handbookPdfPendingKey = null;
+  handbookPdfPendingFile = null;
+  cerrarModalIncompletos();
+}
+
+async function guardarHandbookConfirmado(){
+  const key = handbookPdfPendingKey;
+  const file = handbookPdfPendingFile;
+  if (!key || !file) return;
   try{
     const fullKey = CATALOGS.empleados.prefix + key;
     const res = await window.storage.get(fullKey, false);
@@ -6369,6 +6386,9 @@ async function onHandbookPdfSelected(inputEl){
     if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
     emp.HISTORIAL.unshift({ fecha: emp.HANDBOOK_FIRMADO_FECHA, texto: `Firma del Handbook confirmada — PDF firmado adjuntado ("${file.name}").` });
     await window.storage.set(fullKey, JSON.stringify(emp), false);
+    cerrarModalIncompletos();
+    handbookPdfPendingKey = null;
+    handbookPdfPendingFile = null;
     statusMsg("Firma del Handbook confirmada y PDF guardado para " + (emp.NOMBRE_EMP || "el empleado") + ".");
     renderCatalogTab("empleados");
     if (typeof perfilActualKey !== "undefined" && perfilActualKey === key && typeof renderPerfilEmpleado === "function"){
