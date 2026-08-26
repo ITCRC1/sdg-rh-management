@@ -3508,21 +3508,50 @@ async function procesarColillas(){
   colillasResultadosCache = parsed.map(p => {
     const { match, nombreCorregido, matchedBy } = emparejarRegistroColilla(p, indices, empleadosDB);
     const puestoCoincide = match ? (normalizarNombre(match.DEPARTAMENTO_EMP) === normalizarNombre(p.ocupacion)) : null;
-    return Object.assign({}, p, { match, puestoCoincide, nombreCorregido, matchedBy });
+    // Un salario que cae a menos de un tercio del que ya tenía guardado (o que
+    // se triplica) casi nunca es un cambio real — el caso típico es una colilla
+    // en dólares que el lector leyó como si fueran colones (ej. $2,127 vs
+    // ₡500.000 ya guardados). Estos NO se aplican solos: hay que confirmarlos
+    // uno por uno para no pisar un salario real con un monto sin convertir.
+    let salarioSospechoso = false;
+    if (match && match.SALARIO_EMP){
+      const anterior = Number(String(match.SALARIO_EMP).replace(/[^0-9.]/g,""));
+      if (anterior > 0 && (p.salario < anterior * 0.3 || p.salario > anterior * 3)) salarioSospechoso = true;
+    }
+    return Object.assign({}, p, { match, puestoCoincide, nombreCorregido, matchedBy, salarioSospechoso });
   });
   renderColillasPreview();
 }
 
 function renderColillasPreview(){
   const wrap = document.getElementById("colillas-resultados");
-  const encontrados = colillasResultadosCache.filter(r => r.match);
+  const todosEncontrados = colillasResultadosCache.filter(r => r.match);
+  const encontrados = todosEncontrados.filter(r => !r.salarioSospechoso);
+  const sospechosos = todosEncontrados.filter(r => r.salarioSospechoso);
   const noEncontrados = colillasResultadosCache.filter(r => !r.match);
-  const puestosDistintos = encontrados.filter(r => !r.puestoCoincide);
 
   let html = `<div class="section-card" style="border-color:var(--leaf); margin-top:12px;"><div class="section-body">
     <div style="font-weight:700; margin-bottom:4px;">Resumen</div>
-    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b></div>
+    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} con salario sospechoso</b>` : ""}</div>
   </div></div>`;
+
+  if (sospechosos.length){
+    html += `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
+      <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🚫 Salario muy distinto al guardado — no se aplica solo, confírmalo uno por uno</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">El caso típico es una colilla en dólares que se leyó como si fueran colones. Verifica el monto real antes de confirmar — si de verdad es correcto, "Aplicar de todas formas" lo guarda.</div>
+      ${sospechosos.map((r, i) => {
+        const idx = colillasResultadosCache.indexOf(r);
+        return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+          <b>${escapeHtml(r.match.NOMBRE_EMP)}</b> — № ${escapeHtml(r.numero)}<br>
+          Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)
+          <div style="margin-top:4px;">
+            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="aplicarColillaIndividual(${idx})">Aplicar de todas formas</button>
+            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="colillasResultadosCache[${idx}].match=null; renderColillasPreview();">Ignorar esta fila</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div></div>`;
+  }
 
   if (encontrados.length){
     const corregidos = encontrados.filter(r => r.nombreCorregido);
@@ -3551,14 +3580,44 @@ function renderColillasPreview(){
   wrap.innerHTML = html;
 }
 
+// Aplica UNA sola fila de la lista de "salario sospechoso", tras confirmarla
+// a mano — usa la misma lógica que aplicarColillas() pero para un solo registro.
+async function aplicarColillaIndividual(idx){
+  const r = colillasResultadosCache[idx];
+  if (!r || !r.match) return;
+  const fullKey = CATALOGS.empleados.prefix + r.match.key;
+  const salarioAnterior = r.match.SALARIO_EMP || "—";
+  r.match.SALARIO_EMP = String(r.salario);
+  if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
+  if (r.nombreCorregido) r.match.NOMBRE_EMP = r.nombreCorregido.nuevo;
+  await window.storage.set(fullKey, JSON.stringify(r.match), false);
+  await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago (confirmado a mano tras aviso de monto sospechoso): ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
+  statusMsg(`Salario de ${r.match.NOMBRE_EMP} actualizado.`);
+  colillasResultadosCache[idx] = Object.assign({}, r, { match: null }); // ya aplicado, se quita de la lista de pendientes
+  renderColillasPreview();
+}
+
 async function aplicarColillas(){
   const encontrados = colillasResultadosCache.filter(r => r.match);
   let count = 0;
+  const numerosSospechosos = [];
   for (const r of encontrados){
     const fullKey = CATALOGS.empleados.prefix + r.match.key;
     const salarioAnterior = r.match.SALARIO_EMP || "—";
     r.match.SALARIO_EMP = String(r.salario);
-    r.match.NUMERO_EMPLEADO = r.numero;
+    // El número de empleado solo se GRABA la primera vez (cuando el registro
+    // todavía no tenía uno). Si ya tenía un número distinto guardado, NO se
+    // pisa en silencio — el emparejado por número tiene prioridad sobre el de
+    // nombre en la próxima subida, así que sobrescribirlo sin avisar puede
+    // pegarle el número (y de ahí en adelante el salario) de una persona a la
+    // ficha de otra, para siempre, si alguna vez un nombre parecido empareja mal.
+    const numeroAnterior = r.match.NUMERO_EMPLEADO ? String(r.match.NUMERO_EMPLEADO).replace(/^0+/,"") : "";
+    const numeroNuevo = String(r.numero).replace(/^0+/,"");
+    if (!numeroAnterior){
+      r.match.NUMERO_EMPLEADO = r.numero;
+    } else if (numeroAnterior !== numeroNuevo){
+      numerosSospechosos.push(`${r.match.NOMBRE_EMP}: tenía № ${r.match.NUMERO_EMPLEADO} guardado, la colilla trae № ${r.numero} — no se cambió, revísalo a mano.`);
+    }
     if (r.nombreCorregido){
       r.match.NOMBRE_EMP = r.nombreCorregido.nuevo;
     }
@@ -3573,7 +3632,8 @@ async function aplicarColillas(){
   }
   const fechaHoy = fmtFecha(new Date().toISOString());
   await window.storage.set("colillas-ultima-actualizacion", fechaHoy + " (" + count + " empleado(s))", false);
-  document.getElementById("colillas-pdf-status").innerHTML = `<span style="color:var(--leaf); font-weight:700;">✅ Aplicado y guardado — listo para la próxima quincena. Puedes subir otro PDF cuando quieras.</span>`;
+  document.getElementById("colillas-pdf-status").innerHTML = `<span style="color:var(--leaf); font-weight:700;">✅ Aplicado y guardado — listo para la próxima quincena. Puedes subir otro PDF cuando quieras.</span>` +
+    (numerosSospechosos.length ? `<div style="color:#B3261E; margin-top:6px;">⚠️ ${numerosSospechosos.length} caso(s) con número de empleado distinto al ya guardado — no se tocaron, revísalos:<br>${numerosSospechosos.map(escapeHtml).join("<br>")}</div>` : "");
   statusMsg(`Actualizados ${count} empleado(s) desde la colilla de pago.`);
   document.getElementById("colillas-textarea").value = "";
   document.getElementById("colillas-resultados").innerHTML = "";
