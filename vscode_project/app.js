@@ -3541,6 +3541,7 @@ function showTab(which){
   document.getElementById("amonestacion-wrap").style.display = "none";
   document.getElementById("format-panel").style.display = which === "format" ? "block" : "none";
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
+  document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
@@ -3582,6 +3583,7 @@ function showTab(which){
   if (which === "faq") renderFaqLaboral();
   if (which === "datos") renderDatosTab();
   if (which === "planilla") renderPlanillaPanel();
+  if (which === "horasextras") renderHorasExtrasPanel();
   if (which === "despidoform") renderDespidoForm();
   if (which === "amonestacionform") renderAmonestacionForm();
   if (which === "recomform") renderRecomForm();
@@ -4614,6 +4616,7 @@ function etiquetaClaveActividad(clave){
   if (c.startsWith(CATALOGS.empresas.prefix)) return "una empresa";
   if (c.startsWith(CATALOGS.puestos.prefix)) return "un puesto";
   if (c.startsWith("permiso:")) return "una acción de personal";
+  if (c.startsWith(HORAS_EXTRA_PREFIX)) return "un registro de horas extra";
   return "un documento";
 }
 function etiquetaAccionActividad(accion){
@@ -4649,7 +4652,6 @@ const MODULOS_PENDIENTES = {
   vacaciones: { icono: "🏖️", titulo: "Vacaciones", resumen: "Calendario general con código de color, y panel de solicitudes con aprobar/rechazar." },
   diaslibres: { icono: "📅", titulo: "Días libres", resumen: "Módulo por definir en detalle." },
   incapacidades: { icono: "🤒", titulo: "Incapacidades", resumen: "Panel de incapacidades activas y alertas automáticas de regreso." },
-  horasextras: { icono: "⏱️", titulo: "Horas extras", resumen: "Importación de Excel/CSV desde la máquina de marcación (match por cédula/código de empleado) y panel de aprobación de horas pendientes." },
   estadisticas: { icono: "📊", titulo: "Estadísticas", resumen: "Gráficos de distribución de personal y otros indicadores — separados del Dashboard a propósito." },
   asistente: { icono: "🤖", titulo: "Asistente IA", resumen: "Consultas en lenguaje natural sobre los datos internos (ej. \"¿cuántos empleados están incapacitados?\", \"contratos que vencen este mes\")." },
 };
@@ -4706,6 +4708,430 @@ async function renderPlanillaPanel(){
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
   }
+}
+
+// ---------- Horas extras: importación desde la máquina de marcación +
+// panel de aprobación ----------
+// Cada fila del archivo de marcación queda como un registro por
+// empleado+fecha bajo "horas_extra:", con su propio estado (pendiente /
+// aprobada / rechazada). A diferencia de "solicitud:", esto NO se borra al
+// resolverse — queda como historial de lo que se aprobó o rechazó.
+const HORAS_EXTRA_PREFIX = "horas_extra:";
+const CONFIG_HORAS_EXTRA_KEY = "config:horas_extra";
+let horasExtraFiltro = "pendiente"; // pendiente | sinmatch | aprobada | rechazada
+let horasExtraConfigCache = null;
+
+async function obtenerConfigHorasExtra(){
+  if (horasExtraConfigCache) return horasExtraConfigCache;
+  // Valores por defecto: tiempo y medio (Art. 139 Código de Trabajo) sobre
+  // una jornada de referencia de 8 horas.
+  let cfg = { TARIFA_MULTIPLICADOR: 1.5, JORNADA_DIARIA_HORAS: 8 };
+  try{
+    const r = await window.storage.get(CONFIG_HORAS_EXTRA_KEY, false);
+    if (r && r.value) cfg = Object.assign(cfg, JSON.parse(r.value));
+  }catch(e){ /* sin configuración guardada todavía — se usan los valores legales por defecto */ }
+  horasExtraConfigCache = cfg;
+  return cfg;
+}
+
+async function guardarConfigHorasExtra(tarifa, jornada){
+  const t = parseFloat(tarifa), j = parseFloat(jornada);
+  if (!t || t <= 1 || isNaN(t)){ statusMsg("La tarifa debe ser un número mayor a 1 (ej. 1.5 para tiempo y medio).", false); return; }
+  if (!j || j <= 0 || j > 12 || isNaN(j)){ statusMsg("La jornada diaria debe ser un número entre 1 y 12 horas.", false); return; }
+  const cfg = { TARIFA_MULTIPLICADOR: t, JORNADA_DIARIA_HORAS: j };
+  await window.storage.set(CONFIG_HORAS_EXTRA_KEY, JSON.stringify(cfg), false);
+  horasExtraConfigCache = cfg;
+  statusMsg("Configuración de horas extra guardada.");
+  renderHorasExtrasPanel();
+}
+
+// Excel puede traer la fecha como texto (DD/MM/AAAA o AAAA-MM-DD) o como
+// número de serie de la celda (si viene con formato de fecha) — se cubren
+// los 3 casos.
+function normalizarFechaMarcacion(v){
+  if (v === null || v === undefined || v === "") return "";
+  if (typeof v === "number"){
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+  return s;
+}
+// Muestra "AAAA-MM-DD" como "DD/MM/AAAA" sin pasar por Date — un Date de una
+// fecha sin hora se interpreta en UTC y en Costa Rica (UTC-6) eso corre el
+// día mostrado hacia atrás.
+function fmtFechaSimple(ymd){
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(ymd || "");
+}
+
+// Acepta "2.5", "2,5" u horas en formato reloj "02:30".
+function parsearHorasDecimal(v){
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return v;
+  const s = String(v).trim();
+  const reloj = /^(\d{1,3}):(\d{2})(?::(\d{2}))?$/.exec(s);
+  if (reloj) return parseInt(reloj[1], 10) + parseInt(reloj[2], 10) / 60;
+  const n = parseFloat(s.replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+function detectarColumnaMarcacion(headers, patrones){
+  return headers.find(h => patrones.some(p => p.test(h))) || null;
+}
+// La máquina de marcación puede entregar la columna de horas extra ya
+// calculada, o solo entrada/salida (entonces se calculan contra la jornada
+// diaria configurada — lo que pase de ahí se toma como extra).
+function detectarColumnasHorasExtra(rows){
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+  return {
+    cedula: detectarColumnaMarcacion(headers, [/c[eé]dula/i, /identificaci[oó]n/i]),
+    codigo: detectarColumnaMarcacion(headers, [/c[oó]digo/i, /n[uú]mero.*empleado/i]),
+    fecha: detectarColumnaMarcacion(headers, [/fecha/i, /^date$/i]),
+    horasExtra: detectarColumnaMarcacion(headers, [/horas?\s*extras?/i, /^extra/i]),
+    entrada: detectarColumnaMarcacion(headers, [/entrada/i, /^in$/i]),
+    salida: detectarColumnaMarcacion(headers, [/salida/i, /^out$/i]),
+  };
+}
+
+async function guardarFilasHorasExtra(rows, nombreArchivo){
+  const cols = detectarColumnasHorasExtra(rows);
+  if (!cols.cedula && !cols.codigo) throw new Error("No se encontró una columna de cédula ni de código/número de empleado en ese archivo.");
+  if (!cols.fecha) throw new Error("No se encontró una columna de fecha en ese archivo.");
+  if (!cols.horasExtra && !(cols.entrada && cols.salida)) throw new Error("No se encontró una columna de horas extra, ni de entrada/salida para calcularlas.");
+
+  const { porCedula, porNumero } = await construirIndicesEmpleadosPorFila();
+  const cfg = await obtenerConfigHorasExtra();
+
+  // Varias filas del mismo empleado+fecha se suman dentro de un mismo
+  // archivo — pasa cuando el reloj exporta una fila por marca en vez de un
+  // resumen diario.
+  const acumulado = {};
+  let sinCedula = 0;
+  for (const row of rows){
+    const cedulaRaw = cols.cedula ? String(row[cols.cedula] || "").trim() : "";
+    const codigoRaw = cols.codigo ? String(row[cols.codigo] || "").trim() : "";
+    const fecha = normalizarFechaMarcacion(row[cols.fecha]);
+    if (!fecha) continue;
+
+    let horas = 0;
+    if (cols.horasExtra){
+      horas = parsearHorasDecimal(row[cols.horasExtra]);
+    } else {
+      const trabajadas = parsearHorasDecimal(row[cols.salida]) - parsearHorasDecimal(row[cols.entrada]);
+      horas = trabajadas > cfg.JORNADA_DIARIA_HORAS ? trabajadas - cfg.JORNADA_DIARIA_HORAS : 0;
+    }
+    if (!horas || horas <= 0) continue;
+
+    const cedulaDigits = cedulaRaw.replace(/\D/g, "");
+    const numeroSinCeros = codigoRaw.replace(/^0+/, "");
+    if (!cedulaDigits && !numeroSinCeros){ sinCedula++; continue; }
+    const empleado = (cedulaDigits && porCedula[cedulaDigits]) || (numeroSinCeros && porNumero[numeroSinCeros]) || null;
+
+    const accKey = (empleado ? empleado.key : "sinmatch-" + (cedulaDigits || numeroSinCeros)) + ":" + fecha;
+    if (!acumulado[accKey]){
+      acumulado[accKey] = {
+        CEDULA: empleado ? (empleado.IDENTIFICACION_EMP || cedulaRaw) : (cedulaRaw || codigoRaw),
+        NOMBRE_ARCHIVO: String(row["NOMBRE"] || row["NOMBRE_EMP"] || row["EMPLEADO"] || row["NOMBRE COMPLETO"] || "").trim(),
+        EMPLEADO_KEY: empleado ? empleado.key : null,
+        FECHA: fecha,
+        HORAS_EXTRA: 0,
+      };
+    }
+    acumulado[accKey].HORAS_EXTRA += horas;
+  }
+
+  let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0;
+  for (const info of Object.values(acumulado)){
+    const key = HORAS_EXTRA_PREFIX + (info.EMPLEADO_KEY || ("sinmatch-" + info.CEDULA.replace(/\D/g,""))) + ":" + info.FECHA;
+    let existente = null;
+    try{
+      const r = await window.storage.get(key, false);
+      existente = r && r.value ? JSON.parse(r.value) : null;
+    }catch(e){ /* no existía todavía */ }
+
+    // Un registro ya aprobado o rechazado no se vuelve a tocar con una
+    // reimportación — la decisión ya se tomó, aunque el archivo cambie.
+    if (existente && existente.ESTADO !== "pendiente"){ omitidas++; continue; }
+
+    const value = {
+      CEDULA: info.CEDULA,
+      EMPLEADO_KEY: info.EMPLEADO_KEY,
+      NOMBRE_ARCHIVO: info.NOMBRE_ARCHIVO,
+      FECHA: info.FECHA,
+      HORAS_EXTRA: Math.round(info.HORAS_EXTRA * 100) / 100,
+      ESTADO: "pendiente",
+      ORIGEN_ARCHIVO: nombreArchivo,
+      IMPORTADO_EN: new Date().toISOString(),
+    };
+    await window.storage.set(key, JSON.stringify(value), false);
+    if (!info.EMPLEADO_KEY) sinMatch++;
+    else if (existente) actualizadas++;
+    else creadas++;
+  }
+  return { creadas, actualizadas, sinMatch, omitidas, sinCedula };
+}
+
+async function importarHorasExtraArchivo(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const esCSV = /\.csv$/i.test(file.name);
+  let rows;
+  try{
+    rows = await leerFilasArchivo(file, esCSV);
+  }catch(e){
+    statusMsg(e.message || "No se pudo leer ese archivo.", false);
+    inputEl.value = "";
+    return;
+  }
+  if (!rows.length){
+    statusMsg("Ese archivo no tiene filas.", false);
+    inputEl.value = "";
+    return;
+  }
+  try{
+    const r = await guardarFilasHorasExtra(rows, file.name);
+    let msg = `${r.creadas} registro(s) nuevo(s) y ${r.actualizadas} actualizado(s) de horas extra pendientes.`;
+    if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por cédula/código — revísalas en "Sin identificar".`;
+    if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
+    statusMsg(msg);
+    renderHorasExtrasPanel();
+  }catch(e){
+    statusMsg(e.message || "No se pudo procesar ese archivo.", false);
+  }
+  inputEl.value = "";
+}
+
+async function listarRegistrosHorasExtra(){
+  const res = await window.storage.list(HORAS_EXTRA_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const registros = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return registros.filter(Boolean);
+}
+
+async function renderHorasExtrasPanel(){
+  const panel = document.getElementById("horasextras-panel");
+  if (!panel) return;
+  panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const [registros, cfg] = await Promise.all([listarRegistrosHorasExtra(), obtenerConfigHorasExtra()]);
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const empKeys = (res && res.keys) || [];
+    const empleados = await Promise.all(empKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix, ""), ...v };
+    }));
+    const empleadosPorKey = {};
+    empleados.forEach(e => { empleadosPorKey[e.key] = e; });
+
+    const pendientes = registros.filter(r => r.ESTADO === "pendiente" && r.EMPLEADO_KEY);
+    const sinMatch = registros.filter(r => r.ESTADO === "pendiente" && !r.EMPLEADO_KEY);
+    const aprobadas = registros.filter(r => r.ESTADO === "aprobada");
+    const rechazadas = registros.filter(r => r.ESTADO === "rechazada");
+    const horasAprobadasTotal = aprobadas.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
+
+    const puedeEditar = window.sdgApi && window.sdgApi.puedeEditar();
+
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">⏱️ Horas extras</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Importadas desde la máquina de marcación — se aprueban o rechazan antes de pasar a planilla.</div>
+    </div>`;
+
+    html += `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
+      <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
+      <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
+      <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
+    </div>`;
+
+    if (puedeEditar){
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📥 Importar horas extra</div>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV de la máquina de marcación. Se busca por cédula o código/número de empleado, y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae entrada/salida, se calculan contra la jornada diaria configurada abajo.</p>
+        <button class="btn primary" onclick="document.getElementById('horasextra-file-input').click()">📥 Importar archivo de marcación</button>
+        <input type="file" id="horasextra-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarHorasExtraArchivo(this)">
+      </div></div>`;
+
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">⚙️ Configuración de cálculo</div>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Tarifa de horas extra sobre el salario ordinario (Art. 139 Código de Trabajo: mínimo tiempo y medio) y jornada diaria de referencia para calcularlas cuando el archivo solo trae entrada/salida.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+          <div class="field" style="margin-bottom:0;">
+            <label style="font-size:10.5px;">Tarifa (múltiplo del salario por hora)</label>
+            <input type="number" id="horasextra-tarifa-input" step="0.1" min="1" value="${cfg.TARIFA_MULTIPLICADOR}" style="width:110px;">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label style="font-size:10.5px;">Jornada diaria (horas)</label>
+            <input type="number" id="horasextra-jornada-input" step="0.5" min="1" max="12" value="${cfg.JORNADA_DIARIA_HORAS}" style="width:110px;">
+          </div>
+          <button class="btn primary" onclick="guardarConfigHorasExtra(document.getElementById('horasextra-tarifa-input').value, document.getElementById('horasextra-jornada-input').value)">💾 Guardar</button>
+        </div>
+      </div></div>`;
+    }
+
+    const filtroTabs = [
+      ["pendiente", `Pendientes (${pendientes.length})`],
+      ["sinmatch", `Sin identificar (${sinMatch.length})`],
+      ["aprobada", `Aprobadas (${aprobadas.length})`],
+      ["rechazada", `Rechazadas (${rechazadas.length})`],
+    ];
+    html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
+      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; renderHorasExtrasPanel();">${l}</button>`).join("")}
+    </div>`;
+
+    let lista;
+    if (horasExtraFiltro === "sinmatch") lista = sinMatch;
+    else if (horasExtraFiltro === "aprobada") lista = aprobadas;
+    else if (horasExtraFiltro === "rechazada") lista = rechazadas;
+    else lista = pendientes;
+    lista = lista.slice().sort((a,b) => (b.FECHA || "").localeCompare(a.FECHA || ""));
+
+    if (!lista.length){
+      html += `<div class="empty-state">No hay registros en esta vista.</div>`;
+    } else {
+      html += lista.map(r => {
+        const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
+        const nombre = emp ? (emp.NOMBRE_EMP || "") : (r.NOMBRE_ARCHIVO || "");
+        const puesto = emp ? (emp.DEPARTAMENTO_EMP || "") : "";
+        const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / cfg.JORNADA_DIARIA_HORAS) : null;
+        const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * cfg.TARIFA_MULTIPLICADOR * r.HORAS_EXTRA) : null;
+        const keyEsc = String(r.key).replace(/'/g, "\\'");
+        let acciones = "";
+        if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeEditar){
+          acciones = `<button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
+            <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
+        } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
+          acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
+            <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Descartar</button>`;
+        } else if (r.ESTADO === "aprobada"){
+          acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")}</span>`;
+        } else if (r.ESTADO === "rechazada"){
+          acciones = `<span class="meta">${escapeHtml(r.MOTIVO_RECHAZO || "Rechazada")}</span>`;
+        }
+        return `<div class="catalog-item">
+          <div class="row1">
+            <div class="info">
+              <div class="name">${escapeHtml(nombre || r.CEDULA || "(sin nombre)")} — ${fmtFechaSimple(r.FECHA)}</div>
+              <div class="meta">${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}</div>
+            </div>
+            <div class="actions">${acciones}</div>
+          </div>
+        </div>`;
+      }).join("");
+    }
+
+    panel.innerHTML = html;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo de horas extra: ${escapeHtml(e.message || "")}</div>`;
+  }
+}
+
+async function aprobarHoraExtra(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "aprobada";
+    v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Horas extra aprobadas.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo aprobar: " + e.message, false); }
+}
+
+async function rechazarHoraExtra(key){
+  const motivo = prompt("Motivo del rechazo (opcional):", "");
+  if (motivo === null) return; // canceló el prompt
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "rechazada";
+    v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION = new Date().toISOString();
+    v.MOTIVO_RECHAZO = motivo.trim();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Horas extra rechazadas.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo rechazar: " + e.message, false); }
+}
+
+// El registro "sin identificar" queda con la cédula/código tal como vino del
+// archivo — aquí se corrige a mano cuando ese dato viene mal escrito o
+// incompleto en el reloj marcador.
+async function mostrarModalAsignarHoraExtra(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔗 Identificar empleado";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v){ body.innerHTML = `<div class="empty-state">Ese registro ya no existe.</div>`; return; }
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const empKeys = (res && res.keys) || [];
+    const empleados = await Promise.all(empKeys.map(async k => {
+      const rr = await window.storage.get(k, false);
+      const vv = rr && rr.value ? JSON.parse(rr.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix, ""), ...vv };
+    }));
+    const activos = empleados.filter(e => !e.ARCHIVADO).sort((a,b) => (a.NOMBRE_EMP || "").localeCompare(b.NOMBRE_EMP || ""));
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Cédula/código en el archivo: <b>${escapeHtml(v.CEDULA || "—")}</b>${v.NOMBRE_ARCHIVO ? " — " + escapeHtml(v.NOMBRE_ARCHIVO) : ""}, ${v.HORAS_EXTRA} h extra el ${fmtFechaSimple(v.FECHA)}.</div>
+      <div class="field">
+        <label>Empleado correcto</label>
+        <select id="horasextra-asignar-select">
+          <option value="">— Selecciona —</option>
+          ${activos.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.NOMBRE_EMP || e.key)}${e.IDENTIFICACION_EMP ? " (" + escapeHtml(e.IDENTIFICACION_EMP) + ")" : ""}</option>`).join("")}
+        </select>
+      </div>
+      <button class="btn primary" style="margin-top:8px;" onclick="confirmarAsignarHoraExtra('${key.replace(/'/g,"\\'")}')">Asignar</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarAsignarHoraExtra(key){
+  const sel = document.getElementById("horasextra-asignar-select");
+  const empKey = sel && sel.value;
+  if (!empKey){ statusMsg("Selecciona un empleado.", false); return; }
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    const nuevaKey = HORAS_EXTRA_PREFIX + empKey + ":" + v.FECHA;
+    v.EMPLEADO_KEY = empKey;
+    // Si ya existía un registro pendiente para ese empleado+fecha (ej. otra
+    // fila del mismo archivo que sí lo identificó bien), se suman las horas
+    // en vez de pisarlo, y se borra la fila "sin identificar".
+    let existenteDestino = null;
+    if (nuevaKey !== key){
+      try{ const rr = await window.storage.get(nuevaKey, false); existenteDestino = rr && rr.value ? JSON.parse(rr.value) : null; }catch(e){ /* no existe */ }
+    }
+    if (existenteDestino && existenteDestino.ESTADO === "pendiente"){
+      existenteDestino.HORAS_EXTRA = Math.round((existenteDestino.HORAS_EXTRA + v.HORAS_EXTRA) * 100) / 100;
+      await window.storage.set(nuevaKey, JSON.stringify(existenteDestino), false);
+      await window.storage.delete(key, false);
+    } else if (nuevaKey !== key){
+      await window.storage.set(nuevaKey, JSON.stringify(v), false);
+      await window.storage.delete(key, false);
+    } else {
+      await window.storage.set(key, JSON.stringify(v), false);
+    }
+    cerrarModalIncompletos();
+    statusMsg("Empleado identificado.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo asignar: " + e.message, false); }
 }
 
 // Barra fija arriba del contenido (fuera de inicio-panel, por eso vive
@@ -4820,6 +5246,15 @@ async function renderInicio(){
     if (colillasFaltantesCount > 0){
       alertRows.push(`<div class="dash-alert-row" onclick="mostrarModalColillasFaltantes();"><span class="sev w"></span><span class="txt">${colillasFaltantesCount} empleado(s) sin colilla del período actual</span><span class="go">Ver →</span></div>`);
     }
+    if (rolActualInicio === "master" || rolActualInicio === "gerente"){
+      try{
+        const registrosHorasExtra = await listarRegistrosHorasExtra();
+        const pendientesHorasExtra = registrosHorasExtra.filter(r => r.ESTADO === "pendiente").length;
+        if (pendientesHorasExtra > 0){
+          alertRows.push(`<div class="dash-alert-row" onclick="showTab('horasextras')"><span class="sev w"></span><span class="txt">${pendientesHorasExtra} registro(s) de horas extra por aprobar</span><span class="go">Ver →</span></div>`);
+        }
+      }catch(e){ /* si falla el conteo, no se muestra esta alerta — nunca debe romper el Inicio */ }
+    }
 
     let actividadHtml = `<div class="empty-state" style="padding:10px 0; font-size:12px;">Sin actividad reciente.</div>`;
     try{
@@ -4846,13 +5281,13 @@ async function renderInicio(){
     </div>`;
 
     // "Solicitudes pendientes" y "Próximos eventos" del Dashboard aprobado
-    // dependen de Vacaciones/Días libres/Horas extras, que todavía no
-    // guardan datos propios — se muestran como Pendiente en vez de vacíos
-    // a secas, para que quede claro que el bloque existe a propósito.
+    // dependen de Vacaciones/Días libres, que todavía no guardan datos
+    // propios — se muestran como Pendiente en vez de vacíos a secas, para
+    // que quede claro que el bloque existe a propósito.
     html += `<div class="dash-row">
       <div class="dash-panel">
         <div class="dash-panel-title">Solicitudes pendientes</div>
-        <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende de los módulos de Vacaciones, Días libres y Horas extras.</div>
+        <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende de los módulos de Vacaciones y Días libres.</div>
       </div>
       <div class="dash-panel">
         <div class="dash-panel-title">Próximos eventos</div>
