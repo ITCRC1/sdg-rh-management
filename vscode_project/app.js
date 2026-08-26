@@ -496,30 +496,6 @@ async function exportarDocumentos(){
   await exportarPorPrefijos(["contrato:"], "documentos_sdg", "Datos base de documentos (contratos) exportados. Recuerda que los PDF generados se descargan por separado desde cada uno.");
 }
 
-async function exportarDatos(){
-  await exportarPorPrefijos(["contrato:", CATALOGS.empresas.prefix, CATALOGS.puestos.prefix, CATALOGS.propiedades.prefix, CATALOGS.empleados.prefix], "generador_contratos_datos", "Datos exportados. Guarda ese archivo para importarlo en otra copia de la app.");
-}
-
-async function importarDatosFile(inputEl){
-  const file = inputEl.files && inputEl.files[0];
-  if (!file) return;
-  try{
-    const text = await file.text();
-    const bundle = JSON.parse(text);
-    let count = 0;
-    for (const key of Object.keys(bundle)){
-      if (key.startsWith("_")) continue;
-      await window.storage.set(key, bundle[key], false);
-      count++;
-    }
-    statusMsg("Importados " + count + " elementos. Recargando…");
-    setTimeout(() => location.reload(), 1200);
-  }catch(e){
-    statusMsg("No se pudo leer ese archivo de datos.", false);
-  }
-  inputEl.value = "";
-}
-
 // ---------- catalogs: empresas, puestos, propiedades ----------
 const CATALOGS = {
   empresas: {
@@ -2347,10 +2323,10 @@ function parseCSV(text){
   });
 }
 
-async function guardarFilasEmpleados(rows){
-  // look up existing employees by cédula / número de empleado FIRST — using the name
-  // to decide the storage key means a spelling correction creates a duplicate person
-  // instead of updating the one that already exists, which is exactly what happened before.
+// Índice de empleados existentes por cédula / número de empleado — lo usan
+// las 3 importaciones del menú Datos para decidir si una fila es alguien
+// nuevo o alguien que ya está en la lista.
+async function construirIndicesEmpleadosPorFila(){
   const res = await window.storage.list(CATALOGS.empleados.prefix, false);
   const keys = (res && res.keys) || [];
   const existentes = await Promise.all(keys.map(async k => {
@@ -2363,80 +2339,93 @@ async function guardarFilasEmpleados(rows){
     if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
     if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).replace(/^0+/,"")] = e;
   });
+  return { existentes, porCedula, porNumero };
+}
 
-  let count = 0;
+function buscarEmpleadoExistentePorFila(row, indices){
+  const cedulaFila = String(row["IDENTIFICACION"] || "").trim();
+  const numeroFila = String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim();
+  if (cedulaFila && indices.porCedula[cedulaFila.replace(/\D/g,"")]) return indices.porCedula[cedulaFila.replace(/\D/g,"")];
+  if (numeroFila && indices.porNumero[numeroFila.replace(/^0+/,"")]) return indices.porNumero[numeroFila.replace(/^0+/,"")];
+  return null;
+}
+
+// La cuenta bancaria del CSV/Excel puede venir en cualquiera de los 2 formatos
+// viejos (CUENTA BANCARIA = cliente, CUENTA IBAN = IBAN) — se traduce al campo
+// unificado NUMERO_CUENTA_EMP/TIPO_CUENTA_EMP y se espeja en los viejos para
+// que el resto de la app (que todavía los lee) siga funcionando.
+function extraerCuentaBancariaDeFila(row){
+  const iban = String(row["CUENTA IBAN"] || "").trim();
+  const cliente = String(row["CUENTA BANCARIA"] || "").trim();
+  if (iban) return { NUMERO_CUENTA_EMP: iban, TIPO_CUENTA_EMP: "iban", CUENTA_IBAN_EMP: iban, CUENTA_CLIENTE_EMP: "" };
+  if (cliente) return { NUMERO_CUENTA_EMP: cliente, TIPO_CUENTA_EMP: "cliente", CUENTA_IBAN_EMP: "", CUENTA_CLIENTE_EMP: cliente };
+  return null;
+}
+
+async function leerFilasArchivo(file, esCSV){
+  if (esCSV){
+    // CSV needs no external library — always works, online or offline.
+    const text = await file.text();
+    return parseCSV(text);
+  }
+  if (typeof XLSX === "undefined"){
+    throw new Error("No se pudo cargar el lector de Excel (necesita internet la primera vez). Si no tienes internet ahora, guarda el archivo como CSV desde Excel (Archivo → Guardar como → CSV) y súbelo así — el CSV no necesita internet.");
+  }
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+}
+
+// "Importar Empleados" — SOLO crea. Si la cédula o el número de empleado de la
+// fila ya existe, esa fila se omite tal cual está guardada (para actualizar a
+// alguien que ya existe se usa "Actualizar datos de Empleados").
+async function guardarFilasEmpleadosNuevos(rows){
+  const indices = await construirIndicesEmpleadosPorFila();
+  let creados = 0, omitidos = 0;
   for (const row of rows){
     const nombre = String(row["NOMBRE"] || "").trim();
     if (!nombre) continue;
-    const cedulaFila = String(row["IDENTIFICACION"] || "").trim();
-    const numeroFila = String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim();
-
-    let existente = {};
-    let key = null;
-    if (cedulaFila && porCedula[cedulaFila.replace(/\D/g,"")]){
-      existente = porCedula[cedulaFila.replace(/\D/g,"")];
-      key = CATALOGS.empleados.prefix + existente.key;
-    } else if (numeroFila && porNumero[numeroFila.replace(/^0+/,"")]){
-      existente = porNumero[numeroFila.replace(/^0+/,"")];
-      key = CATALOGS.empleados.prefix + existente.key;
-    } else {
-      key = CATALOGS.empleados.prefix + nombre.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
-      try{
-        const prevRes = await window.storage.get(key, false);
-        if (prevRes && prevRes.value) existente = JSON.parse(prevRes.value);
-      }catch(e){ /* no previous record under that name-key — genuinely new employee */ }
-    }
-
-    const value = Object.assign({}, existente, {
+    if (buscarEmpleadoExistentePorFila(row, indices)){ omitidos++; continue; }
+    const key = CATALOGS.empleados.prefix + nombre.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
+    try{
+      const prevRes = await window.storage.get(key, false);
+      if (prevRes && prevRes.value){ omitidos++; continue; } // misma llave por nombre, aunque no tuviera cédula/número guardados
+    }catch(e){ /* no existe todavía bajo esa llave — sigue */ }
+    const value = {
       NOMBRE_EMP: nombre,
-      NUMERO_EMPLEADO: numeroFila || existente.NUMERO_EMPLEADO || "",
-      DEPARTAMENTO_EMP: String(row["DEPARTAMENTO"] || "").trim() || existente.DEPARTAMENTO_EMP || "",
-      IDENTIFICACION_EMP: cedulaFila || existente.IDENTIFICACION_EMP || "",
-      FECHA_INGRESO_EMP: String(row["FECHA DE INGRESO"] || "").trim() || existente.FECHA_INGRESO_EMP || "",
-      FECHA_SALIDA_EMP: String(row["FECHA DE SALIDA"] || "").trim() || existente.FECHA_SALIDA_EMP || "",
-      SALARIO_EMP: String(row["SALARIO"] || "").trim() || existente.SALARIO_EMP || "",
-      CORREO_EMP: String(row["CORREO"] || "").trim() || existente.CORREO_EMP || "",
-      CELULAR_EMP: String(row["CELULAR PERSONAL"] || "").trim() || existente.CELULAR_EMP || "",
-      BANCO_EMP: String(row["BANCO DE ORIGEN"] || "").trim() || existente.BANCO_EMP || "",
-      CUENTA_CLIENTE_EMP: String(row["CUENTA BANCARIA"] || "").trim() || existente.CUENTA_CLIENTE_EMP || "",
-      CUENTA_IBAN_EMP: String(row["CUENTA IBAN"] || "").trim() || existente.CUENTA_IBAN_EMP || "",
-      CONTACTO_EMERGENCIA_NOMBRE: String(row["CONTACTO DE EMERGENCIA"] || "").trim() || existente.CONTACTO_EMERGENCIA_NOMBRE || "",
-      CONTACTO_EMERGENCIA_ID: String(row["ID CONTACTO EMERGENCIA"] || "").trim() || existente.CONTACTO_EMERGENCIA_ID || "",
-      CONTACTO_EMERGENCIA_TEL: String(row["TELEFONO DE EMERGENCIA"] || "").trim() || existente.CONTACTO_EMERGENCIA_TEL || "",
-      CONTACTO_EMERGENCIA_PARENTESCO: String(row["PARENTESCO"] || "").trim() || existente.CONTACTO_EMERGENCIA_PARENTESCO || "",
-      COMENTARIOS_EMP: String(row["COMENTARIOS"] || "").trim() || existente.COMENTARIOS_EMP || "",
-      ESTADO_EMP: existente.ESTADO_EMP || "Activo",
-    });
-    delete value.key;
+      NUMERO_EMPLEADO: String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim(),
+      DEPARTAMENTO_EMP: String(row["DEPARTAMENTO"] || "").trim(),
+      IDENTIFICACION_EMP: String(row["IDENTIFICACION"] || "").trim(),
+      FECHA_INGRESO_EMP: String(row["FECHA DE INGRESO"] || "").trim(),
+      SALARIO_EMP: String(row["SALARIO"] || "").trim(),
+      CORREO_EMP: String(row["CORREO"] || "").trim(),
+      CELULAR_EMP: String(row["CELULAR PERSONAL"] || "").trim(),
+      BANCO_EMP: String(row["BANCO DE ORIGEN"] || "").trim(),
+      CONTACTO_EMERGENCIA_NOMBRE: String(row["CONTACTO DE EMERGENCIA"] || "").trim(),
+      CONTACTO_EMERGENCIA_ID: String(row["ID CONTACTO EMERGENCIA"] || "").trim(),
+      CONTACTO_EMERGENCIA_TEL: String(row["TELEFONO DE EMERGENCIA"] || "").trim(),
+      CONTACTO_EMERGENCIA_PARENTESCO: String(row["PARENTESCO"] || "").trim(),
+      COMENTARIOS_EMP: String(row["COMENTARIOS"] || "").trim(),
+      ESTADO_EMP: "Activo",
+    };
+    const cuenta = extraerCuentaBancariaDeFila(row);
+    if (cuenta) Object.assign(value, cuenta);
     await window.storage.set(key, JSON.stringify(value), false);
-    count++;
+    creados++;
   }
-  return count;
+  return { creados, omitidos };
 }
 
-async function importarEmpleadosExcel(inputEl){
+async function importarEmpleadosNuevos(inputEl){
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
   const esCSV = /\.csv$/i.test(file.name);
   let rows;
   try{
-    if (esCSV){
-      // CSV needs no external library — always works, online or offline.
-      const text = await file.text();
-      rows = parseCSV(text);
-    } else {
-      if (typeof XLSX === "undefined"){
-        statusMsg("No se pudo cargar el lector de Excel (necesita internet la primera vez). Si no tienes internet ahora, guarda el archivo como CSV desde Excel (Archivo → Guardar como → CSV) y súbelo así — el CSV no necesita internet.", false);
-        inputEl.value = "";
-        return;
-      }
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    }
+    rows = await leerFilasArchivo(file, esCSV);
   }catch(e){
-    statusMsg("No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
+    statusMsg(e.message || "No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
     inputEl.value = "";
     return;
   }
@@ -2444,9 +2433,63 @@ async function importarEmpleadosExcel(inputEl){
   // el guardado falla (ej. sesión vencida, sin propiedad asignada), el
   // mensaje debe decir eso — no culpar al archivo, que no tuvo la culpa.
   try{
-    const count = await guardarFilasEmpleados(rows);
-    statusMsg(`Importados ${count} empleados desde el ${esCSV ? "CSV" : "Excel"}.`);
-    renderCatalogTab("empleados");
+    const { creados, omitidos } = await guardarFilasEmpleadosNuevos(rows);
+    statusMsg(`${creados} empleado(s) nuevo(s) agregado(s) desde el ${esCSV ? "CSV" : "Excel"}.` +
+      (omitidos ? ` ${omitidos} fila(s) omitida(s) porque esa persona ya estaba en la lista (usa "Actualizar datos de Empleados" para esas).` : ""));
+    renderDatosTab();
+  }catch(e){
+    statusMsg("El archivo se leyó bien, pero no se pudo guardar: " + e.message, false);
+  }
+  inputEl.value = "";
+}
+
+// "Actualizar datos de Empleados" — SOLO actualiza a quien ya existe (por
+// cédula o número de empleado) y SOLO toca datos de contacto/personales:
+// nunca puesto, salario, ni fecha de ingreso — para eso están las otras
+// importaciones del menú Datos.
+async function guardarFilasContactoEmpleados(rows){
+  const indices = await construirIndicesEmpleadosPorFila();
+  let actualizados = 0, omitidos = 0;
+  for (const row of rows){
+    const existente = buscarEmpleadoExistentePorFila(row, indices);
+    if (!existente){ omitidos++; continue; }
+    const cambios = {};
+    const correo = String(row["CORREO"] || "").trim(); if (correo) cambios.CORREO_EMP = correo;
+    const celular = String(row["CELULAR PERSONAL"] || "").trim(); if (celular) cambios.CELULAR_EMP = celular;
+    const nacimiento = String(row["FECHA DE NACIMIENTO"] || "").trim(); if (nacimiento) cambios.FECHA_NACIMIENTO_EMP = nacimiento;
+    const banco = String(row["BANCO DE ORIGEN"] || "").trim(); if (banco) cambios.BANCO_EMP = banco;
+    const cuenta = extraerCuentaBancariaDeFila(row); if (cuenta) Object.assign(cambios, cuenta);
+    const contEmerg = String(row["CONTACTO DE EMERGENCIA"] || "").trim(); if (contEmerg) cambios.CONTACTO_EMERGENCIA_NOMBRE = contEmerg;
+    const contEmergId = String(row["ID CONTACTO EMERGENCIA"] || "").trim(); if (contEmergId) cambios.CONTACTO_EMERGENCIA_ID = contEmergId;
+    const contEmergTel = String(row["TELEFONO DE EMERGENCIA"] || "").trim(); if (contEmergTel) cambios.CONTACTO_EMERGENCIA_TEL = contEmergTel;
+    const parentesco = String(row["PARENTESCO"] || "").trim(); if (parentesco) cambios.CONTACTO_EMERGENCIA_PARENTESCO = parentesco;
+    if (Object.keys(cambios).length === 0) continue; // fila sin nada útil que actualizar
+    const key = CATALOGS.empleados.prefix + existente.key;
+    const value = Object.assign({}, existente, cambios);
+    delete value.key;
+    await window.storage.set(key, JSON.stringify(value), false);
+    actualizados++;
+  }
+  return { actualizados, omitidos };
+}
+
+async function importarDatosContactoEmpleados(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const esCSV = /\.csv$/i.test(file.name);
+  let rows;
+  try{
+    rows = await leerFilasArchivo(file, esCSV);
+  }catch(e){
+    statusMsg(e.message || "No se pudo leer ese archivo. Verifica que sea el formato esperado.", false);
+    inputEl.value = "";
+    return;
+  }
+  try{
+    const { actualizados, omitidos } = await guardarFilasContactoEmpleados(rows);
+    statusMsg(`Datos de contacto actualizados en ${actualizados} empleado(s).` +
+      (omitidos ? ` ${omitidos} fila(s) omitida(s) — no se encontró a esa persona por cédula o número de empleado.` : ""));
+    renderDatosTab();
   }catch(e){
     statusMsg("El archivo se leyó bien, pero no se pudo guardar: " + e.message, false);
   }
@@ -2457,7 +2500,10 @@ async function importarEmpleadosExcel(inputEl){
 
 // Guarda/actualiza puestos por nombre (no hay cédula ni ID único para un puesto,
 // así que el nombre normalizado en mayúsculas hace de llave de coincidencia —
-// igual de espíritu que el match por cédula en guardarFilasEmpleados).
+// igual de espíritu que el match por cédula en construirIndicesEmpleadosPorFila).
+// SOLO toca el salario mínimo de referencia del puesto (SALARIO_PUESTO) — nunca
+// el salario real de un empleado (SALARIO_EMP), así que nunca puede "corregir"
+// a alguien que ya gane por encima del mínimo.
 async function guardarFilasPuestos(rows){
   const res = await window.storage.list(CATALOGS.puestos.prefix, false);
   const keys = (res && res.keys) || [];
@@ -2505,7 +2551,7 @@ function renderPuestosPdfPreviewHtml(){
     <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
       <input type="text" value="${escapeHtml(f.puesto)}" style="flex:2;" oninput="puestosPdfPreview[${i}].puesto=this.value">
       <input type="text" value="${escapeHtml(String(f.salario))}" style="flex:1;" oninput="puestosPdfPreview[${i}].salario=this.value">
-      <button type="button" class="btn" style="padding:4px 8px;" onclick="puestosPdfPreview.splice(${i},1); renderCatalogTab('puestos');">✕</button>
+      <button type="button" class="btn" style="padding:4px 8px;" onclick="puestosPdfPreview.splice(${i},1); renderDatosTab();">✕</button>
     </div>`).join("");
   return `<div class="section-card" style="border-color:var(--gold);"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:6px;">📄 ${puestosPdfPreview.length} fila(s) leídas del PDF — revisa y corrige antes de guardar</div>
@@ -2513,7 +2559,7 @@ function renderPuestosPdfPreviewHtml(){
       ${filas || '<div class="empty-state">No quedan filas por guardar.</div>'}
       <div class="catalog-toolbar" style="margin-top:10px;">
         <button class="btn primary" onclick="confirmarPuestosPdfPreview()">💾 Guardar ${puestosPdfPreview.length} puesto(s)</button>
-        <button class="btn" onclick="puestosPdfPreview=null; renderCatalogTab('puestos');">Cancelar</button>
+        <button class="btn" onclick="puestosPdfPreview=null; renderDatosTab();">Cancelar</button>
       </div>
     </div></div>`;
 }
@@ -2524,8 +2570,8 @@ async function confirmarPuestosPdfPreview(){
   try{
     const count = await guardarFilasPuestos(rows);
     puestosPdfPreview = null;
-    statusMsg(`Actualizados ${count} puestos desde el PDF.`);
-    renderCatalogTab("puestos");
+    statusMsg(`Actualizados ${count} puestos (salario mínimo de referencia) desde el PDF.`);
+    renderDatosTab();
   }catch(e){
     statusMsg("No se pudo guardar: " + e.message, false);
   }
@@ -2566,7 +2612,7 @@ async function importarPuestosArchivo(inputEl){
         statusMsg("No se detectó ninguna fila de puesto + salario en ese PDF. Prueba con Excel/CSV, o revisa que el PDF tenga texto seleccionable (no una imagen escaneada).", false);
       } else {
         puestosPdfPreview = filas;
-        renderCatalogTab("puestos");
+        renderDatosTab();
         statusMsg(`Se detectaron ${filas.length} fila(s) del PDF — revísalas antes de guardar.`, true);
       }
     }catch(e){
@@ -2602,12 +2648,73 @@ async function importarPuestosArchivo(inputEl){
   // mensaje debe decir eso — no culpar al archivo, que no tuvo la culpa.
   try{
     const count = await guardarFilasPuestos(rows);
-    statusMsg(`Actualizados ${count} puestos desde el ${esCSV ? "CSV" : "Excel"}.`);
-    renderCatalogTab("puestos");
+    statusMsg(`Actualizados ${count} puestos (salario mínimo de referencia) desde el ${esCSV ? "CSV" : "Excel"}.`);
+    renderDatosTab();
   }catch(e){
     statusMsg("El archivo se leyó bien, pero no se pudo guardar: " + e.message, false);
   }
   inputEl.value = "";
+}
+
+function renderMtssImportSection(){
+  let html = `<p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Sube el Excel/CSV (columnas: PUESTO, SALARIO) o el PDF de la escala salarial oficial del Ministerio de Trabajo. Actualiza únicamente el <b>salario mínimo de referencia</b> de cada puesto — nunca toca ni corrige el salario real de un empleado que ya gane por encima del mínimo.</p>
+    <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px;">El PDF se lee de forma aproximada: antes de guardar nada te muestro la tabla detectada para que la revises y corrijas.</p>
+    <button class="btn primary" onclick="document.getElementById('puestos-file-input').click()">📥 Importar Salarios MTSS</button>
+    <input type="file" id="puestos-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarPuestosArchivo(this)">`;
+  html += renderPuestosPdfPreviewHtml();
+  return html;
+}
+
+// ---------- 📤 Datos: menú único con TODAS las importaciones de la app ----------
+// Antes cada importación (empleados, colillas, salarios MTSS) vivía dispersa en
+// su propia pestaña, disparada por atajos del menú Datos. Ahora el menú Datos
+// ES la pestaña, con las 4 importaciones separadas por lo que cada una puede
+// tocar: crear empleado nuevo, actualizar solo contacto, actualizar solo
+// salario real, o actualizar solo el mínimo legal de referencia del puesto.
+async function renderDatosTab(){
+  const panel = document.getElementById("datos-panel");
+  panel.innerHTML = `
+    <div class="section-card" style="border-color:var(--gold); margin-bottom:14px;"><div class="section-body">
+      <div style="font-size:12px; color:var(--ink-soft);">Todas las importaciones de datos de la app viven aquí. Cada una te dice cuántas filas cambió y cuántas omitió — ninguna toca datos que no le correspondan.</div>
+    </div></div>
+
+    <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">👥 Importar Empleados</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Agrega empleados <b>nuevos</b> desde Excel/CSV (columnas: NOMBRE, DEPARTAMENTO, IDENTIFICACION, FECHA DE INGRESO, SALARIO, CORREO, CELULAR PERSONAL, BANCO DE ORIGEN, CUENTA BANCARIA o CUENTA IBAN, CONTACTO DE EMERGENCIA, ID CONTACTO EMERGENCIA, TELEFONO DE EMERGENCIA, PARENTESCO, COMENTARIOS). <b>Si la cédula o el número de empleado de una fila ya existen, esa fila se omite</b> — esto solo agrega gente nueva, nunca actualiza a quien ya está en la lista.</p>
+      <button class="btn primary" onclick="document.getElementById('empleados-nuevos-input').click()">📥 Importar Empleados</button>
+      <input type="file" id="empleados-nuevos-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarEmpleadosNuevos(this)">
+    </div></div>
+
+    <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">✏️ Actualizar datos de Empleados</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Actualiza <b>solo contacto y datos personales</b> de empleados que ya existen: CORREO, CELULAR PERSONAL, FECHA DE NACIMIENTO, BANCO DE ORIGEN, CUENTA BANCARIA o CUENTA IBAN, CONTACTO DE EMERGENCIA, ID CONTACTO EMERGENCIA, TELEFONO DE EMERGENCIA, PARENTESCO (además de IDENTIFICACION o NUMERO_EMPLEADO para encontrar a la persona). <b>Nunca toca puesto, salario ni fecha de ingreso</b>, y si no encuentra a la persona, omite la fila en vez de crearla.</p>
+      <button class="btn primary" onclick="document.getElementById('empleados-contacto-input').click()">📥 Actualizar datos de Empleados</button>
+      <input type="file" id="empleados-contacto-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarDatosContactoEmpleados(this)">
+    </div></div>
+
+    <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🧾 Importar y Actualizar Salarios</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Sube las colillas de pago (PDF) de cada quincena, en colones y/o en dólares — actualiza el salario real de cada empleado y archiva su colilla individual.</p>
+      <div id="colillas-panel"></div>
+    </div></div>
+
+    <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🏛️ Importar Salarios MTSS</div>
+      ${renderMtssImportSection()}
+    </div></div>
+
+    <div class="section-card" style="border-color:#D9A54A;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🔧 Datos de referencia (Ministerio de Trabajo) — mantenimiento técnico</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Lista de puestos del Ministerio de Trabajo y sus funciones/responsabilidades sugeridas — el contenido que cambia con el tiempo. Con esto se actualiza <b>sin descargar una copia nueva de la app entera</b>: exporta el archivo actual, edítalo (o pídele a Claude que te lo edite), y vuelve a importarlo aquí.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn primary" onclick="exportarDatosReferencia()">⬇️ Exportar datos de referencia</button>
+        <button class="btn" onclick="document.getElementById('import-reference-input').click()">⬆️ Importar actualización</button>
+        <input type="file" id="import-reference-input" accept="application/json" style="display:none;" onchange="importarDatosReferenciaFile(this)">
+      </div>
+      <p style="font-size:11px;color:var(--ink-soft);margin:8px 0 0;">La importación solo actualiza o agrega puestos/funciones — no borra ni cambia el texto legal del contrato ni tus contratos guardados.</p>
+    </div></div>
+  `;
+  await renderColillasImporter();
 }
 
 // ---------- cross-data linking (Empleados <-> Contratos, by cédula) ----------
@@ -2688,11 +2795,8 @@ async function renderCatalogTab(type){
   }
 
   if (type === "empleados"){
-    html += `<div class="section-card" style="border-color:var(--leaf);"><div class="section-body">
-        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Importa tu lista de empleados activos (columnas: NOMBRE, DEPARTAMENTO, IDENTIFICACION, FECHA DE INGRESO, SALARIO, CORREO, CELULAR PERSONAL, CONTACTO DE EMERGENCIA, PARENTESCO, TELEFONO DE EMERGENCIA, BANCO DE ORIGEN, ID CONTACTO EMERGENCIA, CUENTA BANCARIA, CUENTA IBAN, COMENTARIOS). Alimenta las Recomendaciones Laborales, Amonestaciones y Cartas de Despido.</p>
-        <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px;"><b>Recomendado: sube un archivo CSV</b> (Excel → Archivo → Guardar como → CSV) — funciona siempre, sin necesitar internet. El Excel (.xlsx) también funciona, pero necesita internet la primera vez.</p>
-        <button class="btn primary" onclick="document.getElementById('empleados-file-input').click()">📥 Importar empleados (CSV o Excel)</button>
-        <input type="file" id="empleados-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarEmpleadosExcel(this)">
+    html += `<div class="section-card" style="border-color:var(--gold); margin-bottom:10px;"><div class="section-body" style="padding:10px 14px;">
+        <div style="font-size:11.5px; color:var(--ink-soft);">📥 Para importar empleados nuevos, actualizar sus datos de contacto o su salario desde un archivo, ve al menú <b style="color:var(--navy-deep);">📤 Datos</b>.</div>
       </div></div>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
@@ -2720,14 +2824,10 @@ async function renderCatalogTab(type){
       </div>`;
   }
   if (type === "puestos" && !(catalogEditing && catalogEditing.type === "puestos")){
-    html += `<div class="section-card" style="border-color:var(--leaf);"><div class="section-body">
-        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;"><b>Actualizar Datos Salarios y puestos</b> — sube un Excel/CSV (columnas: PUESTO, SALARIO) o un PDF de tu escala salarial. Actualiza el salario de los puestos que ya existen (por nombre) y crea los que falten.</p>
-        <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px;">El PDF se lee de forma aproximada: antes de guardar nada te muestro la tabla detectada para que la revises y corrijas.</p>
-        <button class="btn primary" onclick="document.getElementById('puestos-file-input').click()">📥 Actualizar Datos Salarios y puestos</button>
-        <input type="file" id="puestos-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarPuestosArchivo(this)">
-      </div></div>`;
-    html += renderPuestosPdfPreviewHtml();
-    html = html.replace('<div class="catalog-toolbar">', `<div class="field" style="margin-bottom:10px;">
+    html = html.replace('<div class="catalog-toolbar">', `<div class="section-card" style="border-color:var(--gold); margin-bottom:10px;"><div class="section-body" style="padding:10px 14px;">
+        <div style="font-size:11.5px; color:var(--ink-soft);">📥 Para importar la escala salarial del MTSS, ve al menú <b style="color:var(--navy-deep);">📤 Datos</b>.</div>
+      </div></div>
+      <div class="field" style="margin-bottom:10px;">
         <input type="text" id="puestos-search" placeholder="🔍 Buscar puesto por nombre o jefatura…" value="${escapeHtml(puestosSearchTerm)}" oninput="filtrarPuestosInput(this.value)">
       </div><div class="catalog-toolbar">`);
   }
@@ -3301,7 +3401,7 @@ function showTab(which){
   document.getElementById("perfil-panel").style.display = which === "perfil" ? "block" : "none";
   document.getElementById("reporte-panel").style.display = which === "reporte" ? "block" : "none";
   document.getElementById("faq-panel").style.display = which === "faq" ? "block" : "none";
-  document.getElementById("colillas-panel").style.display = which === "colillas" ? "block" : "none";
+  document.getElementById("datos-panel").style.display = which === "datos" ? "block" : "none";
   document.getElementById("preview-wrap").style.display = which === "preview" ? "block" : "none";
   document.getElementById("constancia-wrap").style.display = which === "constancia" ? "block" : "none";
   document.getElementById("recomendacion-wrap").style.display = which === "recomendacion" ? "block" : "none";
@@ -3314,8 +3414,9 @@ function showTab(which){
   document.getElementById("permisoform-toolbar").style.display = (which === "permisoform") ? "flex" : "none";
   const groupOf = {
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
-    empleados:"empleados", archivo:"empleados", perfil:"empleados", colillas:"empleados",
+    empleados:"empleados", archivo:"empleados", perfil:"empleados",
     despidoform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos",
+    datos:"datos",
     reporte:"ajustes", faq:"ajustes", format:"ajustes",
   };
   ["contratos","empleados","documentos","datos","ajustes"].forEach(g => {
@@ -3337,7 +3438,7 @@ function showTab(which){
   if (which === "perfil") renderPerfilEmpleado();
   if (which === "reporte") renderReporteMensual();
   if (which === "faq") renderFaqLaboral();
-  if (which === "colillas") renderColillasImporter();
+  if (which === "datos") renderDatosTab();
   if (which === "despidoform") renderDespidoForm();
   if (which === "recomform") renderRecomForm();
   if (which === "permisoform") renderPermisoForm();
@@ -4790,7 +4891,7 @@ function cargarDatosDeContrato(loaded){
 }
 
 function mostrarSoloConstancia(){
-  ["inicio-panel","contracts-panel","form-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","colillas-panel","preview-wrap","despido-wrap","recomendacion-wrap","format-panel"].forEach(id => {
+  ["inicio-panel","contracts-panel","form-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","despido-wrap","recomendacion-wrap","format-panel"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
   });
@@ -5022,7 +5123,7 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","recomform-panel","permisoform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","colillas-panel","preview-wrap","constancia-wrap","despido-wrap","recomendacion-wrap","permiso-wrap","format-panel"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","recomform-panel","permisoform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","recomendacion-wrap","permiso-wrap","format-panel"];
 const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","recomform-toolbar","permisoform-toolbar"];
 
 function mostrarSoloRecomendacion(){
