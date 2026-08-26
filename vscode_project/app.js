@@ -5673,7 +5673,27 @@ async function generarAmonestacionDeEmpleado(key){
           data.DIRECCION_EMPRESA_AMONESTACION = c.DIRECCION_EMPRESA || "";
           data.CEDULA_JURIDICA_EMPRESA_AMONESTACION = c.CEDULA_JURIDICA_EMPRESA || "";
         }
-      }catch(e){ /* letterhead queda en blanco si no hay contrato vinculado — no bloquea la amonestación */ }
+      }catch(e){ /* si el contrato vinculado no se puede leer, sigue al respaldo de Empresas abajo */ }
+    }
+    // Sin contrato vinculado (empleado importado por Excel/CSV, nunca se le
+    // generó contrato en la app): se usa la empresa registrada en el catálogo
+    // de Empresas de esta propiedad — así cualquier empleado activo, tenga o
+    // no contrato guardado, puede recibir una amonestación, no solo quien
+    // tiene un contrato ya creado aquí.
+    if (!data.EMPRESA_AMONESTACION){
+      try{
+        const resEmp = await window.storage.list(CATALOGS.empresas.prefix, false);
+        const keysEmp = (resEmp && resEmp.keys) || [];
+        if (keysEmp.length){
+          const eRes = await window.storage.get(keysEmp[0], false);
+          if (eRes && eRes.value){
+            const e = JSON.parse(eRes.value);
+            data.EMPRESA_AMONESTACION = e.EMPRESA || "";
+            data.DIRECCION_EMPRESA_AMONESTACION = e.DIRECCION_EMPRESA || "";
+            data.CEDULA_JURIDICA_EMPRESA_AMONESTACION = e.CEDULA_JURIDICA_EMPRESA || "";
+          }
+        }
+      }catch(e){ /* letterhead queda en blanco si tampoco hay empresa registrada — no bloquea la amonestación */ }
     }
 
     const hoy = new Date();
@@ -5808,8 +5828,9 @@ function renderAmonestacionForm(){
 }
 
 function renderAmonestacionDoc(){
-  const empresaTxt = data.EMPRESA_AMONESTACION || `<span class="missing">[empresa pendiente — vincula un contrato a este empleado]</span>`;
+  const empresaTxt = data.EMPRESA_AMONESTACION || `<span class="missing">[empresa pendiente — registra una empresa en Empresas para esta propiedad]</span>`;
   const direccionTxt = data.DIRECCION_EMPRESA_AMONESTACION || "";
+  const cedulaJuridicaTxt = data.CEDULA_JURIDICA_EMPRESA_AMONESTACION || "";
   const tieneFecha = data.DIA_AMONESTACION && data.MES_AMONESTACION && data.ANIO_AMONESTACION;
   const fechaEmision = tieneFecha ? `${data.DIA_AMONESTACION} de ${data.MES_AMONESTACION} del ${data.ANIO_AMONESTACION}` : `<span class="missing">[fecha pendiente]</span>`;
   const tipoTxt = data.TIPO_AMONESTACION === "escrita" ? "ESCRITA" : (data.TIPO_AMONESTACION === "verbal" ? "VERBAL" : `<span class="missing">[tipo pendiente]</span>`);
@@ -5830,6 +5851,7 @@ function renderAmonestacionDoc(){
   const html = logoHeaderHtml() + `
     <div style="margin-bottom:4px;">
       <div style="font-weight:800; font-size:calc(var(--doc-font-size) + 1px);">${empresaTxt}</div>
+      ${cedulaJuridicaTxt ? `<div style="font-size:calc(var(--doc-font-size) - 1px); color:#333;">Cédula jurídica: ${escapeHtml(cedulaJuridicaTxt)}</div>` : ""}
       ${direccionTxt ? `<div style="font-size:calc(var(--doc-font-size) - 1px); color:#333;">${escapeHtml(direccionTxt)}</div>` : ""}
     </div>
     <h2 class="doc-title" style="margin:18px 0 6px;">AMONESTACIÓN ${tipoTxt}</h2>
