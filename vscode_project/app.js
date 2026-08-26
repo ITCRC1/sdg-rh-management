@@ -2375,7 +2375,7 @@ async function usePuesto(key){
   }catch(e){ statusMsg("No se pudo aplicar.", false); }
 }
 
-function parseCSVLine(line){
+function parseCSVLine(line, delim){
   // handles simple CSV with optional double-quoted fields (Excel's own CSV export format)
   const out = [];
   let cur = "", inQuotes = false;
@@ -2387,7 +2387,7 @@ function parseCSVLine(line){
       else { cur += c; }
     } else {
       if (c === '"'){ inQuotes = true; }
-      else if (c === ","){ out.push(cur); cur = ""; }
+      else if (c === delim){ out.push(cur); cur = ""; }
       else { cur += c; }
     }
   }
@@ -2395,12 +2395,27 @@ function parseCSVLine(line){
   return out.map(s => s.trim());
 }
 
+// Excel en español (incluido Costa Rica) exporta CSV con punto y coma como
+// separador, no coma — porque la coma es el separador decimal en ese
+// idioma regional. Se cuenta cuál aparece más veces en el encabezado en vez
+// de asumir siempre coma, para que ambos formatos se lean bien.
+function detectarDelimitadorCSV(primeraLinea){
+  const comas = (primeraLinea.match(/,/g) || []).length;
+  const puntoYComa = (primeraLinea.match(/;/g) || []).length;
+  return puntoYComa > comas ? ";" : ",";
+}
+
 function parseCSV(text){
-  const lines = text.split(/\r\n|\n|\r/).filter(l => l.trim() !== "");
+  // Quita el BOM de UTF-8 si el archivo lo trae (frecuente al exportar CSV
+  // desde Excel/Windows) — si no, ese carácter invisible se pega al nombre
+  // de la primera columna y esa columna deja de reconocerse.
+  const limpio = String(text || "").replace(/^﻿/, "");
+  const lines = limpio.split(/\r\n|\n|\r/).filter(l => l.trim() !== "");
   if (lines.length === 0) return [];
-  const headers = parseCSVLine(lines[0]);
+  const delim = detectarDelimitadorCSV(lines[0]);
+  const headers = parseCSVLine(lines[0], delim);
   return lines.slice(1).map(line => {
-    const cells = parseCSVLine(line);
+    const cells = parseCSVLine(line, delim);
     const row = {};
     headers.forEach((h, i) => { row[h] = cells[i] !== undefined ? cells[i] : ""; });
     return row;
@@ -2482,8 +2497,15 @@ async function leerFilasArchivo(file, esCSV){
   }
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  // No asume que los datos están en la primera pestaña: varios reportes de
+  // marcación traen una portada/resumen como primera hoja y los datos reales
+  // en otra — se usa la que tenga más filas, no la primera a ciegas.
+  let mejores = [];
+  for (const nombreHoja of wb.SheetNames){
+    const filas = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja], { defval: "" });
+    if (filas.length > mejores.length) mejores = filas;
+  }
+  return mejores;
 }
 
 // "Importar Empleados" — SOLO crea. Si la cédula o el número de empleado de la
@@ -4805,6 +4827,76 @@ function parsearHorasDecimal(v){
   return isNaN(n) ? 0 : n;
 }
 
+// Reportes de marcación en PDF: una línea por marca ("Nº de Empleado
+// Nombre Completo Fecha Tipo grabación"), sin distinguir entrada de
+// salida — cada fila es solo "Ingreso/Salida". Ej.:
+// "00000017 CARLOS MIGUEL ZUÑIGA MATA 15/8/2026 20:52 Ingreso/Salida"
+function parsearLineaMarcacionPDF(linea){
+  const m = /^(\d{4,12})\s+(.+?)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+Ingreso\/Salida\s*$/.exec(String(linea || "").trim());
+  if (!m) return null;
+  const dia = parseInt(m[3], 10), mes = parseInt(m[4], 10), anio = parseInt(m[5], 10);
+  const hh = parseInt(m[6], 10), mm = parseInt(m[7], 10);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31 || hh > 23 || mm > 59) return null;
+  return {
+    codigo: m[1],
+    nombre: m[2].trim(),
+    fecha: `${anio}-${String(mes).padStart(2,"0")}-${String(dia).padStart(2,"0")}`,
+    ts: Date.UTC(anio, mes - 1, dia, hh, mm),
+  };
+}
+
+// Convierte el PDF de marcas sueltas en filas "por día" listas para
+// guardarFilasHorasExtra. Las marcas se emparejan de dos en dos POR
+// EMPLEADO en orden cronológico (sin cortar por fecha civil): un turno
+// nocturno entra un día y sale al siguiente, y cortar por fecha lo
+// partiría mal en dos. El total de horas de cada par se suma al día de SU
+// entrada, y si un empleado tiene varios pares ese mismo día (turno con
+// salida a almorzar, por ejemplo) se suman antes de comparar contra la
+// jornada configurada.
+async function leerRegistrosMarcacionPDF(file){
+  const texto = await extraerTextoPDF(file);
+  const vistos = new Set();
+  const eventos = [];
+  texto.split("\n").forEach(linea => {
+    const ev = parsearLineaMarcacionPDF(linea);
+    if (!ev) return;
+    const dedupeKey = ev.codigo + "|" + ev.ts;
+    if (vistos.has(dedupeKey)) return; // por si el PDF repite la misma marca
+    vistos.add(dedupeKey);
+    eventos.push(ev);
+  });
+  if (!eventos.length) return { filas: [], sinPar: 0 };
+
+  const porEmpleado = {};
+  eventos.forEach(ev => {
+    (porEmpleado[ev.codigo] = porEmpleado[ev.codigo] || { nombre: ev.nombre, marcas: [] }).marcas.push(ev);
+  });
+
+  const cfg = await obtenerConfigHorasExtra();
+  const porDia = {};
+  let sinPar = 0;
+  Object.entries(porEmpleado).forEach(([codigo, info]) => {
+    const marcas = info.marcas.slice().sort((a, b) => a.ts - b.ts);
+    for (let i = 0; i + 1 < marcas.length; i += 2){
+      const horas = (marcas[i + 1].ts - marcas[i].ts) / 3600000;
+      // Turno negativo (marcas fuera de orden) o de más de 20h (probable
+      // marca faltante en medio, que desalinea el emparejamiento): se
+      // ignora ese par en vez de inventar un turno absurdo.
+      if (horas <= 0 || horas > 20){ sinPar += 2; continue; }
+      const key = codigo + "|" + marcas[i].fecha;
+      if (!porDia[key]) porDia[key] = { codigo, nombre: info.nombre, fecha: marcas[i].fecha, horas: 0 };
+      porDia[key].horas += horas;
+    }
+    if (marcas.length % 2 === 1) sinPar += 1; // última marca del período sin su pareja
+  });
+
+  const filas = Object.values(porDia)
+    .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS EXTRA": Math.max(0, d.horas - cfg.JORNADA_DIARIA_HORAS) }))
+    .filter(f => f["HORAS EXTRA"] > 0);
+
+  return { filas, sinPar };
+}
+
 function detectarColumnaMarcacion(headers, patrones){
   return headers.find(h => patrones.some(p => p.test(h))) || null;
 }
@@ -4925,17 +5017,26 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
 async function importarHorasExtraArchivo(inputEl){
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
+  const esPDF = /\.pdf$/i.test(file.name);
   const esCSV = /\.csv$/i.test(file.name);
-  let rows;
+  let rows, sinPar = 0;
   try{
-    rows = await leerFilasArchivo(file, esCSV);
+    if (esPDF){
+      const leido = await leerRegistrosMarcacionPDF(file);
+      rows = leido.filas;
+      sinPar = leido.sinPar;
+    } else {
+      rows = await leerFilasArchivo(file, esCSV);
+    }
   }catch(e){
     statusMsg(e.message || "No se pudo leer ese archivo.", false);
     inputEl.value = "";
     return;
   }
   if (!rows.length){
-    statusMsg("Ese archivo no tiene filas.", false);
+    statusMsg(esPDF
+      ? "No se detectaron horas extra en ese PDF (nadie superó la jornada diaria configurada en ese período, o las marcas no vinieron en pares completos de entrada/salida)."
+      : "Ese archivo no tiene filas.", false);
     inputEl.value = "";
     return;
   }
@@ -4945,6 +5046,7 @@ async function importarHorasExtraArchivo(inputEl){
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
+    if (sinPar) msg += ` ${sinPar} marca(s) de reloj sin su pareja de entrada/salida se ignoraron.`;
     // Para poder revisar rápido si el archivo se leyó como se esperaba —
     // sobre todo cuál columna se usó como número de empleado, la fuente más
     // común de "sin identificar" cuando el encabezado no es de los usuales.
@@ -5023,9 +5125,9 @@ async function renderHorasExtrasPanel(){
     if (puedeEditar){
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
         <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📥 Importar horas extra</div>
-        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae entrada/salida, se calculan contra la jornada diaria configurada abajo.</p>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV/PDF de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae entrada/salida (o un PDF de marcas sueltas de "Ingreso/Salida"), se calculan contra la jornada diaria configurada abajo — las marcas se emparejan en orden cronológico por empleado, así que un turno nocturno que cruza la medianoche se calcula bien.</p>
         <button class="btn primary" onclick="document.getElementById('horasextra-file-input').click()">📥 Importar archivo de marcación</button>
-        <input type="file" id="horasextra-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarHorasExtraArchivo(this)">
+        <input type="file" id="horasextra-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarHorasExtraArchivo(this)">
       </div></div>`;
 
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
