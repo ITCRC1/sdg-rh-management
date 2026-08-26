@@ -465,7 +465,7 @@
   .venc-amarillo{ color:#8a6d1f; font-weight:700; }
   .firma-espacio-block{ display:flex; gap:24px; margin:26px 0 6px; page-break-inside:avoid; break-inside:avoid; }
   .firma-espacio-col{ flex:1; text-align:center; }
-  .firma-espacio-linea{ border-bottom:1px solid #000; height:34px; margin-bottom:4px; }
+  .firma-espacio-linea{ border-bottom:1px solid #000; height:41px; margin-bottom:4px; }
   .firma-espacio-titulo{ font-weight:700; font-size:calc(var(--doc-font-size) - 0.5px); }
   .firma-espacio-detalle{ font-size:calc(var(--doc-font-size) - 2.5px); color:#333; margin-top:1px; }
   .constancia-campos{ border:1px solid #CFCABA; border-radius:6px; padding:4px 14px; }
