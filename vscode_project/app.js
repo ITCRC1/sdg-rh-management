@@ -2419,12 +2419,16 @@ function normalizarNombreParaMatch(nombre){
     .trim();
 }
 
-// El número de empleado puede traer texto alrededor ("ID-017") y venir con
-// menos o más ceros a la izquierda que como está guardado ("00000017" vs
-// "17", el formato corto que suelen dar las máquinas de marcación) — se
-// comparan solo los dígitos significativos, igual en ambos lados.
+// El marcador y NUMERO_EMPLEADO no comparten formato completo (ej. el
+// marcador da "17" y aquí está guardado "00000017", o con algún prefijo
+// distinto) — lo único confiable para hacer match son los ÚLTIMOS 4 DÍGITOS
+// (así lo confirmó RH: ese es el tramo que de verdad identifica a la
+// persona en ambos sistemas). Se limpia todo lo que no sea dígito, se toma
+// esa cola de 4, y se le quitan los ceros a la izquierda que traiga esa cola
+// (para que "0017" y "17" sigan comparando igual).
 function normalizarCodigoEmpleado(v){
-  return String(v == null ? "" : v).replace(/\D/g, "").replace(/^0+/, "");
+  const digits = String(v == null ? "" : v).replace(/\D/g, "");
+  return digits.slice(-4).replace(/^0+/, "");
 }
 
 // Índice de empleados existentes por cédula / número de empleado / nombre —
