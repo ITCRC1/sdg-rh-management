@@ -2697,7 +2697,7 @@ async function renderCatalogTab(type){
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
       <div class="field" style="margin-bottom:10px;">
-        <input type="text" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
+        <input type="text" id="empleados-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
       </div>
       <div style="display:flex; gap:8px; margin-bottom:10px;">
         <div class="field" style="flex:1; margin-bottom:0;">
@@ -2728,7 +2728,7 @@ async function renderCatalogTab(type){
       </div></div>`;
     html += renderPuestosPdfPreviewHtml();
     html = html.replace('<div class="catalog-toolbar">', `<div class="field" style="margin-bottom:10px;">
-        <input type="text" placeholder="🔍 Buscar puesto por nombre o jefatura…" value="${escapeHtml(puestosSearchTerm)}" oninput="filtrarPuestosInput(this.value)">
+        <input type="text" id="puestos-search" placeholder="🔍 Buscar puesto por nombre o jefatura…" value="${escapeHtml(puestosSearchTerm)}" oninput="filtrarPuestosInput(this.value)">
       </div><div class="catalog-toolbar">`);
   }
 
@@ -4368,8 +4368,46 @@ let empleadosSearchTerm = "";
 let puestosSearchTerm = "";
 let empleadosOrden = "nombre_asc"; // nombre_asc | nombre_desc | fecha_reciente | fecha_antigua
 let empleadosFiltroContrato = "todos"; // todos | con | sin
-function filtrarEmpleadosInput(val){ empleadosSearchTerm = val.toLowerCase(); renderCatalogTab("empleados"); }
-function filtrarPuestosInput(val){ puestosSearchTerm = val.toLowerCase(); renderCatalogTab("puestos"); }
+
+function debounce(fn, esperaMs){
+  let temporizador;
+  return function(...args){
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => fn.apply(this, args), esperaMs);
+  };
+}
+
+// Buscar empleado/puesto/contrato vuelve a pedir CADA registro al servidor y
+// reconstruye toda la lista — si eso corre en cada tecla, el cuadro de texto
+// se reemplaza a medio escribir y la persona pierde el foco (por eso solo se
+// podía escribir letra por letra). Se espera una pausa breve de verdad
+// escribiendo antes de refrescar, y al terminar se le devuelve el foco y el
+// cursor al final del cuadro para poder seguir escribiendo sin hacer clic de nuevo.
+function restaurarFocoBusqueda(inputId){
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.focus();
+  const len = el.value.length;
+  el.setSelectionRange(len, len);
+}
+
+const _renderEmpleadosBuscadoDebounced = debounce(async function(){
+  await renderCatalogTab("empleados");
+  restaurarFocoBusqueda("empleados-search");
+}, 350);
+function filtrarEmpleadosInput(val){
+  empleadosSearchTerm = val.toLowerCase();
+  _renderEmpleadosBuscadoDebounced();
+}
+
+const _renderPuestosBuscadoDebounced = debounce(async function(){
+  await renderCatalogTab("puestos");
+  restaurarFocoBusqueda("puestos-search");
+}, 350);
+function filtrarPuestosInput(val){
+  puestosSearchTerm = val.toLowerCase();
+  _renderPuestosBuscadoDebounced();
+}
 function ordenarEmpleadosPor(val){ empleadosOrden = val; renderCatalogTab("empleados"); }
 function filtrarEmpleadosPorContrato(val){ empleadosFiltroContrato = val; renderCatalogTab("empleados"); }
 
@@ -4459,9 +4497,13 @@ function estadoVencimiento(d){
   return null;
 }
 
+const _renderContratosBuscadoDebounced = debounce(async function(){
+  await renderContractsList();
+  restaurarFocoBusqueda("contracts-search");
+}, 350);
 function filtrarContratosInput(val){
   contractsSearchTerm = val.toLowerCase();
-  renderContractsList();
+  _renderContratosBuscadoDebounced();
 }
 
 async function renderContractsList(){
@@ -4494,7 +4536,7 @@ async function renderContractsList(){
         it.empresa.toLowerCase().includes(contractsSearchTerm));
     }
     const searchBar = `<div class="field" style="margin-bottom:10px;">
-      <input type="text" placeholder="🔍 Buscar por nombre, puesto o empresa…" value="${escapeHtml(contractsSearchTerm)}" oninput="filtrarContratosInput(this.value)">
+      <input type="text" id="contracts-search" placeholder="🔍 Buscar por nombre, puesto o empresa…" value="${escapeHtml(contractsSearchTerm)}" oninput="filtrarContratosInput(this.value)">
     </div>`;
     if (items.length === 0){
       listEl.innerHTML = searchBar + `<div class="empty-state">Sin resultados para “${escapeHtml(contractsSearchTerm)}”.</div>`;
