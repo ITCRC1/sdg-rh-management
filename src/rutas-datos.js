@@ -35,6 +35,69 @@ function claveValida(clave) {
 }
 
 // --------------------------------------------------------------------------
+// Alcance de "jefatura" sobre horas_extra: — el único dato que ese rol puede
+// tocar, y solo el de su propio equipo. Espeja los prefijos que usa el
+// cliente (app.js: CATALOGS.empleados.prefix, CATALOGS.puestos.prefix,
+// HORAS_EXTRA_PREFIX) — si esos cambian ahí, deben cambiar aquí también.
+// --------------------------------------------------------------------------
+const HORAS_EXTRA_PREFIX = "horas_extra:";
+const EMPLEADO_PREFIX = "cat_empleado:";
+const PUESTO_PREFIX = "cat_puesto:";
+
+async function valorDeClave(propiedad, clave) {
+  const { rows } = await query(
+    `SELECT valor FROM documentos WHERE propiedad_id = $1 AND clave = $2 AND eliminado_en IS NULL`,
+    [propiedad, clave]
+  );
+  if (!rows[0]) return null;
+  try {
+    return JSON.parse(rows[0].valor);
+  } catch (e) {
+    return null;
+  }
+}
+
+// ¿El empleado dueño de esta clave de horas_extra reporta a la jefatura que
+// ocupa `puestoLider`? Un registro "sinmatch-" (todavía sin empleado
+// identificado) nunca pertenece a ninguna jefatura — esa asignación es
+// trabajo de master/gerente.
+async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, puestoLider) {
+  if (!puestoLider) return false;
+  const empleadoKey = claveHorasExtra.split(":")[1] || "";
+  if (!empleadoKey || empleadoKey.startsWith("sinmatch-")) return false;
+
+  const empleado = await valorDeClave(propiedad, EMPLEADO_PREFIX + empleadoKey);
+  if (!empleado || !empleado.PUESTO_KEY) return false;
+
+  const puesto = await valorDeClave(propiedad, PUESTO_PREFIX + empleado.PUESTO_KEY);
+  if (!puesto) return false;
+
+  return puesto.JEFE_INMEDIATO === puestoLider;
+}
+
+// ¿Puede este usuario escribir en esta clave? master/gerente: todo, como
+// siempre. jefatura: solo horas_extra: de su propio equipo. Cualquier otro
+// caso (incluido colaborador) queda fuera.
+async function puedeEscribirClave(usuario, propiedad, clave) {
+  if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
+  if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
+    return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);
+  }
+  return false;
+}
+
+// Filtra filas (con o sin `valor`) de horas_extra: dejando solo las del
+// equipo de esa jefatura. Secuencial y no en paralelo a propósito: son pocas
+// filas por período de 3 días, y evita abrir decenas de conexiones a la vez.
+async function filtrarFilasPorEquipo(filas, propiedad, puestoLider) {
+  const resultado = [];
+  for (const fila of filas) {
+    if (await horaExtraPerteneceAEquipo(propiedad, fila.clave, puestoLider)) resultado.push(fila);
+  }
+  return resultado;
+}
+
+// --------------------------------------------------------------------------
 // GET /api/datos — lista claves por prefijo (equivale a storage.list)
 // --------------------------------------------------------------------------
 router.get("/", async (req, res, next) => {
@@ -48,6 +111,11 @@ router.get("/", async (req, res, next) => {
     // El prefijo se pasa como parámetro y se escapa: nunca se concatena SQL.
     const like = prefijo.replace(/([\\%_])/g, "\\$1") + "%";
 
+    // Una jefatura solo ve horas_extra: de su propio equipo — nunca las de
+    // otros departamentos, aunque esté pidiendo el mismo prefijo que vería
+    // un master/gerente.
+    const filtrarPorEquipo = req.usuario.rol === "jefatura" && prefijo.startsWith(HORAS_EXTRA_PREFIX);
+
     if (conValores) {
       const { rows } = await query(
         `SELECT clave, valor, version, actualizado_en
@@ -56,7 +124,10 @@ router.get("/", async (req, res, next) => {
           ORDER BY clave`,
         [propiedad, like]
       );
-      return res.json({ propiedad, prefijo, items: rows });
+      const items = filtrarPorEquipo
+        ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario.puesto)
+        : rows;
+      return res.json({ propiedad, prefijo, items });
     }
 
     const { rows } = await query(
@@ -65,7 +136,10 @@ router.get("/", async (req, res, next) => {
         ORDER BY clave`,
       [propiedad, like]
     );
-    res.json({ propiedad, prefijo, claves: rows.map((r) => r.clave) });
+    const filas = filtrarPorEquipo
+      ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario.puesto)
+      : rows;
+    res.json({ propiedad, prefijo, claves: filas.map((r) => r.clave) });
   } catch (e) {
     next(e);
   }
@@ -88,6 +162,11 @@ router.get("/:clave(*)", async (req, res, next) => {
       [propiedad, clave]
     );
     if (!rows[0]) return res.status(404).json({ error: "No encontrado", clave });
+
+    if (req.usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
+      const enSuEquipo = await horaExtraPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
+    }
     res.json(rows[0]);
   } catch (e) {
     next(e);
@@ -99,8 +178,12 @@ router.get("/:clave(*)", async (req, res, next) => {
 //
 // Detecta escritura concurrente: si el cliente manda `version` y ya no es la
 // vigente, se rechaza con 409 en vez de pisar el trabajo de otra persona.
+//
+// No usa A.requiereEscritura porque jefatura SÍ puede escribir, pero solo en
+// horas_extra: de su propio equipo — un permiso que depende de la clave, así
+// que se resuelve aquí en vez de en un middleware genérico por rol.
 // --------------------------------------------------------------------------
-router.put("/:clave(*)", A.requiereEscritura, async (req, res, next) => {
+router.put("/:clave(*)", async (req, res, next) => {
   try {
     const propiedad = propiedadDe(req);
     const clave = req.params.clave;
@@ -109,6 +192,12 @@ router.put("/:clave(*)", A.requiereEscritura, async (req, res, next) => {
 
     if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
     if (!claveValida(clave)) return res.status(400).json({ error: "Clave inválida." });
+    if (!(await puedeEscribirClave(req.usuario, propiedad, clave))) {
+      return res.status(403).json({
+        error: "Tu cuenta no tiene permiso para modificar esto.",
+        codigo: "sin_permiso",
+      });
+    }
     if (typeof valor !== "string") {
       return res.status(400).json({ error: "El campo 'valor' debe ser texto." });
     }

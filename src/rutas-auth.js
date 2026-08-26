@@ -200,10 +200,15 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
     }
     if (!nombre) return res.status(400).json({ error: "El nombre es obligatorio." });
     if (!A.rolValido(rol)) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente o colaborador." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o colaborador." });
     }
     if (rol !== "master" && !propiedadId) {
-      return res.status(400).json({ error: "Gerentes y colaboradores deben tener una propiedad asignada." });
+      return res.status(400).json({ error: "Gerentes, jefaturas y colaboradores deben tener una propiedad asignada." });
+    }
+    if (rol === "jefatura" && !String(b.puesto || "").trim()) {
+      return res.status(400).json({
+        error: "Las cuentas de jefatura necesitan el puesto que lideran (el mismo texto exacto que \"Jefatura inmediata\" en el catálogo de Puestos), para saber a quién le aprueban horas.",
+      });
     }
     const problema = A.validarPassword(password);
     if (problema) return res.status(400).json({ error: problema });
@@ -247,7 +252,22 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
       return res.status(400).json({ error: "No puedes quitarte a ti mismo el rol de master." });
     }
     if (b.rol !== undefined && !A.rolValido(String(b.rol))) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente o colaborador." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o colaborador." });
+    }
+    if (b.rol === "jefatura"){
+      // El puesto puede venir en este mismo PATCH o ya estar guardado de antes
+      // (ej. si ya era jefatura y solo se le cambia otra cosa) — solo falta si
+      // ninguno de los dos existe.
+      let puestoFinal = b.puesto !== undefined ? String(b.puesto || "").trim() : null;
+      if (puestoFinal === null) {
+        const actual = await query("SELECT puesto FROM usuarios WHERE id = $1", [id]);
+        puestoFinal = (actual.rows[0]?.puesto || "").trim();
+      }
+      if (!puestoFinal) {
+        return res.status(400).json({
+          error: "Las cuentas de jefatura necesitan el puesto que lideran (el mismo texto exacto que \"Jefatura inmediata\" en el catálogo de Puestos), para saber a quién le aprueban horas.",
+        });
+      }
     }
 
     const campos = [];

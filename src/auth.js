@@ -239,12 +239,18 @@ async function requiereSesion(req, res, next) {
 //   master       lee, edita, sube archivos Y administra usuarios (ve todas
 //                las propiedades — antes se llamaba 'admin')
 //   gerente      lee, edita, sube archivos, solo su propiedad
+//   jefatura     como colaborador (solo lectura), MÁS puede aprobar/editar/
+//                rechazar horas extra — pero SOLO las de su propio equipo
+//                (los empleados cuyo puesto tiene como Jefatura inmediata el
+//                puesto que ocupa esta cuenta, en usuarios.puesto). Ese
+//                alcance no lo decide este archivo: lo aplica rutas-datos.js
+//                clave por clave, porque requiere resolver empleado→puesto.
 //   colaborador  solo lectura, solo su propiedad
 //
 // Estas comprobaciones son las que de verdad mandan. Que el front esconda
 // botones es comodidad visual: quien manipule la petición choca aquí.
 // --------------------------------------------------------------------------
-const ROLES = ["master", "gerente", "colaborador"];
+const ROLES = ["master", "gerente", "jefatura", "colaborador"];
 const PUEDEN_ESCRIBIR = new Set(["master", "gerente"]);
 
 function rolValido(rol) {

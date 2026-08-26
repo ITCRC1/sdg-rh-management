@@ -47,6 +47,7 @@
   .badge-rol{ border-radius:6px; padding:1px 6px; font-size:10px; margin-left:6px; font-weight:600; }
   .badge-master{ background:#e6ddf0; color:#5b3f7a; }
   .badge-gerente{ background:#e7f0e2; color:#4C5D39; }
+  .badge-jefatura{ background:#dcebf0; color:#2c5f70; }
   .badge-colaborador{ background:#f0ece0; color:#8a7a52; }
   .select-rol{ font-size:11.5px; padding:4px 6px; border-radius:7px; width:auto; }
   .hint{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
@@ -269,13 +270,22 @@
       <select id="new-rol" onchange="alCambiarRol()">
         <option value="colaborador">Colaborador — solo lectura</option>
         <option value="gerente">Gerente — lee, edita y sube archivos</option>
+        <option value="jefatura">Jefatura — solo lectura + aprueba horas extra de su equipo</option>
         <option value="master">Master — todo lo anterior + gestiona usuarios + todas las propiedades</option>
       </select>
       <div class="hint" id="rol-explica"></div>
       <label>Propiedad asignada</label>
       <select id="new-propiedad"></select>
-      <label>Puesto / rol</label>
+      <label id="new-puesto-label">Puesto / rol</label>
       <input type="text" id="new-puesto" placeholder="Ej. Gerente Operativo" value="Gerente Operativo">
+      <select id="new-puesto-jefatura" style="display:none;" onchange="alCambiarPuestoJefatura()"></select>
+      <input type="text" id="new-puesto-jefatura-custom" style="display:none;"
+             placeholder="Escribe el puesto exactamente como está en Jefatura inmediata">
+      <div class="hint" id="new-puesto-jefatura-hint" style="display:none;">
+        Debe coincidir exactamente con el puesto que los empleados de su equipo tienen marcado
+        como "Jefatura inmediata" en el catálogo de Puestos — si no coincide, esta cuenta no
+        verá las horas extra de nadie.
+      </div>
       <button class="btn btn-gold" onclick="crearTrabajador()">Crear usuario</button>
       <div id="crear-msg"></div>
       <div class="hint">
@@ -402,14 +412,58 @@ async function guardarPasswordNueva(){
 const ROLES = {
   master:      { nombre: "Master",        desc: "Lee, edita, sube archivos, administra usuarios y ve todas las propiedades." },
   gerente:     { nombre: "Gerente",       desc: "Lee, edita y sube archivos. No puede crear ni modificar usuarios." },
+  jefatura:    { nombre: "Jefatura",      desc: "Solo lectura, más aprobar, corregir o rechazar horas extra — pero solo las de su propio equipo." },
   colaborador: { nombre: "Colaborador",   desc: "Solo lectura: puede consultar y descargar, pero no modificar nada." },
 };
+
+// Mismo listado que PUESTOS_LIDERAZGO en app.js (Ministerio de Trabajo) —
+// son las opciones válidas de "Jefatura inmediata" en el catálogo de
+// Puestos, así que una cuenta de jefatura debe apuntar a uno de estos
+// mismos textos exactos para que el servidor sepa a quién le aprueba horas.
+const PUESTOS_LIDERAZGO = [
+  "Supervisor capitán de embarcación",
+  "Cocinero A supervisor",
+  "Supervisor de limpieza",
+  "Supervisor de Mantenimiento",
+  "Supervisor de agentes de recepción",
+  "Asistente de gestión de la propiedad",
+  "Administrador de propiedad",
+  "Supervisor de agente de reservas",
+  "Supervisor de saloneros",
+  "Supervisor de oficial de seguridad",
+  "Terapeuta principal de bienestar",
+  "Supervisor de Guías de turismo",
+  "Guía Naturalista Líder",
+];
+
+function llenarSelectPuestosLiderazgo(sel){
+  sel.innerHTML = PUESTOS_LIDERAZGO.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("")
+    + `<option value="__custom__">✏️ Otro (escribir manualmente)</option>`;
+}
+
+// El catálogo de Puestos permite escribir una Jefatura inmediata a mano en
+// vez de elegirla de la lista fija — esto refleja esa misma salida, para que
+// una jefatura con un título fuera de la lista también pueda tener cuenta.
+function alCambiarPuestoJefatura(){
+  const esCustom = document.getElementById("new-puesto-jefatura").value === "__custom__";
+  document.getElementById("new-puesto-jefatura-custom").style.display = esCustom ? "" : "none";
+}
 
 function alCambiarRol(){
   const rol = document.getElementById("new-rol").value;
   // Un master no está atado a una propiedad; los demás roles siempre lo están.
   document.getElementById("new-propiedad").disabled = (rol === "master");
   document.getElementById("rol-explica").textContent = ROLES[rol] ? ROLES[rol].desc : "";
+
+  const esJefatura = rol === "jefatura";
+  document.getElementById("new-puesto-label").textContent = esJefatura ? "Puesto que lidera" : "Puesto / rol";
+  document.getElementById("new-puesto").style.display = esJefatura ? "none" : "";
+  document.getElementById("new-puesto-jefatura").style.display = esJefatura ? "" : "none";
+  document.getElementById("new-puesto-jefatura-hint").style.display = esJefatura ? "" : "none";
+  if (!esJefatura) document.getElementById("new-puesto-jefatura-custom").style.display = "none";
+  if (esJefatura && !document.getElementById("new-puesto-jefatura").options.length){
+    llenarSelectPuestosLiderazgo(document.getElementById("new-puesto-jefatura"));
+  }
 }
 
 async function cargarPropiedades(){
@@ -427,17 +481,26 @@ function nombrePropiedad(id){
 
 async function crearTrabajador(){
   const rol = document.getElementById("new-rol").value;
+  let puesto = document.getElementById("new-puesto").value.trim();
+  if (rol === "jefatura"){
+    const sel = document.getElementById("new-puesto-jefatura").value;
+    puesto = sel === "__custom__" ? document.getElementById("new-puesto-jefatura-custom").value.trim() : sel;
+  }
   const datos = {
     nombre: document.getElementById("new-nombre").value.trim(),
     email: document.getElementById("new-email").value.trim(),
     cedula: document.getElementById("new-cedula").value.trim(),
     password: document.getElementById("new-pass").value,
-    puesto: document.getElementById("new-puesto").value.trim(),
+    puesto,
     rol,
     propiedadId: rol === "master" ? null : document.getElementById("new-propiedad").value,
   };
   if (!datos.nombre || !datos.email || !datos.password){
     mostrarMsg("crear-msg", "Nombre, correo y contraseña temporal son obligatorios.", false);
+    return;
+  }
+  if (rol === "jefatura" && !datos.puesto){
+    mostrarMsg("crear-msg", "Elige qué puesto lidera esta jefatura.", false);
     return;
   }
   mostrarMsg("crear-msg", "Creando…", true);
@@ -468,6 +531,7 @@ async function cargarUsuarios(){
           </div>
           <div class="user-meta">
             ${esc(u.email)} · ${u.rol === "master" ? "todas las propiedades" : esc(nombrePropiedad(u.propiedadId))}
+            ${u.rol === "jefatura" ? " · lidera: " + esc(u.puesto || "—") : ""}
             ${u.ultimoAcceso ? " · último acceso " + new Date(u.ultimoAcceso).toLocaleString("es-CR") : " · nunca ha entrado"}
           </div>
           <div style="margin-top:6px;">
@@ -504,10 +568,37 @@ async function cambiarActivo(id, activar){
   }
 }
 
+// Al escribir un número fuera de rango se vuelve a preguntar — no hay forma
+// de ofrecer un <select> real dentro de un prompt() del navegador. "0" deja
+// escribir un puesto que no esté en la lista fija (igual que "Otro" en el
+// catálogo de Puestos).
+function pedirPuestoLiderazgo(){
+  const lista = PUESTOS_LIDERAZGO.map((p, i) => (i + 1) + ". " + p).join("\n");
+  while (true){
+    const resp = prompt("¿Qué puesto lidera esta jefatura? Escribe el número exacto (o 0 para escribirlo manualmente):\n\n" + lista);
+    if (resp === null) return null; // canceló
+    if (resp.trim() === "0"){
+      const manual = prompt("Escribe el puesto exactamente como está en \"Jefatura inmediata\":");
+      return manual && manual.trim() ? manual.trim() : null;
+    }
+    const idx = parseInt(resp, 10) - 1;
+    if (PUESTOS_LIDERAZGO[idx]) return PUESTOS_LIDERAZGO[idx];
+    alert("Número inválido. Intenta de nuevo.");
+  }
+}
+
 async function cambiarRol(id, nuevoRol, rolAnterior){
   if (nuevoRol === rolAnterior) return;
   const r = ROLES[nuevoRol];
-  if (!confirm("¿Cambiar a " + r.nombre + "?\n\n" + r.desc)){
+  const cambios = { rol: nuevoRol };
+
+  if (nuevoRol === "jefatura"){
+    const puesto = pedirPuestoLiderazgo();
+    if (!puesto){ await cargarUsuarios(); return; }
+    cambios.puesto = puesto;
+  }
+
+  if (!confirm("¿Cambiar a " + r.nombre + "?\n\n" + r.desc + (cambios.puesto ? "\n\nEquipo: " + cambios.puesto : ""))){
     await cargarUsuarios(); // devuelve el desplegable a su valor real
     return;
   }
@@ -515,7 +606,6 @@ async function cambiarRol(id, nuevoRol, rolAnterior){
     // Al pasar a un rol con propiedad, el servidor exige que tenga una; si no
     // la tenía (venía de master), se le asigna la primera para no dejarlo en un
     // estado inválido que la API rechazaría.
-    const cambios = { rol: nuevoRol };
     const usuarios = await api.usuarios.listar();
     const u = usuarios.find(x => x.id === id);
     if (nuevoRol !== "master" && u && !u.propiedadId && propiedadesCache.length){

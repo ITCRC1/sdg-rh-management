@@ -4969,19 +4969,28 @@ async function renderHorasExtrasPanel(){
     const rechazadas = registros.filter(r => r.ESTADO === "rechazada");
     const horasAprobadasTotal = aprobadas.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
 
-    const puedeEditar = window.sdgApi && window.sdgApi.puedeEditar();
+    const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
+    const puedeEditar = window.sdgApi && window.sdgApi.puedeEditar(); // master/gerente: importar, configurar, identificar sin-match
+    const esJefatura = rolActual === "jefatura";
+    const puedeAprobar = puedeEditar || esJefatura; // + jefatura: aprobar/editar/rechazar SOLO su equipo (el servidor filtra qué le llega)
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">⏱️ Horas extras</div>
-      <div style="font-size:12px; color:var(--ink-soft);">Importadas desde la máquina de marcación — se aprueban o rechazan antes de pasar a planilla.</div>
+      <div style="font-size:12px; color:var(--ink-soft);">${esJefatura ? "Horas de tu equipo desde la máquina de marcación — apruébalas, corrígelas o recházalas." : "Importadas desde la máquina de marcación — se aprueban o rechazan antes de pasar a planilla."}</div>
     </div>`;
 
-    html += `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
-      <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
-      <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
-      <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
-    </div>`;
+    html += esJefatura
+      ? `<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+          <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
+          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
+          <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
+        </div>`
+      : `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
+          <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
+          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
+          <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
+        </div>`;
 
     if (puedeEditar){
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
@@ -5010,10 +5019,11 @@ async function renderHorasExtrasPanel(){
 
     const filtroTabs = [
       ["pendiente", `Pendientes (${pendientes.length})`],
-      ["sinmatch", `Sin identificar (${sinMatch.length})`],
+      ...(esJefatura ? [] : [["sinmatch", `Sin identificar (${sinMatch.length})`]]),
       ["aprobada", `Aprobadas (${aprobadas.length})`],
       ["rechazada", `Rechazadas (${rechazadas.length})`],
     ];
+    if (esJefatura && horasExtraFiltro === "sinmatch") horasExtraFiltro = "pendiente";
     html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
       ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; renderHorasExtrasPanel();">${l}</button>`).join("")}
     </div>`;
@@ -5036,8 +5046,9 @@ async function renderHorasExtrasPanel(){
         const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * cfg.TARIFA_MULTIPLICADOR * r.HORAS_EXTRA) : null;
         const keyEsc = String(r.key).replace(/'/g, "\\'");
         let acciones = "";
-        if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeEditar){
+        if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
           acciones = `<button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
+            <button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>
             <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
         } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
           acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
@@ -5077,6 +5088,28 @@ async function aprobarHoraExtra(key){
     statusMsg("Horas extra aprobadas.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo aprobar: " + e.message, false); }
+}
+
+// Corrige el número de horas de un registro pendiente sin decidirlo todavía
+// (queda "pendiente" — la jefatura aprueba o rechaza después, ya con el
+// número correcto). Lo usa tanto master/gerente como jefatura sobre su
+// propio equipo.
+async function editarHorasExtra(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    const nuevo = prompt("Horas extra correctas para este día:", String(v.HORAS_EXTRA));
+    if (nuevo === null) return; // canceló el prompt
+    const horas = parseFloat(String(nuevo).replace(",", "."));
+    if (isNaN(horas) || horas < 0){ statusMsg("Ingresa un número de horas válido.", false); return; }
+    v.HORAS_EXTRA = Math.round(horas * 100) / 100;
+    v.EDITADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_EDICION = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Horas extra actualizadas.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo editar: " + e.message, false); }
 }
 
 async function rechazarHoraExtra(key){
@@ -5178,7 +5211,7 @@ async function renderAppTopbar(){
   const rol = window.sdgApi ? window.sdgApi.rol() : null;
   const nombre = (trabajadorActual && trabajadorActual.nombre) || "";
   const inicial = nombre ? nombre.trim().charAt(0).toUpperCase() : "?";
-  const etiquetasRol = { master: "Master", gerente: "Gerente", colaborador: "Colaborador" };
+  const etiquetasRol = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", colaborador: "Colaborador" };
 
   let alertas = 0;
   try{
@@ -5279,7 +5312,7 @@ async function renderInicio(){
     if (colillasFaltantesCount > 0){
       alertRows.push(`<div class="dash-alert-row" onclick="mostrarModalColillasFaltantes();"><span class="sev w"></span><span class="txt">${colillasFaltantesCount} empleado(s) sin colilla del período actual</span><span class="go">Ver →</span></div>`);
     }
-    if (rolActualInicio === "master" || rolActualInicio === "gerente"){
+    if (rolActualInicio === "master" || rolActualInicio === "gerente" || rolActualInicio === "jefatura"){
       try{
         const registrosHorasExtra = await listarRegistrosHorasExtra();
         const pendientesHorasExtra = registrosHorasExtra.filter(r => r.ESTADO === "pendiente").length;
