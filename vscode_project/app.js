@@ -2816,7 +2816,7 @@ async function buildContratosPorCedulaIndex(){
       const ced = (d.IDENTIFICACION || "").trim();
       if (ced){
         if (!index[ced]) index[ced] = [];
-        index[ced].push({ key: k, nombre: d.NOMBRE_TRABAJADOR || k.replace("contrato:",""), puesto: d.PUESTO || "" });
+        index[ced].push({ key: k, nombre: d.NOMBRE_TRABAJADOR || k.replace("contrato:",""), puesto: d.PUESTO || "", tipoContrato: d.TIPO_CONTRATO || "indeterminado" });
       }
     }catch(e){ /* skip unreadable */ }
   }));
@@ -2890,8 +2890,8 @@ async function renderCatalogTab(type){
       <div class="field" style="margin-bottom:10px;">
         <input type="text" id="empleados-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
       </div>
-      <div style="display:flex; gap:8px; margin-bottom:10px;">
-        <div class="field" style="flex:1; margin-bottom:0;">
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <div class="field" style="flex:1 1 160px; margin-bottom:0;">
           <label style="font-size:10.5px;">Ordenar por</label>
           <select onchange="ordenarEmpleadosPor(this.value)">
             <option value="nombre_asc" ${empleadosOrden==="nombre_asc"?"selected":""}>Nombre (A → Z)</option>
@@ -2900,12 +2900,26 @@ async function renderCatalogTab(type){
             <option value="fecha_antigua" ${empleadosOrden==="fecha_antigua"?"selected":""}>Fecha de ingreso (más antigua)</option>
           </select>
         </div>
-        <div class="field" style="flex:1; margin-bottom:0;">
-          <label style="font-size:10.5px;">Contrato</label>
-          <select onchange="filtrarEmpleadosPorContrato(this.value)">
-            <option value="todos" ${empleadosFiltroContrato==="todos"?"selected":""}>Todos</option>
-            <option value="con" ${empleadosFiltroContrato==="con"?"selected":""}>Con contrato registrado</option>
-            <option value="sin" ${empleadosFiltroContrato==="sin"?"selected":""}>Sin contrato registrado</option>
+        <div class="field" style="flex:1 1 160px; margin-bottom:0;">
+          <label style="font-size:10.5px;">Departamento / puesto</label>
+          <select onchange="filtrarEmpleadosPorDepartamento(this.value)">
+            <option value="todos" ${empleadosFiltroDepartamento==="todos"?"selected":""}>Todos</option>
+            ${empleadosDepartamentosCache.map(d => `<option value="${escapeHtml(d)}" ${empleadosFiltroDepartamento===d?"selected":""}>${escapeHtml(d)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field" style="flex:1 1 160px; margin-bottom:0;">
+          <label style="font-size:10.5px;">Tipo de contrato</label>
+          <select onchange="filtrarEmpleadosPorTipoContrato(this.value)">
+            <option value="todos" ${empleadosFiltroTipoContrato==="todos"?"selected":""}>Todos</option>
+            <option value="indeterminado" ${empleadosFiltroTipoContrato==="indeterminado"?"selected":""}>Indeterminado</option>
+            <option value="determinado" ${empleadosFiltroTipoContrato==="determinado"?"selected":""}>Determinado (plazo fijo)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1 1 160px; margin-bottom:0;">
+          <label style="font-size:10.5px;">Estado</label>
+          <select onchange="showTab(this.value)">
+            <option value="empleados" selected>Activos</option>
+            <option value="archivo">Archivados</option>
           </select>
         </div>
       </div>`;
@@ -2967,6 +2981,7 @@ async function renderCatalogTab(type){
         (it.raw.JEFE_INMEDIATO||"").toLowerCase().includes(puestosSearchTerm));
     }
     if (type === "empleados"){
+      empleadosDepartamentosCache = departamentosEmpleadosDisponibles(items);
       const archivadosCount = items.filter(it => it.raw.ARCHIVADO).length;
       await buildContratosPorCedulaIndex();
       let activos = itemsFiltered.filter(it => !it.raw.ARCHIVADO);
@@ -2977,6 +2992,21 @@ async function renderCatalogTab(type){
           const cedula = (it.raw.IDENTIFICACION_EMP || "").trim();
           const tieneContrato = (contratosPorCedulaCache[cedula] || []).length > 0;
           return empleadosFiltroContrato === "con" ? tieneContrato : !tieneContrato;
+        });
+      }
+
+      // Filtro 4: departamento / puesto
+      if (empleadosFiltroDepartamento !== "todos"){
+        activos = activos.filter(it => (it.raw.DEPARTAMENTO_EMP || "").trim() === empleadosFiltroDepartamento);
+      }
+
+      // Filtro 5: tipo de contrato (cruza contra los contratos reales de esa cédula —
+      // un empleado puede tener más de uno; alcanza con que uno coincida).
+      if (empleadosFiltroTipoContrato !== "todos"){
+        activos = activos.filter(it => {
+          const cedula = (it.raw.IDENTIFICACION_EMP || "").trim();
+          const contratosDeEste = contratosPorCedulaCache[cedula] || [];
+          return contratosDeEste.some(c => c.tipoContrato === empleadosFiltroTipoContrato);
         });
       }
 
@@ -3510,19 +3540,28 @@ function showTab(which){
   document.getElementById("despido-wrap").style.display = "none";
   document.getElementById("amonestacion-wrap").style.display = "none";
   document.getElementById("format-panel").style.display = which === "format" ? "block" : "none";
+  document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
+  document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
   document.getElementById("amonestacionform-toolbar").style.display = (which === "amonestacionform") ? "flex" : "none";
   document.getElementById("recomform-toolbar").style.display = (which === "recomform") ? "flex" : "none";
   document.getElementById("permisoform-toolbar").style.display = (which === "permisoform") ? "flex" : "none";
   const groupOf = {
+    inicio:"inicio",
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
-    empleados:"empleados", archivo:"empleados", perfil:"empleados",
+    empleados:"empleados", archivo:"empleados",
+    perfil:"expedientes",
     despidoform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos",
     datos:"datos",
-    reporte:"ajustes", faq:"ajustes", format:"ajustes",
+    planilla:"planilla",
+    vacaciones:"vacaciones", diaslibres:"diaslibres", incapacidades:"incapacidades", horasextras:"horasextras",
+    reporte:"reportes",
+    estadisticas:"estadisticas",
+    asistente:"asistente",
+    faq:"configuracion", format:"configuracion",
   };
-  ["contratos","empleados","documentos","datos","ajustes"].forEach(g => {
+  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","diaslibres","incapacidades","horasextras","reportes","estadisticas","asistente","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
@@ -3542,10 +3581,12 @@ function showTab(which){
   if (which === "reporte") renderReporteMensual();
   if (which === "faq") renderFaqLaboral();
   if (which === "datos") renderDatosTab();
+  if (which === "planilla") renderPlanillaPanel();
   if (which === "despidoform") renderDespidoForm();
   if (which === "amonestacionform") renderAmonestacionForm();
   if (which === "recomform") renderRecomForm();
   if (which === "permisoform") renderPermisoForm();
+  if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
 }
 
 // ---------- dropdown navbar ----------
@@ -4600,6 +4641,73 @@ function formatoRelativoActividad(iso){
   }catch(e){ return ""; }
 }
 
+// ---------- Módulos del roadmap "SCP People" todavía sin lógica propia ----------
+// En vez de simular datos que no existen, se muestra "Pendiente" — así la
+// navegación ya refleja la estructura final aprobada y el desarrollo puede
+// ser incremental sin fingir funcionalidad a medias.
+const MODULOS_PENDIENTES = {
+  vacaciones: { icono: "🏖️", titulo: "Vacaciones", resumen: "Calendario general con código de color, y panel de solicitudes con aprobar/rechazar." },
+  diaslibres: { icono: "📅", titulo: "Días libres", resumen: "Módulo por definir en detalle." },
+  incapacidades: { icono: "🤒", titulo: "Incapacidades", resumen: "Panel de incapacidades activas y alertas automáticas de regreso." },
+  horasextras: { icono: "⏱️", titulo: "Horas extras", resumen: "Importación de Excel/CSV desde la máquina de marcación (match por cédula/código de empleado) y panel de aprobación de horas pendientes." },
+  estadisticas: { icono: "📊", titulo: "Estadísticas", resumen: "Gráficos de distribución de personal y otros indicadores — separados del Dashboard a propósito." },
+  asistente: { icono: "🤖", titulo: "Asistente IA", resumen: "Consultas en lenguaje natural sobre los datos internos (ej. \"¿cuántos empleados están incapacitados?\", \"contratos que vencen este mes\")." },
+};
+
+function renderModuloPendiente(clave){
+  const panel = document.getElementById("pendiente-panel");
+  const m = MODULOS_PENDIENTES[clave];
+  if (!panel || !m) return;
+  panel.innerHTML = `<div class="section-card" style="border-color:var(--gold);">
+    <div class="section-body" style="padding:22px 20px;">
+      <div style="font-size:26px; margin-bottom:6px;">${m.icono}</div>
+      <div style="font-size:17px; font-weight:800; color:var(--navy-deep); margin-bottom:8px;">${escapeHtml(m.titulo)}</div>
+      <div style="font-size:13px; color:var(--ink); line-height:1.6; margin-bottom:14px;">${escapeHtml(m.resumen)}</div>
+      <div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración.</b> Este módulo todavía no tiene datos ni flujo propio — se muestra aquí para que la navegación del portal ya refleje la estructura final, y se activa cuando construyamos su tabla y su formulario.</div>
+    </div>
+  </div>`;
+}
+
+// ---------- Planilla: hoy es el archivo de colillas ya calculadas afuera;
+// el motor de cálculo (bruto + horas extra +/- ajustes - deducciones = neto,
+// acumulados de aguinaldo/cesantía/preaviso) todavía no existe. ----------
+async function renderPlanillaPanel(){
+  const panel = document.getElementById("planilla-panel");
+  panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const docs = window.sdgApi ? await window.sdgApi.documentos({ tipo: "colilla_pago", limite: 500 }) : [];
+    const porEmpleado = {};
+    docs.forEach(d => {
+      const clave = d.empleado_cedula || d.empleado_nombre || d.id;
+      porEmpleado[clave] = (porEmpleado[clave] || 0) + 1;
+    });
+    const totalEmpleados = Object.keys(porEmpleado).length;
+
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">💰 Planilla</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Colillas de pago archivadas por trabajador.</div>
+    </div>`;
+
+    html += `<div class="kpi-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="kpi-card c-navy" style="cursor:pointer;" onclick="mostrarModalColillasArchivadas();"><div class="ic">🧾</div><div class="val">${docs.length}</div><div class="lbl">Colillas archivadas</div></div>
+      <div class="kpi-card c-gold" style="cursor:pointer;" onclick="mostrarModalColillasArchivadas();"><div class="ic">👥</div><div class="val">${totalEmpleados}</div><div class="lbl">Trabajadores con colilla</div></div>
+    </div>`;
+
+    html += `<div class="dash-panel" style="margin-bottom:14px;">
+      <div class="dash-panel-title">Acciones</div>
+      <button class="btn primary" style="width:100%; margin-bottom:8px;" onclick="mostrarModalColillasArchivadas();">📋 Ver todas las colillas archivadas</button>
+      <button class="btn" style="width:100%; margin-bottom:8px;" onclick="mostrarModalColillasFaltantes();">🧾 Ver quién falta del período actual</button>
+      <button class="btn" style="width:100%;" onclick="showTab('datos');">📥 Subir / actualizar colillas (menú Datos)</button>
+    </div>`;
+
+    html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el cálculo de planilla en sí (salario base + horas extra automáticas +/− ajustes por incapacidad/vacaciones − deducciones = neto, y los acumulados de aguinaldo/cesantía/preaviso). Hoy este módulo archiva e identifica colillas que ya vienen calculadas de afuera; no calcula montos.</div>`;
+
+    panel.innerHTML = html;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
+  }
+}
+
 // Barra fija arriba del contenido (fuera de inicio-panel, por eso vive
 // aparte de renderInicio): propiedad activa, campana de alertas y quién
 // tiene la sesión abierta. Se refresca en login, al cambiar de propiedad y
@@ -4737,6 +4845,21 @@ async function renderInicio(){
       </div>
     </div>`;
 
+    // "Solicitudes pendientes" y "Próximos eventos" del Dashboard aprobado
+    // dependen de Vacaciones/Días libres/Horas extras, que todavía no
+    // guardan datos propios — se muestran como Pendiente en vez de vacíos
+    // a secas, para que quede claro que el bloque existe a propósito.
+    html += `<div class="dash-row">
+      <div class="dash-panel">
+        <div class="dash-panel-title">Solicitudes pendientes</div>
+        <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende de los módulos de Vacaciones, Días libres y Horas extras.</div>
+      </div>
+      <div class="dash-panel">
+        <div class="dash-panel-title">Próximos eventos</div>
+        <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende del calendario de Vacaciones/Incapacidades.</div>
+      </div>
+    </div>`;
+
     html += `<button class="btn primary" style="width:100%; padding:14px; font-size:14.5px; margin-top:6px;" onclick="showTab('contracts'); createNewFromTab();">🌱 Crear contrato nuevo</button>`;
 
     panel.innerHTML = html;
@@ -4777,6 +4900,17 @@ let empleadosSearchTerm = "";
 let puestosSearchTerm = "";
 let empleadosOrden = "nombre_asc"; // nombre_asc | nombre_desc | fecha_reciente | fecha_antigua
 let empleadosFiltroContrato = "todos"; // todos | con | sin
+let empleadosFiltroDepartamento = "todos"; // "todos" o un valor exacto de DEPARTAMENTO_EMP
+let empleadosFiltroTipoContrato = "todos"; // todos | indeterminado | determinado
+// El <select> de departamento se dibuja ANTES de que termine de cargar la
+// lista (para no atrasar el resto de los filtros), así que usa esta caché
+// del render anterior; se actualiza en cuanto los datos llegan.
+let empleadosDepartamentosCache = [];
+function departamentosEmpleadosDisponibles(items){
+  const set = new Set();
+  (items || []).forEach(it => { const d = (it.raw.DEPARTAMENTO_EMP || "").trim(); if (d) set.add(d); });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+}
 
 function debounce(fn, esperaMs){
   let temporizador;
@@ -4819,6 +4953,8 @@ function filtrarPuestosInput(val){
 }
 function ordenarEmpleadosPor(val){ empleadosOrden = val; renderCatalogTab("empleados"); }
 function filtrarEmpleadosPorContrato(val){ empleadosFiltroContrato = val; renderCatalogTab("empleados"); }
+function filtrarEmpleadosPorDepartamento(val){ empleadosFiltroDepartamento = val; renderCatalogTab("empleados"); }
+function filtrarEmpleadosPorTipoContrato(val){ empleadosFiltroTipoContrato = val; renderCatalogTab("empleados"); }
 
 async function renderSolicitudesList(){
   const el = document.getElementById("solicitudes-list");

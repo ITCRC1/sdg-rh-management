@@ -91,7 +91,7 @@
     box-shadow:0 8px 20px rgba(0,0,0,.12); z-index:30; overflow:hidden;
   }
   .nav-dd-menu.open{ display:block; }
-  #navmenu-empleados, #navmenu-documentos, #navmenu-datos, #navmenu-ajustes{ left:auto; right:0; }
+  #navmenu-empleados, #navmenu-documentos, #navmenu-datos, #navmenu-configuracion, #navmenu-planilla{ left:auto; right:0; }
   .nav-dd-menu button{
     display:block; width:100%; text-align:left; padding:11px 14px; font-size:13px;
     background:#fff; border:none; border-bottom:1px solid var(--paper-line); cursor:pointer; color:var(--ink);
@@ -599,6 +599,7 @@ body.solo-lectura select{
   position:static; overflow:visible; padding:4px 10px 16px; gap:2px; flex:1;
 }
 .app-sidebar .nav-dd{ flex:none; }
+.nav-dd-divider{ height:1px; background:rgba(255,255,255,.1); margin:8px 10px 6px; }
 .app-sidebar .nav-dd-btn{
   width:100%; text-align:left; padding:10px 10px; font-size:12.5px; font-weight:700;
   color:#D9E3D6; border-bottom:none; border-radius:8px;

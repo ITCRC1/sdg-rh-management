@@ -64,8 +64,28 @@
 </div>
 
 <div class="tabs navbar-dropdowns" id="main-navbar">
+  <button class="nav-dd-btn active" id="navbtn-inicio" onclick="navCloseAndRun(function(){ showTab('inicio'); })">🏠 1. Dashboard</button>
+
+  <button class="nav-dd-btn" id="navbtn-empleados" onclick="navCloseAndRun(function(){ showTab('empleados'); })">👥 2. Empleados</button>
+
+  <button class="nav-dd-btn" id="navbtn-expedientes" onclick="navCloseAndRun(function(){ showTab('perfil'); })">📁 3. Expedientes</button>
+
   <div class="nav-dd">
-    <button class="nav-dd-btn active" id="navbtn-contratos" onclick="toggleNavMenu('contratos')">🗂️ Contratos <span class="nav-caret">▾</span></button>
+    <button class="nav-dd-btn" id="navbtn-planilla" onclick="toggleNavMenu('planilla')">💰 4. Planilla <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-planilla">
+      <button onclick="navCloseAndRun(function(){ showTab('planilla'); })">💰 Ver planilla y colillas</button>
+      <div class="nav-dd-sep">Importar / actualizar</div>
+      <button onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Ir al menú Datos</button>
+    </div>
+  </div>
+
+  <button class="nav-dd-btn" id="navbtn-vacaciones" onclick="navCloseAndRun(function(){ showTab('vacaciones'); })">🏖️ 5. Vacaciones</button>
+  <button class="nav-dd-btn" id="navbtn-diaslibres" onclick="navCloseAndRun(function(){ showTab('diaslibres'); })">📅 6. Días libres</button>
+  <button class="nav-dd-btn" id="navbtn-incapacidades" onclick="navCloseAndRun(function(){ showTab('incapacidades'); })">🤒 7. Incapacidades</button>
+  <button class="nav-dd-btn" id="navbtn-horasextras" onclick="navCloseAndRun(function(){ showTab('horasextras'); })">⏱️ 8. Horas extras</button>
+
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-contratos" onclick="toggleNavMenu('contratos')">🗂️ 9. Contratos <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-contratos">
       <button onclick="navCloseAndRun(function(){ showTab('contracts'); })">🗂️ Ver contratos guardados</button>
       <button onclick="navCloseAndRun(function(){ showTab('form'); })">📝 Formulario</button>
@@ -76,17 +96,9 @@
       <button onclick="navCloseAndRun(function(){ verConstanciaActual(); })">📋 Constancia Handbook</button>
     </div>
   </div>
+
   <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-empleados" onclick="toggleNavMenu('empleados')">👥 Empleados <span class="nav-caret">▾</span></button>
-    <div class="nav-dd-menu" id="navmenu-empleados">
-      <button onclick="navCloseAndRun(function(){ showTab('empleados'); })">📋 Lista de empleados</button>
-      <button onclick="navCloseAndRun(function(){ showTab('archivo'); })">🗄️ Archivo (salidas)</button>
-      <div class="nav-dd-sep">Importar / actualizar datos</div>
-      <button onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Ir al menú Datos</button>
-    </div>
-  </div>
-  <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-documentos" onclick="toggleNavMenu('documentos')">📑 Documentos <span class="nav-caret">▾</span></button>
+    <button class="nav-dd-btn" id="navbtn-documentos" onclick="toggleNavMenu('documentos')">📑 10. Documentos <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-documentos">
       <div class="nav-dd-sep">Despidos</div>
       <button onclick="navCloseAndRun(function(){ prepararDespidoTipo('con_responsabilidad'); })">⚖️ Despido — Con responsabilidad</button>
@@ -97,10 +109,18 @@
       <button onclick="navCloseAndRun(function(){ showTab('recomform'); })">📝 Nueva recomendación</button>
       <div class="nav-dd-sep">Permiso sin goce salarial</div>
       <button onclick="navCloseAndRun(function(){ showTab('permisoform'); })">🗓️ Nueva acción de personal</button>
+      <div class="nav-dd-sep">Próximamente</div>
+      <div style="padding:8px 14px 10px; font-size:11px; color:var(--ink-soft); line-height:1.5;">⏳ Carga masiva de archivos, plantillas de documentos, vista de documentos recientes por empleado y permisos por rol para documentos sensibles.</div>
     </div>
   </div>
+
+  <button class="nav-dd-btn" id="navbtn-reportes" onclick="navCloseAndRun(function(){ showTab('reporte'); })">📊 11. Reportes</button>
+  <button class="nav-dd-btn" id="navbtn-estadisticas" onclick="navCloseAndRun(function(){ showTab('estadisticas'); })">📈 12. Estadísticas</button>
+  <button class="nav-dd-btn" id="navbtn-asistente" onclick="navCloseAndRun(function(){ showTab('asistente'); })">🤖 13. Asistente IA</button>
+
+  <div class="nav-dd-divider" title="No estaba en la numeración pedida — se deja aquí porque Planilla y Empleados dependen de poder importar datos."></div>
   <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-datos" onclick="toggleNavMenu('datos')">📤 Datos <span class="nav-caret">▾</span></button>
+    <button class="nav-dd-btn" id="navbtn-datos" onclick="toggleNavMenu('datos')">📥 Datos <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-datos">
       <button onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Importar / actualizar datos</button>
       <div class="nav-dd-sep">Extraer datos</div>
@@ -108,17 +128,19 @@
       <button onclick="navCloseAndRun(function(){ exportarEmpleados(); })">👥 Extraer Empleados</button>
     </div>
   </div>
+
   <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-ajustes" onclick="toggleNavMenu('ajustes')">🔧 Ajustes <span class="nav-caret">▾</span></button>
-    <div class="nav-dd-menu" id="navmenu-ajustes">
+    <button class="nav-dd-btn" id="navbtn-configuracion" onclick="toggleNavMenu('configuracion')">🔧 14. Configuración <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-configuracion">
       <button onclick="navCloseAndRun(function(){ showTab('format'); })">🎨 Formato de la hoja (PDF)</button>
-      <button onclick="navCloseAndRun(function(){ showTab('reporte'); })">📊 Reporte mensual</button>
       <button onclick="navCloseAndRun(function(){ showTab('faq'); })">❓ Preguntas de ley laboral</button>
       <div class="nav-dd-sep">Propiedad</div>
       <button id="nav-btn-cambiar-propiedad" onclick="navCloseAndRun(function(){ abrirPropiedadGate(); })">🏨 Cambiar de propiedad</button>
       <div class="nav-dd-sep" id="nav-sep-cuenta" style="display:none;">Cuenta</div>
       <button id="nav-btn-empleador" style="display:none;" onclick="navCloseAndRun(function(){ location.href = 'empleador.html'; })">🏢 Administrar usuarios</button>
       <button id="nav-btn-logout" style="display:none;" onclick="navCloseAndRun(function(){ hacerLogoutTrabajador(); })">🔒 Cerrar sesión</button>
+      <div class="nav-dd-sep">Próximamente</div>
+      <div style="padding:8px 14px 10px; font-size:11px; color:var(--ink-soft); line-height:1.5;">⏳ Roles y permisos parametrizables, otros parámetros generales.</div>
     </div>
   </div>
 </div>
@@ -260,6 +282,11 @@
   <div id="reporte-panel" class="catalog-panel" style="display:none;"></div>
   <div id="faq-panel" class="catalog-panel" style="display:none;"></div>
   <div id="datos-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="planilla-panel" class="catalog-panel" style="display:none;"></div>
+  <!-- Panel compartido para los módulos del roadmap SCP People que todavía
+       no tienen lógica/datos propios (Vacaciones, Días libres, Incapacidades,
+       Horas extras, Estadísticas, Asistente IA) — ver MODULOS_PENDIENTES en app.js. -->
+  <div id="pendiente-panel" class="catalog-panel" style="display:none;"></div>
 
   <div id="preview-wrap" style="display:none;">
     <div class="section-card firma-panel" style="margin-bottom:12px; border-color:var(--gold);">
