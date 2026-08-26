@@ -2735,14 +2735,14 @@ async function renderDatosTab(){
 
     <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">👥 Importar Empleados</div>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Agrega empleados <b>nuevos</b> desde Excel/CSV (columnas: NOMBRE, DEPARTAMENTO, IDENTIFICACION, FECHA DE INGRESO, SALARIO, CORREO, CELULAR PERSONAL, BANCO DE ORIGEN, CUENTA BANCARIA o CUENTA IBAN, CONTACTO DE EMERGENCIA, ID CONTACTO EMERGENCIA, TELEFONO DE EMERGENCIA, PARENTESCO, COMENTARIOS). <b>Si la cédula o el número de empleado de una fila ya existen, esa fila se omite</b> — esto solo agrega gente nueva, nunca actualiza a quien ya está en la lista.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Agrega empleados <b>nuevos</b> desde Excel/CSV (columnas: NOMBRE, DEPARTAMENTO, IDENTIFICACION, FECHA DE INGRESO, SALARIO, CORREO, CELULAR PERSONAL, DIRECCION, BANCO DE ORIGEN, CUENTA BANCARIA o CUENTA IBAN, CONTACTO DE EMERGENCIA, ID CONTACTO EMERGENCIA, TELEFONO DE EMERGENCIA, PARENTESCO, COMENTARIOS). <b>Si la cédula o el número de empleado de una fila ya existen, esa fila se omite</b> — esto solo agrega gente nueva, nunca actualiza a quien ya está en la lista.</p>
       <button class="btn primary" onclick="document.getElementById('empleados-nuevos-input').click()">📥 Importar Empleados</button>
       <input type="file" id="empleados-nuevos-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarEmpleadosNuevos(this)">
     </div></div>
 
     <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">✏️ Actualizar datos de Empleados</div>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Actualiza <b>solo contacto y datos personales</b> de empleados que ya existen: CORREO, CELULAR PERSONAL, FECHA DE NACIMIENTO, BANCO DE ORIGEN, CUENTA BANCARIA o CUENTA IBAN, CONTACTO DE EMERGENCIA, ID CONTACTO EMERGENCIA, TELEFONO DE EMERGENCIA, PARENTESCO (además de IDENTIFICACION o NUMERO_EMPLEADO para encontrar a la persona). <b>Nunca toca puesto, salario ni fecha de ingreso</b>, y si no encuentra a la persona, omite la fila en vez de crearla.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">Actualiza <b>solo contacto y datos personales</b> de empleados que ya existen: CORREO, CELULAR PERSONAL, DIRECCION, FECHA DE NACIMIENTO, BANCO DE ORIGEN, CUENTA BANCARIA o CUENTA IBAN, CONTACTO DE EMERGENCIA, ID CONTACTO EMERGENCIA, TELEFONO DE EMERGENCIA, PARENTESCO (además de IDENTIFICACION o NUMERO_EMPLEADO para encontrar a la persona). <b>Nunca toca puesto, salario ni fecha de ingreso</b>, y si no encuentra a la persona, omite la fila en vez de crearla.</p>
       <button class="btn primary" onclick="document.getElementById('empleados-contacto-input').click()">📥 Actualizar datos de Empleados</button>
       <input type="file" id="empleados-contacto-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarDatosContactoEmpleados(this)">
     </div></div>
@@ -2855,6 +2855,7 @@ async function renderCatalogTab(type){
       </div></div>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
+      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalNombresIncorrectos()">🔤 Ver nombres con formato incorrecto</button>
       <div class="field" style="margin-bottom:10px;">
         <input type="text" id="empleados-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
       </div>
@@ -4325,6 +4326,48 @@ async function mostrarModalIncompletos(){
 
 function cerrarModalIncompletos(){
   document.getElementById("modal-incompletos").classList.remove("open");
+}
+
+// ---------- nombres con formato incorrecto ----------
+// El formato pedido es "Apellidos, Nombre(s)" (una sola coma) — lo mismo que
+// ya exige el campo Nombre del formulario (text_nombre_emp). Esto revisa la
+// lista completa de una vez, para detectar a quienes quedaron con otro
+// formato (ej. importados de un Excel/CSV viejo sin la coma). No se reordena
+// nada automáticamente — separar apellidos de nombres a ciegas es ambiguo
+// (apellidos compuestos como "DE LA CRUZ"), así que cada caso se corrige a
+// mano desde su propia ficha, con la misma validación que ya tiene ese campo.
+function nombreTieneFormatoCorrecto(nombre){
+  return /^[^,]+,\s*[^,]+/.test((nombre || "").trim());
+}
+
+async function mostrarModalNombresIncorrectos(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔤 Nombres con formato incorrecto";
+  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const keys = (res && res.keys) || [];
+    const empleados = await Promise.all(keys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
+    }));
+    const activos = empleados.filter(e => !e.ARCHIVADO);
+    const malFormateados = activos.filter(e => !nombreTieneFormatoCorrecto(e.NOMBRE_EMP));
+
+    if (malFormateados.length === 0){
+      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados activos tienen el nombre en formato "Apellidos, Nombre(s)".</div>`;
+      return;
+    }
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${malFormateados.length} de ${activos.length} empleados activos no están en el formato "Apellidos, Nombre(s)" (con coma). Corrígelos uno por uno — separar apellidos de nombres a ciegas puede equivocarse con apellidos compuestos, así que no se reordenan solos.</div>` +
+      malFormateados.map(e => `
+        <div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
+          <div style="font-weight:700; color:#B3261E;">${escapeHtml(e.NOMBRE_EMP || "(sin nombre guardado)")}</div>
+          <div style="font-size:11px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
+          <button class="btn" style="padding:5px 10px; font-size:11px; margin-top:5px;" onclick="cerrarModalIncompletos(); openCatalogForm('empleados','${e.key.replace(/'/g,"\\'")}');">Corregir ahora</button>
+        </div>`).join("");
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista.</div>`; }
 }
 
 // ---------- duplicate detection & merge ----------
