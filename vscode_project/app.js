@@ -5743,8 +5743,12 @@ function archivarEmpleado(key){
   archivarPendingKey = key;
   archivarPendingPdfDataUrl = null;
   archivarPendingPdfNombre = null;
+  // Sin valor por defecto: hay que decidir a propósito si es despido,
+  // renuncia o abandono laboral — no se puede archivar sin elegir uno.
   const sel = document.getElementById("archivar-tipo-salida");
-  if (sel) sel.value = "Renuncia voluntaria";
+  if (sel) sel.value = "";
+  const hint = document.getElementById("hint-archivar-tipo-salida");
+  if (hint) hint.textContent = "";
   const label = document.getElementById("archivar-pdf-label");
   if (label) label.textContent = "";
   document.getElementById("modal-archivar").classList.add("open");
@@ -5775,7 +5779,13 @@ function onArchivarPdfSelected(inputEl){
 async function confirmarArchivarEmpleado(){
   const key = archivarPendingKey;
   if (!key) return;
-  const tipoSalida = (document.getElementById("archivar-tipo-salida") || {}).value || "Renuncia voluntaria";
+  const tipoSalida = (document.getElementById("archivar-tipo-salida") || {}).value || "";
+  if (!tipoSalida){
+    const hint = document.getElementById("hint-archivar-tipo-salida");
+    if (hint) hint.textContent = "Elige si fue despido, renuncia, abandono laboral u otro motivo antes de archivar.";
+    statusMsg("Elige el tipo de salida antes de archivar al empleado.", false);
+    return;
+  }
   try{
     const fullKey = CATALOGS.empleados.prefix + key;
     const res = await window.storage.get(fullKey, false);
