@@ -566,6 +566,7 @@ const CATALOGS = {
       ["grp", "Contacto"],
       ["CELULAR_EMP","text","6. Teléfono personal",""],
       ["CORREO_EMP","text","7. Correo electrónico",""],
+      ["DIRECCION_EMP","text","Dirección (domicilio)","","libre"],
       ["grp", "Cuenta bancaria"],
       ["BANCO_EMP","select_banco_cr","8. Banco",""],
       ["NUMERO_CUENTA_EMP","cuenta_bancaria_emp","Número de cuenta","Elige el tipo y escribe el número"],
@@ -2453,6 +2454,7 @@ async function guardarFilasEmpleadosNuevos(rows){
       SALARIO_EMP: String(row["SALARIO"] || "").trim(),
       CORREO_EMP: String(row["CORREO"] || "").trim(),
       CELULAR_EMP: String(row["CELULAR PERSONAL"] || "").trim(),
+      DIRECCION_EMP: String(row["DIRECCION"] || "").trim(),
       BANCO_EMP: String(row["BANCO DE ORIGEN"] || "").trim(),
       CONTACTO_EMERGENCIA_NOMBRE: String(row["CONTACTO DE EMERGENCIA"] || "").trim(),
       CONTACTO_EMERGENCIA_ID: String(row["ID CONTACTO EMERGENCIA"] || "").trim(),
@@ -2509,6 +2511,7 @@ async function guardarFilasContactoEmpleados(rows){
     const correo = String(row["CORREO"] || "").trim(); if (correo) cambios.CORREO_EMP = correo;
     const celular = String(row["CELULAR PERSONAL"] || "").trim(); if (celular) cambios.CELULAR_EMP = celular;
     const nacimiento = String(row["FECHA DE NACIMIENTO"] || "").trim(); if (nacimiento) cambios.FECHA_NACIMIENTO_EMP = nacimiento;
+    const direccion = String(row["DIRECCION"] || "").trim(); if (direccion) cambios.DIRECCION_EMP = direccion;
     const banco = String(row["BANCO DE ORIGEN"] || "").trim(); if (banco) cambios.BANCO_EMP = banco;
     const cuenta = extraerCuentaBancariaDeFila(row); if (cuenta) Object.assign(cambios, cuenta);
     const contEmerg = String(row["CONTACTO DE EMERGENCIA"] || "").trim(); if (contEmerg) cambios.CONTACTO_EMERGENCIA_NOMBRE = contEmerg;
