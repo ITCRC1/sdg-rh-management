@@ -2407,9 +2407,21 @@ function parseCSV(text){
   });
 }
 
-// Índice de empleados existentes por cédula / número de empleado — lo usan
-// las 3 importaciones del menú Datos para decidir si una fila es alguien
-// nuevo o alguien que ya está en la lista.
+// Para comparar nombres entre un archivo externo y NOMBRE_EMP: mayúsculas,
+// sin tildes, sin comas (el archivo puede traer "Nombre Apellidos" y
+// NOMBRE_EMP guarda "Apellidos, Nombre") y espacios colapsados.
+function normalizarNombreParaMatch(nombre){
+  return String(nombre || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/,/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Índice de empleados existentes por cédula / número de empleado / nombre —
+// lo usan las importaciones del menú Datos para decidir si una fila es
+// alguien nuevo o alguien que ya está en la lista.
 async function construirIndicesEmpleadosPorFila(){
   const res = await window.storage.list(CATALOGS.empleados.prefix, false);
   const keys = (res && res.keys) || [];
@@ -2418,12 +2430,13 @@ async function construirIndicesEmpleadosPorFila(){
     const v = r && r.value ? JSON.parse(r.value) : {};
     return { key: k.replace(CATALOGS.empleados.prefix, ""), ...v };
   }));
-  const porCedula = {}, porNumero = {};
+  const porCedula = {}, porNumero = {}, porNombre = {};
   existentes.forEach(e => {
     if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
     if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).replace(/^0+/,"")] = e;
+    if (e.NOMBRE_EMP) porNombre[normalizarNombreParaMatch(e.NOMBRE_EMP)] = e;
   });
-  return { existentes, porCedula, porNumero };
+  return { existentes, porCedula, porNumero, porNombre };
 }
 
 function buscarEmpleadoExistentePorFila(row, indices){
@@ -4789,8 +4802,9 @@ function detectarColumnaMarcacion(headers, patrones){
 function detectarColumnasHorasExtra(rows){
   const headers = rows.length ? Object.keys(rows[0]) : [];
   return {
+    codigo: detectarColumnaMarcacion(headers, [/c[oó]digo/i, /n[uú]mero.*empleado/i, /id.*empleado/i]),
+    nombre: detectarColumnaMarcacion(headers, [/nombre/i, /^trabajador$/i, /^colaborador$/i, /^empleado$/i]),
     cedula: detectarColumnaMarcacion(headers, [/c[eé]dula/i, /identificaci[oó]n/i]),
-    codigo: detectarColumnaMarcacion(headers, [/c[oó]digo/i, /n[uú]mero.*empleado/i]),
     fecha: detectarColumnaMarcacion(headers, [/fecha/i, /^date$/i]),
     horasExtra: detectarColumnaMarcacion(headers, [/horas?\s*extras?/i, /^extra/i]),
     entrada: detectarColumnaMarcacion(headers, [/entrada/i, /^in$/i]),
@@ -4798,23 +4812,27 @@ function detectarColumnasHorasExtra(rows){
   };
 }
 
+// El match prioriza número/código de empleado y nombre — lo que trae la
+// máquina de marcación — y solo recurre a cédula si el archivo la trae y las
+// dos anteriores no encontraron a nadie.
 async function guardarFilasHorasExtra(rows, nombreArchivo){
   const cols = detectarColumnasHorasExtra(rows);
-  if (!cols.cedula && !cols.codigo) throw new Error("No se encontró una columna de cédula ni de código/número de empleado en ese archivo.");
+  if (!cols.codigo && !cols.nombre && !cols.cedula) throw new Error("No se encontró una columna de número/código de empleado, nombre, ni cédula en ese archivo.");
   if (!cols.fecha) throw new Error("No se encontró una columna de fecha en ese archivo.");
   if (!cols.horasExtra && !(cols.entrada && cols.salida)) throw new Error("No se encontró una columna de horas extra, ni de entrada/salida para calcularlas.");
 
-  const { porCedula, porNumero } = await construirIndicesEmpleadosPorFila();
+  const { porCedula, porNumero, porNombre } = await construirIndicesEmpleadosPorFila();
   const cfg = await obtenerConfigHorasExtra();
 
   // Varias filas del mismo empleado+fecha se suman dentro de un mismo
   // archivo — pasa cuando el reloj exporta una fila por marca en vez de un
   // resumen diario.
   const acumulado = {};
-  let sinCedula = 0;
+  let sinIdentificar = 0;
   for (const row of rows){
-    const cedulaRaw = cols.cedula ? String(row[cols.cedula] || "").trim() : "";
     const codigoRaw = cols.codigo ? String(row[cols.codigo] || "").trim() : "";
+    const nombreRaw = cols.nombre ? String(row[cols.nombre] || "").trim() : "";
+    const cedulaRaw = cols.cedula ? String(row[cols.cedula] || "").trim() : "";
     const fecha = normalizarFechaMarcacion(row[cols.fecha]);
     if (!fecha) continue;
 
@@ -4827,16 +4845,24 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     }
     if (!horas || horas <= 0) continue;
 
-    const cedulaDigits = cedulaRaw.replace(/\D/g, "");
     const numeroSinCeros = codigoRaw.replace(/^0+/, "");
-    if (!cedulaDigits && !numeroSinCeros){ sinCedula++; continue; }
-    const empleado = (cedulaDigits && porCedula[cedulaDigits]) || (numeroSinCeros && porNumero[numeroSinCeros]) || null;
+    const nombreNormalizado = normalizarNombreParaMatch(nombreRaw);
+    const cedulaDigits = cedulaRaw.replace(/\D/g, "");
+    const identificador = numeroSinCeros || nombreNormalizado || cedulaDigits;
+    if (!identificador){ sinIdentificar++; continue; }
 
-    const accKey = (empleado ? empleado.key : "sinmatch-" + (cedulaDigits || numeroSinCeros)) + ":" + fecha;
+    const empleado = (numeroSinCeros && porNumero[numeroSinCeros])
+      || (nombreNormalizado && porNombre[nombreNormalizado])
+      || (cedulaDigits && porCedula[cedulaDigits])
+      || null;
+
+    const accKey = (empleado ? empleado.key : "sinmatch-" + identificador) + ":" + fecha;
     if (!acumulado[accKey]){
       acumulado[accKey] = {
-        CEDULA: empleado ? (empleado.IDENTIFICACION_EMP || cedulaRaw) : (cedulaRaw || codigoRaw),
-        NOMBRE_ARCHIVO: String(row["NOMBRE"] || row["NOMBRE_EMP"] || row["EMPLEADO"] || row["NOMBRE COMPLETO"] || "").trim(),
+        CODIGO_ARCHIVO: codigoRaw,
+        NOMBRE_ARCHIVO: nombreRaw,
+        CEDULA: cedulaRaw,
+        IDENT_RAW: identificador,
         EMPLEADO_KEY: empleado ? empleado.key : null,
         FECHA: fecha,
         HORAS_EXTRA: 0,
@@ -4847,7 +4873,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
 
   let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0;
   for (const info of Object.values(acumulado)){
-    const key = HORAS_EXTRA_PREFIX + (info.EMPLEADO_KEY || ("sinmatch-" + info.CEDULA.replace(/\D/g,""))) + ":" + info.FECHA;
+    const key = HORAS_EXTRA_PREFIX + (info.EMPLEADO_KEY || ("sinmatch-" + info.IDENT_RAW)) + ":" + info.FECHA;
     let existente = null;
     try{
       const r = await window.storage.get(key, false);
@@ -4859,9 +4885,10 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     if (existente && existente.ESTADO !== "pendiente"){ omitidas++; continue; }
 
     const value = {
+      CODIGO_ARCHIVO: info.CODIGO_ARCHIVO,
+      NOMBRE_ARCHIVO: info.NOMBRE_ARCHIVO,
       CEDULA: info.CEDULA,
       EMPLEADO_KEY: info.EMPLEADO_KEY,
-      NOMBRE_ARCHIVO: info.NOMBRE_ARCHIVO,
       FECHA: info.FECHA,
       HORAS_EXTRA: Math.round(info.HORAS_EXTRA * 100) / 100,
       ESTADO: "pendiente",
@@ -4873,7 +4900,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     else if (existente) actualizadas++;
     else creadas++;
   }
-  return { creadas, actualizadas, sinMatch, omitidas, sinCedula };
+  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar };
 }
 
 async function importarHorasExtraArchivo(inputEl){
@@ -4896,8 +4923,9 @@ async function importarHorasExtraArchivo(inputEl){
   try{
     const r = await guardarFilasHorasExtra(rows, file.name);
     let msg = `${r.creadas} registro(s) nuevo(s) y ${r.actualizadas} actualizado(s) de horas extra pendientes.`;
-    if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por cédula/código — revísalas en "Sin identificar".`;
+    if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
+    if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
     statusMsg(msg);
     renderHorasExtrasPanel();
   }catch(e){
@@ -4958,7 +4986,7 @@ async function renderHorasExtrasPanel(){
     if (puedeEditar){
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
         <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📥 Importar horas extra</div>
-        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV de la máquina de marcación. Se busca por cédula o código/número de empleado, y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae entrada/salida, se calculan contra la jornada diaria configurada abajo.</p>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae entrada/salida, se calculan contra la jornada diaria configurada abajo.</p>
         <button class="btn primary" onclick="document.getElementById('horasextra-file-input').click()">📥 Importar archivo de marcación</button>
         <input type="file" id="horasextra-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarHorasExtraArchivo(this)">
       </div></div>`;
@@ -5002,7 +5030,7 @@ async function renderHorasExtrasPanel(){
     } else {
       html += lista.map(r => {
         const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
-        const nombre = emp ? (emp.NOMBRE_EMP || "") : (r.NOMBRE_ARCHIVO || "");
+        const nombre = emp ? (emp.NOMBRE_EMP || "") : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "");
         const puesto = emp ? (emp.DEPARTAMENTO_EMP || "") : "";
         const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / cfg.JORNADA_DIARIA_HORAS) : null;
         const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * cfg.TARIFA_MULTIPLICADOR * r.HORAS_EXTRA) : null;
@@ -5088,8 +5116,13 @@ async function mostrarModalAsignarHoraExtra(key){
       return { key: k.replace(CATALOGS.empleados.prefix, ""), ...vv };
     }));
     const activos = empleados.filter(e => !e.ARCHIVADO).sort((a,b) => (a.NOMBRE_EMP || "").localeCompare(b.NOMBRE_EMP || ""));
+    const datosArchivo = [
+      v.CODIGO_ARCHIVO ? "código " + v.CODIGO_ARCHIVO : "",
+      v.NOMBRE_ARCHIVO || "",
+      v.CEDULA ? "cédula " + v.CEDULA : "",
+    ].filter(Boolean).join(" — ") || "—";
     body.innerHTML = `
-      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Cédula/código en el archivo: <b>${escapeHtml(v.CEDULA || "—")}</b>${v.NOMBRE_ARCHIVO ? " — " + escapeHtml(v.NOMBRE_ARCHIVO) : ""}, ${v.HORAS_EXTRA} h extra el ${fmtFechaSimple(v.FECHA)}.</div>
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Datos en el archivo: <b>${escapeHtml(datosArchivo)}</b>, ${v.HORAS_EXTRA} h extra el ${fmtFechaSimple(v.FECHA)}.</div>
       <div class="field">
         <label>Empleado correcto</label>
         <select id="horasextra-asignar-select">
