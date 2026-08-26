@@ -581,10 +581,16 @@ body.solo-lectura select{
 .app-sidebar{
   flex:0 0 232px; width:232px; display:flex; flex-direction:column;
   position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+  background:#1F2E17; box-shadow:2px 0 10px rgba(0,0,0,.12);
 }
 .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
 
-.app-sidebar .app-header{ padding:20px 16px 14px; }
+/* El header ya venía con su propio degradado oscuro (pensado para cuando era
+   una barra angosta arriba de todo); ahora que el sidebar completo es verde
+   oscuro sólido, se apaga ese degradado para que sea una sola superficie
+   pareja en vez de dos tonos pegados. */
+.app-sidebar .app-header{ background:transparent; padding:20px 16px 14px; }
+.app-sidebar .app-header::after{ opacity:.08; }
 .app-sidebar .app-header::after{ font-size:64px; right:-10px; top:-8px; }
 .app-sidebar .app-header h1{ font-size:14.5px; line-height:1.3; }
 
