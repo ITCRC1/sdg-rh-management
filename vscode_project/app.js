@@ -4250,39 +4250,89 @@ async function descargarColillasDeGrupo(idx){
   await descargarVariasColillas(grupo.docs);
 }
 
-// ---------- colillas faltantes: quién no tiene la del período más reciente ----------
-// "Período actual" se infiere de la fecha en que se archivó el lote más reciente
-// de colillas (todas las de una misma subida quedan archivadas casi al mismo
-// tiempo) — no hay un campo de período propio en documentos_emitidos.
+// ---------- colillas faltantes: calendario fijo de planilla (1 y 16) ----------
+// La empresa paga los días 15 y 30 (Reglamento Interno / Handbook), así que el
+// "período actual a revisar" se calcula del calendario, NO de cuándo alguien
+// subió el último PDF — antes, si nadie había subido nada todavía ese mes, el
+// sistema no tenía forma de saber qué período tocaba revisar.
+//   día 1  → toca revisar el período 16–fin del MES ANTERIOR (pagado el 30)
+//   día 16 → toca revisar el período 1–15 del mes actual (pagado el 15)
+// Devuelve el checkpoint más reciente que ya pasó, con las fechas del período
+// que le corresponde vigilar.
+function checkpointActualPlanilla(hoy){
+  const cursor = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  for (let i = 0; i < 40; i++){ // nunca hay que retroceder más de ~40 días para encontrar un 1 o un 16
+    const dia = cursor.getDate();
+    if (dia === 1){
+      const finPeriodo = new Date(cursor.getFullYear(), cursor.getMonth(), 0); // último día del mes anterior
+      const inicioPeriodo = new Date(finPeriodo.getFullYear(), finPeriodo.getMonth(), 16);
+      return { checkDate: new Date(cursor), periodoInicio: inicioPeriodo, periodoFin: finPeriodo };
+    }
+    if (dia === 16){
+      const inicioPeriodo = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const finPeriodo = new Date(cursor.getFullYear(), cursor.getMonth(), 15);
+      return { checkDate: new Date(cursor), periodoInicio: inicioPeriodo, periodoFin: finPeriodo };
+    }
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return null;
+}
+
+function fechaISO(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+// A un empleado nuevo no se le puede exigir una colilla que todavía no le
+// corresponde: se vuelve "elegible" a partir del primer checkpoint (1 o 16)
+// que ocurra DESPUÉS de su fecha de ingreso — nunca antes. Ej.: ingresa el 26
+// de agosto (cae en el rango 16–31) → elegible desde el 1 de septiembre.
+function empleadoElegibleParaColilla(fechaIngresoStr, checkDate){
+  const fechaIngreso = parseFechaFlexible(fechaIngresoStr);
+  if (!fechaIngreso) return true; // sin fecha registrada no se puede excluir — se revisa por seguridad
+  const dia = fechaIngreso.getDate();
+  const fechaDesdeQueAplica = dia <= 15
+    ? new Date(fechaIngreso.getFullYear(), fechaIngreso.getMonth(), 16)
+    : new Date(fechaIngreso.getFullYear(), fechaIngreso.getMonth() + 1, 1);
+  return checkDate >= fechaDesdeQueAplica;
+}
+
+// Compartido entre el modal "Ver faltantes" y el banner del portal — evita
+// duplicar la carga de empleados/documentos y la lógica de elegibilidad.
+async function evaluarColillasFaltantes(){
+  const hoy = new Date();
+  const checkpoint = checkpointActualPlanilla(hoy);
+  const [empleadosDB, docs] = await Promise.all([
+    cargarEmpleadosDB(),
+    window.sdgApi.documentos({ tipo: "colilla_pago" }),
+  ]);
+  const activos = empleadosDB.filter(e => !e.ARCHIVADO);
+  const elegibles = activos.filter(e => empleadoElegibleParaColilla(e.FECHA_INGRESO_EMP, checkpoint.checkDate));
+  // Colilla "de este período" = archivada en cualquier momento desde que el
+  // período empezó hasta hoy — el momento exacto de subida no importa, solo
+  // que corresponda a este período (guardada por su propia fecha de subida).
+  const inicioISO = fechaISO(checkpoint.periodoInicio);
+  const cedulasConColilla = new Set(
+    docs.filter(d => (d.emitido_en || "").slice(0,10) >= inicioISO)
+        .map(d => d.empleado_cedula).filter(Boolean)
+  );
+  const faltantes = elegibles.filter(e => e.IDENTIFICACION_EMP && !cedulasConColilla.has(e.IDENTIFICACION_EMP));
+  const periodoTexto = `${checkpoint.periodoInicio.toLocaleDateString("es-CR")} al ${checkpoint.periodoFin.toLocaleDateString("es-CR")}`;
+  return { checkpoint, activos, elegibles, faltantes, periodoTexto };
+}
+
 async function mostrarModalColillasFaltantes(){
   const body = document.getElementById("modal-incompletos-body");
   document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "⚠️ Colillas de pago faltantes";
   body.innerHTML = `<div class="empty-state">Revisando…</div>`;
   document.getElementById("modal-incompletos").classList.add("open");
   try{
-    const [empleadosDB, docs] = await Promise.all([
-      cargarEmpleadosDB(),
-      window.sdgApi.documentos({ tipo: "colilla_pago" }),
-    ]);
-    const activos = empleadosDB.filter(e => !e.ARCHIVADO);
-    if (!docs.length){
-      body.innerHTML = `<div class="empty-state">Todavía no se ha archivado ninguna colilla — subí un PDF de planilla primero.</div>`;
-      return;
-    }
-    const ultimaFecha = docs.reduce((max, d) => (d.emitido_en||"") > max ? d.emitido_en : max, docs[0].emitido_en || "");
-    const diaActual = (ultimaFecha || "").slice(0, 10);
-    const cedulasConColilla = new Set(
-      docs.filter(d => (d.emitido_en || "").slice(0,10) === diaActual)
-          .map(d => d.empleado_cedula).filter(Boolean)
-    );
-    const faltantes = activos.filter(e => e.IDENTIFICACION_EMP && !cedulasConColilla.has(e.IDENTIFICACION_EMP));
-    const fechaTexto = diaActual ? new Date(diaActual + "T00:00:00").toLocaleDateString("es-CR") : "—";
+    const { elegibles, faltantes, periodoTexto } = await evaluarColillasFaltantes();
 
     if (faltantes.length === 0){
-      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados activos tienen su colilla del ${fechaTexto} archivada.</div>`;
+      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados que ya deben tener colilla del período ${periodoTexto} la tienen archivada.</div>`;
       return;
     }
-    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${faltantes.length} de ${activos.length} empleados activos no tienen colilla archivada del ${fechaTexto}.</div>` +
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${faltantes.length} de ${elegibles.length} empleados que ya deben tener colilla del período <b>${periodoTexto}</b> no la tienen archivada.</div>` +
       faltantes.map(e => `
         <div id="faltante-${escapeHtml(e.key)}" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
           <div style="font-size:12.5px;"><b>${escapeHtml(e.NOMBRE_EMP)}</b> — falta colilla de pago</div>
@@ -4533,7 +4583,31 @@ async function renderInicio(){
         </div>
       </div>`;
 
-    let html = `<div style="margin-bottom:14px;">
+    // Banner "toca subir colillas" — solo master/gerente (quienes pueden
+    // subirlas), y solo mientras el período activo del calendario fijo (1 y
+    // 16) siga con empleados elegibles sin colilla archivada. No tiene botón
+    // de "ocultar por ahora" a propósito: desaparece solo cuando de verdad
+    // queda resuelto, para que nadie lo posponga indefinidamente.
+    let bannerColillasHtml = "";
+    const rolActualInicio = window.sdgApi ? window.sdgApi.rol() : null;
+    if (rolActualInicio === "master" || rolActualInicio === "gerente"){
+      try{
+        const { faltantes, periodoTexto } = await evaluarColillasFaltantes();
+        if (faltantes.length > 0){
+          bannerColillasHtml = `<div class="section-card" style="border-color:#B3261E; margin-bottom:14px; cursor:pointer;" onclick="mostrarModalColillasFaltantes();">
+            <div class="section-body" style="padding:14px; display:flex; align-items:center; gap:12px;">
+              <div style="font-size:26px;">🧾</div>
+              <div>
+                <div style="font-weight:800; color:#B3261E;">Toca subir las colillas de pago del período ${periodoTexto}</div>
+                <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">${faltantes.length} empleado(s) todavía sin colilla archivada de este período. Toca para ver quién falta.</div>
+              </div>
+            </div>
+          </div>`;
+        }
+      }catch(e){ /* si falla el chequeo, no se muestra el banner — nunca debe romper el portal */ }
+    }
+
+    let html = bannerColillasHtml + `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">👋 Resumen general</div>
       <div style="font-size:12px; color:var(--ink-soft);">Toca cualquier tarjeta para ir directo a esa sección.</div>
     </div>`;
