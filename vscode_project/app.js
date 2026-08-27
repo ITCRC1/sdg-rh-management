@@ -6523,7 +6523,6 @@ function renderRecomendacion(){
   const nombre = data.NOMBRE_RECOM || `<span class="missing">[${tr("nombre pendiente","name pending")}]</span>`;
   const cedula = data.CEDULA_RECOM || `<span class="missing">[${tr("cédula pendiente","ID pending")}]</span>`;
   const puesto = data.PUESTO_RECOM || `<span class="missing">[${tr("puesto pendiente","position pending")}]</span>`;
-  const depto = data.DEPARTAMENTO_RECOM || `<span class="missing">[${tr("departamento pendiente","department pending")}]</span>`;
   const fechaIni = data.FECHA_INICIO_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const fechaFin = data.FECHA_FIN_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const razon = (data.RAZON_SALIDA_RECOM || "").trim() || `<span class="missing">[${tr("razón pendiente","reason pending")}]</span>`;
@@ -6535,11 +6534,11 @@ function renderRecomendacion(){
   const puestoFirmanteTxt = lang === "en" ? f.puestoEn : f.puesto;
 
   const cuerpo = tr(
-    `<p>El suscrito <b>${f.nombre}</b>, cédula de identidad <b>${f.cedula}</b>, mayor, en calidad de <b>${puestoFirmanteTxt}</b> de la empresa <b>${empresaTxt}</b> con cédula jurídica <b>${f.cedulaJuridica}</b>, hago constar que <b>${nombre}</b>, cédula número <b>${cedula}</b>, laboró como <b>${puesto}</b> y dependiente de <b>${depto}</b> desde el <b>${fechaIni}</b> al <b>${fechaFin}</b>, desempeñando ${escapeHtml(desempeno)}. La razón de su salida corresponde a ${escapeHtml(razon)}.</p>
+    `<p>El suscrito <b>${f.nombre}</b>, cédula de identidad <b>${f.cedula}</b>, mayor, en calidad de <b>${puestoFirmanteTxt}</b> de la empresa <b>${empresaTxt}</b> con cédula jurídica <b>${f.cedulaJuridica}</b>, hago constar que <b>${nombre}</b>, cédula número <b>${cedula}</b>, laboró como <b>${puesto}</b> desde el <b>${fechaIni}</b> al <b>${fechaFin}</b>, desempeñando ${escapeHtml(desempeno)}. La razón de su salida corresponde a ${escapeHtml(razon)}.</p>
     <p>Por tanto, confío plenamente que podrá realizar cualquier labor que se le encomiende sin ningún problema; ${nombre} es una persona ${escapeHtml(cualidades)}.</p>
     <p>Les agradezco de antemano cualquier oportunidad que se le brinde.</p>
     <p>Para que así conste, firmo en ${lugarFirma}, ${fechaFirma}.</p>`,
-    `<p>I, the undersigned, <b>${f.nombre}</b>, holder of identity card <b>${f.cedula}</b>, of legal age, in my capacity as <b>${puestoFirmanteTxt}</b> of the company <b>${empresaTxt}</b> with legal entity ID <b>${f.cedulaJuridica}</b>, hereby certify that <b>${nombre}</b>, ID number <b>${cedula}</b>, worked as <b>${puesto}</b> reporting to <b>${depto}</b> from <b>${fechaIni}</b> to <b>${fechaFin}</b>, delivering ${escapeHtml(desempeno)}. The reason for their departure was ${escapeHtml(razon)}.</p>
+    `<p>I, the undersigned, <b>${f.nombre}</b>, holder of identity card <b>${f.cedula}</b>, of legal age, in my capacity as <b>${puestoFirmanteTxt}</b> of the company <b>${empresaTxt}</b> with legal entity ID <b>${f.cedulaJuridica}</b>, hereby certify that <b>${nombre}</b>, ID number <b>${cedula}</b>, worked as <b>${puesto}</b> from <b>${fechaIni}</b> to <b>${fechaFin}</b>, delivering ${escapeHtml(desempeno)}. The reason for their departure was ${escapeHtml(razon)}.</p>
     <p>I am fully confident that they can carry out any work assigned to them without any issue; ${nombre} is a ${escapeHtml(cualidades)} person.</p>
     <p>I thank you in advance for any opportunity extended to them.</p>
     <p>In witness whereof, I sign in ${lugarFirma}, ${fechaFirma}.</p>`
