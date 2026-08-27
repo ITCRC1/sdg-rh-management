@@ -4866,6 +4866,23 @@ function formatoFechaHoraCortaUTC(ts){
   return `${dd}/${mm} ${hh}:${mi}`;
 }
 
+// "2026-08-15T20:52" — mismo formato que produce/espera un
+// <input type="datetime-local">, para poder precargar y comparar horas al
+// completar un turno sin marcar sin tener que parsear nada aparte.
+function isoLocalDesdeTs(ts){
+  const d = new Date(ts);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+function mostrarFechaHoraCorta(isoLocal){
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(isoLocal || ""));
+  return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : String(isoLocal || "");
+}
+
 // Convierte el PDF de marcas sueltas en filas "por día" listas para
 // guardarFilasHorasExtra. Las marcas se emparejan de dos en dos POR
 // EMPLEADO en orden cronológico (sin cortar por fecha civil): un turno
@@ -4875,6 +4892,11 @@ function formatoFechaHoraCortaUTC(ts){
 // salida a almorzar, por ejemplo) se suman entre sí. Todavía NO se resta la
 // jornada aquí — eso lo hace guardarFilasHorasExtra una vez que sabe con
 // qué empleado (y por lo tanto con qué modalidad de jornada) hizo match.
+//
+// Una marca que se queda sin pareja (turno sin marcar: falta el check-in o
+// el check-out) ya no se descarta en silencio — se manda como su propia
+// fila "incompleta", para que la jefatura la complete o la rechace en el
+// panel en vez de perder esa marca sin que nadie se entere.
 async function leerRegistrosMarcacionPDF(file){
   const texto = await extraerTextoPDF(file);
   const vistos = new Set();
@@ -4887,7 +4909,7 @@ async function leerRegistrosMarcacionPDF(file){
     vistos.add(dedupeKey);
     eventos.push(ev);
   });
-  if (!eventos.length) return { filas: [], sinPar: 0 };
+  if (!eventos.length) return { filas: [], sinPar: 0, turnosSinMarcar: 0 };
 
   const porEmpleado = {};
   eventos.forEach(ev => {
@@ -4895,7 +4917,9 @@ async function leerRegistrosMarcacionPDF(file){
   });
 
   const porDia = {};
-  let sinPar = 0;
+  const filasIncompletas = [];
+  let sinPar = 0; // marcas descartadas de verdad (par con duración imposible)
+  let turnosSinMarcar = 0; // marcas sueltas que SÍ quedan como fila para revisar
   Object.entries(porEmpleado).forEach(([codigo, info]) => {
     const marcas = info.marcas.slice().sort((a, b) => a.ts - b.ts);
     for (let i = 0; i + 1 < marcas.length; i += 2){
@@ -4909,14 +4933,21 @@ async function leerRegistrosMarcacionPDF(file){
       porDia[key].horas += horas;
       porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcas[i].ts), salida: formatoFechaHoraCortaUTC(marcas[i + 1].ts) });
     }
-    if (marcas.length % 2 === 1) sinPar += 1; // última marca del período sin su pareja
+    if (marcas.length % 2 === 1){
+      const suelta = marcas[marcas.length - 1];
+      filasIncompletas.push({
+        CODIGO: codigo, NOMBRE: info.nombre, FECHA: suelta.fecha,
+        MARCA_SUELTA: isoLocalDesdeTs(suelta.ts), INCOMPLETO: true,
+      });
+      turnosSinMarcar += 1;
+    }
   });
 
   const filas = Object.values(porDia)
     .filter(d => d.horas > 0)
     .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS TRABAJADAS": Math.round(d.horas * 100) / 100, MARCAS: d.marcas }));
 
-  return { filas, sinPar };
+  return { filas: filas.concat(filasIncompletas), sinPar, turnosSinMarcar };
 }
 
 function detectarColumnaMarcacion(headers, patrones){
@@ -4931,7 +4962,14 @@ function detectarColumnaMarcacion(headers, patrones){
 // "empleado" como el resto de la app. Se incluyen esos formatos cortos
 // además de los ya usados en otras importaciones.
 function detectarColumnasHorasExtra(rows){
-  const headers = rows.length ? Object.keys(rows[0]) : [];
+  // Unión de encabezados de TODAS las filas, no solo la primera: las filas
+  // "turno sin marcar" que arma leerRegistrosMarcacionPDF no traen columna
+  // de horas (todavía no se sabe cuántas son), así que si esa fuera la
+  // primera fila del lote, mirar solo rows[0] dejaría sin detectar la
+  // columna de horas que sí traen las demás filas.
+  const headerSet = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+  const headers = [...headerSet];
   return {
     codigo: detectarColumnaMarcacion(headers, [
       /c[oó]digo/i, /n[uú]mero.*empleado/i, /id.*empleado/i, /empleado.*id/i,
@@ -4968,7 +5006,11 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   const cols = detectarColumnasHorasExtra(rows);
   if (!cols.codigo && !cols.nombre && !cols.cedula) throw new Error("No se encontró una columna de número/código de empleado, nombre, ni cédula en ese archivo.");
   if (!cols.fecha) throw new Error("No se encontró una columna de fecha en ese archivo.");
-  if (!cols.horasExtra && !cols.horasTrabajadas && !(cols.entrada && cols.salida)) throw new Error("No se encontró una columna de horas extra, horas trabajadas, ni de entrada/salida para calcularlas.");
+  // Un lote que sea SOLO turnos sin marcar (ninguna hora calculable todavía)
+  // igual debe poder importarse — por eso esta validación no exige columna
+  // de horas cuando ya vienen filas INCOMPLETO armadas por el PDF.
+  const tieneIncompletos = rows.some(r => r.INCOMPLETO);
+  if (!cols.horasExtra && !cols.horasTrabajadas && !(cols.entrada && cols.salida) && !tieneIncompletos) throw new Error("No se encontró una columna de horas extra, horas trabajadas, ni de entrada/salida para calcularlas.");
 
   const { porCedula, porNumero, porNombre } = await construirIndicesEmpleadosPorFila();
   const cachePuestos = {};
@@ -4989,19 +5031,22 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     const fecha = normalizarFechaMarcacion(row[cols.fecha]);
     if (!fecha) continue;
 
+    const esIncompleto = !!row.INCOMPLETO;
     let horasExtraDirecta = 0, horasTrabajadas = 0;
     let marcasFila = Array.isArray(row.MARCAS) ? row.MARCAS : null; // ya vienen armadas (PDF de marcación)
     if (cols.horasExtra){
       horasExtraDirecta = parsearHorasDecimal(row[cols.horasExtra]);
     } else if (cols.horasTrabajadas){
       horasTrabajadas = parsearHorasDecimal(row[cols.horasTrabajadas]);
-    } else {
+    } else if (cols.entrada && cols.salida){
       const entradaRaw = String(row[cols.entrada] ?? "").trim();
       const salidaRaw = String(row[cols.salida] ?? "").trim();
       horasTrabajadas = parsearHorasDecimal(salidaRaw) - parsearHorasDecimal(entradaRaw);
       if (horasTrabajadas > 0) marcasFila = [{ entrada: entradaRaw, salida: salidaRaw }];
     }
-    if (horasExtraDirecta <= 0 && horasTrabajadas <= 0) continue;
+    // Una fila "turno sin marcar" no trae horas que calcular — igual debe
+    // pasar, porque lo que importa es dejar la marca suelta para revisión.
+    if (horasExtraDirecta <= 0 && horasTrabajadas <= 0 && !esIncompleto) continue;
 
     const numeroSinCeros = normalizarCodigoEmpleado(codigoRaw);
     const nombreNormalizado = normalizarNombreParaMatch(nombreRaw);
@@ -5027,11 +5072,17 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
         HORAS_EXTRA_DIRECTA: 0,
         HORAS_TRABAJADAS: 0,
         MARCAS: [],
+        INCOMPLETO: false,
+        MARCA_SUELTA: null,
       };
     }
     acumulado[accKey].HORAS_EXTRA_DIRECTA += horasExtraDirecta;
     acumulado[accKey].HORAS_TRABAJADAS += horasTrabajadas;
     if (marcasFila) acumulado[accKey].MARCAS.push(...marcasFila);
+    if (esIncompleto){
+      acumulado[accKey].INCOMPLETO = true;
+      acumulado[accKey].MARCA_SUELTA = row.MARCA_SUELTA || null;
+    }
   }
 
   let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0;
@@ -5042,7 +5093,9 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     const jornada = await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
     const horasExtraCalculadas = info.HORAS_TRABAJADAS > jornada ? info.HORAS_TRABAJADAS - jornada : 0;
     const horasExtraFinal = info.HORAS_EXTRA_DIRECTA + horasExtraCalculadas;
-    if (horasExtraFinal <= 0) continue; // trabajó, pero no superó su jornada — no hay nada que aprobar
+    // Un turno sin marcar se deja pasar aunque dé 0 horas — todavía hay algo
+    // que resolver (completar la hora que falta o descartarlo).
+    if (horasExtraFinal <= 0 && !info.INCOMPLETO) continue;
 
     const key = HORAS_EXTRA_PREFIX + (info.EMPLEADO_KEY || ("sinmatch-" + info.IDENT_RAW)) + ":" + info.FECHA;
     let existente = null;
@@ -5063,6 +5116,8 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
       FECHA: info.FECHA,
       HORAS_EXTRA: Math.round(horasExtraFinal * 100) / 100,
       MARCAS: info.MARCAS,
+      INCOMPLETO: info.INCOMPLETO,
+      MARCA_SUELTA: info.MARCA_SUELTA,
       ESTADO: "pendiente",
       ORIGEN_ARCHIVO: nombreArchivo,
       IMPORTADO_EN: new Date().toISOString(),
@@ -5080,12 +5135,13 @@ async function importarHorasExtraArchivo(inputEl){
   if (!file) return;
   const esPDF = /\.pdf$/i.test(file.name);
   const esCSV = /\.csv$/i.test(file.name);
-  let rows, sinPar = 0;
+  let rows, sinPar = 0, turnosSinMarcar = 0;
   try{
     if (esPDF){
       const leido = await leerRegistrosMarcacionPDF(file);
       rows = leido.filas;
       sinPar = leido.sinPar;
+      turnosSinMarcar = leido.turnosSinMarcar;
     } else {
       rows = await leerFilasArchivo(file, esCSV);
     }
@@ -5109,7 +5165,8 @@ async function importarHorasExtraArchivo(inputEl){
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
-    if (sinPar) msg += ` ${sinPar} marca(s) de reloj sin su pareja de entrada/salida se ignoraron.`;
+    if (turnosSinMarcar) msg += ` ${turnosSinMarcar} turno(s) sin marcar quedaron para que la jefatura los complete o los descarte.`;
+    if (sinPar) msg += ` ${sinPar} marca(s) con duración imposible (par negativo o de más de 20h) se ignoraron.`;
     // Para poder revisar rápido si el archivo se leyó como se esperaba —
     // sobre todo cuál columna se usó como número de empleado, la fuente más
     // común de "sin identificar" cuando el encabezado no es de los usuales.
@@ -5238,7 +5295,10 @@ async function renderHorasExtrasPanel(){
       const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * TARIFA_HORAS_EXTRA * r.HORAS_EXTRA) : null;
       const keyEsc = String(r.key).replace(/'/g, "\\'");
       let acciones = "";
-      if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
+      if (r.ESTADO === "pendiente" && r.INCOMPLETO && r.EMPLEADO_KEY && puedeAprobar){
+        acciones = `<button class="use" onclick="mostrarModalCompletarTurno('${keyEsc}')">✏️ Completar</button>
+          <button class="del" onclick="rechazarTurnoSinMarcar('${keyEsc}')">❌ No laboró</button>`;
+      } else if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
         acciones = `<button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
           <button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>
           <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
@@ -5258,11 +5318,14 @@ async function renderHorasExtrasPanel(){
             </div>
           </details>`
         : "";
-      return `<div class="catalog-item">
+      const infoLinea = (r.ESTADO === "pendiente" && r.INCOMPLETO)
+        ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
+        : `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}`;
+      return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">
           <div class="info">
             <div class="name">${escapeHtml(nombre || r.CEDULA || "(sin nombre)")} — ${fmtFechaSimple(r.FECHA)}</div>
-            <div class="meta">${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}</div>
+            <div class="meta">${infoLinea}</div>
             ${marcasHtml}
           </div>
           <div class="actions">${acciones}</div>
@@ -5285,17 +5348,21 @@ async function renderHorasExtrasPanel(){
       if (empKeySel && diasSel.length){
         const emp = empleadosPorKey[empKeySel];
         diasSel.sort((a, b) => (a.FECHA || "").localeCompare(b.FECHA || ""));
-        const keysSel = diasSel.map(d => d.key);
+        // Los turnos sin marcar se resuelven uno por uno (Completar/No
+        // laboró) — no entran en el lote de aprobar/rechazar en bloque.
+        const diasCompletos = diasSel.filter(d => !d.INCOMPLETO);
+        const diasIncompletos = diasSel.filter(d => d.INCOMPLETO);
+        const keysSel = diasCompletos.map(d => d.key);
         html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraEmpleadoSeleccionado=null; renderHorasExtrasPanel();">← Volver a la lista</button>`;
         html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
           <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(emp ? emp.NOMBRE_EMP || empKeySel : empKeySel)}</div>
-          <div style="font-size:12px; color:var(--ink-soft);">${diasSel.length} día(s) pendientes · ${diasSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra en total</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${diasSel.length} día(s) pendientes · ${diasSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra en total${diasIncompletos.length ? ` · ⚠️ ${diasIncompletos.length} turno(s) sin marcar` : ""}</div>
         </div></div>`;
-        if (puedeAprobar && diasSel.length > 1){
+        if (puedeAprobar && diasCompletos.length > 1){
           const keysJson = escapeHtml(JSON.stringify(keysSel));
           html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
-            <button class="btn primary" onclick="aprobarVariasHorasExtra(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>✅ Aprobar los ${diasSel.length} días</button>
-            <button class="btn" onclick="rechazarVariasHorasExtra(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>🚫 Rechazar los ${diasSel.length} días</button>
+            <button class="btn primary" onclick="aprobarVariasHorasExtra(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>✅ Aprobar los ${diasCompletos.length} días</button>
+            <button class="btn" onclick="rechazarVariasHorasExtra(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>🚫 Rechazar los ${diasCompletos.length} días</button>
           </div>`;
         }
         html += diasSel.map(renderFilaHorasExtra).join("");
@@ -5317,16 +5384,18 @@ async function renderHorasExtrasPanel(){
         } else {
           html += deptosRoster.map(depto => `
             <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px; margin:12px 0 4px;">${escapeHtml(depto)} (${porDeptoRoster[depto].length})</div>
-            ${porDeptoRoster[depto].map(({ empKey, emp, dias }) => `
-              <div class="catalog-item" style="cursor:pointer;" onclick="horasExtraEmpleadoSeleccionado='${empKey.replace(/'/g,"\\'")}'; renderHorasExtrasPanel();">
+            ${porDeptoRoster[depto].map(({ empKey, emp, dias }) => {
+              const incompletos = dias.filter(d => d.INCOMPLETO).length;
+              return `<div class="catalog-item" style="cursor:pointer;${incompletos ? " border-color:#D9A54A;" : ""}" onclick="horasExtraEmpleadoSeleccionado='${empKey.replace(/'/g,"\\'")}'; renderHorasExtrasPanel();">
                 <div class="row1">
                   <div class="info">
                     <div class="name">${escapeHtml(emp ? emp.NOMBRE_EMP || empKey : empKey)}</div>
-                    <div class="meta">${dias.length} día(s) pendientes · ${dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra</div>
+                    <div class="meta">${dias.length} día(s) pendientes · ${dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra${incompletos ? ` · ⚠️ ${incompletos} sin marcar` : ""}</div>
                   </div>
                   <div class="actions"><span class="meta">Ver →</span></div>
                 </div>
-              </div>`).join("")}
+              </div>`;
+            }).join("")}
           `).join("");
         }
       }
@@ -5460,6 +5529,97 @@ async function rechazarVariasHorasExtra(keys){
   horasExtraEmpleadoSeleccionado = null;
   statusMsg(`${ok} de ${keys.length} día(s) rechazados.`, ok === keys.length);
   renderHorasExtrasPanel();
+}
+
+// "Turno sin marcar": el reloj registró una sola marca ese día (falta el
+// check-in o el check-out). Se le muestra a la jefatura la marca que sí
+// llegó, y completa la que falta a mano — o confirma que ese día no se
+// trabajó, si la marca fue un error del reloj.
+async function mostrarModalCompletarTurno(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "⚠️ Turno sin marcar";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v){ body.innerHTML = `<div class="empty-state">Ese registro ya no existe.</div>`; return; }
+    let nombre = v.NOMBRE_ARCHIVO || v.CEDULA || "";
+    if (v.EMPLEADO_KEY){
+      try{
+        const re = await window.storage.get(CATALOGS.empleados.prefix + v.EMPLEADO_KEY, false);
+        const emp = re && re.value ? JSON.parse(re.value) : null;
+        if (emp && emp.NOMBRE_EMP) nombre = emp.NOMBRE_EMP;
+      }catch(e){ /* se queda con el nombre del archivo */ }
+    }
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
+        <b>${escapeHtml(nombre || "—")}</b> — el reloj marcador solo registró una marca ese día: <b>${escapeHtml(mostrarFechaHoraCorta(v.MARCA_SUELTA))}</b>.
+        Completa la hora que falta (lo más común es que haya olvidado marcar la salida).
+      </div>
+      <div class="field">
+        <label>Entrada</label>
+        <input type="datetime-local" id="turno-entrada" value="${escapeHtml(v.MARCA_SUELTA || "")}">
+      </div>
+      <div class="field">
+        <label>Salida</label>
+        <input type="datetime-local" id="turno-salida" value="">
+      </div>
+      <button class="btn primary" style="margin-top:8px;" onclick="confirmarCompletarTurno('${key.replace(/'/g,"\\'")}')">✅ Guardar y aprobar</button>
+      <div class="hint" style="margin-top:6px;">Si la marca fue de salida en vez de entrada, corrige el campo "Entrada" y llena "Salida" con la hora real de entrada — el sistema solo calcula la diferencia entre las dos.</div>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarCompletarTurno(key){
+  const entradaStr = document.getElementById("turno-entrada").value;
+  const salidaStr = document.getElementById("turno-salida").value;
+  if (!entradaStr || !salidaStr){ statusMsg("Completa las dos horas.", false); return; }
+  const horas = (new Date(salidaStr).getTime() - new Date(entradaStr).getTime()) / 3600000;
+  if (!horas || isNaN(horas) || horas <= 0 || horas > 20){
+    statusMsg("Ese rango de horas no parece válido — revisa las fechas y horas.", false);
+    return;
+  }
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    let jornada = JORNADA_DIARIA_POR_DEFECTO;
+    if (v.EMPLEADO_KEY){
+      try{
+        const re = await window.storage.get(CATALOGS.empleados.prefix + v.EMPLEADO_KEY, false);
+        const emp = re && re.value ? JSON.parse(re.value) : null;
+        jornada = await jornadaDiariaDeEmpleado(emp, {});
+      }catch(e){ /* usa la jornada por defecto */ }
+    }
+    v.HORAS_EXTRA = Math.round(Math.max(0, horas - jornada) * 100) / 100;
+    v.MARCAS = [{ entrada: mostrarFechaHoraCorta(entradaStr), salida: mostrarFechaHoraCorta(salidaStr) }];
+    v.INCOMPLETO = false;
+    v.MARCA_SUELTA = null;
+    v.ESTADO = "aprobada";
+    v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    cerrarModalIncompletos();
+    statusMsg("Turno completado y aprobado.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
+}
+
+async function rechazarTurnoSinMarcar(key){
+  if (!confirm("¿Confirmas que ese día NO se trabajó?")) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "rechazada";
+    v.MOTIVO_RECHAZO = "Turno sin marcar — no laboró ese día";
+    v.INCOMPLETO = false;
+    v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Marcado como no laborado.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
 }
 
 // El registro "sin identificar" queda con la cédula/código tal como vino del
