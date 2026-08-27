@@ -5134,9 +5134,14 @@ let horasExtraEmpleadoSeleccionado = null; // key del empleado abierto en el det
 
 // Cada registro de horas_extra: es un "día" (con o sin marca) al que
 // jefatura/gerencia le asigna un tipo antes de aprobarlo. "laboral" es el
-// valor por defecto de cualquier día importado desde la máquina de
-// marcación (trae marcas → se trabajó); los otros cuatro solo se agregan a
-// mano, porque un día sin marca no llega solo de ningún archivo.
+// valor por defecto de cualquier día importado con marcas; "ausencia" se
+// detecta sola al importar (ver guardarFilasHorasExtra) para cualquier hueco
+// dentro del rango de fechas del archivo; "libre"/"incapacidad"/
+// "permiso_sin_goce" hoy solo llegan reclasificando una ausencia detectada
+// con este selector (o, en el caso de permiso sin goce, automático desde la
+// carta de acción de personal — ver crearDiasPermisoSinGoceParaPlanilla).
+// Pendiente: un catálogo de días de descanso por empleado para que la
+// detección de ausencias ya no marque como tal el descanso semanal normal.
 const TIPOS_DIA_HORARIO = {
   laboral: { label: "Día laboral", emoji: "💼" },
   libre: { label: "Día libre", emoji: "🌴" },
@@ -5144,7 +5149,6 @@ const TIPOS_DIA_HORARIO = {
   permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄" },
   ausencia: { label: "Ausencia", emoji: "⚠️" },
 };
-const TIPOS_DIA_SIN_MARCA = ["libre", "incapacidad", "permiso_sin_goce", "ausencia"];
 
 // Tarifa legal mínima de horas extra (Art. 139 Código de Trabajo: tiempo y
 // medio) — no es un dato por-empleado como la jornada, así que no hace
@@ -5362,6 +5366,82 @@ async function jornadaDiariaDeEmpleado(empleado, cachePuestos){
   return jornadaDiariaDePuesto(cachePuestos[empleado.PUESTO_KEY]);
 }
 
+// El archivo de marcación es "completo" para su propio rango de fechas: si
+// trae marcas de un empleado del 1 al 15, cualquier día de ese mismo rango
+// donde esa persona no tenga ni una marca es información (algo pasó ese
+// día), no un simple vacío. Por cada empleado que sí aparece en el archivo
+// se revisan todos los días entre la primera y la última fecha del archivo
+// (acotado a su fecha de ingreso, y a su fecha de salida si ya está
+// archivado) y cualquier hueco sin registro se crea como "ausencia"
+// pendiente — jefatura lo reclasifica con el selector de tipo de día si en
+// realidad era su descanso semanal (todavía no hay catálogo de días de
+// descanso por empleado; en cuanto exista, esos días dejan de entrar aquí).
+// Empleados que no aparecen en el archivo para nada no se tocan — no hay
+// con qué comparar su ausencia contra este archivo en particular.
+async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
+  const fechasDelArchivo = [...new Set(Object.values(acumulado).map(info => info.FECHA))].filter(Boolean).sort();
+  if (!fechasDelArchivo.length) return 0;
+  const minFecha = fechasDelArchivo[0];
+  const maxFecha = fechasDelArchivo[fechasDelArchivo.length - 1];
+
+  const empleadosEnArchivo = new Map();
+  const fechasPorEmpleado = new Map();
+  Object.values(acumulado).forEach(info => {
+    if (!info.EMPLEADO_KEY) return;
+    if (!empleadosEnArchivo.has(info.EMPLEADO_KEY)) empleadosEnArchivo.set(info.EMPLEADO_KEY, info.EMPLEADO);
+    if (!fechasPorEmpleado.has(info.EMPLEADO_KEY)) fechasPorEmpleado.set(info.EMPLEADO_KEY, new Set());
+    fechasPorEmpleado.get(info.EMPLEADO_KEY).add(info.FECHA);
+  });
+
+  let ausenciasDetectadas = 0;
+  for (const [empKey, empleado] of empleadosEnArchivo){
+    const fechasConRegistro = fechasPorEmpleado.get(empKey) || new Set();
+    const ingreso = parsearFechaDDMMYYYY(empleado && empleado.FECHA_INGRESO_EMP);
+    const salidaStr = (empleado && empleado.ARCHIVADO && empleado.FECHA_ARCHIVADO)
+      ? (parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO) ? isoDeFechaLocal(parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO)) : null)
+      : null;
+    const ingresoStr = ingreso ? isoDeFechaLocal(ingreso) : null;
+
+    const cursor = new Date(minFecha + "T00:00:00");
+    const fin = new Date(maxFecha + "T00:00:00");
+    while (cursor <= fin){
+      const fechaStr = isoDeFechaLocal(cursor);
+      cursor.setDate(cursor.getDate() + 1);
+      if (fechasConRegistro.has(fechaStr)) continue;
+      if (ingresoStr && fechaStr < ingresoStr) continue;
+      if (salidaStr && fechaStr > salidaStr) continue;
+
+      const key = HORAS_EXTRA_PREFIX + empKey + ":" + fechaStr;
+      try{
+        const existente = await window.storage.get(key, false);
+        if (existente && existente.value) continue; // ya hay algo ahí (de otro archivo, o ya resuelto) — no se pisa
+      }catch(e){ /* no existía, sigue normal */ }
+
+      try{
+        await window.storage.set(key, JSON.stringify({
+          EMPLEADO_KEY: empKey,
+          FECHA: fechaStr,
+          HORAS_EXTRA: 0,
+          MARCAS: [],
+          INCOMPLETO: false,
+          MARCA_SUELTA: null,
+          TIPO_DIA: "ausencia",
+          ESTADO: "pendiente",
+          ORIGEN: "ausencia_detectada",
+          ORIGEN_ARCHIVO: nombreArchivo,
+          IMPORTADO_EN: new Date().toISOString(),
+        }), false);
+        ausenciasDetectadas++;
+      }catch(e){ /* best effort — se puede reclasificar/agregar después */ }
+    }
+  }
+  return ausenciasDetectadas;
+}
+
+function isoDeFechaLocal(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
 // El match prioriza número/código de empleado y nombre — lo que trae la
 // máquina de marcación — y solo recurre a cédula si el archivo la trae y las
 // dos anteriores no encontraron a nadie.
@@ -5456,9 +5536,13 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     const jornada = await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
     const horasExtraCalculadas = info.HORAS_TRABAJADAS > jornada ? info.HORAS_TRABAJADAS - jornada : 0;
     const horasExtraFinal = info.HORAS_EXTRA_DIRECTA + horasExtraCalculadas;
-    // Un turno sin marcar se deja pasar aunque dé 0 horas — todavía hay algo
-    // que resolver (completar la hora que falta o descartarlo).
-    if (horasExtraFinal <= 0 && !info.INCOMPLETO) continue;
+    // Antes esto solo dejaba pasar días con horas EXTRA (>0) o turnos sin
+    // marcar — un día normal de jornada completa sin excedente no generaba
+    // ningún registro. Pero "Días Laborados" (planilla) necesita contar TODO
+    // día con marca real, tenga o no horas extra, así que un día con marcas
+    // o con horas trabajadas ya se guarda igual (con HORAS_EXTRA en 0).
+    const huboTrabajo = info.HORAS_TRABAJADAS > 0 || info.HORAS_EXTRA_DIRECTA > 0 || (Array.isArray(info.MARCAS) && info.MARCAS.length > 0);
+    if (!huboTrabajo && !info.INCOMPLETO) continue;
 
     const key = HORAS_EXTRA_PREFIX + (info.EMPLEADO_KEY || ("sinmatch-" + info.IDENT_RAW)) + ":" + info.FECHA;
     let existente = null;
@@ -5481,6 +5565,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
       MARCAS: info.MARCAS,
       INCOMPLETO: info.INCOMPLETO,
       MARCA_SUELTA: info.MARCA_SUELTA,
+      TIPO_DIA: info.INCOMPLETO ? null : "laboral",
       ESTADO: "pendiente",
       ORIGEN_ARCHIVO: nombreArchivo,
       IMPORTADO_EN: new Date().toISOString(),
@@ -5490,7 +5575,10 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     else if (existente) actualizadas++;
     else creadas++;
   }
-  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, cols };
+
+  const ausenciasDetectadas = await detectarAusenciasDelArchivo(acumulado, nombreArchivo);
+
+  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols };
 }
 
 async function importarHorasExtraArchivo(inputEl){
@@ -5523,8 +5611,9 @@ async function importarHorasExtraArchivo(inputEl){
   try{
     const r = await guardarFilasHorasExtra(rows, file.name);
     let msg = (r.creadas + r.actualizadas + r.sinMatch === 0)
-      ? `El archivo se leyó bien, pero nadie superó su jornada diaria en ese período — no hay horas extra que registrar.`
-      : `${r.creadas} registro(s) nuevo(s) y ${r.actualizadas} actualizado(s) de horas extra pendientes.`;
+      ? `El archivo se leyó bien, pero no se encontró ningún día con marcas para registrar.`
+      : `${r.creadas} día(s) nuevo(s) y ${r.actualizadas} actualizado(s) quedaron pendientes de revisar.`;
+    if (r.ausenciasDetectadas) msg += ` ${r.ausenciasDetectadas} día(s) sin ninguna marca dentro del rango del archivo se marcaron como ausencia pendiente — revisalos, puede que en realidad fueran descanso.`;
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
@@ -5628,36 +5717,6 @@ async function renderHorasExtrasPanel(){
         <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV/PDF de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae horas trabajadas o entrada/salida (o un PDF de marcas sueltas de "Ingreso/Salida"), se comparan contra la jornada diaria del puesto de cada empleado (turno diurno, mixto o nocturno — la misma que se define al crear el puesto), a tiempo y medio (Art. 139 CT). Las marcas se emparejan en orden cronológico, así que un turno nocturno que cruza la medianoche se calcula bien.</p>
         <button class="btn primary" onclick="document.getElementById('horasextra-file-input').click()">📥 Importar archivo de marcación</button>
         <input type="file" id="horasextra-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarHorasExtraArchivo(this)">
-      </div></div>`;
-    }
-
-    if (puedeAprobar){
-      const sesion = window.sdgApi && window.sdgApi.sesionActual();
-      const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
-      const empleadosParaManual = empleados
-        .filter(e => !e.ARCHIVADO)
-        .filter(e => !deptoJefatura || departamentoDeEmpleado(e) === deptoJefatura)
-        .sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
-      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📅 Agregar día sin marca</div>
-        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Para un día que no llegó de la máquina de marcación — día libre, incapacidad, permiso sin goce o ausencia. Queda pendiente hasta que se apruebe, igual que las horas extra normales.</p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
-            <select id="horasextra-manual-empleado">
-              <option value="">— Elegí —</option>
-              ${empleadosParaManual.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
-            </select>
-          </label>
-          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Fecha
-            <input type="date" id="horasextra-manual-fecha">
-          </label>
-          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo de día
-            <select id="horasextra-manual-tipo">
-              ${TIPOS_DIA_SIN_MARCA.map(t => `<option value="${t}">${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
-            </select>
-          </label>
-          <button class="btn primary" onclick="agregarDiaSinMarca();">➕ Agregar</button>
-        </div>
       </div></div>`;
     }
 
@@ -5860,45 +5919,6 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
   }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
 }
 
-// Agrega un día SIN marca (día libre, incapacidad, permiso sin goce o
-// ausencia) al mismo flujo de pendiente→aprobada que ya usan los días con
-// marca — jefatura lo registra, master/gerente (o la propia jefatura sobre
-// su equipo) lo aprueba después, igual que con horas extra normales.
-async function agregarDiaSinMarca(){
-  const empKey = (document.getElementById("horasextra-manual-empleado") || {}).value;
-  const fecha = (document.getElementById("horasextra-manual-fecha") || {}).value;
-  const tipo = (document.getElementById("horasextra-manual-tipo") || {}).value;
-  if (!empKey){ statusMsg("Elegí un empleado.", false); return; }
-  if (!fecha){ statusMsg("Elegí una fecha.", false); return; }
-  if (!TIPOS_DIA_SIN_MARCA.includes(tipo)){ statusMsg("Elegí un tipo de día válido.", false); return; }
-  const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
-  try{
-    const existente = await window.storage.get(key, false);
-    if (existente && existente.value){
-      statusMsg("Ya existe un registro de ese día para este empleado — revisalo en la lista en vez de crear uno nuevo.", false);
-      return;
-    }
-  }catch(e){ /* no existía todavía, sigue normal */ }
-  const value = {
-    EMPLEADO_KEY: empKey,
-    FECHA: fecha,
-    HORAS_EXTRA: 0,
-    MARCAS: [],
-    INCOMPLETO: false,
-    MARCA_SUELTA: null,
-    TIPO_DIA: tipo,
-    ESTADO: "pendiente",
-    ORIGEN: "manual",
-    CREADO_POR: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
-    CREADO_EN: new Date().toISOString(),
-  };
-  try{
-    await window.storage.set(key, JSON.stringify(value), false);
-    statusMsg("Día agregado como pendiente.");
-    renderHorasExtrasPanel();
-  }catch(e){ statusMsg("No se pudo agregar: " + e.message, false); }
-}
-
 // Corrige el número de horas de un registro pendiente sin decidirlo todavía
 // (queda "pendiente" — la jefatura aprueba o rechaza después, ya con el
 // número correcto). Lo usa tanto master/gerente como jefatura sobre su
@@ -6049,6 +6069,7 @@ async function confirmarCompletarTurno(key){
     v.MARCAS = [{ entrada: mostrarFechaHoraCorta(entradaStr), salida: mostrarFechaHoraCorta(salidaStr) }];
     v.INCOMPLETO = false;
     v.MARCA_SUELTA = null;
+    v.TIPO_DIA = "laboral";
     v.ESTADO = "aprobada";
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
@@ -6068,6 +6089,7 @@ async function rechazarTurnoSinMarcar(key){
     v.ESTADO = "rechazada";
     v.MOTIVO_RECHAZO = "Turno sin marcar — no laboró ese día";
     v.INCOMPLETO = false;
+    v.TIPO_DIA = "ausencia";
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
     await window.storage.set(key, JSON.stringify(v), false);
