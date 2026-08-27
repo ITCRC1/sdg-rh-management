@@ -4780,32 +4780,25 @@ async function renderPlanillaPanel(){
 // aprobada / rechazada). A diferencia de "solicitud:", esto NO se borra al
 // resolverse — queda como historial de lo que se aprobó o rechazó.
 const HORAS_EXTRA_PREFIX = "horas_extra:";
-const CONFIG_HORAS_EXTRA_KEY = "config:horas_extra";
 let horasExtraFiltro = "pendiente"; // pendiente | sinmatch | aprobada | rechazada
-let horasExtraConfigCache = null;
+let horasExtraEmpleadoSeleccionado = null; // key del empleado abierto en el detalle de "Pendientes" (vista lista → detalle)
 
-async function obtenerConfigHorasExtra(){
-  if (horasExtraConfigCache) return horasExtraConfigCache;
-  // Valores por defecto: tiempo y medio (Art. 139 Código de Trabajo) sobre
-  // una jornada de referencia de 8 horas.
-  let cfg = { TARIFA_MULTIPLICADOR: 1.5, JORNADA_DIARIA_HORAS: 8 };
-  try{
-    const r = await window.storage.get(CONFIG_HORAS_EXTRA_KEY, false);
-    if (r && r.value) cfg = Object.assign(cfg, JSON.parse(r.value));
-  }catch(e){ /* sin configuración guardada todavía — se usan los valores legales por defecto */ }
-  horasExtraConfigCache = cfg;
-  return cfg;
-}
+// Tarifa legal mínima de horas extra (Art. 139 Código de Trabajo: tiempo y
+// medio) — no es un dato por-empleado como la jornada, así que no hace
+// falta configurarla aparte.
+const TARIFA_HORAS_EXTRA = 1.5;
 
-async function guardarConfigHorasExtra(tarifa, jornada){
-  const t = parseFloat(tarifa), j = parseFloat(jornada);
-  if (!t || t <= 1 || isNaN(t)){ statusMsg("La tarifa debe ser un número mayor a 1 (ej. 1.5 para tiempo y medio).", false); return; }
-  if (!j || j <= 0 || j > 12 || isNaN(j)){ statusMsg("La jornada diaria debe ser un número entre 1 y 12 horas.", false); return; }
-  const cfg = { TARIFA_MULTIPLICADOR: t, JORNADA_DIARIA_HORAS: j };
-  await window.storage.set(CONFIG_HORAS_EXTRA_KEY, JSON.stringify(cfg), false);
-  horasExtraConfigCache = cfg;
-  statusMsg("Configuración de horas extra guardada.");
-  renderHorasExtrasPanel();
+// La jornada diaria de referencia ya no es un solo número global: cada
+// puesto define su MODALIDAD_JORNADA al crearse (turno diurno 8h, mixto 7h,
+// nocturno 6h — ver MODALIDADES_JORNADA), así que la jornada correcta para
+// comparar contra lo trabajado sale de ahí. Si el empleado no tiene puesto
+// o modalidad asignada, se usa 8h (jornada diurna ordinaria, Art. 136 CT)
+// como valor por defecto en vez de dejarlo sin definir.
+const JORNADA_DIARIA_POR_DEFECTO = 8;
+
+function jornadaDiariaDePuesto(puesto){
+  const info = puesto && puesto.MODALIDAD_JORNADA ? MODALIDADES_JORNADA[puesto.MODALIDAD_JORNADA] : null;
+  return (info && info.horasDiarias) || JORNADA_DIARIA_POR_DEFECTO;
 }
 
 // Excel puede traer la fecha como texto (DD/MM/AAAA o AAAA-MM-DD) o como
@@ -4879,8 +4872,9 @@ function formatoFechaHoraCortaUTC(ts){
 // nocturno entra un día y sale al siguiente, y cortar por fecha lo
 // partiría mal en dos. El total de horas de cada par se suma al día de SU
 // entrada, y si un empleado tiene varios pares ese mismo día (turno con
-// salida a almorzar, por ejemplo) se suman antes de comparar contra la
-// jornada configurada.
+// salida a almorzar, por ejemplo) se suman entre sí. Todavía NO se resta la
+// jornada aquí — eso lo hace guardarFilasHorasExtra una vez que sabe con
+// qué empleado (y por lo tanto con qué modalidad de jornada) hizo match.
 async function leerRegistrosMarcacionPDF(file){
   const texto = await extraerTextoPDF(file);
   const vistos = new Set();
@@ -4900,7 +4894,6 @@ async function leerRegistrosMarcacionPDF(file){
     (porEmpleado[ev.codigo] = porEmpleado[ev.codigo] || { nombre: ev.nombre, marcas: [] }).marcas.push(ev);
   });
 
-  const cfg = await obtenerConfigHorasExtra();
   const porDia = {};
   let sinPar = 0;
   Object.entries(porEmpleado).forEach(([codigo, info]) => {
@@ -4920,8 +4913,8 @@ async function leerRegistrosMarcacionPDF(file){
   });
 
   const filas = Object.values(porDia)
-    .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS EXTRA": Math.max(0, d.horas - cfg.JORNADA_DIARIA_HORAS), MARCAS: d.marcas }))
-    .filter(f => f["HORAS EXTRA"] > 0);
+    .filter(d => d.horas > 0)
+    .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS TRABAJADAS": Math.round(d.horas * 100) / 100, MARCAS: d.marcas }));
 
   return { filas, sinPar };
 }
@@ -4930,8 +4923,9 @@ function detectarColumnaMarcacion(headers, patrones){
   return headers.find(h => patrones.some(p => p.test(h))) || null;
 }
 // La máquina de marcación puede entregar la columna de horas extra ya
-// calculada, o solo entrada/salida (entonces se calculan contra la jornada
-// diaria configurada — lo que pase de ahí se toma como extra).
+// calculada, o las horas trabajadas / entrada+salida (entonces se comparan
+// contra la jornada del puesto de cada empleado, resuelta más abajo — lo
+// que pase de ahí se toma como extra).
 // Las máquinas de marcación suelen dar el ID del empleado en una columna con
 // un encabezado muy corto (ID, No., PIN) — no siempre dice "código" ni
 // "empleado" como el resto de la app. Se incluyen esos formatos cortos
@@ -4947,9 +4941,24 @@ function detectarColumnasHorasExtra(rows){
     cedula: detectarColumnaMarcacion(headers, [/c[eé]dula/i, /identificaci[oó]n/i]),
     fecha: detectarColumnaMarcacion(headers, [/fecha/i, /^date$/i]),
     horasExtra: detectarColumnaMarcacion(headers, [/horas?\s*extras?/i, /^extra/i]),
+    horasTrabajadas: detectarColumnaMarcacion(headers, [/horas?\s*trabajadas?/i]),
     entrada: detectarColumnaMarcacion(headers, [/entrada/i, /^in$/i]),
     salida: detectarColumnaMarcacion(headers, [/salida/i, /^out$/i]),
   };
+}
+
+// Puesto → jornada diaria de referencia (MODALIDAD_JORNADA del puesto, con
+// caché por PUESTO_KEY para no repetir la misma consulta por cada empleado
+// de un mismo puesto).
+async function jornadaDiariaDeEmpleado(empleado, cachePuestos){
+  if (!empleado || !empleado.PUESTO_KEY) return JORNADA_DIARIA_POR_DEFECTO;
+  if (!(empleado.PUESTO_KEY in cachePuestos)){
+    try{
+      const r = await window.storage.get(CATALOGS.puestos.prefix + empleado.PUESTO_KEY, false);
+      cachePuestos[empleado.PUESTO_KEY] = r && r.value ? JSON.parse(r.value) : null;
+    }catch(e){ cachePuestos[empleado.PUESTO_KEY] = null; }
+  }
+  return jornadaDiariaDePuesto(cachePuestos[empleado.PUESTO_KEY]);
 }
 
 // El match prioriza número/código de empleado y nombre — lo que trae la
@@ -4959,14 +4968,18 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   const cols = detectarColumnasHorasExtra(rows);
   if (!cols.codigo && !cols.nombre && !cols.cedula) throw new Error("No se encontró una columna de número/código de empleado, nombre, ni cédula en ese archivo.");
   if (!cols.fecha) throw new Error("No se encontró una columna de fecha en ese archivo.");
-  if (!cols.horasExtra && !(cols.entrada && cols.salida)) throw new Error("No se encontró una columna de horas extra, ni de entrada/salida para calcularlas.");
+  if (!cols.horasExtra && !cols.horasTrabajadas && !(cols.entrada && cols.salida)) throw new Error("No se encontró una columna de horas extra, horas trabajadas, ni de entrada/salida para calcularlas.");
 
   const { porCedula, porNumero, porNombre } = await construirIndicesEmpleadosPorFila();
-  const cfg = await obtenerConfigHorasExtra();
+  const cachePuestos = {};
 
   // Varias filas del mismo empleado+fecha se suman dentro de un mismo
   // archivo — pasa cuando el reloj exporta una fila por marca en vez de un
-  // resumen diario.
+  // resumen diario. HORAS_EXTRA_DIRECTA (ya calculada por fuera) y
+  // HORAS_TRABAJADAS (todavía sin restarle la jornada) se acumulan
+  // aparte porque a la segunda hay que restarle la jornada del PUESTO de
+  // cada empleado — un dato que recién se conoce después del match, así
+  // que esa resta se hace en el segundo bucle, no aquí.
   const acumulado = {};
   let sinIdentificar = 0;
   for (const row of rows){
@@ -4976,18 +4989,19 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     const fecha = normalizarFechaMarcacion(row[cols.fecha]);
     if (!fecha) continue;
 
-    let horas = 0;
+    let horasExtraDirecta = 0, horasTrabajadas = 0;
     let marcasFila = Array.isArray(row.MARCAS) ? row.MARCAS : null; // ya vienen armadas (PDF de marcación)
     if (cols.horasExtra){
-      horas = parsearHorasDecimal(row[cols.horasExtra]);
+      horasExtraDirecta = parsearHorasDecimal(row[cols.horasExtra]);
+    } else if (cols.horasTrabajadas){
+      horasTrabajadas = parsearHorasDecimal(row[cols.horasTrabajadas]);
     } else {
       const entradaRaw = String(row[cols.entrada] ?? "").trim();
       const salidaRaw = String(row[cols.salida] ?? "").trim();
-      const trabajadas = parsearHorasDecimal(salidaRaw) - parsearHorasDecimal(entradaRaw);
-      horas = trabajadas > cfg.JORNADA_DIARIA_HORAS ? trabajadas - cfg.JORNADA_DIARIA_HORAS : 0;
-      if (horas > 0) marcasFila = [{ entrada: entradaRaw, salida: salidaRaw }];
+      horasTrabajadas = parsearHorasDecimal(salidaRaw) - parsearHorasDecimal(entradaRaw);
+      if (horasTrabajadas > 0) marcasFila = [{ entrada: entradaRaw, salida: salidaRaw }];
     }
-    if (!horas || horas <= 0) continue;
+    if (horasExtraDirecta <= 0 && horasTrabajadas <= 0) continue;
 
     const numeroSinCeros = normalizarCodigoEmpleado(codigoRaw);
     const nombreNormalizado = normalizarNombreParaMatch(nombreRaw);
@@ -5007,18 +5021,29 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
         NOMBRE_ARCHIVO: nombreRaw,
         CEDULA: cedulaRaw,
         IDENT_RAW: identificador,
+        EMPLEADO: empleado,
         EMPLEADO_KEY: empleado ? empleado.key : null,
         FECHA: fecha,
-        HORAS_EXTRA: 0,
+        HORAS_EXTRA_DIRECTA: 0,
+        HORAS_TRABAJADAS: 0,
         MARCAS: [],
       };
     }
-    acumulado[accKey].HORAS_EXTRA += horas;
+    acumulado[accKey].HORAS_EXTRA_DIRECTA += horasExtraDirecta;
+    acumulado[accKey].HORAS_TRABAJADAS += horasTrabajadas;
     if (marcasFila) acumulado[accKey].MARCAS.push(...marcasFila);
   }
 
   let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0;
   for (const info of Object.values(acumulado)){
+    // La jornada de referencia es la del puesto del empleado (turno diurno,
+    // mixto o nocturno) — sin match todavía, se usa la jornada por defecto,
+    // así que esa fila queda visible en "Sin identificar" en vez de perderse.
+    const jornada = await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
+    const horasExtraCalculadas = info.HORAS_TRABAJADAS > jornada ? info.HORAS_TRABAJADAS - jornada : 0;
+    const horasExtraFinal = info.HORAS_EXTRA_DIRECTA + horasExtraCalculadas;
+    if (horasExtraFinal <= 0) continue; // trabajó, pero no superó su jornada — no hay nada que aprobar
+
     const key = HORAS_EXTRA_PREFIX + (info.EMPLEADO_KEY || ("sinmatch-" + info.IDENT_RAW)) + ":" + info.FECHA;
     let existente = null;
     try{
@@ -5036,7 +5061,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
       CEDULA: info.CEDULA,
       EMPLEADO_KEY: info.EMPLEADO_KEY,
       FECHA: info.FECHA,
-      HORAS_EXTRA: Math.round(info.HORAS_EXTRA * 100) / 100,
+      HORAS_EXTRA: Math.round(horasExtraFinal * 100) / 100,
       MARCAS: info.MARCAS,
       ESTADO: "pendiente",
       ORIGEN_ARCHIVO: nombreArchivo,
@@ -5071,14 +5096,16 @@ async function importarHorasExtraArchivo(inputEl){
   }
   if (!rows.length){
     statusMsg(esPDF
-      ? "No se detectaron horas extra en ese PDF (nadie superó la jornada diaria configurada en ese período, o las marcas no vinieron en pares completos de entrada/salida)."
+      ? "No se detectó ninguna marca válida en ese PDF (¿las marcas no vinieron en pares completos de entrada/salida?)."
       : "Ese archivo no tiene filas.", false);
     inputEl.value = "";
     return;
   }
   try{
     const r = await guardarFilasHorasExtra(rows, file.name);
-    let msg = `${r.creadas} registro(s) nuevo(s) y ${r.actualizadas} actualizado(s) de horas extra pendientes.`;
+    let msg = (r.creadas + r.actualizadas + r.sinMatch === 0)
+      ? `El archivo se leyó bien, pero nadie superó su jornada diaria en ese período — no hay horas extra que registrar.`
+      : `${r.creadas} registro(s) nuevo(s) y ${r.actualizadas} actualizado(s) de horas extra pendientes.`;
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
@@ -5118,7 +5145,7 @@ async function renderHorasExtrasPanel(){
   if (!panel) return;
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
-    const [registros, cfg] = await Promise.all([listarRegistrosHorasExtra(), obtenerConfigHorasExtra()]);
+    const registros = await listarRegistrosHorasExtra();
     const res = await window.storage.list(CATALOGS.empleados.prefix, false);
     const empKeys = (res && res.keys) || [];
     const empleados = await Promise.all(empKeys.map(async k => {
@@ -5178,25 +5205,9 @@ async function renderHorasExtrasPanel(){
     if (puedeEditar){
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
         <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📥 Importar horas extra</div>
-        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV/PDF de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae entrada/salida (o un PDF de marcas sueltas de "Ingreso/Salida"), se calculan contra la jornada diaria configurada abajo — las marcas se emparejan en orden cronológico por empleado, así que un turno nocturno que cruza la medianoche se calcula bien.</p>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV/PDF de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae horas trabajadas o entrada/salida (o un PDF de marcas sueltas de "Ingreso/Salida"), se comparan contra la jornada diaria del puesto de cada empleado (turno diurno, mixto o nocturno — la misma que se define al crear el puesto), a tiempo y medio (Art. 139 CT). Las marcas se emparejan en orden cronológico, así que un turno nocturno que cruza la medianoche se calcula bien.</p>
         <button class="btn primary" onclick="document.getElementById('horasextra-file-input').click()">📥 Importar archivo de marcación</button>
         <input type="file" id="horasextra-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarHorasExtraArchivo(this)">
-      </div></div>`;
-
-      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">⚙️ Configuración de cálculo</div>
-        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Tarifa de horas extra sobre el salario ordinario (Art. 139 Código de Trabajo: mínimo tiempo y medio) y jornada diaria de referencia para calcularlas cuando el archivo solo trae entrada/salida.</p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-          <div class="field" style="margin-bottom:0;">
-            <label style="font-size:10.5px;">Tarifa (múltiplo del salario por hora)</label>
-            <input type="number" id="horasextra-tarifa-input" step="0.1" min="1" value="${cfg.TARIFA_MULTIPLICADOR}" style="width:110px;">
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label style="font-size:10.5px;">Jornada diaria (horas)</label>
-            <input type="number" id="horasextra-jornada-input" step="0.5" min="1" max="12" value="${cfg.JORNADA_DIARIA_HORAS}" style="width:110px;">
-          </div>
-          <button class="btn primary" onclick="guardarConfigHorasExtra(document.getElementById('horasextra-tarifa-input').value, document.getElementById('horasextra-jornada-input').value)">💾 Guardar</button>
-        </div>
       </div></div>`;
     }
 
@@ -5208,7 +5219,7 @@ async function renderHorasExtrasPanel(){
     ];
     if (esJefatura && horasExtraFiltro === "sinmatch") horasExtraFiltro = "pendiente";
     html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
-      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; renderHorasExtrasPanel();">${l}</button>`).join("")}
+      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
     </div>`;
 
     let lista;
@@ -5222,8 +5233,9 @@ async function renderHorasExtrasPanel(){
       const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
       const nombre = emp ? (emp.NOMBRE_EMP || "") : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "");
       const puesto = emp ? (emp.DEPARTAMENTO_EMP || "") : "";
-      const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / cfg.JORNADA_DIARIA_HORAS) : null;
-      const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * cfg.TARIFA_MULTIPLICADOR * r.HORAS_EXTRA) : null;
+      const jornadaEmpleado = jornadaDiariaDePuesto(emp && emp.PUESTO_KEY ? puestosPorKey[emp.PUESTO_KEY] : null);
+      const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
+      const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * TARIFA_HORAS_EXTRA * r.HORAS_EXTRA) : null;
       const keyEsc = String(r.key).replace(/'/g, "\\'");
       let acciones = "";
       if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
@@ -5258,7 +5270,67 @@ async function renderHorasExtrasPanel(){
       </div>`;
     };
 
-    if (!lista.length){
+    if (horasExtraFiltro === "pendiente"){
+      // "Pendientes" es lista → detalle: primero un roster de quién tiene
+      // días pendientes (por departamento), y al entrar a una persona se ven
+      // sus días uno por uno con acciones en lote — pensado para revisar de
+      // un tirón los días que se suben cada 3 días, en vez de perseguir un
+      // registro suelto a la vez en una lista plana.
+      const pendientesPorEmpleado = {};
+      pendientes.forEach(r => { (pendientesPorEmpleado[r.EMPLEADO_KEY] = pendientesPorEmpleado[r.EMPLEADO_KEY] || []).push(r); });
+
+      const empKeySel = horasExtraEmpleadoSeleccionado;
+      const diasSel = empKeySel ? (pendientesPorEmpleado[empKeySel] || []) : [];
+
+      if (empKeySel && diasSel.length){
+        const emp = empleadosPorKey[empKeySel];
+        diasSel.sort((a, b) => (a.FECHA || "").localeCompare(b.FECHA || ""));
+        const keysSel = diasSel.map(d => d.key);
+        html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraEmpleadoSeleccionado=null; renderHorasExtrasPanel();">← Volver a la lista</button>`;
+        html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
+          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(emp ? emp.NOMBRE_EMP || empKeySel : empKeySel)}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${diasSel.length} día(s) pendientes · ${diasSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra en total</div>
+        </div></div>`;
+        if (puedeAprobar && diasSel.length > 1){
+          const keysJson = escapeHtml(JSON.stringify(keysSel));
+          html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
+            <button class="btn primary" onclick="aprobarVariasHorasExtra(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>✅ Aprobar los ${diasSel.length} días</button>
+            <button class="btn" onclick="rechazarVariasHorasExtra(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>🚫 Rechazar los ${diasSel.length} días</button>
+          </div>`;
+        }
+        html += diasSel.map(renderFilaHorasExtra).join("");
+      } else {
+        if (empKeySel) horasExtraEmpleadoSeleccionado = null; // esa persona ya no tiene pendientes — vuelve al roster
+        const porDeptoRoster = {};
+        Object.keys(pendientesPorEmpleado).forEach(empKey => {
+          const emp = empleadosPorKey[empKey];
+          const depto = departamentoDeEmpleado(emp);
+          (porDeptoRoster[depto] = porDeptoRoster[depto] || []).push({ empKey, emp, dias: pendientesPorEmpleado[empKey] });
+        });
+        const deptosRoster = Object.keys(porDeptoRoster).sort((a, b) => {
+          if (a === "Sin departamento") return 1;
+          if (b === "Sin departamento") return -1;
+          return a.localeCompare(b);
+        });
+        if (!deptosRoster.length){
+          html += `<div class="empty-state">No hay registros en esta vista.</div>`;
+        } else {
+          html += deptosRoster.map(depto => `
+            <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px; margin:12px 0 4px;">${escapeHtml(depto)} (${porDeptoRoster[depto].length})</div>
+            ${porDeptoRoster[depto].map(({ empKey, emp, dias }) => `
+              <div class="catalog-item" style="cursor:pointer;" onclick="horasExtraEmpleadoSeleccionado='${empKey.replace(/'/g,"\\'")}'; renderHorasExtrasPanel();">
+                <div class="row1">
+                  <div class="info">
+                    <div class="name">${escapeHtml(emp ? emp.NOMBRE_EMP || empKey : empKey)}</div>
+                    <div class="meta">${dias.length} día(s) pendientes · ${dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra</div>
+                  </div>
+                  <div class="actions"><span class="meta">Ver →</span></div>
+                </div>
+              </div>`).join("")}
+          `).join("");
+        }
+      }
+    } else if (!lista.length){
       html += `<div class="empty-state">No hay registros en esta vista.</div>`;
     } else if (horasExtraFiltro === "sinmatch"){
       // Sin empleado identificado todavía — no hay departamento que resolver.
@@ -5341,6 +5413,53 @@ async function rechazarHoraExtra(key){
     statusMsg("Horas extra rechazadas.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo rechazar: " + e.message, false); }
+}
+
+// Aprobar/rechazar varios días de un mismo empleado de un tirón, desde su
+// vista de detalle — para revisar de una vez lo que se sube cada 3 días en
+// vez de aprobar registro por registro. Si uno falla no se detiene el resto.
+async function aprobarVariasHorasExtra(keys){
+  if (!Array.isArray(keys) || !keys.length) return;
+  if (!confirm(`¿Aprobar ${keys.length} día(s) de horas extra?`)) return;
+  let ok = 0;
+  for (const key of keys){
+    try{
+      const r = await window.storage.get(key, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      if (!v) continue;
+      v.ESTADO = "aprobada";
+      v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+      v.FECHA_DECISION = new Date().toISOString();
+      await window.storage.set(key, JSON.stringify(v), false);
+      ok++;
+    }catch(e){ /* se sigue con el resto aunque uno falle */ }
+  }
+  horasExtraEmpleadoSeleccionado = null;
+  statusMsg(`${ok} de ${keys.length} día(s) aprobados.`, ok === keys.length);
+  renderHorasExtrasPanel();
+}
+
+async function rechazarVariasHorasExtra(keys){
+  if (!Array.isArray(keys) || !keys.length) return;
+  const motivo = prompt(`Motivo del rechazo para los ${keys.length} día(s) (opcional):`, "");
+  if (motivo === null) return; // canceló el prompt
+  let ok = 0;
+  for (const key of keys){
+    try{
+      const r = await window.storage.get(key, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      if (!v) continue;
+      v.ESTADO = "rechazada";
+      v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+      v.FECHA_DECISION = new Date().toISOString();
+      v.MOTIVO_RECHAZO = motivo.trim();
+      await window.storage.set(key, JSON.stringify(v), false);
+      ok++;
+    }catch(e){ /* se sigue con el resto aunque uno falle */ }
+  }
+  horasExtraEmpleadoSeleccionado = null;
+  statusMsg(`${ok} de ${keys.length} día(s) rechazados.`, ok === keys.length);
+  renderHorasExtrasPanel();
 }
 
 // El registro "sin identificar" queda con la cédula/código tal como vino del
