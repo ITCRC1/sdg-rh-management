@@ -1,5 +1,5 @@
 const CONTRACT_ROWS = [{"es": [{"bullet": false, "html": "<b>CONTRATO INDIVIDUAL DE TRABAJO POR TIEMPO </b><b>«TIPO_CONTRATO_LABEL»</b>"}], "en": [{"bullet": false, "html": "<b>INDIVIDUAL EMPLOYMENT CONTRACT FOR </b><b>«TIPO_CONTRATO_LABEL»</b><b> TERM</b>"}]}, {"es": [{"bullet": false, "html": "Entre nosotros, «REPRESENTANTE_LEGAL», ciudadano («NACIONALIDAD_REPRESENTANTE»), con Documento de Identidad «TIPO_IDENTIFICACION_REPRESENTANTE» número («IDENTIFICACION_REPRESENTANTE»), vecino de «DIRECCION_REPRESENTANTE_LEGAL», en mi condición de «PUESTO_REPRESENTANTE_LEGAL» y representante legal con facultades de Apoderado Generalísimo sin límite de suma y suficientes para este acto de la empresa «EMPRESA», SOCIEDAD DE RESPONSABILIDAD LIMITADA, cédula «TIPO_CEDULA_EMPRESA» número «CEDULA_JURIDICA_EMPRESA», domiciliada en «DIRECCION_EMPRESA»; en adelante denominada EL PATRONO;"}, {"bullet": false, "html": "y (El /La) señor(a) «NOMBRE_TRABAJADOR», ciudadana «NACIONALIDAD», con número de «TIPO_IDENTIFICACION» de identidad («IDENTIFICACION»), mayor, «ESTADO_CIVIL», profesional en «ESPECIALIZACION», vecina de «DIRECCION_TRABAJADOR»; en adelante denominada/o EL TRABAJADOR;"}, {"bullet": false, "html": "encontrándonos ambos en el libre ejercicio de nuestros derechos y facultades, asegurando el primero tener la representación legal relacionada, hemos convenido en celebrar el presente CONTRATO INDIVIDUAL DE TRABAJO POR TIEMPO «TIPO_CONTRATO_LABEL», el cual se regirá por el Código de Trabajo de Costa Rica (en adelante “CT”), las leyes conexas aplicables, y en especial por las siguientes cláusulas:"}], "en": [{"bullet": false, "html": "Between us, «REPRESENTANTE_LEGAL», a citizen of («NACIONALIDAD_REPRESENTANTE»), holder of «TIPO_IDENTIFICACION_REPRESENTANTE» identification number («IDENTIFICACION_REPRESENTANTE»), resident of «DIRECCION_REPRESENTANTE_LEGAL», in my capacity as «PUESTO_REPRESENTANTE_LEGAL» and legal representative with powers of General Attorney-in-Fact (Apoderado Generalísimo) without limit of amount and sufficient for this act of the company «EMPRESA», LIMITED LIABILITY COMPANY, «TIPO_CEDULA_EMPRESA» identification number «CEDULA_JURIDICA_EMPRESA», domiciled at «DIRECCION_EMPRESA»; hereinafter referred to as THE EMPLOYER;"}, {"bullet": false, "html": "and (Mr./Ms.) «NOMBRE_TRABAJADOR», a citizen of («NACIONALIDAD»), holder of «TIPO_IDENTIFICACION» identification number («IDENTIFICACION»), of legal age, «ESTADO_CIVIL», professional in «ESPECIALIZACION», resident of «DIRECCION_TRABAJADOR»; hereinafter referred to as THE EMPLOYEE;"}, {"bullet": false, "html": "both of us being in the free exercise of our rights and powers, the first party warranting that it holds the aforementioned legal representation, we have agreed to enter into this INDIVIDUAL EMPLOYMENT CONTRACT FOR «TIPO_CONTRATO_LABEL» TERM, which shall be governed by the Labor Code of Costa Rica (hereinafter “LC”), the applicable related laws, and in particular by the following clauses:"}]}, {"es": [{"bullet": false, "html": "<b>PRIMERA – SOBRE LA EMPRESA</b>"}, {"bullet": false, "html": "EL TRABAJADOR prestará sus servicios para «EMPRESA», con oficinas centrales en la provincia de «DIRECCION_EMPRESA». «EMPRESA» es una empresa de «ACTIVIDAD_EMPRESA». El portafolio «PROPIEDADES»"}], "en": [{"bullet": false, "html": "<b>ONE – ABOUT THE COMPANY</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall render services for «EMPRESA», with head offices in the province of «DIRECCION_EMPRESA». «EMPRESA» is a company engaged in «ACTIVIDAD_EMPRESA». The portfolio «PROPIEDADES»"}]}, {"es": [{"bullet": false, "html": "<b>SEGUNDA – PUESTO Y RESPONSABILIDADES</b>"}, {"bullet": false, "html": "EL TRABAJADOR se desempeñará en el puesto de «PUESTO» para «PROPIEDADES». Dicha labor la realizará bajo la dirección y dependencia del «JEFE_INMEDIATO» designado por EL PATRONO, así como de su «LIDER_DIRECTOR». Los servicios se prestarán para las siguientes propiedades, sin limitarse a ellas:"}, {"bullet": true, "html": "«PROPIEDADES_LIST»"}, {"bullet": false, "html": "El portafolio anterior podrá ampliarse o modificarse mediante la incorporación o salida de propiedades administradas por EL PATRONO, siempre que las funciones asignadas continúen siendo compatibles con la naturaleza del puesto contratado y ello no implique una modificación sustancial de las condiciones esenciales de trabajo."}, {"bullet": false, "html": "Adicionalmente, dado que «EMPRESA» actúa como «ACTIVIDAD_EMPRESA», EL TRABAJADOR podrá ser asignada para realizar visitas de “scouting” o inspecciones a propiedades externas, cuando el puesto lo requiera. En estos casos se reconocerán los gastos de movilización y viáticos conforme a la política interna vigente."}, {"bullet": false, "html": "LOCALIZACIÓN DE LAS LABORES: Las labores se realizarán de manera remota desde la casa de habitación de EL TRABAJADOR, conforme a lo establecido en la CLÁUSULA SÉPTIMA del presente contrato sobre Teletrabajo. Sin perjuicio de lo anterior, EL TRABAJADOR deberá contar con disponibilidad para atender reuniones presenciales, visitar hoteles, asistir a eventos, ferias, producciones de contenido y otras actividades que sean requeridas razonablemente por EL PATRONO."}], "en": [{"bullet": false, "html": "<b>TWO – POSITION AND RESPONSIBILITIES</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall serve in the position of «PUESTO» for «PROPIEDADES». Such work shall be carried out under the direction and dependence of the «JEFE_INMEDIATO» designated by THE EMPLOYER, as well as of its «LIDER_DIRECTOR». The services shall be rendered for the following properties, without being limited to them:"}, {"bullet": true, "html": "«PROPIEDADES_LIST»"}, {"bullet": false, "html": "The foregoing portfolio may be expanded or modified through the incorporation or withdrawal of properties managed by THE EMPLOYER, provided that the assigned functions remain compatible with the nature of the contracted position and this does not entail a substantial modification of the essential working conditions."}, {"bullet": false, "html": "Additionally, since «EMPRESA» acts as «ACTIVIDAD_EMPRESA», THE EMPLOYEE may be assigned to carry out “scouting” visits or inspections at external properties when the position so requires. In such cases, transportation and travel expenses shall be recognized in accordance with the internal policy in force."}, {"bullet": false, "html": "LOCATION OF THE WORK: The work shall be performed remotely from THE EMPLOYEE’s residence, in accordance with the provisions of CLAUSE SEVEN of this contract regarding Telework. Notwithstanding the foregoing, THE EMPLOYEE must be available to attend in-person meetings, visit hotels, attend events, fairs, content productions, and other activities reasonably required by THE EMPLOYER."}]}, {"es": [{"bullet": false, "html": "<b>TERCERA – OBLIGACIONES DEL TRABAJADOR</b>"}, {"bullet": false, "html": "EL TRABAJADOR estará obligado a:"}, {"bullet": true, "html": "Seguir los lineamientos establecidos en el Manual Interno de la institución y en el Manual de Puestos, los cuales le serán suministrados al inicio de la relación laboral. Su consentimiento con dichos documentos será manifestado por escrito."}, {"bullet": true, "html": "Apoyar al «JEFE_INMEDIATO» en «TAREAS_APOYO» y operaciones comerciales del portafolio."}, {"bullet": true, "html": "Cumplir con las responsabilidades detalladas en el Anexo 2 adjunto al presente contrato (Job Description del puesto)."}, {"bullet": true, "html": "Mantener comunicación activa con su jefatura directa y reportar el avance de sus tareas conforme a los procedimientos internos."}, {"bullet": true, "html": "Utilizar de forma adecuada los equipos, sistemas y recursos que EL PATRONO ponga a su disposición para el desempeño de sus funciones."}], "en": [{"bullet": false, "html": "<b>THREE – OBLIGATIONS OF THE EMPLOYEE</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be obligated to:"}, {"bullet": true, "html": "Follow the guidelines established in the institution’s Internal Manual and in the Job Manual, which shall be provided at the beginning of the employment relationship. Consent to said documents shall be expressed in writing."}, {"bullet": true, "html": "Support the «JEFE_INMEDIATO» in «TAREAS_APOYO» and the commercial operations of the portfolio."}, {"bullet": true, "html": "Comply with the responsibilities detailed in Annex 2 attached to this contract (Job Description of the position)."}, {"bullet": true, "html": "Maintain active communication with the direct supervisor and report the progress of tasks in accordance with internal procedures."}, {"bullet": true, "html": "Properly use the equipment, systems, and resources that THE EMPLOYER makes available for the performance of the functions."}]}, {"es": [{"bullet": false, "html": "<b>CUARTA – EXCLUSIVIDAD. </b><b>«EXCLUSIVIDAD_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "Durante la vigencia del presente contrato, EL TRABAJADOR deberá garantizar la exclusividad en el desempeño de sus labores relacionadas con el portafolio de «EMPRESA», incluyendo actividades «ACTIVIDADES_EXCLUSIVIDAD» EL TRABAJADOR se abstendrá de prestar servicios equivalentes a competidores directos sin la autorización previa y por escrito de EL PATRONO. Esta cláusula no impide a EL TRABAJADOR realizar actividades personales ajenas al giro comercial de la empresa."}], "en": [{"bullet": false, "html": "<b>FOUR – EXCLUSIVITY. </b><b>«EXCLUSIVIDAD_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "During the term of this contract, THE EMPLOYEE shall guarantee exclusivity in the performance of duties related to the portfolio of «EMPRESA», including «ACTIVIDADES_EXCLUSIVIDAD» activities. THE EMPLOYEE shall refrain from rendering equivalent services to direct competitors without the prior written authorization of THE EMPLOYER. This clause does not prevent THE EMPLOYEE from carrying out personal activities unrelated to the company’s line of business."}]}, {"es": [{"bullet": false, "html": "<b>QUINTA – CONFIDENCIALIDAD Y PROPIEDAD INTELECTUAL</b>"}, {"bullet": false, "html": "<b>5.1 CONFIDENCIALIDAD: </b>EL TRABAJADOR deberá mantener absoluta confidencialidad sobre los productos, operativa, procedimientos y políticas internas, precios, estrategias comerciales, contenido, proyectos y demás información de carácter confidencial de EL PATRONO y de sus clientes, tanto durante la vigencia del contrato como durante los dos (2) años posteriores a su terminación, por cualquier causa. La violación de esta cláusula facultará a EL PATRONO a ejercer las acciones legales correspondientes."}, {"bullet": false, "html": "<b>5.2 PROPIEDAD INTELECTUAL: </b>Todos los materiales, contenidos, diseños, campañas, estrategias, bases de datos, artes, textos y demás obras creadas por EL TRABAJADOR en el ejercicio de sus funciones y con recursos de EL PATRONO serán propiedad exclusiva de EL PATRONO, conforme a la Ley de Derechos de Autor y Derechos Conexos N.° 6683 y sus reformas. EL TRABAJADOR cede desde ya todos los derechos patrimoniales sobre dichas creaciones a favor de EL PATRONO sin costo adicional. Esto aplica inclusive para mercadeo digital, campañas publicitarias, contenido audiovisual, fotografías, videos, contenido para redes sociales, material audiovisual, contenido generado mediante herramientas digitales, plataformas tecnológicas o sistemas de inteligencia artificial utilizados durante la relación laboral, entre otros afines."}, {"bullet": false, "html": "<b>5.3 DEVOLUCIÓN DE ACTIVOS: </b>A la terminación del contrato, EL TRABAJADOR deberá devolver de inmediato todos los activos, documentos, archivos digitales, accesos y credenciales de EL PATRONO que obren en su poder."}, {"bullet": false, "html": "<b>5.4 USO DE IMAGEN CORPORATIVA: </b>EL TRABAJADOR autoriza a EL PATRONO, durante la vigencia de la relación laboral, a utilizar fotografías, grabaciones de audio, video o material audiovisual en que aparezca su imagen, voz o nombre, siempre que hayan sido obtenidos en actividades relacionadas con el trabajo y sean utilizados para fines institucionales, publicitarios, promocionales, educativos o corporativos relacionados con las actividades de EL PATRONO o de las empresas del grupo. Esta autorización cesará con la terminación de la relación laboral respecto de nuevas publicaciones, sin perjuicio del material previamente divulgado legítimamente durante la vigencia del contrato."}, {"bullet": false, "html": "<b>5.5 DATOS PERSONALES: </b>EL TRABAJADOR se compromete a tratar los datos personales de huéspedes, clientes, proveedores, colaboradores y terceros únicamente para fines propios de sus funciones, observando las políticas internas de EL PATRONO y la Ley N.° 8968 de Protección de la Persona frente al Tratamiento de sus Datos Personales."}], "en": [{"bullet": false, "html": "<b>FIVE – CONFIDENTIALITY AND INTELLECTUAL PROPERTY</b>"}, {"bullet": false, "html": "<b>5.1 CONFIDENTIALITY: </b>THE EMPLOYEE shall maintain absolute confidentiality regarding the products, operations, procedures and internal policies, prices, commercial strategies, content, projects, and other confidential information of THE EMPLOYER and its clients, both during the term of the contract and for the two (2) years following its termination for any cause. Violation of this clause shall entitle THE EMPLOYER to pursue the corresponding legal actions."}, {"bullet": false, "html": "<b>5.2 INTELLECTUAL PROPERTY: </b>All materials, content, designs, campaigns, strategies, databases, artwork, texts, and other works created by THE EMPLOYEE in the exercise of the functions and with THE EMPLOYER’s resources shall be the exclusive property of THE EMPLOYER, in accordance with the Copyright and Related Rights Law No. 6683 and its amendments. THE EMPLOYEE hereby assigns all economic rights over such creations in favor of THE EMPLOYER at no additional cost. This applies including to digital marketing, advertising campaigns, audiovisual content, photographs, videos, social media content, audiovisual material, and content generated through digital tools, technological platforms, or artificial intelligence systems used during the employment relationship, among other related matters."}, {"bullet": false, "html": "<b>5.3 RETURN OF ASSETS: </b>Upon termination of the contract, THE EMPLOYEE shall immediately return all assets, documents, digital files, access, and credentials of THE EMPLOYER in the EMPLOYEE’s possession."}, {"bullet": false, "html": "<b>5.4 USE OF CORPORATE IMAGE: </b>THE EMPLOYEE authorizes THE EMPLOYER, during the term of the employment relationship, to use photographs, audio recordings, video, or audiovisual material in which the EMPLOYEE’s image, voice, or name appears, provided they were obtained in work-related activities and used for institutional, advertising, promotional, educational, or corporate purposes related to the activities of THE EMPLOYER or the group companies. This authorization shall cease upon termination of the employment relationship with respect to new publications, without prejudice to material previously and legitimately disclosed during the term of the contract."}, {"bullet": false, "html": "<b>5.5 PERSONAL DATA: </b>THE EMPLOYEE undertakes to process the personal data of guests, clients, suppliers, coworkers, and third parties solely for purposes proper to the functions, observing THE EMPLOYER’s internal policies and Law No. 8968 on the Protection of the Person against the Processing of Personal Data."}]}, {"es": [{"bullet": false, "html": "<b>SEXTA – CUMPLIMIENTO DE NORMATIVA INTERNA</b>"}, {"bullet": false, "html": "Al inicio de la relación laboral se proporcionará a EL TRABAJADOR el documento denominado “HANDBOOK PARA MIEMBROS DEL EQUIPO”, el cual contiene, entre otros:"}, {"bullet": true, "html": "Declaración de bienvenida, historia y valores organizacionales."}, {"bullet": true, "html": "Código de conducta de la empresa."}, {"bullet": true, "html": "Políticas de salud ocupacional."}, {"bullet": true, "html": "Código de vestimenta, uniforme y presentación personal."}, {"bullet": true, "html": "Iniciativas e incentivos del grupo."}, {"bullet": true, "html": "Sostenibilidad, impacto ambiental y social."}, {"bullet": true, "html": "Programas de mentoría."}, {"bullet": false, "html": "EL TRABAJADOR firmará un acuse de recibo de los documentos anteriores y se compromete a conocer y cumplir su contenido. EL PATRONO podrá actualizar dichos documentos, notificando a EL TRABAJADOR con al menos diez (10) días hábiles de anticipación."}, {"bullet": false, "html": "Ninguna modificación al Handbook podrá interpretarse como modificación de las condiciones esenciales del contrato de trabajo ni de los derechos adquiridos de TRABAJADOR."}], "en": [{"bullet": false, "html": "<b>SIX – COMPLIANCE WITH INTERNAL REGULATIONS</b>"}, {"bullet": false, "html": "At the beginning of the employment relationship, THE EMPLOYEE shall be provided with the document titled “HANDBOOK FOR TEAM MEMBERS”, which contains, among others:"}, {"bullet": true, "html": "Welcome statement, history, and organizational values."}, {"bullet": true, "html": "Company code of conduct."}, {"bullet": true, "html": "Occupational health policies."}, {"bullet": true, "html": "Dress code, uniform, and personal presentation."}, {"bullet": true, "html": "Group initiatives and incentives."}, {"bullet": true, "html": "Sustainability, environmental and social impact."}, {"bullet": true, "html": "Mentoring programs."}, {"bullet": false, "html": "THE EMPLOYEE shall sign an acknowledgment of receipt of the foregoing documents and undertakes to know and comply with their content. THE EMPLOYER may update said documents, notifying THE EMPLOYEE at least ten (10) business days in advance."}, {"bullet": false, "html": "No modification to the Handbook may be interpreted as a modification of the essential conditions of the employment contract or of the acquired rights of THE EMPLOYEE."}]}, {"es": [{"bullet": false, "html": "<b>SÉPTIMA – MODALIDAD DE TELETRABAJO </b><b>(LEY N.° 9738). Aplica: «TELETRABAJO_SI_NO»</b>"}, {"bullet": false, "html": "La prestación de servicios se desarrollará principalmente bajo la modalidad de teletrabajo, de conformidad con la Ley para Regular el Teletrabajo N.° 9738 del 14 de febrero de 2020 y su Reglamento. Se establecen las siguientes condiciones:"}, {"bullet": true, "html": "<b>LUGAR DE TELETRABAJO: </b>EL TRABAJADOR realizará sus funciones desde su casa de habitación ubicada en «DIRECCION_TELETRABAJO». Cualquier cambio de domicilio deberá notificarse a EL PATRONO con al menos cinco (5) días hábiles de anticipación."}, {"bullet": true, "html": "<b>EQUIPOS Y HERRAMIENTAS: </b>EL PATRONO proveerá directamente a EL TRABAJADOR los equipos tecnológicos, software y accesos necesarios para el desempeño de sus funciones o, previo acuerdo escrito entre las partes, reconocerá el uso de equipos propiedad de EL TRABAJADOR mediante la compensación o modalidad que se establezca en cada caso. EL TRABAJADOR deberá mantener una conexión a internet adecuada para el cumplimiento de sus labores. La entrega de equipos, dispositivos, licencias de software o cualquier otro activo propiedad de EL PATRONO se documentará mediante un acta de entrega firmada por ambas partes, en la cual se detallará el estado de los bienes y las obligaciones de custodia y devolución por parte de EL TRABAJADOR."}, {"bullet": true, "html": "<b>GASTOS OPERATIVOS: </b>EL PATRONO pagará una compensación mensual de [«COMPENSACION_TELETRABAJO»] por concepto de gastos de electricidad e internet derivados del teletrabajo, sujeto a revisión anual. Dicho monto no constituye salario en especie."}, {"bullet": true, "html": "<b>CONTROL Y SUPERVISIÓN: </b>EL PATRONO podrá implementar mecanismos de supervisión de las labores, siempre que respeten los derechos fundamentales y la privacidad de EL TRABAJADOR. No se utilizarán cámaras de vigilancia en el domicilio de EL TRABAJADOR sin su consentimiento expreso."}, {"bullet": true, "html": "<b>REVERSIBILIDAD: </b>Cualquiera de las partes podrá solicitar la reversión a la modalidad presencial con un preaviso mínimo de quince (15) días calendario, sujeto a la disponibilidad de espacio físico en las instalaciones de EL PATRONO."}, {"bullet": true, "html": "<b>SEGURIDAD DE LA INFORMACIÓN: </b>EL TRABAJADOR se compromete a cumplir con las políticas de seguridad informática de EL PATRONO, incluyendo el uso de contraseñas seguras, VPN cuando se requiera, y la prohibición de acceder a información confidencial desde redes públicas sin las medidas de seguridad correspondientes."}, {"bullet": true, "html": "<b>SALUD OCUPACIONAL EN TELETRABAJO: </b>EL TRABAJADOR es responsable de mantener un espacio de trabajo ergonómico y seguro en su domicilio. EL PATRONO podrá realizar verificaciones del espacio de trabajo, con consentimiento previo de EL TRABAJADOR."}], "en": [{"bullet": false, "html": "<b>SEVEN – TELEWORK MODALITY </b><b>(LAW No. 9738). Applies: «TELETRABAJO_SI_NO»</b>"}, {"bullet": false, "html": "The rendering of services shall be carried out mainly under the telework modality, in accordance with the Law to Regulate Telework No. 9738 of February 14, 2020, and its Regulations. The following conditions are established:"}, {"bullet": true, "html": "<b>TELEWORK LOCATION: </b>THE EMPLOYEE shall perform the functions from the residence located at «DIRECCION_TELETRABAJO». Any change of address must be notified to THE EMPLOYER at least five (5) business days in advance."}, {"bullet": true, "html": "<b>EQUIPMENT AND TOOLS: </b>THE EMPLOYER shall directly provide THE EMPLOYEE with the technological equipment, software, and access necessary for the performance of the functions or, upon prior written agreement between the parties, shall recognize the use of equipment owned by THE EMPLOYEE through the compensation or modality established in each case. THE EMPLOYEE must maintain an adequate internet connection for the fulfillment of the duties. The delivery of equipment, devices, software licenses, or any other asset owned by THE EMPLOYER shall be documented by means of a delivery record signed by both parties, detailing the condition of the goods and THE EMPLOYEE’s custody and return obligations."}, {"bullet": true, "html": "<b>OPERATING EXPENSES: </b>THE EMPLOYER shall pay a monthly compensation of [«COMPENSACION_TELETRABAJO»] for electricity and internet expenses derived from telework, subject to annual review. Said amount does not constitute salary in kind."}, {"bullet": true, "html": "<b>MONITORING AND SUPERVISION: </b>THE EMPLOYER may implement mechanisms to supervise the work, provided they respect the fundamental rights and privacy of THE EMPLOYEE. Surveillance cameras shall not be used in THE EMPLOYEE’s home without express consent."}, {"bullet": true, "html": "<b>REVERSIBILITY: </b>Either party may request reversion to the in-person modality with a minimum notice of fifteen (15) calendar days, subject to the availability of physical space at THE EMPLOYER’s facilities."}, {"bullet": true, "html": "<b>INFORMATION SECURITY: </b>THE EMPLOYEE undertakes to comply with THE EMPLOYER’s IT security policies, including the use of secure passwords, VPN when required, and the prohibition of accessing confidential information from public networks without the corresponding security measures."}, {"bullet": true, "html": "<b>OCCUPATIONAL HEALTH IN TELEWORK: </b>THE EMPLOYEE is responsible for maintaining an ergonomic and safe workspace at the residence. THE EMPLOYER may carry out workspace inspections, with THE EMPLOYEE’s prior consent."}]}, {"es": [{"bullet": false, "html": "<b>OCTAVA – JORNADA LABORAL</b>"}, {"bullet": false, "html": "La jornada ordinaria de trabajo será de «JORNADA_DESCRIPCION», de conformidad con el artículo 136 del Código de Trabajo. Dado que EL TRABAJADOR desempeña un puesto de confianza dentro de la organización, la jornada tendrá la flexibilidad prevista en el artículo 143 del CT, tomando como referencia el horario general de oficinas de «EMPRESA»: de las 8:00 a.m. a las 5:00 p.m., de lunes a viernes. La referencia al artículo 143 del Código de Trabajo únicamente será aplicable cuando el puesto desempeñado reúna efectivamente las características legales de un puesto de dirección, administración o de confianza, conforme a la legislación laboral vigente."}, {"bullet": false, "html": "Las horas extraordinarias serán reconocidas conforme al artículo 139 del CT (recargo del 50% sobre el salario ordinario), previa autorización escrita de la jefatura directa. Para puestos de confianza, el tiempo adicional se referenciará a la jornada mínima legal aplicable."}], "en": [{"bullet": false, "html": "<b>EIGHT – WORKING HOURS</b>"}, {"bullet": false, "html": "The ordinary working schedule shall be «JORNADA_DESCRIPCION», in accordance with article 136 of the Labor Code. Given that THE EMPLOYEE holds a position of trust within the organization, the schedule shall have the flexibility provided in article 143 of the LC, taking as reference the general office hours of «EMPRESA»: from 8:00 a.m. to 5:00 p.m., Monday to Friday. The reference to article 143 of the Labor Code shall only be applicable when the position effectively meets the legal characteristics of a management, administration, or trust position, in accordance with the labor law in force."}, {"bullet": false, "html": "Overtime shall be recognized in accordance with article 139 of the LC (a 50% surcharge over the ordinary salary), subject to prior written authorization from the direct supervisor. For trust positions, additional time shall be referenced to the applicable minimum legal workday."}]}, {"es": [{"bullet": false, "html": "<b>NOVENA – HORARIOS DE TRABAJO OPERATIVO</b>"}, {"bullet": false, "html": "Para el personal operativo en sitio, los horarios serán establecidos por los coordinadores de turno designados por EL PATRONO, quienes informarán a EL TRABAJADOR con al menos una semana de anticipación. Los cambios extraordinarios de horario se comunicarán con la anticipación razonable posible, considerando la naturaleza de la industria hotelera y de hospitalidad."}], "en": [{"bullet": false, "html": "<b>NINE – OPERATIONAL WORK SCHEDULES</b>"}, {"bullet": false, "html": "For on-site operational staff, schedules shall be established by the shift coordinators designated by THE EMPLOYER, who shall inform THE EMPLOYEE at least one week in advance. Extraordinary schedule changes shall be communicated with as much reasonable notice as possible, considering the nature of the hotel and hospitality industry."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA – DÍAS DE DESCANSO Y FERIADOS</b>"}, {"bullet": false, "html": "De conformidad con los artículos 152 y 148 del Código de Trabajo, EL TRABAJADOR tendrá derecho a un día de descanso semanal remunerado y a los días feriados de pago obligatorio establecidos en el artículo 148 CT. Para EL TRABAJADOR, en su calidad de personal de oficina en puesto de dirección, los días de descanso corresponden al sábado y domingo de cada semana, salvo acuerdo previo en contrario."}, {"bullet": false, "html": "Cuando las necesidades operacionales requieran laborar en día de descanso o feriado, EL PATRONO deberá contar con la anuencia de EL TRABAJADOR, o mediar causa legal suficiente, y compensar dicho trabajo conforme al artículo 152 del CT (doble del salario ordinario), o mediante día compensatorio, cuando ello sea legalmente procedente y exista acuerdo entre las partes."}], "en": [{"bullet": false, "html": "<b>TEN – REST DAYS AND HOLIDAYS</b>"}, {"bullet": false, "html": "In accordance with articles 152 and 148 of the Labor Code, THE EMPLOYEE shall be entitled to one paid weekly rest day and to the mandatory paid holidays established in article 148 of the LC. For THE EMPLOYEE, in the capacity of office staff in a management position, the rest days correspond to Saturday and Sunday of each week, unless otherwise agreed in advance."}, {"bullet": false, "html": "When operational needs require work on a rest day or holiday, THE EMPLOYER must have THE EMPLOYEE’s consent, or a sufficient legal cause must exist, and shall compensate such work in accordance with article 152 of the LC (double the ordinary salary), or by means of a compensatory day, when legally permissible and there is agreement between the parties."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA PRIMERA – VACACIONES</b>"}, {"bullet": false, "html": "EL TRABAJADOR tendrá derecho a disfrutar de vacaciones remuneradas conforme al artículo 153 del Código de Trabajo: dos semanas por cada cincuenta semanas de servicio continuo (equivalente a un día por cada mes laborado durante el primer año). Las vacaciones son acumulables por un período no mayor a doce (12) meses, y su disfrute se coordinará con la jefatura directa."}, {"bullet": false, "html": "El goce anticipado de vacaciones, previo al cumplimiento del período mínimo legal, queda sujeto a acuerdo mutuo entre EL TRABAJADOR y EL PATRONO. En caso de terminación de la relación laboral, EL PATRONO pagará el período proporcional de vacaciones no disfrutadas, conforme al artículo 156 del CT."}], "en": [{"bullet": false, "html": "<b>ELEVEN – VACATION</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be entitled to paid vacation in accordance with article 153 of the Labor Code: two weeks for every fifty weeks of continuous service (equivalent to one day for each month worked during the first year). Vacation may be accumulated for a period no longer than twelve (12) months, and its use shall be coordinated with the direct supervisor."}, {"bullet": false, "html": "Advance use of vacation, prior to completing the minimum legal period, is subject to mutual agreement between THE EMPLOYEE and THE EMPLOYER. In the event of termination of the employment relationship, THE EMPLOYER shall pay the proportional period of unused vacation, in accordance with article 156 of the LC."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA SEGUNDA – SALARIO</b>"}, {"bullet": false, "html": "Por concepto de la jornada ordinaria de trabajo, EL PATRONO pagará a EL TRABAJADOR la suma de «SALARIO_BRUTO_LETRAS» «MONEDA» «SALARIO_BRUTO_NUM» brutos mensuales, equivalentes aproximadamente a «SALARIO_NETO_LETRAS» «MONEDA» «SALARIO_NETO_NUM» netos, una vez aplicadas las deducciones obreras de ley. El pago se realizará en «MONEDA_TEXTO» (Acrónimo de la moneda), moneda que las partes acuerdan expresamente como unidad de cuenta y de pago, conforme al artículo 164 del Código de Trabajo."}, {"bullet": false, "html": "La modalidad de pago será mensual, efectuándose un adelanto del cincuenta por ciento (50%) el día quince (15) de cada mes, o el siguiente día hábil si éste fuera feriado o fin de semana, y el saldo restante más horas extras, feriados, comisiones y otros rubros aplicables a más tardar el último día hábil del mes. El pago se realizará mediante transferencia bancaria a la cuenta que EL TRABAJADOR indique, preferiblemente en el Banco Nacional de Costa Rica; si EL TRABAJADOR no contara con dicha cuenta, deberá abrirla dentro de los primeros quince (15) días calendario de la relación laboral."}, {"bullet": false, "html": "El salario establecido no será inferior al salario mínimo legal fijado semestralmente por el Consejo Nacional de Salarios para la categoría correspondiente. Cualquier ajuste salarial por ascenso, revisión o cambio de condiciones se documentará mediante acción de personal firmada por ambas partes."}], "en": [{"bullet": false, "html": "<b>TWELVE – SALARY</b>"}, {"bullet": false, "html": "For the ordinary working schedule, THE EMPLOYER shall pay THE EMPLOYEE the sum of «SALARIO_BRUTO_LETRAS» «MONEDA» «SALARIO_BRUTO_NUM» gross per month, approximately equivalent to «SALARIO_NETO_LETRAS» «MONEDA» «SALARIO_NETO_NUM» net, once the statutory employee deductions are applied. Payment shall be made in «MONEDA_TEXTO» (Currency acronym), a currency that the parties expressly agree upon as the unit of account and payment, in accordance with article 164 of the Labor Code."}, {"bullet": false, "html": "The payment modality shall be monthly, with an advance of fifty percent (50%) made on the fifteenth (15th) of each month, or the next business day if it falls on a holiday or weekend, and the remaining balance plus overtime, holidays, commissions, and other applicable items no later than the last business day of the month. Payment shall be made by bank transfer to the account indicated by THE EMPLOYEE, preferably at Banco Nacional de Costa Rica; if THE EMPLOYEE does not have such an account, one must be opened within the first fifteen (15) calendar days of the employment relationship."}, {"bullet": false, "html": "The established salary shall not be lower than the minimum legal wage set semiannually by the National Wage Council for the corresponding category. Any salary adjustment due to promotion, review, or change of conditions shall be documented by means of a personnel action signed by both parties."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA TERCERA – COMPENSACIONES ADICIONALES (COMISIONES). </b><b>«COMISION_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "«COMISION_DETALLE_BLOCK»"}], "en": [{"bullet": false, "html": "<b>THIRTEEN – ADDITIONAL COMPENSATION (COMMISSIONS). </b><b>«COMISION_SI_NO»</b><b>.</b>"}, {"bullet": false, "html": "«COMISION_DETALLE_BLOCK»"}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA CUARTA – PERÍODO DE PRUEBA</b>"}, {"bullet": false, "html": "De conformidad con el artículo 26 del Código de Trabajo, se establece un período de prueba de tres (3) meses contados a partir de la fecha de inicio de la relación laboral. Durante este período, cualquiera de las partes podrá dar por terminado el contrato sin responsabilidad patronal ni laboral, salvo el pago proporcional de vacaciones y aguinaldo devengados. Superado el período de prueba sin que ninguna de las partes haya ejercido este derecho, el contrato adquirirá plena vigencia indefinida."}], "en": [{"bullet": false, "html": "<b>FOURTEEN – PROBATIONARY PERIOD</b>"}, {"bullet": false, "html": "In accordance with article 26 of the Labor Code, a probationary period of three (3) months is established, counted from the start date of the employment relationship. During this period, either party may terminate the contract without employer or employee liability, except for the proportional payment of accrued vacation and Christmas bonus. Once the probationary period has passed without either party having exercised this right, the contract shall acquire full indefinite force."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA QUINTA – PREAVISO</b>"}, {"bullet": false, "html": "De conformidad con el artículo 28 del Código de Trabajo, la parte que desee dar por terminado el contrato sin justa causa deberá comunicarlo a la otra con el siguiente preaviso mínimo:"}, {"bullet": true, "html": "Menos de tres (3) meses de servicio: una (1) semana de anticipación."}, {"bullet": true, "html": "De tres (3) meses a menos de seis (6) meses: dos (2) semanas de anticipación."}, {"bullet": true, "html": "De seis (6) meses a menos de un (1) año: un (1) mes de anticipación."}, {"bullet": true, "html": "Más de un (1) año de servicio: un (1) mes de anticipación, con derecho a un día libre por semana durante el preaviso para buscar nueva colocación."}, {"bullet": false, "html": "La parte que omita el preaviso o lo reduzca deberá pagar a la otra una suma equivalente al salario correspondiente al plazo omitido. EL TRABAJADOR deberá presentar renuncia por escrito indicando la fecha de salida y el preaviso correspondiente."}], "en": [{"bullet": false, "html": "<b>FIFTEEN – NOTICE OF TERMINATION</b>"}, {"bullet": false, "html": "In accordance with article 28 of the Labor Code, the party wishing to terminate the contract without just cause must notify the other with the following minimum notice:"}, {"bullet": true, "html": "Less than three (3) months of service: one (1) week’s notice."}, {"bullet": true, "html": "From three (3) months to less than six (6) months: two (2) weeks’ notice."}, {"bullet": true, "html": "From six (6) months to less than one (1) year: one (1) month’s notice."}, {"bullet": true, "html": "More than one (1) year of service: one (1) month’s notice, with the right to one day off per week during the notice period to seek new employment."}, {"bullet": false, "html": "The party that omits or reduces the notice shall pay the other a sum equivalent to the salary corresponding to the omitted period. THE EMPLOYEE must submit the resignation in writing, indicating the departure date and the corresponding notice."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA SEXTA – TERMINACIÓN DEL CONTRATO Y AUXILIO DE CESANTÍA</b>"}, {"bullet": false, "html": "<b>16.1 </b>El auxilio de cesantía se calculará conforme al Código de Trabajo y sus reformas."}, {"bullet": false, "html": "El salario base para el cálculo de la cesantía será el promedio de los últimos seis (6) meses de salario ordinario, incluyendo los componentes que la ley ordene incluir."}, {"bullet": false, "html": "<b>16.2 LIQUIDACIÓN: </b>Al finalizar la relación laboral, EL PATRONO cancelará a EL TRABAJADOR los extremos laborales que legalmente correspondan según la forma de terminación del contrato, incluyendo, cuando proceda, salarios pendientes, vacaciones no disfrutadas, aguinaldo proporcional, preaviso, auxilio de cesantía y cualquier otro derecho reconocido por la legislación laboral vigente."}], "en": [{"bullet": false, "html": "<b>SIXTEEN – TERMINATION OF THE CONTRACT AND SEVERANCE PAY</b>"}, {"bullet": false, "html": "<b>16.1 </b>Severance pay shall be calculated in accordance with the Labor Code and its amendments."}, {"bullet": false, "html": "The base salary for calculating severance shall be the average of the last six (6) months of ordinary salary, including the components that the law requires to be included."}, {"bullet": false, "html": "<b>16.2 SETTLEMENT: </b>Upon termination of the employment relationship, THE EMPLOYER shall pay THE EMPLOYEE the labor entitlements that legally correspond according to the manner of termination of the contract, including, where applicable, pending salaries, unused vacation, proportional Christmas bonus, notice, severance pay, and any other right recognized by the labor law in force."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA SÉPTIMA – SEGUROS SOCIALES Y RIESGOS DEL TRABAJO</b>"}, {"bullet": false, "html": "EL TRABAJADOR quedará asegurado ante la Caja Costarricense del Seguro Social (CCSS) desde el primer día de la relación laboral, conforme a la Ley Constitutiva de la CCSS y sus reglamentos. Las cuotas obrero-patronales serán deducidas y remitidas mensualmente a la CCSS por EL PATRONO."}, {"bullet": false, "html": "Adicionalmente, EL PATRONO contratará y mantendrá vigente una póliza de Riesgos del Trabajo ante el Instituto Nacional de Seguros (INS), conforme a la Ley de Riesgos del Trabajo N.° 6727. Esta cobertura aplicará incluso cuando EL TRABAJADOR realice sus labores bajo la modalidad de teletrabajo, conforme al artículo 13 de la Ley N.° 9738."}], "en": [{"bullet": false, "html": "<b>SEVENTEEN – SOCIAL SECURITY AND OCCUPATIONAL RISKS</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be insured with the Costa Rican Social Security Fund (CCSS) from the first day of the employment relationship, in accordance with the Constitutive Law of the CCSS and its regulations. The employee-employer contributions shall be deducted and remitted monthly to the CCSS by THE EMPLOYER."}, {"bullet": false, "html": "Additionally, THE EMPLOYER shall contract and keep in force an Occupational Risk insurance policy with the National Insurance Institute (INS), in accordance with the Occupational Risks Law No. 6727. This coverage shall apply even when THE EMPLOYEE performs the duties under the telework modality, in accordance with article 13 of Law No. 9738."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA OCTAVA – DEDUCCIONES OBRERAS DE LEY</b>"}, {"bullet": false, "html": "EL PATRONO retendrá y remitirá a las instituciones correspondientes las siguientes deducciones obreras, conforme a la legislación vigente:"}, {"bullet": true, "html": "Cuotas obreras de la CCSS (seguro de salud, pensión y maternidad), según los porcentajes vigentes."}, {"bullet": true, "html": "Contribución al Fondo de Capitalización Laboral (FCL), conforme a la Ley de Protección al Trabajador N.° 7983."}, {"bullet": true, "html": "Contribución al Régimen Obligatorio de Pensiones Complementarias (ROPC), según corresponda."}, {"bullet": false, "html": "Los porcentajes de ley se ajustarán automáticamente conforme lo dispongan las autoridades competentes, sin necesidad de modificar el presente contrato."}], "en": [{"bullet": false, "html": "<b>EIGHTEEN – STATUTORY EMPLOYEE DEDUCTIONS</b>"}, {"bullet": false, "html": "THE EMPLOYER shall withhold and remit to the corresponding institutions the following employee deductions, in accordance with the law in force:"}, {"bullet": true, "html": "CCSS employee contributions (health, pension, and maternity insurance), according to the percentages in force."}, {"bullet": true, "html": "Contribution to the Labor Capitalization Fund (FCL), in accordance with the Worker Protection Law No. 7983."}, {"bullet": true, "html": "Contribution to the Mandatory Supplementary Pension Regime (ROPC), as applicable."}, {"bullet": false, "html": "The statutory percentages shall be adjusted automatically as determined by the competent authorities, without the need to modify this contract."}]}, {"es": [{"bullet": false, "html": "<b>DÉCIMA NOVENA – RETENCIÓN DEL IMPUESTO SOBRE LA RENTA</b>"}, {"bullet": false, "html": "Conforme al artículo 33 de la Ley del Impuesto sobre la Renta N.° 7092 y la normativa del Ministerio de Hacienda, EL PATRONO retendrá mensualmente el Impuesto sobre las Rentas del Trabajo Personal Dependiente cuando el salario bruto de EL TRABAJADOR supere los tramos exentos establecidos anualmente. Dicha retención será declarada y remitida al Ministerio de Hacienda en los plazos legales correspondientes."}], "en": [{"bullet": false, "html": "<b>NINETEEN – INCOME TAX WITHHOLDING</b>"}, {"bullet": false, "html": "In accordance with article 33 of the Income Tax Law No. 7092 and the regulations of the Ministry of Finance, THE EMPLOYER shall withhold monthly the Tax on Dependent Personal Employment Income when THE EMPLOYEE’s gross salary exceeds the exempt brackets established annually. Said withholding shall be declared and remitted to the Ministry of Finance within the corresponding legal deadlines."}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA – AGUINALDO</b>"}, {"bullet": false, "html": "De conformidad con la ley No. 2412, EL TRABAJADOR tendrá derecho al pago de aguinaldo equivalente a la doceava parte del total de salarios ordinarios y extraordinarios devengados durante el período comprendido entre el 1.° de diciembre de un año y el 30 de noviembre del siguiente. El aguinaldo deberá pagarse dentro de los primeros veinte (20) días del mes de diciembre de cada año. En caso de terminación de la relación laboral antes de completarse el período, EL TRABAJADOR recibirá el aguinaldo proporcional correspondiente."}], "en": [{"bullet": false, "html": "<b>TWENTY – CHRISTMAS BONUS (AGUINALDO)</b>"}, {"bullet": false, "html": "In accordance with Law No. 2412, THE EMPLOYEE shall be entitled to the payment of a Christmas bonus equivalent to one-twelfth of the total ordinary and extraordinary salaries earned during the period from December 1 of one year to November 30 of the following year. The Christmas bonus must be paid within the first twenty (20) days of December each year. In the event of termination of the employment relationship before the period is completed, THE EMPLOYEE shall receive the corresponding proportional Christmas bonus."}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA PRIMERA – LICENCIAS Y PERMISOS</b>"}, {"bullet": false, "html": "EL TRABAJADOR tendrá derecho a los permisos y licencias establecidos en el Código de Trabajo y legislación conexa, incluyendo:"}, {"bullet": true, "html": "<b>Incapacidad por enfermedad o accidente: </b>Con el pago correspondiente por parte de la CCSS (a partir del cuarto día), según el artículo 79 del CT."}, {"bullet": true, "html": "<b>Licencia de maternidad: </b>Cuatro (4) meses de licencia remunerada (un mes antes y tres meses después del parto), conforme al artículo 95 del CT, con la protección de fuero especial establecida en el artículo 94 CT."}, {"bullet": true, "html": "<b>Período de lactancia: </b>Se procederá conforme a lo estipulado por el CT."}, {"bullet": true, "html": "<b>Licencia por fallecimiento de familiar: </b>Tres (3) días hábiles de licencia remunerada por el fallecimiento de parientes en primer grado de consanguinidad o afinidad, así como en los demás supuestos previstos por la ley para convivientes en unión de hecho y procesos de adopción. Asimismo, tendrá derecho a un (1) día hábil de licencia remunerada por el fallecimiento de parientes en segundo y tercer grado de consanguinidad o afinidad, todo ello sin perjuicio de lo dispuesto en normas especiales."}, {"bullet": true, "html": "Otros permisos contemplados en el Código de Trabajo o legislación especial aplicable."}], "en": [{"bullet": false, "html": "<b>TWENTY-ONE – LEAVES AND PERMITS</b>"}, {"bullet": false, "html": "THE EMPLOYEE shall be entitled to the permits and leaves established in the Labor Code and related legislation, including:"}, {"bullet": true, "html": "<b>Sick or accident leave: </b>With the corresponding payment by the CCSS (from the fourth day), according to article 79 of the LC."}, {"bullet": true, "html": "<b>Maternity leave: </b>Four (4) months of paid leave (one month before and three months after childbirth), in accordance with article 95 of the LC, with the special protection (“<i><b>fuero”</b></i>) established in article 94 of the LC."}, {"bullet": true, "html": "<b>Breastfeeding period: </b>Handled in accordance with the provisions of the LC."}, {"bullet": true, "html": "<b>Leave for death of a family member: </b>Three (3) business days of paid leave upon the death of a first-degree relative by consanguinity or affinity, as well as in the other cases provided by law for common-law spouses and adoption proceedings. THE EMPLOYEE shall also be entitled to one (1) business day of paid leave upon the death of second- or third-degree relatives by consanguinity or affinity, all without prejudice to any additional rights established under applicable special legislation."}, {"bullet": true, "html": "Other permits contemplated in the Labor Code or applicable special legislation."}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA SEGUNDA – PLAZO DEL CONTRATO</b>"}, {"bullet": false, "html": "«PLAZO_CONTRATO_TEXTO»"}], "en": [{"bullet": false, "html": "<b>TWENTY-TWO – TERM OF THE CONTRACT</b>"}, {"bullet": false, "html": "«PLAZO_CONTRATO_TEXTO»"}]}, {"es": [{"bullet": false, "html": "<b>VIGÉSIMA TERCERA – DISPOSICIONES GENERALES</b>"}, {"bullet": false, "html": "<b>23.1 LEGISLACIÓN APLICABLE: </b>El presente contrato se regirá por las disposiciones del Código de Trabajo de Costa Rica, la ley 2412, Ley de Pago de Aguinaldo a los Servidores de la Empresa Privada, y la legislación laboral vigente. Los derechos contenidos en este contrato no podrán interpretarse en perjuicio de los derechos mínimos e irrenunciables establecidos por ley."}, {"bullet": false, "html": "<b>23.2 RESOLUCIÓN DE CONFLICTOS: </b>Cualquier discrepancia derivada del presente contrato se resolverá en primera instancia mediante diálogo entre las partes. De no llegarse a acuerdo, las partes se someterán a la jurisdicción de los Juzgados de Trabajo de la República de Costa Rica."}, {"bullet": false, "html": "<b>23.3 MODIFICACIONES: </b>Cualquier modificación al presente contrato requerirá el acuerdo escrito de ambas partes y no podrá implicar disminución de los derechos adquiridos por EL TRABAJADOR."}, {"bullet": false, "html": "<b>23.4 EJEMPLARES: </b>El presente contrato se suscribe en tres (3) ejemplares originales: uno para EL PATRONO, uno para EL TRABAJADOR y uno para el expediente de Recursos Humanos."}, {"bullet": false, "html": "Las partes hemos leído, comprendemos y aceptamos íntegramente el contenido del presente Contrato Individual de Trabajo por Tiempo «TIPO_CONTRATO_LABEL», y lo suscribimos en «DISTRITO_FIRMA» de «CANTON_FIRMA», «PROVINCIA_FIRMA», el «FECHA_FIRMA_TEXTO»."}], "en": [{"bullet": false, "html": "<b>TWENTY-THREE – GENERAL PROVISIONS</b>"}, {"bullet": false, "html": "<b>23.1 APPLICABLE LAW: </b>This contract shall be governed by the provisions of the Labor Code of Costa Rica, Law 2412, the Law on Payment of the Christmas Bonus to Private-Sector Employees, and current labor legislation. The rights contained in this contract may not be interpreted to the detriment of the minimum and non-waivable rights established by law."}, {"bullet": false, "html": "<b>23.2 DISPUTE RESOLUTION: </b>Any discrepancy arising from this contract shall be resolved in the first instance through dialogue between the parties. If no agreement is reached, the parties shall submit to the jurisdiction of the Labor Courts of the Republic of Costa Rica."}, {"bullet": false, "html": "<b>23.3 MODIFICATIONS: </b>Any modification to this contract shall require the written agreement of both parties and may not entail a reduction of the rights acquired by THE EMPLOYEE."}, {"bullet": false, "html": "<b>23.4 COUNTERPARTS: </b>This contract is executed in three (3) original counterparts: one for THE EMPLOYER, one for THE EMPLOYEE, and one for the Human Resources file."}, {"bullet": false, "html": "The parties have read, understand, and fully accept the content of this Individual Employment Contract for «TIPO_CONTRATO_LABEL» Term, and we execute it in «DISTRITO_FIRMA» of «CANTON_FIRMA», «PROVINCIA_FIRMA», on the «FECHA_FIRMA_TEXTO»."}]}, {"es": [{"bullet": false, "html": "«FIRMA_BLOCK»"}], "en": [{"bullet": false, "html": "«FIRMA_BLOCK»"}]}, {"es": [{"bullet": false, "html": "<b>ANEXOS DEL CONTRATO</b>"}, {"bullet": false, "html": "<b>Anexo 1: </b>Manual del Trabajador – «EMPRESA» (HANDBOOK PARA MIEMBROS DEL EQUIPO)."}, {"bullet": false, "html": "<b>Anexo 2: </b>Descripción detallada del puesto (Job Description) para «PUESTO»."}], "en": [{"bullet": false, "html": "<b>CONTRACT ANNEXES</b>"}, {"bullet": false, "html": "<b>Annex 1: </b>Employee Manual – «EMPRESA» (HANDBOOK FOR TEAM MEMBERS)."}, {"bullet": false, "html": "<b>Annex 2: </b>Detailed job description (Job Description) for «PUESTO»."}]}, {"es": [{"bullet": false, "html": "<b>ANEXO 2 – RESPONSABILIDADES DEL PUESTO: </b><b>«PUESTO»</b>"}, {"bullet": true, "html": "«RESPONSABILIDADES_LIST»"}, {"bullet": false, "html": "<i>Nota: El presente Anexo 2 forma parte integral del Contrato Individual de Trabajo. Cualquier modificación al esquema de comisiones o a las demás condiciones previstas en este Anexo requerirá el acuerdo expreso y por escrito de ambas partes.</i>"}], "en": [{"bullet": false, "html": "<b>ANNEX 2 – RESPONSIBILITIES OF THE POSITION: </b><b>«PUESTO»</b>"}, {"bullet": true, "html": "«RESPONSABILIDADES_LIST»"}, {"bullet": false, "html": "<i>Note: This Annex 2 forms an integral part of the Individual Employment Contract. Any modification to the commission scheme or to the other conditions provided in this Annex shall require the express written agreement of both parties.</i>"}]}];
-const FIELDS_META = [["grp", "Idioma del contrato"], ["IDIOMA_CONTRATO", "select_idioma", "Idioma del contrato", ""], ["grp", "Tipo de contrato"], ["TIPO_CONTRATO", "select_tipo_contrato", "Tipo de contrato", ""], ["grp", "Datos del trabajador"], ["NOMBRE_TRABAJADOR", "text", "Nombre completo", ""], ["TIPO_IDENTIFICACION", "select_tipo_identificacion", "Tipo de identificación", ""], ["IDENTIFICACION", "text", "Número de identificación", ""], ["NACIONALIDAD", "select_nacionalidad", "Nacionalidad", ""], ["ESTADO_CIVIL", "select_estado_civil", "Estado civil", ""], ["ESPECIALIZACION", "text", "Especialización / experiencia de campo", ""], ["DIRECCION_TRABAJADOR", "textarea", "Dirección completa (Provincia, Cantón, Distrito, Señas)", ""], ["grp", "Fecha de ingreso"], ["DIA_INICIO", "number", "Día de inicio", "1-31"], ["MES_INICIO", "select_month", "Mes de inicio", ""], ["ANIO_INICIO", "number", "Año de inicio", "Ej. 2026"], ["grp", "Fecha de finalización"], ["DIA_FIN", "number", "Día de finalización", "1-31"], ["MES_FIN", "select_month", "Mes de finalización", ""], ["ANIO_FIN", "number", "Año de finalización", "Ej. 2027"], ["grp", "Portafolio y exclusividad"], ["PROPIEDADES", "text", "Propiedades / portafolio administrado (o usa la pestaña Propiedades / Empresas)", ""], ["EXCLUSIVIDAD_SI_NO", "select_sino", "¿Aplica la cláusula de exclusividad?", ""], ["ACTIVIDADES_EXCLUSIVIDAD", "textarea", "Actividades incluidas en la cláusula de exclusividad (se sugieren solas según el puesto)", "Actividad A, actividad B, actividad C..."], ["grp", "Salario"], ["SALARIO_BRUTO_NUM", "text", "Salario bruto mensual (número)", "Ej. 1,500.00"], ["SALARIO_BRUTO_LETRAS", "text", "Salario bruto en letras", "Ej. mil quinientos"], ["SALARIO_NETO_NUM", "text", "Salario neto aproximado (número)", "Se calcula automático (Bruto − 10.83% CCSS) — editable si lo necesitas"], ["SALARIO_NETO_LETRAS", "text", "Salario neto en letras", "Se calcula automático — editable si lo necesitas"], ["MONEDA", "select_moneda", "Moneda (acrónimo)", ""], ["MONEDA_TEXTO", "text", "Moneda en letras", "Ej. dólares, colones"], ["grp", "Comisiones"], ["COMISION_SI_NO", "select_sino", "¿Aplica comisión?", ""], ["DEPARTAMENTO_COMISION", "select_departamento_comision", "Departamento / tipo de comisión", ""], ["PORCENTAJE_COMISION", "text", "Porcentaje de comisión (solo si elegiste \"Eventos y viajes de grupo\")", "Ej. 5.0%"], ["PORCENTAJE_COMISION_LETRAS", "text", "Porcentaje en letras", "Ej. cinco por ciento"], ["grp", "Teletrabajo"], ["TELETRABAJO_SI_NO", "select_sino", "¿Aplica teletrabajo?", ""], ["DIRECCION_TELETRABAJO", "textarea", "Dirección de teletrabajo", ""], ["COMPENSACION_TELETRABAJO", "text", "Compensación mensual de teletrabajo", ""], ["grp", "Carta de despido (opcional)"], ["TIPO_DESPIDO", "select_tipo_despido", "Tipo de despido", ""], ["CAUSAL_DESPIDO", "select_causal_despido", "Causal (Art. 81 CT)", ""], ["DESCRIPCION_HECHOS", "textarea", "Descripción específica de los hechos (fecha, lugar, testigos, evidencia)", "Sea puntual y detallado: solo lo escrito aquí podrá alegarse después ante un juez."], ["DIA_DESPIDO", "number", "Día de la terminación", "1-31"], ["MES_DESPIDO", "select_month", "Mes de la terminación", ""], ["ANIO_DESPIDO", "number", "Año de la terminación", "Ej. 2026"], ["MOTIVO_DESPIDO_CON", "select_motivo_despido_con", "Motivo (solo si es con responsabilidad)", ""], ["grp", "Recomendación laboral (opcional)"], ["NOMBRE_RECOM", "text", "Nombre completo del colaborador", ""], ["CEDULA_RECOM", "text", "Cédula del colaborador", ""], ["PUESTO_RECOM", "text", "Puesto que desempeñó", ""], ["DEPARTAMENTO_RECOM", "text", "Departamento / área", ""], ["FECHA_INICIO_RECOM", "text", "Fecha de inicio laboral", "Ej. 25 de noviembre del 2024"], ["FECHA_FIN_RECOM", "text", "Fecha de salida", "Ej. 22 de septiembre del 2025"], ["RAZON_SALIDA_RECOM", "text", "Razón de la salida", "Ej. Renuncia voluntaria, despido por reestructuración"], ["DESEMPENO_RECOM", "textarea", "Descripción del desempeño", "Ej. desempeñando una gran labor con responsabilidad y entrega"], ["CUALIDADES_RECOM", "text", "Cualidades personales a destacar", "Ej. respetuoso(a) y responsable"], ["LUGAR_FIRMA_RECOM", "text", "Lugar de la firma", "Ej. Sierpe de Osa"], ["FECHA_FIRMA_RECOM", "text", "Fecha de la firma", "Ej. 25 de septiembre del 2025"], ["grp", "Permiso sin goce salarial (opcional)"], ["NOMBRE_PERMISO", "text", "Nombre completo del colaborador", ""], ["CEDULA_PERMISO", "text", "Cédula del colaborador", ""], ["PUESTO_PERMISO", "text", "Puesto", ""], ["DEPARTAMENTO_PERMISO", "text", "Departamento / área", ""], ["DIA_INICIO_PERMISO", "number", "Día de inicio del permiso", "1-31"], ["MES_INICIO_PERMISO", "select_month", "Mes de inicio del permiso", ""], ["ANIO_INICIO_PERMISO", "number", "Año de inicio del permiso", "Ej. 2026"], ["DIA_FIN_PERMISO", "number", "Día de fin del permiso", "1-31"], ["MES_FIN_PERMISO", "select_month", "Mes de fin del permiso", ""], ["ANIO_FIN_PERMISO", "number", "Año de fin del permiso", "Ej. 2026"], ["TOTAL_DIAS_PERMISO", "text", "Total de días (se calcula automático)", "Se calcula de las fechas — editable si lo necesitas"]];
+const FIELDS_META = [["grp", "Idioma del contrato"], ["IDIOMA_CONTRATO", "select_idioma", "Idioma del contrato", ""], ["grp", "Tipo de contrato"], ["TIPO_CONTRATO", "select_tipo_contrato", "Tipo de contrato", ""], ["grp", "Datos del trabajador"], ["NOMBRE_TRABAJADOR", "text", "Nombre completo", ""], ["TIPO_IDENTIFICACION", "select_tipo_identificacion", "Tipo de identificación", ""], ["IDENTIFICACION", "text", "Número de identificación", ""], ["NACIONALIDAD", "select_nacionalidad", "Nacionalidad", ""], ["ESTADO_CIVIL", "select_estado_civil", "Estado civil", ""], ["ESPECIALIZACION", "text", "Especialización / experiencia de campo", ""], ["DIRECCION_TRABAJADOR", "textarea", "Dirección completa (Provincia, Cantón, Distrito, Señas)", ""], ["grp", "Fecha de ingreso"], ["DIA_INICIO", "number", "Día de inicio", "1-31"], ["MES_INICIO", "select_month", "Mes de inicio", ""], ["ANIO_INICIO", "number", "Año de inicio", "Ej. 2026"], ["grp", "Fecha de finalización"], ["DIA_FIN", "number", "Día de finalización", "1-31"], ["MES_FIN", "select_month", "Mes de finalización", ""], ["ANIO_FIN", "number", "Año de finalización", "Ej. 2027"], ["grp", "Portafolio y exclusividad"], ["PROPIEDADES", "text", "Propiedades / portafolio administrado (o usa la pestaña Propiedades / Empresas)", ""], ["EXCLUSIVIDAD_SI_NO", "select_sino", "¿Aplica la cláusula de exclusividad?", ""], ["ACTIVIDADES_EXCLUSIVIDAD", "textarea", "Actividades incluidas en la cláusula de exclusividad (se sugieren solas según el puesto)", "Actividad A, actividad B, actividad C..."], ["grp", "Salario"], ["SALARIO_BRUTO_NUM", "text", "Salario bruto mensual (número)", "Ej. 1,500.00"], ["SALARIO_BRUTO_LETRAS", "text", "Salario bruto en letras", "Ej. mil quinientos"], ["SALARIO_NETO_NUM", "text", "Salario neto aproximado (número)", "Se calcula automático (Bruto − 10.83% CCSS) — editable si lo necesitas"], ["SALARIO_NETO_LETRAS", "text", "Salario neto en letras", "Se calcula automático — editable si lo necesitas"], ["MONEDA", "select_moneda", "Moneda (acrónimo)", ""], ["MONEDA_TEXTO", "text", "Moneda en letras", "Ej. dólares, colones"], ["grp", "Comisiones"], ["COMISION_SI_NO", "select_sino", "¿Aplica comisión?", ""], ["DEPARTAMENTO_COMISION", "select_departamento_comision", "Departamento / tipo de comisión", ""], ["PORCENTAJE_COMISION", "text", "Porcentaje de comisión (solo si elegiste \"Eventos y viajes de grupo\")", "Ej. 5.0%"], ["PORCENTAJE_COMISION_LETRAS", "text", "Porcentaje en letras", "Ej. cinco por ciento"], ["grp", "Teletrabajo"], ["TELETRABAJO_SI_NO", "select_sino", "¿Aplica teletrabajo?", ""], ["DIRECCION_TELETRABAJO", "textarea", "Dirección de teletrabajo", ""], ["COMPENSACION_TELETRABAJO", "text", "Compensación mensual de teletrabajo", ""], ["grp", "Carta de despido (opcional)"], ["TIPO_DESPIDO", "select_tipo_despido", "Tipo de despido", ""], ["CAUSAL_DESPIDO", "select_causal_despido", "Causal (Art. 81 CT)", ""], ["DESCRIPCION_HECHOS", "textarea", "Descripción específica de los hechos (fecha, lugar, testigos, evidencia)", "Sea puntual y detallado: solo lo escrito aquí podrá alegarse después ante un juez."], ["DIA_DESPIDO", "number", "Día de la terminación", "1-31"], ["MES_DESPIDO", "select_month", "Mes de la terminación", ""], ["ANIO_DESPIDO", "number", "Año de la terminación", "Ej. 2026"], ["MOTIVO_DESPIDO_CON", "select_motivo_despido_con", "Motivo (solo si es con responsabilidad)", ""], ["grp", "Recomendación laboral (opcional)"], ["NOMBRE_RECOM", "text", "Nombre completo del colaborador", ""], ["CEDULA_RECOM", "text", "Cédula del colaborador", ""], ["PUESTO_RECOM", "text", "Puesto que desempeñó", ""], ["DEPARTAMENTO_RECOM", "text", "Departamento / área", ""], ["FECHA_INICIO_RECOM", "text", "Fecha de inicio laboral", "Ej. 25 de noviembre del 2024"], ["FECHA_FIN_RECOM", "text", "Fecha de salida", "Ej. 22 de septiembre del 2025"], ["RAZON_SALIDA_RECOM", "text", "Razón de la salida", "Ej. Renuncia voluntaria, despido por reestructuración"], ["DESEMPENO_RECOM", "textarea", "Descripción del desempeño", "Ej. desempeñando una gran labor con responsabilidad y entrega"], ["CUALIDADES_RECOM", "text", "Cualidades personales a destacar", "Ej. respetuoso(a) y responsable"], ["LUGAR_FIRMA_RECOM", "text", "Lugar de la firma", "Ej. Sierpe de Osa"], ["FECHA_FIRMA_RECOM", "text", "Fecha de la firma", "Ej. 25 de septiembre del 2025"], ["grp", "Permiso sin goce salarial (opcional)"], ["NOMBRE_PERMISO", "text", "Nombre completo del colaborador", ""], ["CEDULA_PERMISO", "text", "Cédula del colaborador", ""], ["PUESTO_PERMISO", "text", "Puesto", ""], ["DEPARTAMENTO_PERMISO", "text", "Departamento / área", ""], ["DIA_INICIO_PERMISO", "number", "Día de inicio del permiso", "1-31"], ["MES_INICIO_PERMISO", "select_month", "Mes de inicio del permiso", ""], ["ANIO_INICIO_PERMISO", "number", "Año de inicio del permiso", "Ej. 2026"], ["DIA_FIN_PERMISO", "number", "Día de fin del permiso", "1-31"], ["MES_FIN_PERMISO", "select_month", "Mes de fin del permiso", ""], ["ANIO_FIN_PERMISO", "number", "Año de fin del permiso", "Ej. 2026"], ["TOTAL_DIAS_PERMISO", "text", "Total de días (se calcula automático)", "Se calcula de las fechas — editable si lo necesitas"], ["grp", "Vacaciones (opcional)"], ["NOMBRE_VACACIONES", "text", "Nombre completo del colaborador", ""], ["CEDULA_VACACIONES", "text", "Cédula del colaborador", ""], ["PUESTO_VACACIONES", "text", "Puesto", ""], ["DEPARTAMENTO_VACACIONES", "text", "Departamento / área", ""], ["DIA_INICIO_VACACIONES", "number", "Día de inicio de vacaciones", "1-31"], ["MES_INICIO_VACACIONES", "select_month", "Mes de inicio de vacaciones", ""], ["ANIO_INICIO_VACACIONES", "number", "Año de inicio de vacaciones", "Ej. 2026"], ["DIA_FIN_VACACIONES", "number", "Día de fin de vacaciones", "1-31"], ["MES_FIN_VACACIONES", "select_month", "Mes de fin de vacaciones", ""], ["ANIO_FIN_VACACIONES", "number", "Año de fin de vacaciones", "Ej. 2026"], ["TOTAL_DIAS_VACACIONES", "text", "Total de días (se calcula automático)", "Se calcula de las fechas — editable si lo necesitas"]];
 const MINISTERIO_PUESTOS = [{"puestoEs": "GUÍA DE AVENTURAS", "puestoEn": "ADVENTURE GUIDE", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Guía de turismo", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "INSTRUCTOR DE BUCEO", "puestoEn": "DIVE MASTER", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Guía de turismo", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "GUÍA NATURISTA", "puestoEn": "NATURE GUIDE", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Guía de turismo", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "CAPITÁN DE EMBARCACIÓN", "puestoEn": "BOAT CAPTAIN", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Capitán de embarcación", "sigla": "TOE", "significado": "Trabajador en Ocupación Especializada", "salarioMin": 487335.0}, {"puestoEs": "SUPERVISOR CAPITÁN DE EMBARCACIÓN", "puestoEn": "BOAT CAPTAIN SUPERVISOR", "departamento": "ACTIVIDADES-TOURS", "ocupacion": "Capitán de embarcación", "sigla": "TOE", "significado": "Trabajador en Ocupación Especializada", "salarioMin": 487335.0}, {"puestoEs": "PANADERO", "puestoEn": "BAKER", "departamento": "COCINA", "ocupacion": "Panadero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "COCINERO A", "puestoEn": "COOK A", "departamento": "COCINA", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "COCINERO A SUPERVISOR", "puestoEn": "COOK A-SUPERVISOR", "departamento": "COCINA", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "COCINERO B", "puestoEn": "COOK B", "departamento": "COCINA", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "LAVAPLATOS/ASISTENTE DE COCINA", "puestoEn": "STEWARD", "departamento": "COCINA", "ocupacion": "Ayudante de cocina", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "COCINERO DE EMPLEADOS (COCINERO B)", "puestoEn": "STATION COOK 2 (COCINERO B)", "departamento": "COMEDOR DE EMPLEADOS", "ocupacion": "Cocinero", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "EMPLEADO DE COMPRAS", "puestoEn": "PURCHASING CLERK", "departamento": "COMPRAS", "ocupacion": "Bodeguero (Encargado) *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "GESTOR DE BODEGA", "puestoEn": "WAREHOUSE CLERK", "departamento": "COMPRAS", "ocupacion": "Bodeguero (Encargado) *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "BOTONES(TRANSPORTISTA INTERNO)", "puestoEn": "BELLMAN", "departamento": "CONCIERGE", "ocupacion": "Conductor de vehículo liviano", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "DIRECTOR DE OPERACIONES", "puestoEn": "OPERATIONS DIRECTOR", "departamento": "DIRECCIÓN", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "EJECUTIVO CONTABLE", "puestoEn": "ACCOUNTING EXECUTIVE", "departamento": "FINANZAS", "ocupacion": "Contador privado *", "sigla": "Bach.", "significado": "Bachiller Universitario", "salarioMin": 664078.07}, {"puestoEs": "AUDITOR DE INGRESOS", "puestoEn": "INCOME AUDITOR", "departamento": "FINANZAS", "ocupacion": "Contador privado *", "sigla": "Bach.", "significado": "Bachiller Universitario", "salarioMin": 664078.07}, {"puestoEs": "CONTRALOR FINANCIERO", "puestoEn": "FINANCE CONTROLLER", "departamento": "FINANZAS", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "ASISTENTE DE PASILLO (CORREDOR DE PLANTA)", "puestoEn": "CORRIDOR ATTENDANT (FLOOR RUNNER)", "departamento": "LIMPIEZA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "SUPERVISOR DE LIMPIEZA", "puestoEn": "HOUSEKEEPING SUPERVISOR", "departamento": "LIMPIEZA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "ASISTENTE DE HABITACIÓN", "puestoEn": "ROOM ATTENDANT", "departamento": "LIMPIEZA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "AUXILIAR DE CONSTRUCCIÓN", "puestoEn": "CONSTRUCTION HELPER", "departamento": "MANTENIMIENTO", "ocupacion": "Ayudante de operario, construcción", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "MECÁNICO", "puestoEn": "MECHANIC", "departamento": "MANTENIMIENTO", "ocupacion": "Mecánico general", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "JARDINERO", "puestoEn": "GARDENER", "departamento": "MANTENIMIENTO", "ocupacion": "Jardinero (diseña jardines)", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "SUPERVISOR DE MANTENIMIENTO", "puestoEn": "MAINTENANCE SUPERVISOR", "departamento": "MANTENIMIENTO", "ocupacion": "Mantenimiento de edificios", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "APOYO DE PROPIEDADES", "puestoEn": "PROPERTY SUPPORT", "departamento": "MANTENIMIENTO", "ocupacion": "Mantenimiento de edificios", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "OPERADOR DE SALAS Y ÁREAS PÚBLICAS", "puestoEn": "ROOMS AND PUBLIC AREAS OPERATOR", "departamento": "MANTENIMIENTO", "ocupacion": "Mantenimiento de edificios", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "ENCARGADO DE LA LAVANDERÍA", "puestoEn": "LAUNDRY ATTENDANT", "departamento": "OPERACIONES DE LAVANDERÍA", "ocupacion": "Misceláneo *", "sigla": "TONCG", "significado": "Trabajador en Ocupación No Calificada (Genérico)", "salarioMin": 373092.3}, {"puestoEs": "AGENTE DE RECEPCIÓN", "puestoEn": "FRONT DESK AGENT", "departamento": "RECEPCIÓN", "ocupacion": "Recepcionista *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "SUPERVISOR DE AGENTES DE RECEPCIÓN", "puestoEn": "FRONT DESK AGENT SUPERVISOR", "departamento": "RECEPCIÓN", "ocupacion": "Recepcionista *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "ASISTENTE DE GESTIÓN DE PROPIEDAD", "puestoEn": "PROPERTY ASSISTANT MANAGER", "departamento": "RECEPCIÓN", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "ADMINISTRADOR DE PROPIEDAD", "puestoEn": "PROPERTY MANAGER", "departamento": "RECEPCIÓN", "ocupacion": "", "sigla": "", "significado": "", "salarioMin": null}, {"puestoEs": "AGENTE DE RESERVAS", "puestoEn": "RESERVATIONS AGENT", "departamento": "RESERVA", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}, {"puestoEs": "SUPERVISOR DE AGENTE DE RESERVAS", "puestoEn": "RESERVATIONS AGENT SUPERVISOR", "departamento": "RESERVA", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}, {"puestoEs": "SUPERVISOR DE ALIMENTOS Y BEBIDAS", "puestoEn": "F&B SUPERVISOR", "departamento": "RESTAURANTE", "ocupacion": "Coctelero (Bartender o Barwoman)", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "SALONERO", "puestoEn": "SERVER", "departamento": "RESTAURANTE", "ocupacion": "Salonero", "sigla": "TONC", "significado": "Trabajador en Ocupación No Calificada", "salarioMin": 373092.3}, {"puestoEs": "SUPERVISOR DE SALONEROS", "puestoEn": "SERVER CAPTAIN", "departamento": "RESTAURANTE", "ocupacion": "Salonero", "sigla": "TONC", "significado": "Trabajador en Ocupación No Calificada", "salarioMin": 373092.3}, {"puestoEs": "OFICIAL DE SEGURIDAD", "puestoEn": "SECURITY OFFICER", "departamento": "SEGURIDAD", "ocupacion": "Agente de seguridad *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "SUPERVISOR DE OFICIAL DE SEGURIDAD", "puestoEn": "SECURITY OFFICER SUPERVISOR", "departamento": "SEGURIDAD", "ocupacion": "Agente de seguridad *", "sigla": "TOSCG", "significado": "Trabajador en Ocupación Semicalificada (Genérico)", "salarioMin": 405710.7}, {"puestoEs": "SOPORTE TECNOLOGÍAS E INFORMACIÓN", "puestoEn": "IT SUPPORT", "departamento": "SISTEMA DE INFORMACIÓN", "ocupacion": "Mantenimiento correctivo de cómputo", "sigla": "TOE", "significado": "Trabajador en Ocupación Especializada", "salarioMin": 487335.0}, {"puestoEs": "TERAPEUTA PRINCIPAL DE BIENESTAR", "puestoEn": "LEAD WELLNESS THERAPIST", "departamento": "SPA", "ocupacion": "Masajista", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "TERAPEUTA DE SPA", "puestoEn": "SPA THERAPIST", "departamento": "SPA", "ocupacion": "Masajista", "sigla": "TOC", "significado": "Trabajador en Ocupación Calificada", "salarioMin": 419755.8}, {"puestoEs": "CONDUCTOR EXTERNO", "puestoEn": "DRIVER", "departamento": "TRANSPORTE", "ocupacion": "Conductor de vehículo liviano", "sigla": "TOSC", "significado": "Trabajador en Ocupación Semicalificada", "salarioMin": 405710.7}, {"puestoEs": "COORDINADOR DE VENTAS DE GRUPOS", "puestoEn": "GROUP SALES COORDINATOR", "departamento": "VENTAS Y MARKETING", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}, {"puestoEs": "GESTOR DE INGRESOS", "puestoEn": "REVENUE MANAGER", "departamento": "VENTAS Y MARKETING", "ocupacion": "Agente de ventas *", "sigla": "TOCG", "significado": "Trabajador en Ocupación Calificada (Genérico)", "salarioMin": 419755.8}];
 const EXCLUSIVIDAD_POR_DEPTO = {"ACTIVIDADES-TOURS": "guianza y venta directa de tours o actividades de aventura por cuenta propia, prestación de servicios de guía para operadores turísticos competidores y divulgación de rutas, contactos de proveedores o ubicaciones específicas de especies silvestres protegidas a terceros, conforme a la Ley de Conservación de la Vida Silvestre N.° 7317 y la Ley de Biodiversidad N.° 7788.", "COCINA": "preparación o venta de alimentos y bebidas por cuenta propia o para terceros, consultoría culinaria para restaurantes u hoteles competidores y divulgación de recetas o costos del negocio.", "COMEDOR DE EMPLEADOS": "prestación de servicios de catering o preparación de alimentos para terceros, trabajo para negocios de alimentación competidores y divulgación de procesos internos de cocina.", "COMPRAS": "negociación de compras o adquisiciones para empresas competidoras, intermediación comercial con proveedores del sector y divulgación de condiciones comerciales o listas de proveedores.", "CONCIERGE": "prestación de servicios de transporte o conserjería a huéspedes por cuenta propia, recomendación remunerada de servicios turísticos de terceros y intermediación en reservas para operadores competidores.", "DIRECCIÓN": "participación en la dirección u operación de hoteles o lodges competidores, asesoría estratégica a empresas del sector y divulgación de información comercial o financiera confidencial.", "FINANZAS": "prestación de servicios contables o financieros a empresas competidoras, divulgación de información financiera confidencial y participación en auditorías para negocios del mismo sector.", "LIMPIEZA": "prestación de servicios de limpieza u hospedaje por cuenta propia, trabajo para empresas de housekeeping competidoras y divulgación de estándares o procedimientos internos de limpieza.", "MANTENIMIENTO": "prestación de servicios de mantenimiento o construcción a hoteles competidores, uso del conocimiento técnico de las instalaciones para beneficio de terceros y trabajos de mantenimiento remunerados fuera del patrono.", "OPERACIONES DE LAVANDERÍA": "prestación de servicios de lavandería a terceros, trabajo para empresas de lavandería competidoras y divulgación de procesos o proveedores utilizados por EL PATRONO.", "RECEPCIÓN": "atención de reservas o huéspedes por cuenta propia, trabajo para hoteles o plataformas de reservas competidoras y divulgación de tarifas o información de huéspedes.", "RESERVA": "gestión de reservas para hoteles competidores, intermediación con agencias o plataformas de reservas por cuenta propia y divulgación de tarifas o estrategias comerciales.", "RESTAURANTE": "prestación de servicios de mesería, coctelería o eventos para terceros, trabajo para restaurantes o bares competidores y divulgación de recetas, costos o proveedores del restaurante.", "SEGURIDAD": "prestación de servicios de seguridad privada a terceros, trabajo para empresas de seguridad competidoras y divulgación de protocolos o información sensible de seguridad.", "SISTEMA DE INFORMACIÓN": "prestación de servicios de soporte técnico o desarrollo a empresas competidoras, divulgación de sistemas o accesos confidenciales y consultoría en tecnología para negocios del sector.", "SPA": "prestación de servicios de masajes o terapias de bienestar por cuenta propia, trabajo para spas o centros de bienestar competidores y venta de productos o servicios similares fuera del patrono.", "TRANSPORTE": "prestación de servicios de transporte turístico por cuenta propia, trabajo para empresas de transporte competidoras y divulgación de rutas, tarifas o contactos de clientes.", "VENTAS Y MARKETING": "gestión de ventas o campañas de marketing para empresas competidoras, divulgación de estrategias comerciales o bases de datos de clientes e intermediación comercial por cuenta propia."};
 const PUESTOS_LIDERAZGO_EN = ["Boat Captain Supervisor", "Cook A - Supervisor", "Housekeeping Supervisor", "Maintenance Supervisor", "Front Desk Agent Supervisor", "Property Assistant Manager", "Property Manager", "Reservations Agent Supervisor", "Server Captain", "Security Officer Supervisor", "Lead Wellness Therapist", "Tourism Guide Supervisor", "Lead Naturalist Guide"];
@@ -1135,6 +1135,7 @@ function renderLugarFirmaInfo(){
 const DESPIDO_SECTION_TITLES = ["Carta de despido (opcional)"];
 const RECOM_SECTION_TITLES = ["Recomendación laboral (opcional)"];
 const PERMISO_SECTION_TITLES = ["Permiso sin goce salarial (opcional)"];
+const VACACIONES_SECTION_TITLES = ["Vacaciones (opcional)"];
 
 function groupFieldsIntoSections(){
   let sections = [];
@@ -1334,6 +1335,59 @@ async function generarPermisoDeEmpleado(key){
     currentEmpKeyForLetter = key;
     showTab("permisoform");
     statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados. Elige las fechas del permiso.");
+  }catch(e){ statusMsg("No se pudo preparar la acción de personal.", false); }
+}
+
+function renderVacacionesForm(){
+  if (!data.NOMBRE_VACACIONES || !data.CEDULA_VACACIONES){
+    document.getElementById("vacacionesform-panel").innerHTML = renderElegirEmpleadoGate(
+      tr("La acción de personal siempre se genera desde el registro del empleado, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados.",
+         "The personnel action is always generated from the employee record, so the name and ID are never hand-typed or out of sync with Employees.")
+    );
+    return;
+  }
+  const intro = renderEmpleadoVinculadoCard(data.NOMBRE_VACACIONES, data.CEDULA_VACACIONES, data.PUESTO_VACACIONES)
+    + `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
+      <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
+        🏖️ ${tr("Elige las fechas de vacaciones — el total de días se calcula automáticamente.","Choose the vacation dates — the total days are calculated automatically.")}
+      </div>
+    </div>`;
+  renderFieldSections("vacacionesform-panel", title => VACACIONES_SECTION_TITLES.includes(title), intro, new Set(["NOMBRE_VACACIONES","CEDULA_VACACIONES"]));
+}
+
+async function generarVacacionesDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    data.NOMBRE_VACACIONES = emp.NOMBRE_EMP || "";
+    data.CEDULA_VACACIONES = emp.IDENTIFICACION_EMP || "";
+    let puestoNombre = emp.DEPARTAMENTO_EMP || "";
+    if (emp.PUESTO_KEY){
+      try{
+        const puestoRes = await window.storage.get(CATALOGS.puestos.prefix + emp.PUESTO_KEY, false);
+        if (puestoRes && puestoRes.value) puestoNombre = JSON.parse(puestoRes.value).PUESTO || puestoNombre;
+      }catch(e){ /* fall back to DEPARTAMENTO_EMP */ }
+    }
+    data.PUESTO_VACACIONES = puestoNombre;
+    data.DEPARTAMENTO_VACACIONES = emp.DEPARTAMENTO_EMP || "";
+    data.DIA_INICIO_VACACIONES = ""; data.MES_INICIO_VACACIONES = ""; data.ANIO_INICIO_VACACIONES = "";
+    data.DIA_FIN_VACACIONES = ""; data.MES_FIN_VACACIONES = ""; data.ANIO_FIN_VACACIONES = "";
+    data.TOTAL_DIAS_VACACIONES = "";
+    data.NUMERO_ACCION_VACACIONES = "";
+    if (trabajadorActual){
+      data.FIRMANTE_VACACIONES_NOMBRE = trabajadorActual.nombre;
+      data.FIRMANTE_VACACIONES_CEDULA = trabajadorActual.cedula;
+      data.FIRMANTE_VACACIONES_PUESTO = trabajadorActual.puesto;
+    } else {
+      const firmante = await buscarFirmanteAccionesPropiedad();
+      data.FIRMANTE_VACACIONES_NOMBRE = firmante.nombre;
+      data.FIRMANTE_VACACIONES_CEDULA = firmante.cedula;
+      data.FIRMANTE_VACACIONES_PUESTO = firmante.puesto;
+    }
+    currentEmpKeyForLetter = key;
+    showTab("vacacionesform");
+    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados. Elige las fechas de vacaciones.");
   }catch(e){ statusMsg("No se pudo preparar la acción de personal.", false); }
 }
 
@@ -1574,6 +1628,10 @@ function onInput(id, val){
   if (PERMISO_DATE_FIELDS.includes(id)){
     calcularDiasPermiso();
   }
+  const VACACIONES_DATE_FIELDS = ["DIA_INICIO_VACACIONES","MES_INICIO_VACACIONES","ANIO_INICIO_VACACIONES","DIA_FIN_VACACIONES","MES_FIN_VACACIONES","ANIO_FIN_VACACIONES"];
+  if (VACACIONES_DATE_FIELDS.includes(id)){
+    calcularDiasVacaciones();
+  }
   if (id === "SALARIO_BRUTO_NUM"){
     const bruto = parseFloat(String(val).replace(/,/g, ""));
     if (bruto && !isNaN(bruto)){
@@ -1659,6 +1717,28 @@ function calcularDiasPermiso(){
   data.TOTAL_DIAS_PERMISO = dias > 0 ? String(dias) : "";
   const totalEl = document.querySelector('[data-field="TOTAL_DIAS_PERMISO"]');
   if (totalEl) totalEl.value = data.TOTAL_DIAS_PERMISO;
+  if (dias <= 0){
+    statusMsg("La fecha de fin debe ser igual o posterior a la fecha de inicio.", false);
+  }
+}
+
+function calcularDiasVacaciones(){
+  const di = parseInt(data.DIA_INICIO_VACACIONES, 10);
+  const mi = MESES.indexOf(data.MES_INICIO_VACACIONES);
+  const ai = parseInt(data.ANIO_INICIO_VACACIONES, 10);
+  const df = parseInt(data.DIA_FIN_VACACIONES, 10);
+  const mf = MESES.indexOf(data.MES_FIN_VACACIONES);
+  const af = parseInt(data.ANIO_FIN_VACACIONES, 10);
+  if (!di || mi < 0 || !ai || !df || mf < 0 || !af){
+    return; // wait until both dates are fully chosen
+  }
+  const inicio = new Date(ai, mi, di);
+  const fin = new Date(af, mf, df);
+  const msDia = 24 * 60 * 60 * 1000;
+  const dias = Math.round((fin - inicio) / msDia) + 1; // inclusive of both endpoints
+  data.TOTAL_DIAS_VACACIONES = dias > 0 ? String(dias) : "";
+  const totalEl = document.querySelector('[data-field="TOTAL_DIAS_VACACIONES"]');
+  if (totalEl) totalEl.value = data.TOTAL_DIAS_VACACIONES;
   if (dias <= 0){
     statusMsg("La fecha de fin debe ser igual o posterior a la fecha de inicio.", false);
   }
@@ -3131,11 +3211,12 @@ async function renderCatalogTab(type){
               <button onclick="generarAmonestacionDeEmpleado('${k2}')">2. ⚠️ Amonestación</button>
               <button onclick="actualizarContratoDeEmpleado('${k2}')">3. 📄 ${contratosVinculados.length ? "Actualizar" : "Crear"} contrato</button>
               <button onclick="generarPermisoDeEmpleado('${k2}')">4. 🗓️ Permiso sin goce salarial</button>
-              <button onclick="openCatalogForm('empleados','${k2}')">5. ✏️ Editar datos (puesto, salario, contacto...)</button>
-              <button onclick="confirmarFirmaHandbook('${k2}')">6. ✍️ Confirmar handbook</button>
-              <button onclick="subirContratoFirmado('${k2}')">7. 📎 Subir contrato firmado (PDF)</button>
-              <button onclick="descargarDatosCCSS('${k2}')">8. 📊 Descargar datos para planilla CCSS (Excel)</button>
-              <button onclick="archivarEmpleado('${k2}')">9. 🗄️ Archivar</button>
+              <button onclick="generarVacacionesDeEmpleado('${k2}')">5. 🏖️ Vacaciones</button>
+              <button onclick="openCatalogForm('empleados','${k2}')">6. ✏️ Editar datos (puesto, salario, contacto...)</button>
+              <button onclick="confirmarFirmaHandbook('${k2}')">7. ✍️ Confirmar handbook</button>
+              <button onclick="subirContratoFirmado('${k2}')">8. 📎 Subir contrato firmado (PDF)</button>
+              <button onclick="descargarDatosCCSS('${k2}')">9. 📊 Descargar datos para planilla CCSS (Excel)</button>
+              <button onclick="archivarEmpleado('${k2}')">10. 🗄️ Archivar</button>
             </div>
           </div>`;
         }).join("");
@@ -3607,6 +3688,7 @@ function showTab(which){
   document.getElementById("amonestacionform-panel").style.display = which === "amonestacionform" ? "block" : "none";
   document.getElementById("recomform-panel").style.display = which === "recomform" ? "block" : "none";
   document.getElementById("permisoform-panel").style.display = which === "permisoform" ? "block" : "none";
+  document.getElementById("vacacionesform-panel").style.display = which === "vacacionesform" ? "block" : "none";
   document.getElementById("empresas-panel").style.display = which === "empresas" ? "block" : "none";
   document.getElementById("puestos-panel").style.display = which === "puestos" ? "block" : "none";
   document.getElementById("propiedades-panel").style.display = which === "propiedades" ? "block" : "none";
@@ -3620,6 +3702,7 @@ function showTab(which){
   document.getElementById("constancia-wrap").style.display = which === "constancia" ? "block" : "none";
   document.getElementById("recomendacion-wrap").style.display = which === "recomendacion" ? "block" : "none";
   document.getElementById("permiso-wrap").style.display = "none";
+  document.getElementById("vacaciones-wrap").style.display = "none";
   document.getElementById("despido-wrap").style.display = "none";
   document.getElementById("amonestacion-wrap").style.display = "none";
   document.getElementById("format-panel").style.display = which === "format" ? "block" : "none";
@@ -3631,12 +3714,13 @@ function showTab(which){
   document.getElementById("amonestacionform-toolbar").style.display = (which === "amonestacionform") ? "flex" : "none";
   document.getElementById("recomform-toolbar").style.display = (which === "recomform") ? "flex" : "none";
   document.getElementById("permisoform-toolbar").style.display = (which === "permisoform") ? "flex" : "none";
+  document.getElementById("vacacionesform-toolbar").style.display = (which === "vacacionesform") ? "flex" : "none";
   const groupOf = {
     inicio:"inicio",
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
     empleados:"empleados", archivo:"empleados",
     perfil:"expedientes",
-    despidoform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos",
+    despidoform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos",
     datos:"datos",
     planilla:"planilla",
     vacaciones:"vacaciones", diaslibres:"diaslibres", incapacidades:"incapacidades", horasextras:"horasextras",
@@ -3671,6 +3755,7 @@ function showTab(which){
   if (which === "amonestacionform") renderAmonestacionForm();
   if (which === "recomform") renderRecomForm();
   if (which === "permisoform") renderPermisoForm();
+  if (which === "vacacionesform") renderVacacionesForm();
   if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
 }
 
@@ -4732,8 +4817,8 @@ function formatoRelativoActividad(iso){
 // navegación ya refleja la estructura final aprobada y el desarrollo puede
 // ser incremental sin fingir funcionalidad a medias.
 const MODULOS_PENDIENTES = {
-  vacaciones: { icono: "🏖️", titulo: "Vacaciones", resumen: "Calendario general con código de color, y panel de solicitudes con aprobar/rechazar." },
-  diaslibres: { icono: "📅", titulo: "Días libres", resumen: "Módulo por definir en detalle." },
+  vacaciones: { icono: "🏖️", titulo: "Vacaciones", resumen: "Calendario general con código de color, y panel de solicitudes con aprobar/rechazar. (La carta de acción de personal de vacaciones ya existe — Documentos → Vacaciones, o desde Acciones en el perfil del empleado.)" },
+  diaslibres: { icono: "📅", titulo: "Días libres", resumen: "Calendario general por empleado — todavía por definir. (Ya se pueden marcar fechas puntuales de descanso desde Horas extra → \"Marcar día libre\", con el mismo flujo de aprobación.)" },
   incapacidades: { icono: "🤒", titulo: "Incapacidades", resumen: "Panel de incapacidades activas y alertas automáticas de regreso." },
   estadisticas: { icono: "📊", titulo: "Estadísticas", resumen: "Gráficos de distribución de personal y otros indicadores — separados del Dashboard a propósito." },
   asistente: { icono: "🤖", titulo: "Asistente IA", resumen: "Consultas en lenguaje natural sobre los datos internos (ej. \"¿cuántos empleados están incapacitados?\", \"contratos que vencen este mes\")." },
@@ -4802,7 +4887,7 @@ async function renderPlanillaPanel(){
 
     html += `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">🗓️ Reporte de horarios para pago de planilla</div>
-      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Por empleado: días laborados (marca + aprobado por jefatura/gerencia), horas extra aprobadas y días de permiso sin goce (PSG), entre dos fechas. Vacaciones se agrega como columna más adelante — de momento sale en blanco.</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Por empleado: días laborados (marca + aprobado por jefatura/gerencia), horas extra aprobadas, días de permiso sin goce (PSG) y días de vacaciones, entre dos fechas.</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
           <input type="date" id="horario-desde">
@@ -5032,9 +5117,10 @@ async function generarReporteHorarioPlanilla(){
     const acumulado = {};
     aprobados.forEach(r => {
       const tipo = r.TIPO_DIA || "laboral";
-      const acc = acumulado[r.EMPLEADO_KEY] = acumulado[r.EMPLEADO_KEY] || { diasLaborados: 0, horasExtra: 0, psg: 0 };
+      const acc = acumulado[r.EMPLEADO_KEY] = acumulado[r.EMPLEADO_KEY] || { diasLaborados: 0, horasExtra: 0, psg: 0, vacaciones: 0 };
       if (tipo === "laboral") acc.diasLaborados++;
       if (tipo === "permiso_sin_goce") acc.psg++;
+      if (tipo === "vacaciones") acc.vacaciones++;
       acc.horasExtra += r.HORAS_EXTRA || 0;
     });
 
@@ -5097,7 +5183,7 @@ async function generarReporteHorarioPlanilla(){
         f.diasLaborados,
         Math.round(f.horasExtra * 100) / 100,
         f.psg,
-        "Próximamente",
+        f.vacaciones,
       ];
       const fila = ws.getRow(filaActual);
       valores.forEach((v, i) => {
@@ -5105,7 +5191,6 @@ async function generarReporteHorarioPlanilla(){
         celda.value = v;
         celda.border = bordeCelda;
         celda.alignment = { vertical: "middle", horizontal: i >= 3 ? "center" : "left" };
-        if (i === 6) celda.font = { italic: true, color: { argb: "FF808080" } };
       });
       filaActual++;
     });
@@ -5147,6 +5232,7 @@ const TIPOS_DIA_HORARIO = {
   libre: { label: "Día libre", emoji: "🌴" },
   incapacidad: { label: "Incapacidad", emoji: "🤒" },
   permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄" },
+  vacaciones: { label: "Vacaciones", emoji: "🏖️" },
   ausencia: { label: "Ausencia", emoji: "⚠️" },
 };
 
@@ -5720,6 +5806,32 @@ async function renderHorasExtrasPanel(){
       </div></div>`;
     }
 
+    if (puedeAprobar){
+      const sesion = window.sdgApi && window.sdgApi.sesionActual();
+      const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
+      const empleadosParaLibre = Object.values(empleadosPorKey)
+        .filter(e => !e.ARCHIVADO)
+        .filter(e => !deptoJefatura || departamentoDeEmpleado(e) === deptoJefatura)
+        .sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📅 Marcar día libre</div>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Para una fecha puntual de descanso — como en hotelería el descanso rota, se marca semana a semana en vez de un solo día fijo. Queda pendiente hasta que se apruebe, igual que el resto de los días.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
+            <select id="diaslibres-empleado">
+              <option value="">— Elegí —</option>
+              ${empleadosParaLibre.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+            </select>
+          </label>
+          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Fecha
+            <input type="date" id="diaslibres-fecha">
+          </label>
+          <button class="btn primary" onclick="marcarDiaLibre();">➕ Marcar</button>
+        </div>
+        <div id="diaslibres-status" style="font-size:12px; margin-top:6px;"></div>
+      </div></div>`;
+    }
+
     const filtroTabs = [
       ["pendiente", `Pendientes (${pendientes.length})`],
       ...(esJefatura ? [] : [["sinmatch", `Sin identificar (${sinMatch.length})`]]),
@@ -5917,6 +6029,25 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
     v.TIPO_DIA = tipo;
     await window.storage.set(key, JSON.stringify(v), false);
   }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
+}
+
+// Marca una fecha puntual como día libre de un empleado — mismo flujo
+// pendiente→aprobada que el resto de horas extra. No pisa un día que ya
+// tenga algo real (marca, ya aprobado/rechazado, u otro tipo justificado);
+// solo reemplaza una "ausencia" que el sistema haya adivinado sola.
+async function marcarDiaLibre(){
+  const status = document.getElementById("diaslibres-status");
+  const empKey = (document.getElementById("diaslibres-empleado") || {}).value;
+  const fecha = (document.getElementById("diaslibres-fecha") || {}).value;
+  if (!empKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí un empleado.</span>`; return; }
+  if (!fecha){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí una fecha.</span>`; return; }
+  const creado = await crearOJustificarDiaHorasExtra(empKey, fecha, "libre", "dia_libre_manual");
+  if (creado){
+    statusMsg("Día libre marcado como pendiente.");
+    renderHorasExtrasPanel();
+  } else if (status){
+    status.innerHTML = `<span style="color:#b23b3b;">Ya había un registro real para ese día (marca, ya aprobado/rechazado, u otro tipo) — revisalo en la lista en vez de marcarlo aquí.</span>`;
+  }
 }
 
 // Corrige el número de horas de un registro pendiente sin decidirlo todavía
@@ -7036,8 +7167,8 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","format-panel"];
-const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","format-panel"];
+const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar","vacacionesform-toolbar"];
 
 function mostrarSoloRecomendacion(){
   ALL_MAIN_PANELS.filter(id => id !== "recomendacion-wrap").forEach(id => {
@@ -7058,6 +7189,19 @@ function mostrarSoloPermiso(){
     if (el) el.style.display = "none";
   });
   const wrap = document.getElementById("permiso-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function mostrarSoloVacaciones(){
+  ALL_MAIN_PANELS.filter(id => id !== "vacaciones-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("vacaciones-wrap");
   if (wrap) wrap.style.display = "block";
   ALL_FORM_TOOLBARS.forEach(id => {
     const el = document.getElementById(id);
@@ -7166,19 +7310,118 @@ function renderAccionPersonal(){
   document.getElementById("permiso-root").innerHTML = html;
 }
 
-// Al generar la carta de permiso sin goce con fechas ya elegidas, se crea un
-// registro por cada día del rango (mismo prefijo horas_extra: y mismo flujo
-// pendiente→aprobada que usa jefatura) para que ese permiso ya aparezca solo
-// en el reporte de planilla sin que jefatura tenga que repetirlo día por día
-// desde el horario. Si algún día del rango ya tenía un registro (p. ej. la
-// persona sí marcó ese día), se deja tal cual — no se pisa nada.
-async function crearDiasPermisoSinGoceParaPlanilla(empKey){
-  const di = parseInt(data.DIA_INICIO_PERMISO, 10);
-  const mi = MESES.indexOf(data.MES_INICIO_PERMISO);
-  const ai = parseInt(data.ANIO_INICIO_PERMISO, 10);
-  const df = parseInt(data.DIA_FIN_PERMISO, 10);
-  const mf = MESES.indexOf(data.MES_FIN_PERMISO);
-  const af = parseInt(data.ANIO_FIN_PERMISO, 10);
+function renderAccionVacaciones(){
+  const empresaInfo = FIRMANTE_RECOMENDACION;
+  const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
+  const nombre = data.NOMBRE_VACACIONES || "";
+  const cedula = data.CEDULA_VACACIONES || "";
+  const puesto = data.PUESTO_VACACIONES || "";
+  const depto = data.DEPARTAMENTO_VACACIONES || "";
+  const dias = data.TOTAL_DIAS_VACACIONES || "0";
+  const propiedad = getPropiedadActual();
+  const propiedadNombre = propiedad ? propiedad.nombre : "";
+  const empresaTxt = lang === "en" ? empresaInfo.empresaEn : empresaInfo.empresa;
+  const firmanteNombre = data.FIRMANTE_VACACIONES_NOMBRE || FIRMANTE_RECOMENDACION.nombre;
+  const firmantePuesto = data.FIRMANTE_VACACIONES_PUESTO || FIRMANTE_RECOMENDACION.puesto;
+  const fIni = fechaCortaDDMMYYYY(data.DIA_INICIO_VACACIONES, data.MES_INICIO_VACACIONES, data.ANIO_INICIO_VACACIONES);
+  const fFin = fechaCortaDDMMYYYY(data.DIA_FIN_VACACIONES, data.MES_FIN_VACACIONES, data.ANIO_FIN_VACACIONES);
+  const numeroAccion = data.NUMERO_ACCION_VACACIONES || "";
+  const fechaEmision = fmtFecha(new Date().toISOString());
+
+  const html = `<div class="ap-page">
+    ${logoHeaderHtml()}
+    <div class="ap-title">${tr("ACCIÓN DE PERSONAL","PERSONNEL ACTION")}</div>
+    <div class="ap-subtitle">${tr("VACACIONES","VACATION LEAVE")}</div>
+    <div class="ap-company">${escapeHtml(empresaTxt)}</div>
+    <div class="ap-companyid">${tr("Cédula Jurídica. No.","Legal Entity ID No.")} ${empresaInfo.cedulaJuridica}</div>
+
+    <div class="ap-infobox">
+      <div class="row"><b>${tr("Empleado","Employee")}:</b> ${cedula ? escapeHtml(cedula)+" " : ""}<u>${escapeHtml(nombre)}</u></div>
+      <div class="row"><b>${tr("Fecha de emisión","Issue date")}:</b> ${fechaEmision}</div>
+      <div class="row"><b>${tr("No. de Acción","Action No.")}:</b> ${escapeHtml(numeroAccion)}</div>
+      <div class="row"><b>${tr("Departamento","Department")}:</b> ${escapeHtml(depto)}</div>
+      <div class="row"><b>${tr("Puesto","Position")}:</b> ${escapeHtml(puesto)}</div>
+      <div class="row"><b>${tr("Propiedad","Property")}:</b> ${escapeHtml(propiedadNombre)}</div>
+    </div>
+
+    <div class="ap-section-title">1 - ${tr("PERÍODO DE VACACIONES SOLICITADO","REQUESTED VACATION PERIOD")}</div>
+    <table class="ap-lines">
+      <tr>
+        <td class="ap-desc">${tr("VACACIONES","VACATION LEAVE")}</td>
+        <td class="ap-num">${escapeHtml(dias)}</td>
+        <td class="ap-unit">${tr("Días","Days")}</td>
+        <td style="text-align:right; color:var(--ink-soft); font-size:11.5px;">${tr("Del","From")} ${fIni} ${tr("al","to")} ${fFin}</td>
+      </tr>
+      <tr class="ap-total-row">
+        <td class="ap-desc">${tr("Total","Total")}</td>
+        <td colspan="2" style="text-align:right; padding-right:64px;">1 - ${tr("PERÍODO SOLICITADO","REQUESTED PERIOD")}</td>
+        <td class="ap-num" style="text-align:right;">${escapeHtml(dias)}</td>
+      </tr>
+    </table>
+
+    <div class="ap-grand-total">
+      <div class="ap-label">${tr("TOTAL DÍAS DE VACACIONES","TOTAL VACATION DAYS")}</div>
+      <div class="ap-dots"></div>
+      <div class="ap-box">${escapeHtml(dias)}</div>
+    </div>
+
+    <div class="ap-signatures">
+      <div class="ap-sig">
+        <div class="ap-line"></div>
+        <div class="ap-lbl">${tr("Firma de quien autoriza","Authorized by")}</div>
+        <div class="ap-sub">${escapeHtml(firmanteNombre)} — ${escapeHtml(firmantePuesto)}</div>
+      </div>
+      <div class="ap-sig">
+        <div class="ap-line"></div>
+        <div class="ap-lbl">${tr("Firma del colaborador","Employee signature")}</div>
+        <div class="ap-sub">${escapeHtml(nombre)} — ${tr("Recibido conforme","Received and accepted")}</div>
+      </div>
+    </div>
+
+    <div class="ap-footer">${tr("Este documento constituye respaldo de Recursos Humanos y debe conservarse firmado en el expediente del colaborador.","This document constitutes an HR record and must be kept signed in the employee's file.")}</div>
+  </div>`;
+  document.getElementById("vacaciones-root").innerHTML = html;
+}
+
+// Crea un registro horas_extra: para un día ya justificado por otra fuente
+// (permiso sin goce, vacaciones, día libre marcado a mano) — mismo prefijo y
+// mismo flujo pendiente→aprobada que usa jefatura para todo lo demás, así
+// que ya aparece solo en el reporte de planilla sin que nadie lo repita a
+// mano. Si ya hay un registro real para ese día (marca, ya aprobado o
+// rechazado, u otro tipo ya justificado) no se toca. La única excepción es
+// una "ausencia" que el propio sistema adivinó sola al no ver marcas
+// (todavía pendiente, origen "ausencia_detectada") — esa sí se reemplaza,
+// porque era solo un supuesto y esto es información real que lo corrige.
+async function crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, camposExtra){
+  const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
+  try{
+    const r = await window.storage.get(key, false);
+    const existente = r && r.value ? JSON.parse(r.value) : null;
+    const esAusenciaAdivinada = existente && existente.TIPO_DIA === "ausencia" && existente.ESTADO === "pendiente" && existente.ORIGEN === "ausencia_detectada";
+    if (existente && !esAusenciaAdivinada) return false;
+    await window.storage.set(key, JSON.stringify({
+      EMPLEADO_KEY: empKey,
+      FECHA: fecha,
+      HORAS_EXTRA: 0,
+      MARCAS: [],
+      INCOMPLETO: false,
+      MARCA_SUELTA: null,
+      TIPO_DIA: tipoDia,
+      ESTADO: "pendiente",
+      ORIGEN: origen,
+      CREADO_POR: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
+      CREADO_EN: new Date().toISOString(),
+      ...(camposExtra || {}),
+    }), false);
+    return true;
+  }catch(e){ return false; } // best effort — la carta ya salió; un día suelto se puede resolver después desde horas extra
+}
+
+// Recorre un rango de fechas inclusivo (mismo cálculo que calcularDiasPermiso/
+// calcularDiasVacaciones) creando/justificando un día por cada fecha.
+async function justificarRangoDeFechas(empKey, dia1, mes1, anio1, dia2, mes2, anio2, tipoDia, origen, camposExtra){
+  const di = parseInt(dia1, 10), mi = MESES.indexOf(mes1), ai = parseInt(anio1, 10);
+  const df = parseInt(dia2, 10), mf = MESES.indexOf(mes2), af = parseInt(anio2, 10);
   if (!di || mi < 0 || !ai || !df || mf < 0 || !af) return;
   const inicio = new Date(ai, mi, di);
   const fin = new Date(af, mf, df);
@@ -7186,28 +7429,29 @@ async function crearDiasPermisoSinGoceParaPlanilla(empKey){
   const cursor = new Date(inicio);
   while (cursor <= fin){
     const fecha = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,"0")}-${String(cursor.getDate()).padStart(2,"0")}`;
-    const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
-    try{
-      const existente = await window.storage.get(key, false);
-      if (!existente || !existente.value){
-        await window.storage.set(key, JSON.stringify({
-          EMPLEADO_KEY: empKey,
-          FECHA: fecha,
-          HORAS_EXTRA: 0,
-          MARCAS: [],
-          INCOMPLETO: false,
-          MARCA_SUELTA: null,
-          TIPO_DIA: "permiso_sin_goce",
-          ESTADO: "pendiente",
-          ORIGEN: "permiso_sin_goce",
-          NUMERO_ACCION: data.NUMERO_ACCION_PERMISO || "",
-          CREADO_POR: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
-          CREADO_EN: new Date().toISOString(),
-        }), false);
-      }
-    }catch(e){ /* best effort — la carta ya salió; un día suelto se puede agregar a mano después */ }
+    await crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, camposExtra);
     cursor.setDate(cursor.getDate() + 1);
   }
+}
+
+async function crearDiasPermisoSinGoceParaPlanilla(empKey){
+  await justificarRangoDeFechas(
+    empKey,
+    data.DIA_INICIO_PERMISO, data.MES_INICIO_PERMISO, data.ANIO_INICIO_PERMISO,
+    data.DIA_FIN_PERMISO, data.MES_FIN_PERMISO, data.ANIO_FIN_PERMISO,
+    "permiso_sin_goce", "permiso_sin_goce",
+    { NUMERO_ACCION: data.NUMERO_ACCION_PERMISO || "" }
+  );
+}
+
+async function crearDiasVacacionesParaPlanilla(empKey){
+  await justificarRangoDeFechas(
+    empKey,
+    data.DIA_INICIO_VACACIONES, data.MES_INICIO_VACACIONES, data.ANIO_INICIO_VACACIONES,
+    data.DIA_FIN_VACACIONES, data.MES_FIN_VACACIONES, data.ANIO_FIN_VACACIONES,
+    "vacaciones", "vacaciones",
+    { NUMERO_ACCION: data.NUMERO_ACCION_VACACIONES || "" }
+  );
 }
 
 async function guardarPermisoEnHistorial(key){
@@ -7259,6 +7503,55 @@ async function descargarPermisoPDF(){
   });
 }
 
+async function guardarVacacionesEnHistorial(key){
+  try{
+    const fullKey = CATALOGS.empleados.prefix + key;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value) return;
+    const emp = JSON.parse(res.value);
+    if (!Array.isArray(emp.VACACIONES_HISTORIAL)) emp.VACACIONES_HISTORIAL = [];
+    emp.VACACIONES_HISTORIAL.unshift({
+      numeroAccion: data.NUMERO_ACCION_VACACIONES,
+      fechaEmision: fmtFecha(new Date().toISOString()),
+      diaInicio: data.DIA_INICIO_VACACIONES, mesInicio: data.MES_INICIO_VACACIONES, anioInicio: data.ANIO_INICIO_VACACIONES,
+      diaFin: data.DIA_FIN_VACACIONES, mesFin: data.MES_FIN_VACACIONES, anioFin: data.ANIO_FIN_VACACIONES,
+      totalDias: data.TOTAL_DIAS_VACACIONES,
+      pdfFirmado: null, pdfNombre: null,
+    });
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+  }catch(e){ /* best effort — the printable document already went out either way */ }
+}
+
+async function descargarVacacionesPDF(){
+  if (!data.TOTAL_DIAS_VACACIONES || Number(data.TOTAL_DIAS_VACACIONES) <= 0){
+    statusMsg("Completa las fechas de inicio y fin de vacaciones antes de descargar (el total de días debe ser mayor a cero).", false);
+    return;
+  }
+  if (!data.NUMERO_ACCION_VACACIONES){
+    data.NUMERO_ACCION_VACACIONES = await siguienteNumeroAccion();
+  }
+  const original = document.title;
+  const nombreBase = data.NOMBRE_VACACIONES ? data.NOMBRE_VACACIONES.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Accion_Personal_Vacaciones_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  renderAccionVacaciones();
+  mostrarSoloVacaciones();
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  if (currentEmpKeyForLetter){
+    await guardarVacacionesEnHistorial(currentEmpKeyForLetter);
+    agregarBitacora(currentEmpKeyForLetter, "Acción de personal generada: vacaciones de " + data.TOTAL_DIAS_VACACIONES + " día(s) (" + data.NUMERO_ACCION_VACACIONES + ").");
+    await crearDiasVacacionesParaPlanilla(currentEmpKeyForLetter);
+  }
+  await congelarEmitido("vacaciones-root", {
+    tipo: "accion_personal_vacaciones",
+    titulo: "Acción de personal " + (data.NUMERO_ACCION_VACACIONES || "") + " — " + (data.NOMBRE_VACACIONES || "sin nombre"),
+    nombreArchivo: "Accion_Personal_Vacaciones_" + nombreBase,
+    claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
+    empleadoCedula: data.CEDULA_VACACIONES || null,
+    empleadoNombre: data.NOMBRE_VACACIONES || null,
+  });
+}
+
 // ---------- generic signed-PDF backup uploads (contrato / permiso / salida) ----------
 // Shared by any place in the app that needs to attach a signed PDF to an
 // employee record, independent of the Handbook upload flow above.
@@ -7290,6 +7583,10 @@ function subirPermisoFirmado(key, index){
   iniciarSubidaPdfGenerica("permiso", key, index);
 }
 
+function subirVacacionesFirmado(key, index){
+  iniciarSubidaPdfGenerica("vacaciones", key, index);
+}
+
 async function onGenericPdfSelected(inputEl){
   const file = inputEl.files && inputEl.files[0];
   const ctx = pendingPdfUpload;
@@ -7318,6 +7615,13 @@ async function onGenericPdfSelected(inputEl){
         emp.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: `Permiso sin goce salarial firmado adjuntado ("${file.name}").` });
       }
       statusMsg("Permiso firmado guardado.");
+    } else if (ctx.tipo === "vacaciones"){
+      if (Array.isArray(emp.VACACIONES_HISTORIAL) && emp.VACACIONES_HISTORIAL[ctx.index]){
+        emp.VACACIONES_HISTORIAL[ctx.index].pdfFirmado = dataUrl;
+        emp.VACACIONES_HISTORIAL[ctx.index].pdfNombre = file.name;
+        emp.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: `Vacaciones firmadas adjuntadas ("${file.name}").` });
+      }
+      statusMsg("Vacaciones firmadas guardadas.");
     } else if (ctx.tipo === "salida"){
       emp.SALIDA_PDF_FIRMADO = dataUrl;
       emp.SALIDA_PDF_NOMBRE = file.name;
@@ -7971,6 +8275,7 @@ async function renderPerfilEmpleado(){
           ${emp.ARCHIVADO ? `<button onclick="generarRecomendacionDeEmpleado('${perfilActualKey}')">📝 Recomendación laboral</button>` : ""}
           <button onclick="actualizarContratoDeEmpleado('${perfilActualKey}')">📄 Actualizar contrato</button>
           ${!emp.ARCHIVADO ? `<button onclick="generarPermisoDeEmpleado('${perfilActualKey}')">🗓️ Permiso sin goce salarial</button>` : ""}
+          ${!emp.ARCHIVADO ? `<button onclick="generarVacacionesDeEmpleado('${perfilActualKey}')">🏖️ Vacaciones</button>` : ""}
           <button onclick="openCatalogForm('empleados','${perfilActualKey}')">✏️ Editar datos</button>
           <button onclick="confirmarFirmaHandbook('${perfilActualKey}')">✍️ Confirmar handbook</button>
           <button onclick="subirContratoFirmado('${perfilActualKey}')">📎 Subir contrato firmado (PDF)</button>
@@ -7997,6 +8302,21 @@ async function renderPerfilEmpleado(){
             ${p.pdfFirmado
               ? `<button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="descargarPermisoFirmado('${perfilActualKey}', ${i})">📎 Ver PDF</button>`
               : `<button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="subirPermisoFirmado('${perfilActualKey}', ${i})">📎 Subir firmado</button>`}
+          </div>`).join("")}
+      </div></div>` : ""}
+
+      ${Array.isArray(emp.VACACIONES_HISTORIAL) && emp.VACACIONES_HISTORIAL.length > 0 ? `
+      <div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:8px;">🏖️ Vacaciones</div>
+        ${emp.VACACIONES_HISTORIAL.map((p, i) => `
+          <div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <div>
+              <b>${escapeHtml(p.numeroAccion||"")}</b> — ${escapeHtml(String(p.totalDias||""))} día(s)
+              <div style="color:var(--ink-soft);">${escapeHtml(fechaCortaDDMMYYYY(p.diaInicio,p.mesInicio,p.anioInicio))} al ${escapeHtml(fechaCortaDDMMYYYY(p.diaFin,p.mesFin,p.anioFin))}</div>
+            </div>
+            ${p.pdfFirmado
+              ? `<button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="descargarVacacionesFirmado('${perfilActualKey}', ${i})">📎 Ver PDF</button>`
+              : `<button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="subirVacacionesFirmado('${perfilActualKey}', ${i})">📎 Subir firmado</button>`}
           </div>`).join("")}
       </div></div>` : ""}
 
@@ -8202,6 +8522,17 @@ async function descargarPermisoFirmado(key, index){
     const entry = Array.isArray(emp.PERMISOS_HISTORIAL) ? emp.PERMISOS_HISTORIAL[index] : null;
     if (!entry || !entry.pdfFirmado){ statusMsg("Ese permiso no tiene un PDF firmado guardado todavía.", false); return; }
     descargarDataUrlComoArchivo(entry.pdfFirmado, entry.pdfNombre || ((entry.numeroAccion || "permiso") + ".pdf"));
+  }catch(e){ statusMsg("No se pudo abrir el PDF guardado.", false); }
+}
+
+async function descargarVacacionesFirmado(key, index){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    const entry = Array.isArray(emp.VACACIONES_HISTORIAL) ? emp.VACACIONES_HISTORIAL[index] : null;
+    if (!entry || !entry.pdfFirmado){ statusMsg("Esas vacaciones no tienen un PDF firmado guardado todavía.", false); return; }
+    descargarDataUrlComoArchivo(entry.pdfFirmado, entry.pdfNombre || ((entry.numeroAccion || "vacaciones") + ".pdf"));
   }catch(e){ statusMsg("No se pudo abrir el PDF guardado.", false); }
 }
 

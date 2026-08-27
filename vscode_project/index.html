@@ -110,6 +110,8 @@
       <button onclick="navCloseAndRun(function(){ showTab('recomform'); })">📝 Nueva recomendación</button>
       <div class="nav-dd-sep">Permiso sin goce salarial</div>
       <button onclick="navCloseAndRun(function(){ showTab('permisoform'); })">🗓️ Nueva acción de personal</button>
+      <div class="nav-dd-sep">Vacaciones</div>
+      <button onclick="navCloseAndRun(function(){ showTab('vacacionesform'); })">🏖️ Nueva acción de personal</button>
       <div class="nav-dd-sep">Próximamente</div>
       <div style="padding:8px 14px 10px; font-size:11px; color:var(--ink-soft); line-height:1.5;">⏳ Carga masiva de archivos, plantillas de documentos, vista de documentos recientes por empleado y permisos por rol para documentos sensibles.</div>
     </div>
@@ -167,6 +169,9 @@
 </div>
 <div class="toolbar" id="permisoform-toolbar" style="display:none;">
   <button class="btn gold" onclick="descargarPermisoPDF()">🗓️ Descargar acción de personal</button>
+</div>
+<div class="toolbar" id="vacacionesform-toolbar" style="display:none;">
+  <button class="btn gold" onclick="descargarVacacionesPDF()">🏖️ Descargar acción de personal</button>
 </div>
 <div class="status-msg" id="status-msg"></div>
 <div class="toast" id="toast"></div>
@@ -273,6 +278,7 @@
   <div id="amonestacionform-panel" style="display:none;"></div>
   <div id="recomform-panel" style="display:none;"></div>
   <div id="permisoform-panel" style="display:none;"></div>
+  <div id="vacacionesform-panel" style="display:none;"></div>
 
   <div id="empresas-panel" class="catalog-panel" style="display:none;"></div>
   <div id="puestos-panel" class="catalog-panel" style="display:none;"></div>
@@ -323,6 +329,11 @@
   <div id="permiso-wrap" style="display:none;">
     <div class="toolbar"><button class="btn gold" onclick="descargarPermisoPDF()">⬇️ Descargar Acción de Personal PDF</button></div>
     <div class="doc-scroll"><div id="permiso-root"></div></div>
+  </div>
+
+  <div id="vacaciones-wrap" style="display:none;">
+    <div class="toolbar"><button class="btn gold" onclick="descargarVacacionesPDF()">⬇️ Descargar Acción de Personal PDF</button></div>
+    <div class="doc-scroll"><div id="vacaciones-root"></div></div>
   </div>
 
   <div id="format-panel" style="display:none;">
