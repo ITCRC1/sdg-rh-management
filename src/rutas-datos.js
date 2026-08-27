@@ -102,6 +102,22 @@ async function filtrarFilasPorEquipo(filas, propiedad, puestoLider) {
   return resultado;
 }
 
+// Una jefatura no ve "la página de Recursos Humanos" — solo el módulo de
+// Horas extras. Por eso su lectura queda limitada a estos 3 prefijos:
+// horas_extra: (lo suyo), y cat_empleado:/cat_puesto: (para poder resolver
+// nombre, puesto y departamento de su propio equipo — nada de contratos,
+// documentos, otros catálogos, etc.).
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
+
+// ¿Puede leer esta clave (o este prefijo de listado)? true para todos los
+// roles salvo jefatura, que solo puede si arranca con uno de los prefijos
+// permitidos arriba — así una jefatura no puede pedir prefijo="" (listaría
+// todo) ni un prefijo más corto que además matchee catálogos ajenos.
+function puedeLeerClaveOPrefijo(usuario, claveOPrefijo) {
+  if (usuario.rol !== "jefatura") return true;
+  return PREFIJOS_LECTURA_JEFATURA.some((permitido) => claveOPrefijo.startsWith(permitido));
+}
+
 // --------------------------------------------------------------------------
 // GET /api/datos — lista claves por prefijo (equivale a storage.list)
 // --------------------------------------------------------------------------
@@ -112,6 +128,12 @@ router.get("/", async (req, res, next) => {
 
     const prefijo = String(req.query.prefijo || "");
     const conValores = req.query.valores === "1";
+
+    // Jefatura no ve "la página de RH" — solo horas extra y lo mínimo para
+    // resolverla (empleados/puestos). Cualquier otro prefijo, lista vacía.
+    if (!puedeLeerClaveOPrefijo(req.usuario, prefijo)) {
+      return res.json(conValores ? { propiedad, prefijo, items: [] } : { propiedad, prefijo, claves: [] });
+    }
 
     // El prefijo se pasa como parámetro y se escapa: nunca se concatena SQL.
     const like = prefijo.replace(/([\\%_])/g, "\\$1") + "%";
