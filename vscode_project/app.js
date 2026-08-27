@@ -4800,6 +4800,21 @@ async function renderPlanillaPanel(){
       <div id="incidencias-status" style="font-size:12px;"></div>
     </div>`;
 
+    html += `<div class="dash-panel" style="margin-bottom:14px;">
+      <div class="dash-panel-title">🗓️ Reporte de horarios para pago de planilla</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Por empleado: días laborados (marca + aprobado por jefatura/gerencia), horas extra aprobadas y días de permiso sin goce (PSG), entre dos fechas. Vacaciones se agrega como columna más adelante — de momento sale en blanco.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+          <input type="date" id="horario-desde">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+          <input type="date" id="horario-hasta">
+        </label>
+        <button class="btn primary" onclick="generarReporteHorarioPlanilla();">⬇️ Generar y descargar Excel</button>
+      </div>
+      <div id="horario-status" style="font-size:12px;"></div>
+    </div>`;
+
     html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el cálculo de planilla en sí (salario base + horas extra automáticas +/− ajustes por incapacidad/vacaciones − deducciones = neto, y los acumulados de aguinaldo/cesantía/preaviso). Hoy este módulo archiva e identifica colillas que ya vienen calculadas de afuera; no calcula montos.</div>`;
 
     panel.innerHTML = html;
@@ -4984,6 +4999,129 @@ function fmtFechaDesdeDate(d){
   return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 }
 
+// Reporte de horarios para pago de planilla: por empleado, cuántos días
+// laborados (marca + aprobado), cuántas horas extra aprobadas y cuántos días
+// de permiso sin goce cayeron dentro del rango. Solo cuenta lo ya APROBADO
+// — un día todavía pendiente de revisión no entra a planilla hasta que
+// jefatura/gerencia lo confirme, a propósito (empuja a resolverlo a tiempo
+// en vez de dejarlo pendiente y que salga corto en el pago).
+async function generarReporteHorarioPlanilla(){
+  const status = document.getElementById("horario-status");
+  const desdeStr = (document.getElementById("horario-desde") || {}).value;
+  const hastaStr = (document.getElementById("horario-hasta") || {}).value;
+  if (!desdeStr || !hastaStr){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí ambas fechas (desde y hasta).</span>`;
+    return;
+  }
+  if (desdeStr > hastaStr){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">La fecha "desde" no puede ser posterior a "hasta".</span>`;
+    return;
+  }
+  if (typeof ExcelJS === "undefined"){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de Excel. Recargá la página e intentá de nuevo.</span>`;
+    return;
+  }
+
+  if (status) status.innerHTML = `Generando…`;
+  try{
+    const registros = await listarRegistrosHorasExtra();
+    // FECHA ya viene como "AAAA-MM-DD" (normalizarFechaMarcacion / fecha del
+    // día agregado a mano) — compara bien como texto, sin pasar por Date.
+    const aprobados = registros.filter(r => r.ESTADO === "aprobada" && r.EMPLEADO_KEY && r.FECHA >= desdeStr && r.FECHA <= hastaStr);
+
+    const acumulado = {};
+    aprobados.forEach(r => {
+      const tipo = r.TIPO_DIA || "laboral";
+      const acc = acumulado[r.EMPLEADO_KEY] = acumulado[r.EMPLEADO_KEY] || { diasLaborados: 0, horasExtra: 0, psg: 0 };
+      if (tipo === "laboral") acc.diasLaborados++;
+      if (tipo === "permiso_sin_goce") acc.psg++;
+      acc.horasExtra += r.HORAS_EXTRA || 0;
+    });
+
+    if (!Object.keys(acumulado).length){
+      if (status) status.innerHTML = `No hay días aprobados (laborados, horas extra o PSG) en ese rango de fechas.`;
+      return;
+    }
+
+    const empleados = await cargarEmpleadosDB();
+    const empleadosPorKey = {};
+    empleados.forEach(e => { empleadosPorKey[e.key] = e; });
+
+    const filas = Object.keys(acumulado)
+      .map(key => ({ emp: empleadosPorKey[key], key, ...acumulado[key] }))
+      .filter(f => f.emp);
+    filas.sort((a,b) => (a.emp.DEPARTAMENTO_EMP||"").localeCompare(b.emp.DEPARTAMENTO_EMP||"", "es") || (a.emp.NOMBRE_EMP||"").localeCompare(b.emp.NOMBRE_EMP||"", "es"));
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Horas extra","PSG","Vacaciones"];
+    const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
+    const bordeFino = { style: "thin", color: { argb: "FF000000" } };
+    const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "SDG RH Management";
+    const ws = wb.addWorksheet("HORARIOS");
+    ws.columns = COLUMNAS.map(() => ({ width: 20 }));
+
+    ws.mergeCells(1, 1, 1, COLUMNAS.length);
+    const tituloCelda = ws.getCell(1, 1);
+    tituloCelda.value = nombrePropiedad;
+    tituloCelda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NEGRO } };
+    tituloCelda.font = { color: { argb: BLANCO }, bold: true, size: 13 };
+    tituloCelda.alignment = { horizontal: "center", vertical: "middle" };
+    ws.getRow(1).height = 22;
+
+    ws.mergeCells(2, 1, 2, COLUMNAS.length);
+    const subtituloCelda = ws.getCell(2, 1);
+    subtituloCelda.value = `Horarios para planilla — del ${fmtFechaDesdeDate(new Date(desdeStr + "T00:00:00"))} al ${fmtFechaDesdeDate(new Date(hastaStr + "T00:00:00"))}`;
+    subtituloCelda.font = { italic: true, size: 10 };
+    subtituloCelda.alignment = { horizontal: "center", vertical: "middle" };
+
+    const filaHeader = ws.getRow(3);
+    COLUMNAS.forEach((titulo, i) => {
+      const celda = filaHeader.getCell(i + 1);
+      celda.value = titulo;
+      celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GRIS_HEADER } };
+      celda.font = { bold: true };
+      celda.alignment = { horizontal: "center", vertical: "middle" };
+      celda.border = bordeCelda;
+    });
+
+    let filaActual = 4;
+    filas.forEach(f => {
+      const valores = [
+        f.emp.NOMBRE_EMP || "",
+        f.emp.NUMERO_EMPLEADO || "",
+        f.emp.DEPARTAMENTO_EMP || "",
+        f.diasLaborados,
+        Math.round(f.horasExtra * 100) / 100,
+        f.psg,
+        "Próximamente",
+      ];
+      const fila = ws.getRow(filaActual);
+      valores.forEach((v, i) => {
+        const celda = fila.getCell(i + 1);
+        celda.value = v;
+        celda.border = bordeCelda;
+        celda.alignment = { vertical: "middle", horizontal: i >= 3 ? "center" : "left" };
+        if (i === 6) celda.font = { italic: true, color: { argb: "FF808080" } };
+      });
+      filaActual++;
+    });
+
+    ws.views = [{ state: "frozen", ySplit: 3 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const nombreArchivo = `horarios_planilla_${desdeStr}_a_${hastaStr}.xlsx`;
+    descargarBlobComoArchivo(blob, nombreArchivo);
+    if (status) status.innerHTML = `Descargado: ${filas.length} empleado(s) con días aprobados entre ${fmtFechaDesdeDate(new Date(desdeStr + "T00:00:00"))} y ${fmtFechaDesdeDate(new Date(hastaStr + "T00:00:00"))}.`;
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar el reporte: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
 // ---------- Horas extras: importación desde la máquina de marcación +
 // panel de aprobación ----------
 // Cada fila del archivo de marcación queda como un registro por
@@ -4993,6 +5131,20 @@ function fmtFechaDesdeDate(d){
 const HORAS_EXTRA_PREFIX = "horas_extra:";
 let horasExtraFiltro = "pendiente"; // pendiente | sinmatch | aprobada | rechazada
 let horasExtraEmpleadoSeleccionado = null; // key del empleado abierto en el detalle de "Pendientes" (vista lista → detalle)
+
+// Cada registro de horas_extra: es un "día" (con o sin marca) al que
+// jefatura/gerencia le asigna un tipo antes de aprobarlo. "laboral" es el
+// valor por defecto de cualquier día importado desde la máquina de
+// marcación (trae marcas → se trabajó); los otros cuatro solo se agregan a
+// mano, porque un día sin marca no llega solo de ningún archivo.
+const TIPOS_DIA_HORARIO = {
+  laboral: { label: "Día laboral", emoji: "💼" },
+  libre: { label: "Día libre", emoji: "🌴" },
+  incapacidad: { label: "Incapacidad", emoji: "🤒" },
+  permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄" },
+  ausencia: { label: "Ausencia", emoji: "⚠️" },
+};
+const TIPOS_DIA_SIN_MARCA = ["libre", "incapacidad", "permiso_sin_goce", "ausencia"];
 
 // Tarifa legal mínima de horas extra (Art. 139 Código de Trabajo: tiempo y
 // medio) — no es un dato por-empleado como la jornada, así que no hace
@@ -5479,6 +5631,36 @@ async function renderHorasExtrasPanel(){
       </div></div>`;
     }
 
+    if (puedeAprobar){
+      const sesion = window.sdgApi && window.sdgApi.sesionActual();
+      const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
+      const empleadosParaManual = empleados
+        .filter(e => !e.ARCHIVADO)
+        .filter(e => !deptoJefatura || departamentoDeEmpleado(e) === deptoJefatura)
+        .sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📅 Agregar día sin marca</div>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Para un día que no llegó de la máquina de marcación — día libre, incapacidad, permiso sin goce o ausencia. Queda pendiente hasta que se apruebe, igual que las horas extra normales.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
+            <select id="horasextra-manual-empleado">
+              <option value="">— Elegí —</option>
+              ${empleadosParaManual.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+            </select>
+          </label>
+          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Fecha
+            <input type="date" id="horasextra-manual-fecha">
+          </label>
+          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo de día
+            <select id="horasextra-manual-tipo">
+              ${TIPOS_DIA_SIN_MARCA.map(t => `<option value="${t}">${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
+            </select>
+          </label>
+          <button class="btn primary" onclick="agregarDiaSinMarca();">➕ Agregar</button>
+        </div>
+      </div></div>`;
+    }
+
     const filtroTabs = [
       ["pendiente", `Pendientes (${pendientes.length})`],
       ...(esJefatura ? [] : [["sinmatch", `Sin identificar (${sinMatch.length})`]]),
@@ -5505,13 +5687,17 @@ async function renderHorasExtrasPanel(){
       const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
       const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * TARIFA_HORAS_EXTRA * r.HORAS_EXTRA) : null;
       const keyEsc = String(r.key).replace(/'/g, "\\'");
+      const tipoDia = r.TIPO_DIA || "laboral";
       let acciones = "";
       if (r.ESTADO === "pendiente" && r.INCOMPLETO && r.EMPLEADO_KEY && puedeAprobar){
         acciones = `<button class="use" onclick="mostrarModalCompletarTurno('${keyEsc}')">✏️ Completar</button>
           <button class="del" onclick="rechazarTurnoSinMarcar('${keyEsc}')">❌ No laboró</button>`;
       } else if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
-        acciones = `<button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
-          <button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>
+        acciones = `<select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
+            ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
+          </select>
+          <button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
+          ${tipoDia === "laboral" ? `<button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>` : ""}
           <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
       } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
         acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
@@ -5529,9 +5715,12 @@ async function renderHorasExtrasPanel(){
             </div>
           </details>`
         : "";
+      const etiquetaTipo = TIPOS_DIA_HORARIO[tipoDia] ? `${TIPOS_DIA_HORARIO[tipoDia].emoji} ${TIPOS_DIA_HORARIO[tipoDia].label}` : "";
       const infoLinea = (r.ESTADO === "pendiente" && r.INCOMPLETO)
         ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
-        : `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}`;
+        : (tipoDia === "laboral"
+          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}`
+          : `${etiquetaTipo}${puesto ? " · " + escapeHtml(puesto) : ""}${r.ORIGEN === "permiso_sin_goce" ? " · generado desde la acción de personal" : ""}`);
       return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">
           <div class="info">
@@ -5654,6 +5843,60 @@ async function aprobarHoraExtra(key){
     statusMsg("Horas extra aprobadas.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo aprobar: " + e.message, false); }
+}
+
+// Cambia el tipo de día (laboral/libre/incapacidad/permiso sin goce/ausencia)
+// de un registro todavía pendiente — no se toca su ESTADO, así que sigue
+// necesitando aprobar/rechazar aparte antes de contar en el reporte de
+// planilla.
+async function cambiarTipoDiaHoraExtra(key, tipo){
+  if (!TIPOS_DIA_HORARIO[tipo]) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.TIPO_DIA = tipo;
+    await window.storage.set(key, JSON.stringify(v), false);
+  }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
+}
+
+// Agrega un día SIN marca (día libre, incapacidad, permiso sin goce o
+// ausencia) al mismo flujo de pendiente→aprobada que ya usan los días con
+// marca — jefatura lo registra, master/gerente (o la propia jefatura sobre
+// su equipo) lo aprueba después, igual que con horas extra normales.
+async function agregarDiaSinMarca(){
+  const empKey = (document.getElementById("horasextra-manual-empleado") || {}).value;
+  const fecha = (document.getElementById("horasextra-manual-fecha") || {}).value;
+  const tipo = (document.getElementById("horasextra-manual-tipo") || {}).value;
+  if (!empKey){ statusMsg("Elegí un empleado.", false); return; }
+  if (!fecha){ statusMsg("Elegí una fecha.", false); return; }
+  if (!TIPOS_DIA_SIN_MARCA.includes(tipo)){ statusMsg("Elegí un tipo de día válido.", false); return; }
+  const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
+  try{
+    const existente = await window.storage.get(key, false);
+    if (existente && existente.value){
+      statusMsg("Ya existe un registro de ese día para este empleado — revisalo en la lista en vez de crear uno nuevo.", false);
+      return;
+    }
+  }catch(e){ /* no existía todavía, sigue normal */ }
+  const value = {
+    EMPLEADO_KEY: empKey,
+    FECHA: fecha,
+    HORAS_EXTRA: 0,
+    MARCAS: [],
+    INCOMPLETO: false,
+    MARCA_SUELTA: null,
+    TIPO_DIA: tipo,
+    ESTADO: "pendiente",
+    ORIGEN: "manual",
+    CREADO_POR: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
+    CREADO_EN: new Date().toISOString(),
+  };
+  try{
+    await window.storage.set(key, JSON.stringify(value), false);
+    statusMsg("Día agregado como pendiente.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo agregar: " + e.message, false); }
 }
 
 // Corrige el número de horas de un registro pendiente sin decidirlo todavía
@@ -6901,6 +7144,50 @@ function renderAccionPersonal(){
   document.getElementById("permiso-root").innerHTML = html;
 }
 
+// Al generar la carta de permiso sin goce con fechas ya elegidas, se crea un
+// registro por cada día del rango (mismo prefijo horas_extra: y mismo flujo
+// pendiente→aprobada que usa jefatura) para que ese permiso ya aparezca solo
+// en el reporte de planilla sin que jefatura tenga que repetirlo día por día
+// desde el horario. Si algún día del rango ya tenía un registro (p. ej. la
+// persona sí marcó ese día), se deja tal cual — no se pisa nada.
+async function crearDiasPermisoSinGoceParaPlanilla(empKey){
+  const di = parseInt(data.DIA_INICIO_PERMISO, 10);
+  const mi = MESES.indexOf(data.MES_INICIO_PERMISO);
+  const ai = parseInt(data.ANIO_INICIO_PERMISO, 10);
+  const df = parseInt(data.DIA_FIN_PERMISO, 10);
+  const mf = MESES.indexOf(data.MES_FIN_PERMISO);
+  const af = parseInt(data.ANIO_FIN_PERMISO, 10);
+  if (!di || mi < 0 || !ai || !df || mf < 0 || !af) return;
+  const inicio = new Date(ai, mi, di);
+  const fin = new Date(af, mf, df);
+  if (fin < inicio) return;
+  const cursor = new Date(inicio);
+  while (cursor <= fin){
+    const fecha = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,"0")}-${String(cursor.getDate()).padStart(2,"0")}`;
+    const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
+    try{
+      const existente = await window.storage.get(key, false);
+      if (!existente || !existente.value){
+        await window.storage.set(key, JSON.stringify({
+          EMPLEADO_KEY: empKey,
+          FECHA: fecha,
+          HORAS_EXTRA: 0,
+          MARCAS: [],
+          INCOMPLETO: false,
+          MARCA_SUELTA: null,
+          TIPO_DIA: "permiso_sin_goce",
+          ESTADO: "pendiente",
+          ORIGEN: "permiso_sin_goce",
+          NUMERO_ACCION: data.NUMERO_ACCION_PERMISO || "",
+          CREADO_POR: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
+          CREADO_EN: new Date().toISOString(),
+        }), false);
+      }
+    }catch(e){ /* best effort — la carta ya salió; un día suelto se puede agregar a mano después */ }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+}
+
 async function guardarPermisoEnHistorial(key){
   try{
     const fullKey = CATALOGS.empleados.prefix + key;
@@ -6938,6 +7225,7 @@ async function descargarPermisoPDF(){
   if (currentEmpKeyForLetter){
     await guardarPermisoEnHistorial(currentEmpKeyForLetter);
     agregarBitacora(currentEmpKeyForLetter, "Acción de personal generada: permiso sin goce salarial de " + data.TOTAL_DIAS_PERMISO + " día(s) (" + data.NUMERO_ACCION_PERMISO + ").");
+    await crearDiasPermisoSinGoceParaPlanilla(currentEmpKeyForLetter);
   }
   await congelarEmitido("permiso-root", {
     tipo: "accion_personal",
