@@ -5254,6 +5254,22 @@ function jornadaDiariaDePuesto(puesto){
   return (info && info.horasDiarias) || JORNADA_DIARIA_POR_DEFECTO;
 }
 
+// Tolerancia de cortesía: el tiempo entre que alguien marca y llega a su
+// puesto (o se retira tras marcar salida) se acumula en el reloj pero no es
+// tiempo efectivo de trabajo. Si el excedente sobre la jornada de ESE día no
+// pasa de 20 minutos, no se cuenta como hora extra — aplica igual para
+// todos los empleados, cualquiera sea su jornada o puesto.
+const TOLERANCIA_CORTESIA_HORAS = 20 / 60;
+
+function aplicarToleranciaCortesia(excedenteHoras){
+  // Comparar en minutos redondeados (no en horas con decimales) evita que un
+  // excedente que en la práctica son exactamente 20 minutos cuente como
+  // "más de 20" solo por imprecisión de coma flotante (8 + 20/60 - 8 no da
+  // 0.333... exacto en JS).
+  const minutos = Math.round(excedenteHoras * 60);
+  return minutos > 20 ? excedenteHoras : 0;
+}
+
 // Excel puede traer la fecha como texto (DD/MM/AAAA o AAAA-MM-DD) o como
 // número de serie de la celda (si viene con formato de fecha) — se cubren
 // los 3 casos.
@@ -5620,7 +5636,8 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // mixto o nocturno) — sin match todavía, se usa la jornada por defecto,
     // así que esa fila queda visible en "Sin identificar" en vez de perderse.
     const jornada = await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
-    const horasExtraCalculadas = info.HORAS_TRABAJADAS > jornada ? info.HORAS_TRABAJADAS - jornada : 0;
+    const excedenteMarcado = info.HORAS_TRABAJADAS > jornada ? info.HORAS_TRABAJADAS - jornada : 0;
+    const horasExtraCalculadas = aplicarToleranciaCortesia(excedenteMarcado);
     const horasExtraFinal = info.HORAS_EXTRA_DIRECTA + horasExtraCalculadas;
     // Antes esto solo dejaba pasar días con horas EXTRA (>0) o turnos sin
     // marcar — un día normal de jornada completa sin excedente no generaba
@@ -6196,7 +6213,7 @@ async function confirmarCompletarTurno(key){
         jornada = await jornadaDiariaDeEmpleado(emp, {});
       }catch(e){ /* usa la jornada por defecto */ }
     }
-    v.HORAS_EXTRA = Math.round(Math.max(0, horas - jornada) * 100) / 100;
+    v.HORAS_EXTRA = Math.round(aplicarToleranciaCortesia(Math.max(0, horas - jornada)) * 100) / 100;
     v.MARCAS = [{ entrada: mostrarFechaHoraCorta(entradaStr), salida: mostrarFechaHoraCorta(salidaStr) }];
     v.INCOMPLETO = false;
     v.MARCA_SUELTA = null;
