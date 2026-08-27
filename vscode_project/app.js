@@ -261,7 +261,20 @@ function aplicarModoSegunRol(rol){
   const btnCambiarPropiedad = document.getElementById("nav-btn-cambiar-propiedad");
   if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = rol === "master" ? "block" : "none";
 
-  const etiquetas = { master: "Master", gerente: "Gerente", colaborador: "Colaborador" };
+  // Jefatura no tiene "página de RH" — solo el módulo de Horas extras. Se
+  // esconde el resto del menú (el servidor ya bloquea esos datos aparte;
+  // esto es para que la navegación no ofrezca puertas cerradas).
+  if (rol === "jefatura"){
+    ["navbtn-inicio","navbtn-empleados","navbtn-expedientes","navbtn-planilla",
+     "navbtn-vacaciones","navbtn-diaslibres","navbtn-incapacidades",
+     "navbtn-contratos","navbtn-documentos","navbtn-reportes",
+     "navbtn-estadisticas","navbtn-asistente","navbtn-datos"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) (el.closest(".nav-dd") || el).style.display = "none";
+    });
+  }
+
+  const etiquetas = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", colaborador: "Colaborador" };
   let barra = document.getElementById("barra-rol");
   if (!barra){
     barra = document.createElement("div");
@@ -3580,6 +3593,13 @@ function renderPreview(){
 
 // ---------- tabs ----------
 function showTab(which){
+  // Jefatura no tiene "página de RH" — solo el módulo de Horas extras.
+  // Esto es la comodidad visual (el servidor es quien de verdad bloquea el
+  // resto de los datos): cubre el logo, "atrás" del navegador o cualquier
+  // otro camino que intente llevarla a otra pestaña.
+  if (which !== "horasextras" && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
+    which = "horasextras";
+  }
   document.getElementById("inicio-panel").style.display = which === "inicio" ? "block" : "none";
   document.getElementById("contracts-panel").style.display = which === "contracts" ? "block" : "none";
   document.getElementById("form-panel").style.display = which === "form" ? "block" : "none";
@@ -8153,6 +8173,13 @@ async function continuarInicioApp(){
     abrirPropiedadGate();
   } else {
     renderPropiedadBadge();
+  }
+  // Jefatura no usa nada de Contratos (formulario, PDF, datos de
+  // referencia) — se salta directo a Horas extras, que es lo único a lo
+  // que esa cuenta tiene acceso (showTab también lo fuerza, por si acaso).
+  if (window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
+    showTab("horasextras");
+    return;
   }
   await loadContentOverrides();
   await loadPdfConfig();

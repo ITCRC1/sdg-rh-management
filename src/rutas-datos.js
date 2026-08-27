@@ -181,6 +181,9 @@ router.get("/:clave(*)", async (req, res, next) => {
     const clave = req.params.clave;
     if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
     if (!claveValida(clave)) return res.status(400).json({ error: "Clave inválida." });
+    if (!puedeLeerClaveOPrefijo(req.usuario, clave)) {
+      return res.status(403).json({ error: "Tu cuenta no tiene acceso a esto.", codigo: "sin_permiso" });
+    }
 
     const { rows } = await query(
       `SELECT clave, valor, version, actualizado_en
@@ -305,6 +308,16 @@ router.delete("/:clave(*)", A.requiereEscritura, async (req, res, next) => {
   }
 });
 
+// Jefatura no tiene "página de RH": nada de histórico ni de documentos
+// congelados (contratos, colillas, cartas...) — eso vive fuera del módulo
+// de horas extra, que es lo único a lo que esa cuenta debe llegar.
+function bloquearJefatura(req, res, next) {
+  if (req.usuario.rol === "jefatura") {
+    return res.status(403).json({ error: "Tu cuenta no tiene acceso a esto.", codigo: "sin_permiso" });
+  }
+  next();
+}
+
 // ==========================================================================
 // Histórico
 //
@@ -312,7 +325,7 @@ router.delete("/:clave(*)", A.requiereEscritura, async (req, res, next) => {
 // /:clave(*) de arriba se tragaría cualquier subruta que colgara de /api/datos.
 // ==========================================================================
 const historial = express.Router();
-historial.use(A.requiereSesion, A.exigeCambioPassword);
+historial.use(A.requiereSesion, A.exigeCambioPassword, bloquearJefatura);
 
 historial.get("/", async (req, res, next) => {
   try {
@@ -352,7 +365,7 @@ historial.get("/", async (req, res, next) => {
 // Documentos emitidos (contratos congelados)
 // ==========================================================================
 const emitidos = express.Router();
-emitidos.use(A.requiereSesion, A.exigeCambioPassword);
+emitidos.use(A.requiereSesion, A.exigeCambioPassword, bloquearJefatura);
 
 // POST /api/documentos — congela un archivo tal como se generó
 emitidos.post("/", A.requiereEscritura, async (req, res, next) => {
