@@ -4785,12 +4785,203 @@ async function renderPlanillaPanel(){
       <button class="btn" style="width:100%;" onclick="showTab('datos');">📥 Subir / actualizar colillas (menú Datos)</button>
     </div>`;
 
+    html += `<div class="dash-panel" style="margin-bottom:14px;">
+      <div class="dash-panel-title">📊 Reporte de incidencias por fechas</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Descarga un Excel con los ingresos y salidas de personal ocurridos entre dos fechas.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+          <input type="date" id="incidencias-desde">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+          <input type="date" id="incidencias-hasta">
+        </label>
+        <button class="btn primary" onclick="generarReporteIncidencias();">⬇️ Generar y descargar Excel</button>
+      </div>
+      <div id="incidencias-status" style="font-size:12px;"></div>
+    </div>`;
+
     html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el cálculo de planilla en sí (salario base + horas extra automáticas +/− ajustes por incapacidad/vacaciones − deducciones = neto, y los acumulados de aguinaldo/cesantía/preaviso). Hoy este módulo archiva e identifica colillas que ya vienen calculadas de afuera; no calcula montos.</div>`;
 
     panel.innerHTML = html;
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
   }
+}
+
+function descargarBlobComoArchivo(blob, nombre){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// FECHA_INGRESO_EMP y FECHA_ARCHIVADO se guardan siempre como DD/MM/AAAA
+// (ver onFechaIngresoEmpChange y el archivado de empleados) — a diferencia de
+// parseFechaFlexible (que existe para leer fechas pegadas desde Excel y por
+// eso asume MM/DD cuando el primer número es ambiguo), acá el formato es
+// conocido, así que se interpreta directo para no correr el mes.
+function parsearFechaDDMMYYYY(str){
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(str || "").trim());
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Reporte de "incidencias" (movimientos de personal) entre dos fechas: quién
+// entró y quién salió en ese rango. No es un roster completo — igual que el
+// script de referencia del usuario, solo aparece quien tuvo un ingreso o una
+// salida dentro del período consultado.
+//
+// Si un mismo empleado tiene tanto el ingreso como la salida dentro del
+// rango (p. ej. entró y salió en el mismo período corto), gana el evento más
+// reciente; si ambas fechas son iguales, gana el ingreso (verde) sobre la
+// salida (rojo) — mismo criterio que se confirmó con el usuario.
+async function generarReporteIncidencias(){
+  const status = document.getElementById("incidencias-status");
+  const desdeStr = (document.getElementById("incidencias-desde") || {}).value;
+  const hastaStr = (document.getElementById("incidencias-hasta") || {}).value;
+  if (!desdeStr || !hastaStr){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí ambas fechas (desde y hasta).</span>`;
+    return;
+  }
+  const [ay, am, ad] = desdeStr.split("-").map(Number);
+  const [by, bm, bd] = hastaStr.split("-").map(Number);
+  const desde = new Date(ay, am - 1, ad, 0, 0, 0, 0);
+  const hasta = new Date(by, bm - 1, bd, 23, 59, 59, 999);
+  if (desde > hasta){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">La fecha "desde" no puede ser posterior a "hasta".</span>`;
+    return;
+  }
+  if (typeof ExcelJS === "undefined"){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de Excel. Recargá la página e intentá de nuevo.</span>`;
+    return;
+  }
+
+  if (status) status.innerHTML = `Generando…`;
+  try{
+    const empleados = await cargarEmpleadosDB();
+    const filas = [];
+    empleados.forEach(e => {
+      const ingreso = parsearFechaDDMMYYYY(e.FECHA_INGRESO_EMP);
+      const salida = e.ARCHIVADO ? parsearFechaDDMMYYYY(e.FECHA_ARCHIVADO) : null;
+      const ingresoEnRango = ingreso && ingreso >= desde && ingreso <= hasta;
+      const salidaEnRango = salida && salida >= desde && salida <= hasta;
+      if (!ingresoEnRango && !salidaEnRango) return;
+      let tipo, fechaEvento;
+      if (ingresoEnRango && salidaEnRango && salida.getTime() > ingreso.getTime()){
+        tipo = "salida"; fechaEvento = salida;
+      }else if (salidaEnRango && !ingresoEnRango){
+        tipo = "salida"; fechaEvento = salida;
+      }else{
+        tipo = "ingreso"; fechaEvento = ingreso;
+      }
+      filas.push({ emp: e, tipo, fechaEvento });
+    });
+    filas.sort((a,b) => a.fechaEvento - b.fechaEvento || (a.emp.NOMBRE_EMP||"").localeCompare(b.emp.NOMBRE_EMP||"", "es"));
+
+    if (!filas.length){
+      if (status) status.innerHTML = `No hubo ingresos ni salidas de personal en ese rango de fechas.`;
+      return;
+    }
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Nombre","Cédula","N° de empleado","Puesto / Departamento","Fecha de ingreso","Estado","Fecha de salida","Tipo de salida"];
+    const NEGRO = "FF000000", BLANCO = "FFFFFFFF", VERDE = "FFC5E0B3", ROJO = "FFC00000", GRIS_HEADER = "FFD9D9D9";
+    const bordeFino = { style: "thin", color: { argb: "FF000000" } };
+    const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "SDG RH Management";
+    const ws = wb.addWorksheet("INCIDENCIAS");
+    ws.columns = COLUMNAS.map(() => ({ width: 20 }));
+
+    ws.mergeCells(1, 1, 1, COLUMNAS.length);
+    const tituloCelda = ws.getCell(1, 1);
+    tituloCelda.value = nombrePropiedad;
+    tituloCelda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NEGRO } };
+    tituloCelda.font = { color: { argb: BLANCO }, bold: true, size: 13 };
+    tituloCelda.alignment = { horizontal: "center", vertical: "middle" };
+    ws.getRow(1).height = 22;
+
+    ws.mergeCells(2, 1, 2, COLUMNAS.length);
+    const subtituloCelda = ws.getCell(2, 1);
+    subtituloCelda.value = `Incidencias de personal — del ${fmtFechaDesdeDate(desde)} al ${fmtFechaDesdeDate(hasta)}`;
+    subtituloCelda.font = { italic: true, size: 10 };
+    subtituloCelda.alignment = { horizontal: "center", vertical: "middle" };
+
+    const filaHeader = ws.getRow(3);
+    COLUMNAS.forEach((titulo, i) => {
+      const celda = filaHeader.getCell(i + 1);
+      celda.value = titulo;
+      celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GRIS_HEADER } };
+      celda.font = { bold: true };
+      celda.alignment = { horizontal: "center", vertical: "middle" };
+      celda.border = bordeCelda;
+    });
+
+    let filaActual = 4;
+    filas.forEach(({ emp, tipo }) => {
+      const valores = [
+        emp.NOMBRE_EMP || "",
+        emp.IDENTIFICACION_EMP || "",
+        emp.NUMERO_EMPLEADO || "",
+        emp.DEPARTAMENTO_EMP || "",
+        emp.FECHA_INGRESO_EMP || "",
+        emp.ARCHIVADO ? "Archivado" : "Activo",
+        emp.ARCHIVADO ? (emp.FECHA_ARCHIVADO || "") : "",
+        emp.ARCHIVADO ? (emp.TIPO_SALIDA || "") : "",
+      ];
+      const fila = ws.getRow(filaActual);
+      valores.forEach((v, i) => {
+        const celda = fila.getCell(i + 1);
+        celda.value = v;
+        celda.border = bordeCelda;
+        celda.alignment = { vertical: "middle" };
+        if (tipo === "ingreso"){
+          celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
+        }else{
+          celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ROJO } };
+          celda.font = { color: { argb: BLANCO } };
+        }
+      });
+      filaActual++;
+    });
+
+    // Leyenda
+    filaActual += 1;
+    const leyenda = [
+      { color: VERDE, texto: "Ingreso de personal", claro: true },
+      { color: ROJO, texto: "Salida de personal", claro: false },
+    ];
+    leyenda.forEach(l => {
+      const celda = ws.getCell(filaActual, 1);
+      celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: l.color } };
+      celda.border = bordeCelda;
+      const etiqueta = ws.getCell(filaActual, 2);
+      etiqueta.value = l.texto;
+      etiqueta.font = { italic: true, size: 10 };
+      filaActual++;
+    });
+
+    ws.views = [{ state: "frozen", ySplit: 3 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const nombreArchivo = `incidencias_${desdeStr}_a_${hastaStr}.xlsx`;
+    descargarBlobComoArchivo(blob, nombreArchivo);
+    if (status) status.innerHTML = `Descargado: ${filas.length} incidencia(s) entre ${fmtFechaDesdeDate(desde)} y ${fmtFechaDesdeDate(hasta)}.`;
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar el reporte: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function fmtFechaDesdeDate(d){
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 }
 
 // ---------- Horas extras: importación desde la máquina de marcación +
