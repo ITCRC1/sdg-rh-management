@@ -4818,7 +4818,7 @@ function formatoRelativoActividad(iso){
 // ser incremental sin fingir funcionalidad a medias.
 const MODULOS_PENDIENTES = {
   vacaciones: { icono: "🏖️", titulo: "Vacaciones", resumen: "Calendario general con código de color, y panel de solicitudes con aprobar/rechazar. (La carta de acción de personal de vacaciones ya existe — Documentos → Vacaciones, o desde Acciones en el perfil del empleado.)" },
-  diaslibres: { icono: "📅", titulo: "Días libres", resumen: "Calendario general por empleado — todavía por definir. (Ya se pueden marcar fechas puntuales de descanso desde Horas extra → \"Marcar día libre\", con el mismo flujo de aprobación.)" },
+  diaslibres: { icono: "📅", titulo: "Días libres", resumen: "Módulo por definir en detalle." },
   incapacidades: { icono: "🤒", titulo: "Incapacidades", resumen: "Panel de incapacidades activas y alertas automáticas de regreso." },
   estadisticas: { icono: "📊", titulo: "Estadísticas", resumen: "Gráficos de distribución de personal y otros indicadores — separados del Dashboard a propósito." },
   asistente: { icono: "🤖", titulo: "Asistente IA", resumen: "Consultas en lenguaje natural sobre los datos internos (ej. \"¿cuántos empleados están incapacitados?\", \"contratos que vencen este mes\")." },
@@ -5823,32 +5823,6 @@ async function renderHorasExtrasPanel(){
       </div></div>`;
     }
 
-    if (puedeAprobar){
-      const sesion = window.sdgApi && window.sdgApi.sesionActual();
-      const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
-      const empleadosParaLibre = Object.values(empleadosPorKey)
-        .filter(e => !e.ARCHIVADO)
-        .filter(e => !deptoJefatura || departamentoDeEmpleado(e) === deptoJefatura)
-        .sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
-      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📅 Marcar día libre</div>
-        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Para una fecha puntual de descanso — como en hotelería el descanso rota, se marca semana a semana en vez de un solo día fijo. Queda pendiente hasta que se apruebe, igual que el resto de los días.</p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
-            <select id="diaslibres-empleado">
-              <option value="">— Elegí —</option>
-              ${empleadosParaLibre.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
-            </select>
-          </label>
-          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Fecha
-            <input type="date" id="diaslibres-fecha">
-          </label>
-          <button class="btn primary" onclick="marcarDiaLibre();">➕ Marcar</button>
-        </div>
-        <div id="diaslibres-status" style="font-size:12px; margin-top:6px;"></div>
-      </div></div>`;
-    }
-
     const filtroTabs = [
       ["pendiente", `Pendientes (${pendientes.length})`],
       ...(esJefatura ? [] : [["sinmatch", `Sin identificar (${sinMatch.length})`]]),
@@ -6046,25 +6020,6 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
     v.TIPO_DIA = tipo;
     await window.storage.set(key, JSON.stringify(v), false);
   }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
-}
-
-// Marca una fecha puntual como día libre de un empleado — mismo flujo
-// pendiente→aprobada que el resto de horas extra. No pisa un día que ya
-// tenga algo real (marca, ya aprobado/rechazado, u otro tipo justificado);
-// solo reemplaza una "ausencia" que el sistema haya adivinado sola.
-async function marcarDiaLibre(){
-  const status = document.getElementById("diaslibres-status");
-  const empKey = (document.getElementById("diaslibres-empleado") || {}).value;
-  const fecha = (document.getElementById("diaslibres-fecha") || {}).value;
-  if (!empKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí un empleado.</span>`; return; }
-  if (!fecha){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí una fecha.</span>`; return; }
-  const creado = await crearOJustificarDiaHorasExtra(empKey, fecha, "libre", "dia_libre_manual");
-  if (creado){
-    statusMsg("Día libre marcado como pendiente.");
-    renderHorasExtrasPanel();
-  } else if (status){
-    status.innerHTML = `<span style="color:#b23b3b;">Ya había un registro real para ese día (marca, ya aprobado/rechazado, u otro tipo) — revisalo en la lista en vez de marcarlo aquí.</span>`;
-  }
 }
 
 // Corrige el número de horas de un registro pendiente sin decidirlo todavía
