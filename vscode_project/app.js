@@ -5787,6 +5787,7 @@ async function renderHorasExtrasPanel(){
 
     const pendientes = registros.filter(r => r.ESTADO === "pendiente" && r.EMPLEADO_KEY);
     const sinMatch = registros.filter(r => r.ESTADO === "pendiente" && !r.EMPLEADO_KEY);
+    const aprobadasJefatura = registros.filter(r => r.ESTADO === "aprobada_jefatura");
     const aprobadas = registros.filter(r => r.ESTADO === "aprobada");
     const rechazadas = registros.filter(r => r.ESTADO === "rechazada");
     const horasAprobadasTotal = aprobadas.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
@@ -5794,22 +5795,25 @@ async function renderHorasExtrasPanel(){
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
     const puedeEditar = window.sdgApi && window.sdgApi.puedeEditar(); // master/gerente: importar, configurar, identificar sin-match
     const esJefatura = rolActual === "jefatura";
+    const esGerente = rolActual === "gerente";
     const puedeAprobar = puedeEditar || esJefatura; // + jefatura: aprobar/editar/rechazar SOLO su equipo (el servidor filtra qué le llega)
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">⏱️ Horas extras</div>
-      <div style="font-size:12px; color:var(--ink-soft);">${esJefatura ? "Horas de tu equipo desde la máquina de marcación — apruébalas, corrígelas o recházalas." : "Importadas desde la máquina de marcación — se aprueban o rechazan antes de pasar a planilla."}</div>
+      <div style="font-size:12px; color:var(--ink-soft);">${esJefatura ? "Horas de tu equipo desde la máquina de marcación — apruébalas, corrígelas o recházalas. La aprobación final para planilla la hace gerencia." : "Importadas desde la máquina de marcación. Jefatura aprueba primero; gerencia da la aprobación final antes de que cuenten para el reporte de planilla."}</div>
     </div>`;
 
     html += esJefatura
-      ? `<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+      ? `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
+          <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">Esperando aprobación de gerencia</div></div>
           <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
         </div>`
-      : `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+      : `<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
+          <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">${esGerente ? "Por aprobar (tuyo)" : "Por aprobar (gerencia)"}</div></div>
           <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
         </div>`;
@@ -5826,6 +5830,7 @@ async function renderHorasExtrasPanel(){
     const filtroTabs = [
       ["pendiente", `Pendientes (${pendientes.length})`],
       ...(esJefatura ? [] : [["sinmatch", `Sin identificar (${sinMatch.length})`]]),
+      ["aprobada_jefatura", `Aprobación final (${aprobadasJefatura.length})`],
       ["aprobada", `Aprobadas (${aprobadas.length})`],
       ["rechazada", `Rechazadas (${rechazadas.length})`],
     ];
@@ -5836,6 +5841,7 @@ async function renderHorasExtrasPanel(){
 
     let lista;
     if (horasExtraFiltro === "sinmatch") lista = sinMatch;
+    else if (horasExtraFiltro === "aprobada_jefatura") lista = aprobadasJefatura;
     else if (horasExtraFiltro === "aprobada") lista = aprobadas;
     else if (horasExtraFiltro === "rechazada") lista = rechazadas;
     else lista = pendientes;
@@ -5864,8 +5870,17 @@ async function renderHorasExtrasPanel(){
       } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
         acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
           <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Descartar</button>`;
+      } else if (r.ESTADO === "aprobada_jefatura" && esGerente){
+        acciones = `<select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
+            ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
+          </select>
+          <button class="use" onclick="aprobarHoraExtraFinal('${keyEsc}')">✅ Aprobar (final)</button>
+          ${tipoDia === "laboral" ? `<button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>` : ""}
+          <button class="del" onclick="rechazarHoraExtraFinal('${keyEsc}')">🚫 Rechazar</button>`;
+      } else if (r.ESTADO === "aprobada_jefatura"){
+        acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")} · esperando aprobación final de gerencia</span>`;
       } else if (r.ESTADO === "aprobada"){
-        acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")}</span>`;
+        acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}</span>`;
       } else if (r.ESTADO === "rechazada"){
         acciones = `<span class="meta">${escapeHtml(r.MOTIVO_RECHAZO || "Rechazada")}</span>`;
       }
@@ -5981,10 +5996,19 @@ async function renderHorasExtrasPanel(){
         if (b === "Sin departamento") return -1;
         return a.localeCompare(b);
       });
-      html += deptosOrdenados.map(depto => `
-        <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px; margin:12px 0 4px;">${escapeHtml(depto)} (${grupos[depto].length})</div>
-        ${grupos[depto].map(renderFilaHorasExtra).join("")}
-      `).join("");
+      html += deptosOrdenados.map(depto => {
+        const filasDepto = grupos[depto];
+        const batchFinal = (esGerente && horasExtraFiltro === "aprobada_jefatura" && filasDepto.length > 1)
+          ? `<div class="catalog-toolbar" style="margin-bottom:8px;">
+              <button class="btn primary" onclick="aprobarVariasHorasExtraFinal(JSON.parse(this.dataset.keys))" data-keys='${escapeHtml(JSON.stringify(filasDepto.map(f => f.key)))}'>✅ Aprobar los ${filasDepto.length} de este departamento (final)</button>
+            </div>`
+          : "";
+        return `
+        <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px; margin:12px 0 4px;">${escapeHtml(depto)} (${filasDepto.length})</div>
+        ${batchFinal}
+        ${filasDepto.map(renderFilaHorasExtra).join("")}
+      `;
+      }).join("");
     }
 
     panel.innerHTML = html;
@@ -5993,24 +6017,64 @@ async function renderHorasExtrasPanel(){
   }
 }
 
+// Primera instancia (jefatura, o master/gerente en su lugar): NO deja el
+// día listo para planilla todavía — pasa a "aprobada_jefatura", a la espera
+// de la aprobación final de gerencia (ver aprobarHoraExtraFinal). Solo esa
+// aprobación final cuenta en el reporte de horarios para pago de planilla.
 async function aprobarHoraExtra(key){
   try{
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) return;
-    v.ESTADO = "aprobada";
+    v.ESTADO = "aprobada_jefatura";
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
     await window.storage.set(key, JSON.stringify(v), false);
-    statusMsg("Horas extra aprobadas.");
+    statusMsg("Aprobado — queda pendiente de la aprobación final de gerencia.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo aprobar: " + e.message, false); }
 }
 
+// Aprobación FINAL — exclusiva de gerencia (el servidor lo exige incluso
+// para master). Solo después de esto el día cuenta en el reporte de
+// horarios para pago de planilla.
+async function aprobarHoraExtraFinal(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "aprobada";
+    v.APROBADO_FINAL_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION_FINAL = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Aprobado en definitiva — ya cuenta para el reporte de planilla.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo aprobar: " + e.message, false); }
+}
+
+// Rechazo en la aprobación final — gerencia puede devolver/descartar algo
+// que jefatura ya había aprobado, si al revisar el dato final no le calza.
+async function rechazarHoraExtraFinal(key){
+  const motivo = prompt("Motivo del rechazo en la aprobación final (opcional):", "");
+  if (motivo === null) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "rechazada";
+    v.APROBADO_FINAL_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION_FINAL = new Date().toISOString();
+    v.MOTIVO_RECHAZO = motivo.trim() || "Rechazado en la aprobación final de gerencia";
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Rechazado en la aprobación final.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo rechazar: " + e.message, false); }
+}
+
 // Cambia el tipo de día (laboral/libre/incapacidad/permiso sin goce/ausencia)
-// de un registro todavía pendiente — no se toca su ESTADO, así que sigue
-// necesitando aprobar/rechazar aparte antes de contar en el reporte de
-// planilla.
+// de un registro pendiente o ya aprobado por jefatura (a la espera de la
+// aprobación final) — no se toca su ESTADO, así que sigue necesitando su
+// aprobación/rechazo aparte antes de contar en el reporte de planilla.
 async function cambiarTipoDiaHoraExtra(key, tipo){
   if (!TIPOS_DIA_HORARIO[tipo]) return;
   try{
@@ -6064,6 +6128,8 @@ async function rechazarHoraExtra(key){
 // Aprobar/rechazar varios días de un mismo empleado de un tirón, desde su
 // vista de detalle — para revisar de una vez lo que se sube cada 3 días en
 // vez de aprobar registro por registro. Si uno falla no se detiene el resto.
+// Primera instancia: deja "aprobada_jefatura", pendiente de la aprobación
+// final de gerencia (ver aprobarVariasHorasExtraFinal).
 async function aprobarVariasHorasExtra(keys){
   if (!Array.isArray(keys) || !keys.length) return;
   if (!confirm(`¿Aprobar ${keys.length} día(s) de horas extra?`)) return;
@@ -6073,7 +6139,7 @@ async function aprobarVariasHorasExtra(keys){
       const r = await window.storage.get(key, false);
       const v = r && r.value ? JSON.parse(r.value) : null;
       if (!v) continue;
-      v.ESTADO = "aprobada";
+      v.ESTADO = "aprobada_jefatura";
       v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
       v.FECHA_DECISION = new Date().toISOString();
       await window.storage.set(key, JSON.stringify(v), false);
@@ -6081,7 +6147,28 @@ async function aprobarVariasHorasExtra(keys){
     }catch(e){ /* se sigue con el resto aunque uno falle */ }
   }
   horasExtraEmpleadoSeleccionado = null;
-  statusMsg(`${ok} de ${keys.length} día(s) aprobados.`, ok === keys.length);
+  statusMsg(`${ok} de ${keys.length} día(s) aprobados — pendientes de la aprobación final de gerencia.`, ok === keys.length);
+  renderHorasExtrasPanel();
+}
+
+// Aprobación FINAL en lote — exclusiva de gerencia (el servidor lo exige).
+async function aprobarVariasHorasExtraFinal(keys){
+  if (!Array.isArray(keys) || !keys.length) return;
+  if (!confirm(`¿Aprobar en definitiva ${keys.length} día(s) para el reporte de planilla?`)) return;
+  let ok = 0;
+  for (const key of keys){
+    try{
+      const r = await window.storage.get(key, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      if (!v) continue;
+      v.ESTADO = "aprobada";
+      v.APROBADO_FINAL_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+      v.FECHA_DECISION_FINAL = new Date().toISOString();
+      await window.storage.set(key, JSON.stringify(v), false);
+      ok++;
+    }catch(e){ /* se sigue con el resto aunque uno falle */ }
+  }
+  statusMsg(`${ok} de ${keys.length} día(s) aprobados en definitiva.`, ok === keys.length);
   renderHorasExtrasPanel();
 }
 
@@ -6173,12 +6260,12 @@ async function confirmarCompletarTurno(key){
     v.INCOMPLETO = false;
     v.MARCA_SUELTA = null;
     v.TIPO_DIA = "laboral";
-    v.ESTADO = "aprobada";
+    v.ESTADO = "aprobada_jefatura";
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
     await window.storage.set(key, JSON.stringify(v), false);
     cerrarModalIncompletos();
-    statusMsg("Turno completado y aprobado.");
+    statusMsg("Turno completado y aprobado — pendiente de la aprobación final de gerencia.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
 }

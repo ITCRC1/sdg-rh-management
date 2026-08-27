@@ -83,7 +83,28 @@ async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departament
 // en usuarios.puesto — pese al nombre de la columna, para una cuenta de
 // jefatura ese campo guarda el departamento que lidera, no un puesto
 // puntual). Cualquier otro caso (incluido colaborador) queda fuera.
-async function puedeEscribirClave(usuario, propiedad, clave) {
+//
+// Excepción por encima de todo lo anterior: el paso a ESTADO "aprobada" en
+// horas_extra: (la aprobación FINAL, la que hace que un día cuente para el
+// reporte de planilla) es exclusivo del rol "gerente" — ni siquiera master
+// lo hace directo, a propósito: la palabra final sobre lo que se paga queda
+// siempre en una sola persona. El resto de escrituras sobre horas_extra:
+// (aprobar en primera instancia a "aprobada_jefatura", rechazar, editar
+// horas, reclasificar tipo de día, importar) sigue las reglas de siempre.
+async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
+  if (clave.startsWith(HORAS_EXTRA_PREFIX) && typeof valorNuevo === "string") {
+    let nuevo = null;
+    try {
+      nuevo = JSON.parse(valorNuevo);
+    } catch (e) {
+      /* no es JSON válido — se rechaza más abajo en la ruta, no aquí */
+    }
+    if (nuevo && nuevo.ESTADO === "aprobada") {
+      const actual = await valorDeClave(propiedad, clave);
+      const yaEraFinal = actual && actual.ESTADO === "aprobada";
+      if (!yaEraFinal) return usuario.rol === "gerente";
+    }
+  }
   if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
     return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);
@@ -222,7 +243,7 @@ router.put("/:clave(*)", async (req, res, next) => {
 
     if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
     if (!claveValida(clave)) return res.status(400).json({ error: "Clave inválida." });
-    if (!(await puedeEscribirClave(req.usuario, propiedad, clave))) {
+    if (!(await puedeEscribirClave(req.usuario, propiedad, clave, valor))) {
       return res.status(403).json({
         error: "Tu cuenta no tiene permiso para modificar esto.",
         codigo: "sin_permiso",
