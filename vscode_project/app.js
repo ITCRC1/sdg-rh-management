@@ -4888,20 +4888,27 @@ async function renderPlanillaPanel(){
       <div id="incidencias-status" style="font-size:12px;"></div>
     </div>`;
 
-    html += `<div class="dash-panel" style="margin-bottom:14px;">
+    html += (() => {
+      const rangoHoy = rangoQuincenaActual();
+      const mesInputHoy = `${rangoHoy.inicio.getFullYear()}-${String(rangoHoy.inicio.getMonth() + 1).padStart(2, "0")}`;
+      return `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">🗓️ Reporte de horarios para pago de planilla</div>
-      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Por empleado: días laborados (marca + aprobado por jefatura/gerencia), horas extra aprobadas, días de permiso sin goce (PSG) y días de vacaciones, entre dos fechas.</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Por empleado: días laborados (15 días base — o menos si entró/salió a mitad de quincena — menos incapacidad/PSG/cita médica/ausencia ya aprobados; un día con marca real cuenta solo, sin depender de que la marcación cubra toda la quincena), horas extra aprobadas, y días libres/vacaciones, para la quincena elegida.</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
-        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
-          <input type="date" id="horario-desde">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Mes
+          <input type="month" id="horario-mes" value="${mesInputHoy}">
         </label>
-        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
-          <input type="date" id="horario-hasta">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Quincena
+          <select id="horario-quincena">
+            <option value="1"${rangoHoy.esPrimeraQuincena ? " selected" : ""}>1ª (día 1 al 15)</option>
+            <option value="2"${!rangoHoy.esPrimeraQuincena ? " selected" : ""}>2ª (día 16 al fin de mes)</option>
+          </select>
         </label>
         <button class="btn primary" onclick="generarReporteHorarioPlanilla();">⬇️ Generar y descargar Excel</button>
       </div>
       <div id="horario-status" style="font-size:12px;"></div>
     </div>`;
+    })();
 
     html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el cálculo de planilla en sí (salario base + horas extra automáticas +/− ajustes por incapacidad/vacaciones − deducciones = neto, y los acumulados de aguinaldo/cesantía/preaviso). Hoy este módulo archiva e identifica colillas que ya vienen calculadas de afuera; no calcula montos.</div>`;
 
@@ -5087,22 +5094,23 @@ function fmtFechaDesdeDate(d){
   return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 }
 
-// Reporte de horarios para pago de planilla: por empleado, cuántos días
-// laborados (marca + aprobado), cuántas horas extra aprobadas y cuántos días
-// de permiso sin goce cayeron dentro del rango. Solo cuenta lo ya APROBADO
-// — un día todavía pendiente de revisión no entra a planilla hasta que
-// jefatura/gerencia lo confirme, a propósito (empuja a resolverlo a tiempo
-// en vez de dejarlo pendiente y que salga corto en el pago).
+// Reporte de horarios para pago de planilla: por empleado, días laborados
+// de la quincena elegida (15 días base — o los que le correspondan si entró
+// o salió a mitad de esa quincena — menos incapacidad/PSG/cita médica/
+// ausencia ya aprobados; ver calcularResumenQuincena), horas extra
+// aprobadas, y días libres/vacaciones. A diferencia de antes, ya NO cuenta
+// días con marca real uno por uno — la marcación se sube con días de
+// anticipación y nunca cubre toda la quincena, así que contar marcas dejaba
+// el reporte corto. Solo cuenta lo ya APROBADO EN DEFINITIVA — un día
+// todavía pendiente de revisión no entra a planilla hasta que jefatura/
+// gerencia lo confirme, a propósito (empuja a resolverlo a tiempo en vez de
+// dejarlo pendiente y que salga corto en el pago).
 async function generarReporteHorarioPlanilla(){
   const status = document.getElementById("horario-status");
-  const desdeStr = (document.getElementById("horario-desde") || {}).value;
-  const hastaStr = (document.getElementById("horario-hasta") || {}).value;
-  if (!desdeStr || !hastaStr){
-    if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí ambas fechas (desde y hasta).</span>`;
-    return;
-  }
-  if (desdeStr > hastaStr){
-    if (status) status.innerHTML = `<span style="color:#b23b3b;">La fecha "desde" no puede ser posterior a "hasta".</span>`;
+  const mesStr = (document.getElementById("horario-mes") || {}).value;
+  const quincenaStr = (document.getElementById("horario-quincena") || {}).value;
+  if (!mesStr){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el mes.</span>`;
     return;
   }
   if (typeof ExcelJS === "undefined"){
@@ -5112,38 +5120,23 @@ async function generarReporteHorarioPlanilla(){
 
   if (status) status.innerHTML = `Generando…`;
   try{
+    const [anio, mes1] = mesStr.split("-").map(Number);
+    const rango = rangoQuincena(anio, mes1 - 1, quincenaStr !== "2");
+
     const registros = await listarRegistrosHorasExtra();
-    // FECHA ya viene como "AAAA-MM-DD" (normalizarFechaMarcacion / fecha del
-    // día agregado a mano) — compara bien como texto, sin pasar por Date.
-    const aprobados = registros.filter(r => r.ESTADO === "aprobada" && r.EMPLEADO_KEY && r.FECHA >= desdeStr && r.FECHA <= hastaStr);
+    const empleados = await cargarEmpleadosDB();
 
-    const acumulado = {};
-    aprobados.forEach(r => {
-      const tipo = r.TIPO_DIA || "laboral";
-      const acc = acumulado[r.EMPLEADO_KEY] = acumulado[r.EMPLEADO_KEY] || { diasLaborados: 0, horasExtra: 0, psg: 0, vacaciones: 0 };
-      if (tipo === "laboral") acc.diasLaborados++;
-      if (tipo === "permiso_sin_goce") acc.psg++;
-      if (tipo === "vacaciones") acc.vacaciones++;
-      acc.horasExtra += r.HORAS_EXTRA || 0;
-    });
+    const filas = calcularResumenQuincena(registros, empleados, rango)
+      .sort((a, b) => (a.emp.DEPARTAMENTO_EMP || "").localeCompare(b.emp.DEPARTAMENTO_EMP || "", "es") || (a.emp.NOMBRE_EMP || "").localeCompare(b.emp.NOMBRE_EMP || "", "es"));
 
-    if (!Object.keys(acumulado).length){
-      if (status) status.innerHTML = `No hay días aprobados (laborados, horas extra o PSG) en ese rango de fechas.`;
+    if (!filas.length){
+      if (status) status.innerHTML = `No hay ningún empleado activo dentro de esa quincena.`;
       return;
     }
 
-    const empleados = await cargarEmpleadosDB();
-    const empleadosPorKey = {};
-    empleados.forEach(e => { empleadosPorKey[e.key] = e; });
-
-    const filas = Object.keys(acumulado)
-      .map(key => ({ emp: empleadosPorKey[key], key, ...acumulado[key] }))
-      .filter(f => f.emp);
-    filas.sort((a,b) => (a.emp.DEPARTAMENTO_EMP||"").localeCompare(b.emp.DEPARTAMENTO_EMP||"", "es") || (a.emp.NOMBRE_EMP||"").localeCompare(b.emp.NOMBRE_EMP||"", "es"));
-
     const prop = getPropiedadActual();
     const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
-    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Horas extra","PSG","Vacaciones"];
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Horas extra"];
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
@@ -5163,7 +5156,7 @@ async function generarReporteHorarioPlanilla(){
 
     ws.mergeCells(2, 1, 2, COLUMNAS.length);
     const subtituloCelda = ws.getCell(2, 1);
-    subtituloCelda.value = `Horarios para planilla — del ${fmtFechaDesdeDate(new Date(desdeStr + "T00:00:00"))} al ${fmtFechaDesdeDate(new Date(hastaStr + "T00:00:00"))}`;
+    subtituloCelda.value = `Horarios para planilla — ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena, del ${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`;
     subtituloCelda.font = { italic: true, size: 10 };
     subtituloCelda.alignment = { horizontal: "center", vertical: "middle" };
 
@@ -5184,9 +5177,12 @@ async function generarReporteHorarioPlanilla(){
         f.emp.NUMERO_EMPLEADO || "",
         f.emp.DEPARTAMENTO_EMP || "",
         f.diasLaborados,
+        f.descPorTipo.incapacidad || 0,
+        f.descPorTipo.permiso_sin_goce || 0,
+        f.descPorTipo.ausencia_medica || 0,
+        f.descPorTipo.ausencia || 0,
+        `${f.diasLibresMes}/${DIAS_LIBRES_POR_MES}`,
         Math.round(f.horasExtra * 100) / 100,
-        f.psg,
-        f.vacaciones,
       ];
       const fila = ws.getRow(filaActual);
       valores.forEach((v, i) => {
@@ -5202,9 +5198,9 @@ async function generarReporteHorarioPlanilla(){
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const nombreArchivo = `horarios_planilla_${desdeStr}_a_${hastaStr}.xlsx`;
+    const nombreArchivo = `horarios_planilla_${mesStr}_q${rango.esPrimeraQuincena ? 1 : 2}.xlsx`;
     descargarBlobComoArchivo(blob, nombreArchivo);
-    if (status) status.innerHTML = `Descargado: ${filas.length} empleado(s) con días aprobados entre ${fmtFechaDesdeDate(new Date(desdeStr + "T00:00:00"))} y ${fmtFechaDesdeDate(new Date(hastaStr + "T00:00:00"))}.`;
+    if (status) status.innerHTML = `Descargado: ${filas.length} empleado(s) de la ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena (${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}).`;
   }catch(e){
     if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar el reporte: ${escapeHtml(e.message)}</span>`;
   }
@@ -5763,11 +5759,17 @@ async function listarRegistrosHorasExtra(){
 // máquina de marcación se sube antes de que cierre la quincena (el archivo
 // típico lee del 27 al 12/13, no hasta el día 15), así que nunca hay marca
 // para los últimos días. Por eso este cuadro no depende de las marcas: cada
-// quincena vale 15 días fijos, y solo se resta lo que ya quedó aprobado en
-// definitiva como incapacidad, permiso sin goce, cita médica o ausencia
-// injustificada. Las horas extra sí se siguen tomando de lo real aprobado
-// — para eso están las aprobaciones de horas extra de este mismo panel.
+// quincena vale 15 días fijos — un día CON marca real ya cuenta como
+// laborado sin más (nunca resta), y un día SIN marca solo resta si hay algo
+// que ya lo justifique como incapacidad/PSG/cita médica/ausencia. Un día
+// libre programado (solicitud de vacaciones aprobada, ver
+// TIPOS_SOLICITUD_AUSENCIA) tampoco resta — se cuenta aparte en su propia
+// columna — porque crearOJustificarDiaHorasExtra ya protege esos días para
+// que la detección automática de ausencias no los pise (ver esa función).
+// Las horas extra sí se siguen tomando de lo real aprobado — para eso están
+// las aprobaciones de horas extra de este mismo panel.
 const DIAS_BASE_QUINCENA = 15;
+const DIAS_LIBRES_POR_MES = 4;
 const TIPOS_DIA_DESCUENTA_QUINCENA = {
   incapacidad: "Incapacidad",
   permiso_sin_goce: "Permiso sin goce",
@@ -5775,45 +5777,85 @@ const TIPOS_DIA_DESCUENTA_QUINCENA = {
   ausencia: "Ausencia injust.",
 };
 
-// Quincena 1 = día 1 al 15. Quincena 2 = día 16 al último día del mes, pero
-// en meses de 31 días la legislación solo paga 30 días de salario base — el
-// día 31 no cuenta como día base (no resta aunque haya ausencia ese día, ni
-// suma si se trabajó normal), así que "finBase" topa en 30 mientras que
-// "fin" sí llega hasta el 31, para que las horas extra de ese día igual se
-// sumen si las hubo.
-function rangoQuincenaActual(hoy){
-  hoy = hoy || new Date();
-  const anio = hoy.getFullYear(), mes = hoy.getMonth();
-  const esPrimeraQuincena = hoy.getDate() <= 15;
+// El día 31 (en meses que lo tienen) no es día de pago base — la
+// legislación paga 30 días de salario por mes — así que ni resta si hubo
+// ausencia ese día ni suma si se trabajó normal. Sí sigue sumando horas
+// extra si las tuvo (eso se maneja aparte, sobre el rango completo).
+function esDiaBaseDePago(fechaISO){
+  return new Date(fechaISO + "T00:00:00").getDate() !== 31;
+}
+
+// Quincena 1 = día 1 al 15. Quincena 2 = día 16 al último día del mes
+// (parametrizable a cualquier año/mes/quincena — no solo "hoy" — para poder
+// generar el reporte de una quincena pasada).
+function rangoQuincena(anio, mes, esPrimeraQuincena){
   const inicio = new Date(anio, mes, esPrimeraQuincena ? 1 : 16);
   const fin = esPrimeraQuincena ? new Date(anio, mes, 15) : new Date(anio, mes + 1, 0);
-  const finBase = esPrimeraQuincena ? fin : new Date(anio, mes, Math.min(fin.getDate(), 30));
-  return { inicio, fin, finBase, esPrimeraQuincena };
+  return { inicio, fin, esPrimeraQuincena };
+}
+function rangoQuincenaActual(hoy){
+  hoy = hoy || new Date();
+  return rangoQuincena(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() <= 15);
+}
+
+// Tope de días base de UN empleado en la quincena: 15, salvo que haya
+// entrado o salido a mitad de esa quincena — ahí se prorratea a los días
+// reales que estuvo activo (mismo criterio del día 31 que no es día base),
+// para no pagarle días de una quincena en la que ni siquiera estaba
+// contratado. null si ni un día de la quincena cae dentro de su contrato.
+function diasBaseParaEmpleadoEnQuincena(empleado, rango){
+  const ingreso = parsearFechaDDMMYYYY(empleado && empleado.FECHA_INGRESO_EMP);
+  const salida = (empleado && empleado.ARCHIVADO) ? parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO) : null;
+  const inicioEfectivo = (ingreso && ingreso > rango.inicio) ? ingreso : rango.inicio;
+  const finEfectivo = (salida && salida < rango.fin) ? salida : rango.fin;
+  if (inicioEfectivo > finEfectivo) return null;
+  const activoTodaLaQuincena = inicioEfectivo.getTime() === rango.inicio.getTime() && finEfectivo.getTime() === rango.fin.getTime();
+  if (activoTodaLaQuincena) return { inicioEfectivo, finEfectivo, diasBase: DIAS_BASE_QUINCENA };
+  let dias = 0;
+  const cursor = new Date(inicioEfectivo);
+  while (cursor <= finEfectivo){
+    if (cursor.getDate() !== 31) dias++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return { inicioEfectivo, finEfectivo, diasBase: Math.min(dias, DIAS_BASE_QUINCENA) };
 }
 
 // Por empleado, dentro de la quincena dada: horas extra aprobadas en todo el
-// rango (incluido el día 31 si lo hay) y cuántos de los 15 días base se
-// pierden por incapacidad/PSG/cita médica/ausencia — solo cuenta lo ya
-// aprobado en definitiva (ESTADO "aprobada"), igual que el resto de reportes
-// de planilla, para no restar ni sumar nada que todavía esté en revisión.
+// rango en que estuvo activo (incluido el día 31 si lo hay), cuántos de los
+// días base se pierden por incapacidad/PSG/cita médica/ausencia, cuántos
+// días libres (TIPO_DIA "vacaciones", el mismo que usa el módulo de Días
+// Libres y Vacaciones) cayeron en esta quincena, y cuántos lleva ya en el
+// mes calendario completo (los 4 mensuales pueden repartirse en cualquier
+// proporción entre las dos quincenas — 2 y 2 es lo típico, pero no una
+// regla fija). Solo cuenta lo ya aprobado en definitiva (ESTADO
+// "aprobada"), igual que el resto de reportes de planilla, para no restar
+// ni sumar nada que todavía esté en revisión.
 function calcularResumenQuincena(registros, empleados, rango){
-  const inicioISO = isoDeFechaLocal(rango.inicio);
-  const finISO = isoDeFechaLocal(rango.fin);
-  const finBaseISO = isoDeFechaLocal(rango.finBase);
+  const anioMes = `${rango.inicio.getFullYear()}-${String(rango.inicio.getMonth() + 1).padStart(2, "0")}`;
   return empleados.map(emp => {
-    const delEmpleado = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
-    const horasExtra = delEmpleado.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+    const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
+    if (!activo) return { emp, activo: false, horasExtra: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0 };
+    const inicioISO = isoDeFechaLocal(activo.inicioEfectivo);
+    const finISO = isoDeFechaLocal(activo.finEfectivo);
+
+    const delEmpleadoEnRango = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
+    const horasExtra = delEmpleadoEnRango.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
     const descPorTipo = {};
     let totalDescuento = 0;
-    delEmpleado.forEach(r => {
-      if (r.FECHA > finBaseISO) return; // día 31 "extra": no resta ni suma días base
+    let diasLibresQuincena = 0;
+    delEmpleadoEnRango.forEach(r => {
+      if (!esDiaBaseDePago(r.FECHA)) return; // día 31 "extra": no resta ni suma días base
+      if (r.TIPO_DIA === "vacaciones"){ diasLibresQuincena++; return; } // día libre programado: no resta, se muestra aparte
       if (!TIPOS_DIA_DESCUENTA_QUINCENA[r.TIPO_DIA]) return;
       descPorTipo[r.TIPO_DIA] = (descPorTipo[r.TIPO_DIA] || 0) + 1;
       totalDescuento++;
     });
-    const diasLaborados = Math.max(0, DIAS_BASE_QUINCENA - totalDescuento);
-    return { emp, horasExtra, descPorTipo, totalDescuento, diasLaborados };
-  });
+    const diasLaborados = Math.max(0, activo.diasBase - totalDescuento);
+
+    const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.TIPO_DIA === "vacaciones" && r.FECHA.startsWith(anioMes)).length;
+
+    return { emp, activo: true, horasExtra, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
+  }).filter(f => f.activo);
 }
 
 function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado){
@@ -5832,22 +5874,32 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
 
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">📋 Resumen de quincena para planilla — ${etiquetaRango}</div>
-    <p style="font-size:11.5px; color:var(--ink-soft); margin:0 0 10px;">Días laborados = 15 días base menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango (no depende de que la marcación alcance a cubrir toda la quincena). Horas extra = lo ya aprobado en definitiva en todo el rango.${notaDia31}</p>
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:0 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Días libres = TIPO_DIA "vacaciones" del módulo de Días Libres y Vacaciones, no resta de los días laborados. Horas extra = lo ya aprobado en definitiva en todo el rango.${notaDia31}</p>
     <div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
       <thead><tr style="border-bottom:2px solid #ccc; text-align:left;">
         <th style="padding:4px 8px;">Empleado</th>
         <th style="padding:4px 8px; text-align:center;">Días laborados</th>
         ${cols.map(c => `<th style="padding:4px 8px; text-align:center;">${escapeHtml(TIPOS_DIA_DESCUENTA_QUINCENA[c])}</th>`).join("")}
+        <th style="padding:4px 8px; text-align:center;">Días libres (quincena)</th>
+        <th style="padding:4px 8px; text-align:center;">Días libres (mes)</th>
         <th style="padding:4px 8px; text-align:center;">Horas extra</th>
       </tr></thead>
       <tbody>
-        ${filas.map(f => `<tr style="border-bottom:1px solid #eee;">
+        ${filas.map(f => {
+          const mesCompleto = f.diasLibresMes >= DIAS_LIBRES_POR_MES;
+          const notaMes = mesCompleto
+            ? "✅"
+            : (f.diasLibresQuincena > 0 ? `⏳ ${DIAS_LIBRES_POR_MES - f.diasLibresMes} pendiente(s), se esperan la otra quincena` : `⏳ ${DIAS_LIBRES_POR_MES - f.diasLibresMes} pendiente(s)`);
+          return `<tr style="border-bottom:1px solid #eee;">
           <td style="padding:4px 8px;">${escapeHtml(f.emp.NOMBRE_EMP || f.emp.key)}</td>
-          <td style="padding:4px 8px; text-align:center; font-weight:700; color:${f.diasLaborados < DIAS_BASE_QUINCENA ? '#b23b3b' : 'var(--navy-deep)'};">${f.diasLaborados}</td>
+          <td style="padding:4px 8px; text-align:center; font-weight:700; color:${f.diasLaborados < f.diasBase ? '#b23b3b' : 'var(--navy-deep)'};">${f.diasLaborados}${f.diasBase !== DIAS_BASE_QUINCENA ? ` / ${f.diasBase}` : ""}</td>
           ${cols.map(c => `<td style="padding:4px 8px; text-align:center;">${f.descPorTipo[c] || ""}</td>`).join("")}
+          <td style="padding:4px 8px; text-align:center;">${f.diasLibresQuincena || ""}</td>
+          <td style="padding:4px 8px; text-align:center; font-size:11px;">${f.diasLibresMes}/${DIAS_LIBRES_POR_MES} ${notaMes}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700;">${f.horasExtra ? f.horasExtra.toFixed(1) : ""}</td>
-        </tr>`).join("")}
+        </tr>`;
+        }).join("")}
       </tbody>
     </table>
     </div>
