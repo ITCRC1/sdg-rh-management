@@ -2179,19 +2179,34 @@ async function openCatalogForm(type, key){
     // Si esto falla (sesión, red, o un registro de puesto corrupto) NO debe
     // impedir que se abra el formulario — antes una excepción aquí dejaba el
     // botón "Agregar empleado" sin efecto visible, sin ningún aviso.
+    //
+    // Un puesto individual que falle al leer/parsear ya NO se descarta en
+    // silencio (antes devolvía null y el .filter(Boolean) lo sacaba de la
+    // lista sin avisar — con un catálogo grande, unos pocos registros
+    // corridos por una carga masiva vieja alcanzaban para que el selector
+    // mostrara "menos puestos de los que en realidad hay guardados", sin
+    // ninguna pista de que faltaba algo). Ahora, igual que ya hace la lista
+    // de la pestaña Puestos, ese registro entra igual con su clave como
+    // nombre de respaldo — se ve raro, pero sigue siendo seleccionable en
+    // vez de desaparecer.
+    let puestosConProblema = 0;
     try{
       const res2 = await window.storage.list(CATALOGS.puestos.prefix, false);
       const keys2 = (res2 && res2.keys) || [];
-      catalogEditing.puestoOptions = (await Promise.all(keys2.map(async k => {
+      catalogEditing.puestoOptions = await Promise.all(keys2.map(async k => {
+        const shortKey = k.replace(CATALOGS.puestos.prefix, "");
         try{
           const r = await window.storage.get(k, false);
           const v = r && r.value ? JSON.parse(r.value) : {};
-          return { key: k.replace(CATALOGS.puestos.prefix,""), nombre: v.PUESTO || k };
-        }catch(e){ return null; } // un registro de puesto corrupto no debe tumbar a los demás
-      }))).filter(Boolean);
+          return { key: shortKey, nombre: v.PUESTO || shortKey };
+        }catch(e){ puestosConProblema++; return { key: shortKey, nombre: shortKey }; }
+      }));
     }catch(e){
       catalogEditing.puestoOptions = [];
       statusMsg("No se pudo cargar el catálogo de puestos — el campo 'Puesto a contratar' quedó vacío. " + e.message, false);
+    }
+    if (puestosConProblema > 0){
+      statusMsg(`${puestosConProblema} puesto(s) del catálogo tienen un registro dañado — igual aparecen en la lista, mostrados por su clave interna en vez de su nombre.`, false);
     }
     // Sin puesto asignado todavía: arranca mostrando el buscador directo en
     // vez del resumen "puesto elegido + Cambiar" (no hay nada que resumir).
@@ -3129,7 +3144,14 @@ async function renderCatalogTab(type){
       </div><div class="catalog-toolbar">`);
   }
 
-  html += `<div id="${type}-list"></div>`;
+  // La lista de Puestos (fácilmente 40-50 registros entre varias propiedades)
+  // antes crecía la página entera — con el buscador arriba y la lista
+  // haciendo scroll de a poco, algunos quedaban lejos de la vista sin que se
+  // notara que hacía falta bajar. Ahora la lista misma es una caja con
+  // scroll propio, del mismo alto siempre, así se ve de entrada que hay más
+  // para desplazar.
+  const listWrapStyle = type === "puestos" ? ' style="max-height:520px; overflow-y:auto; border:1px solid var(--paper-line); border-radius:8px; padding:2px 4px;"' : "";
+  html += `<div id="${type}-list"${listWrapStyle}></div>`;
   panel.innerHTML = html;
 
   const listEl = document.getElementById(type + "-list");
