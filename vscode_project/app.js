@@ -1993,9 +1993,35 @@ function catalogFieldHtml(meta){
       `<option value="${escapeHtml(d)}" ${val===d?"selected":""}>${escapeHtml(d)}</option>`).join("");
     control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
   } else if (type === "select_puesto_catalogo"){
-    const opts = (catalogEditing.puestoOptions || []).map(p =>
-      `<option value="${escapeHtml(p.key)}" ${val===p.key?"selected":""}>${escapeHtml(p.nombre)}</option>`).join("");
-    control = `<select onchange="onSelectPuestoCatalogo(this.value)"><option value="">Seleccionar puesto…</option>${opts}<option value="__custom__">✏️ No está en la lista (escribir abajo)</option></select>`;
+    // Antes esto era un <select> nativo con TODOS los puestos como <option> —
+    // usable con pocos puestos, pero con el catálogo real (decenas de
+    // puestos entre varias propiedades) tocaba desplazarse a mano por una
+    // lista larga sin poder filtrar. Ahora es el mismo patrón de buscador +
+    // lista que ya usa la pestaña Puestos (ver puestosSearchTerm /
+    // filtrarPuestosInput): siempre lee de catalogEditing.puestoOptions (el
+    // catálogo YA cargado — nunca depende de crear un puesto nuevo desde
+    // acá) y se puede filtrar escribiendo, en vez de scrollear un dropdown.
+    const opciones = catalogEditing.puestoOptions || [];
+    const seleccionado = opciones.find(p => p.key === val);
+    if (seleccionado && !catalogEditing.puestoSelectorAbierto){
+      control = `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span style="font-weight:700; color:var(--navy-deep);">${escapeHtml(seleccionado.nombre)}</span>
+        <button type="button" class="btn" style="padding:4px 9px; font-size:11px;" onclick="abrirSelectorPuesto()">🔁 Cambiar puesto</button>
+      </div>`;
+    } else if (opciones.length === 0){
+      control = `<div class="hint">Todavía no hay puestos guardados. <button type="button" class="btn" style="padding:4px 9px; font-size:11px;" onclick="navCloseAndRun(function(){ showTab('puestos'); })">Crear el primero en Puestos →</button></div>`;
+    } else {
+      const termino = (puestoSelectorBusqueda || "").toLowerCase();
+      const filtradas = termino ? opciones.filter(p => p.nombre.toLowerCase().includes(termino)) : opciones;
+      control = `
+        <input type="text" id="puesto-selector-search" placeholder="🔍 Buscar puesto por nombre…" value="${escapeHtml(puestoSelectorBusqueda)}" oninput="filtrarPuestoSelectorInput(this.value)" autocomplete="off">
+        <div style="max-height:220px; overflow-y:auto; border:1px solid var(--paper-line); border-radius:8px; margin-top:6px;">
+          ${filtradas.length
+            ? filtradas.map(p => `<div class="catalog-item" style="cursor:pointer; padding:8px 10px;" onclick="onSelectPuestoCatalogo('${p.key.replace(/'/g,"\\'")}')">${escapeHtml(p.nombre)}</div>`).join("")
+            : `<div class="hint" style="padding:10px;">Ningún puesto coincide con "${escapeHtml(puestoSelectorBusqueda)}".</div>`}
+        </div>
+        <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="onSelectPuestoCatalogo('__custom__')">✏️ No está en la lista (escribir abajo)</button>`;
+    }
   } else if (type === "select_puesto_lider"){
     const isManual = !!(catalogEditing.manualFields && catalogEditing.manualFields[id]);
     const matches = PUESTOS_LIDERAZGO.includes(val);
@@ -2167,6 +2193,10 @@ async function openCatalogForm(type, key){
       catalogEditing.puestoOptions = [];
       statusMsg("No se pudo cargar el catálogo de puestos — el campo 'Puesto a contratar' quedó vacío. " + e.message, false);
     }
+    // Sin puesto asignado todavía: arranca mostrando el buscador directo en
+    // vez del resumen "puesto elegido + Cambiar" (no hay nada que resumir).
+    catalogEditing.puestoSelectorAbierto = !values.PUESTO_KEY;
+    puestoSelectorBusqueda = "";
   }
   renderCatalogTab(type);
 }
@@ -2318,7 +2348,15 @@ async function onAdjuntoEmpChange(fieldId, inputEl){
   }
 }
 
+function abrirSelectorPuesto(){
+  catalogEditing.puestoSelectorAbierto = true;
+  puestoSelectorBusqueda = "";
+  renderCatalogTab("empleados");
+}
+
 async function onSelectPuestoCatalogo(val){
+  catalogEditing.puestoSelectorAbierto = false;
+  puestoSelectorBusqueda = "";
   if (val === "__custom__"){
     catalogEditing.values.PUESTO_KEY = "";
     renderCatalogTab("empleados");
@@ -6829,6 +6867,20 @@ const _renderPuestosBuscadoDebounced = debounce(async function(){
 function filtrarPuestosInput(val){
   puestosSearchTerm = val.toLowerCase();
   _renderPuestosBuscadoDebounced();
+}
+
+// Búsqueda del selector de puesto DENTRO del formulario de un empleado (campo
+// "Puesto a contratar") — aparte de puestosSearchTerm (que es de la pestaña
+// Puestos): esta vive mientras el formulario está abierto y se resetea cada
+// vez que se abre uno (ver openCatalogForm / onSelectPuestoCatalogo).
+let puestoSelectorBusqueda = "";
+const _renderPuestoSelectorBuscadoDebounced = debounce(async function(){
+  await renderCatalogTab("empleados");
+  restaurarFocoBusqueda("puesto-selector-search");
+}, 350);
+function filtrarPuestoSelectorInput(val){
+  puestoSelectorBusqueda = val;
+  _renderPuestoSelectorBuscadoDebounced();
 }
 function ordenarEmpleadosPor(val){ empleadosOrden = val; renderCatalogTab("empleados"); }
 function filtrarEmpleadosPorContrato(val){ empleadosFiltroContrato = val; renderCatalogTab("empleados"); }
