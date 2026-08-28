@@ -5909,6 +5909,11 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
 async function renderHorasExtrasPanel(){
   const panel = document.getElementById("horasextras-panel");
   if (!panel) return;
+  // Si el panel se va a recargar de todos modos (por esta llamada o por
+  // cualquier otra acción), primero se guarda cualquier edición de horas que
+  // haya quedado en el borrador — así nunca se pierde en silencio, aunque
+  // "Confirmar todo" no se haya presionado explícitamente.
+  await guardarEdicionesPendientesHorasExtra();
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const registros = await listarRegistrosHorasExtra();
@@ -5985,6 +5990,14 @@ async function renderHorasExtrasPanel(){
       </div></div>`;
     }
 
+    html += `<div id="horasextra-confirmar-bar" style="display:none; align-items:center; justify-content:space-between; gap:10px; background:#FFF7E0; border:1px solid #D9A54A; border-radius:8px; padding:8px 12px; margin-bottom:10px;">
+      <span style="font-size:12.5px; font-weight:700; color:var(--navy-deep);">✏️ <span id="horasextra-confirmar-count">0</span> edición(es) de horas sin confirmar</span>
+      <span style="display:flex; gap:8px;">
+        <button class="btn" onclick="descartarEdicionesHorasExtra()">Descartar</button>
+        <button class="btn primary" onclick="confirmarEdicionesHorasExtra()">✅ Confirmar todo</button>
+      </span>
+    </div>`;
+
     const filtroTabs = [
       ["pendiente", `Pendientes (${pendientes.length})`],
       ...(esJefatura ? [] : [["sinmatch", `Sin identificar (${sinMatch.length})`]]),
@@ -6023,7 +6036,7 @@ async function renderHorasExtrasPanel(){
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
           <button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
-          ${tipoDia === "laboral" ? `<button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>` : ""}
+          ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}
           <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
       } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
         acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
@@ -6033,7 +6046,7 @@ async function renderHorasExtrasPanel(){
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
           <button class="use" onclick="aprobarHoraExtraFinal('${keyEsc}')">✅ Aprobar (final)</button>
-          ${tipoDia === "laboral" ? `<button class="use" onclick="editarHorasExtra('${keyEsc}')">✏️ Editar</button>` : ""}
+          ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}
           <button class="del" onclick="rechazarHoraExtraFinal('${keyEsc}')">🚫 Rechazar</button>`;
       } else if (r.ESTADO === "aprobada_jefatura"){
         acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")} · esperando aprobación final de gerencia</span>`;
@@ -6244,26 +6257,74 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
   }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
 }
 
-// Corrige el número de horas de un registro pendiente sin decidirlo todavía
-// (queda "pendiente" — la jefatura aprueba o rechaza después, ya con el
-// número correcto). Lo usa tanto master/gerente como jefatura sobre su
-// propio equipo.
-async function editarHorasExtra(key){
-  try{
-    const r = await window.storage.get(key, false);
-    const v = r && r.value ? JSON.parse(r.value) : null;
-    if (!v) return;
-    const nuevo = prompt("Horas extra correctas para este día:", String(v.HORAS_EXTRA));
-    if (nuevo === null) return; // canceló el prompt
-    const horas = parseFloat(String(nuevo).replace(",", "."));
-    if (isNaN(horas) || horas < 0){ statusMsg("Ingresa un número de horas válido.", false); return; }
-    v.HORAS_EXTRA = Math.round(horas * 100) / 100;
-    v.EDITADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
-    v.FECHA_EDICION = new Date().toISOString();
-    await window.storage.set(key, JSON.stringify(v), false);
-    statusMsg("Horas extra actualizadas.");
-    renderHorasExtrasPanel();
-  }catch(e){ statusMsg("No se pudo editar: " + e.message, false); }
+// Corrige el número de horas de un registro pendiente (o aprobado por
+// jefatura, a la espera de la final) sin decidirlo todavía. A diferencia de
+// antes (un prompt() que guardaba y recargaba TODO el panel al toque —
+// perdiendo la posición de scroll cada vez que se corregía un solo día),
+// esto es un <input> directo en la fila: escribir NO guarda ni recarga
+// nada, solo queda en horasExtraEdicionesPendientes hasta que se confirme
+// con el botón "Confirmar todo" (o cualquier otra acción que sí recargue el
+// panel — ver guardarEdicionesPendientesHorasExtra, que la llama primero
+// para no perder ediciones a medio hacer).
+let horasExtraEdicionesPendientes = {}; // key del registro -> texto tal cual lo escribió el usuario
+
+function renderInputHorasExtra(r, keyEsc){
+  const valorActual = horasExtraEdicionesPendientes[r.key] !== undefined ? horasExtraEdicionesPendientes[r.key] : r.HORAS_EXTRA;
+  return `<span style="display:inline-flex; align-items:center; gap:4px;">
+    <input type="number" step="0.25" min="0" value="${escapeHtml(String(valorActual))}" style="width:58px; padding:3px 5px; border:1px solid #ccc; border-radius:5px; font-size:12px;" oninput="marcarEdicionHorasExtraPendiente('${keyEsc}', this.value)">
+    <span class="meta" style="font-size:10.5px;">hrs</span>
+  </span>`;
+}
+
+function marcarEdicionHorasExtraPendiente(key, valorTexto){
+  horasExtraEdicionesPendientes[key] = valorTexto;
+  const n = Object.keys(horasExtraEdicionesPendientes).length;
+  const bar = document.getElementById("horasextra-confirmar-bar");
+  const contador = document.getElementById("horasextra-confirmar-count");
+  if (bar) bar.style.display = n ? "flex" : "none";
+  if (contador) contador.textContent = n;
+}
+
+// Guarda en definitiva todo lo que haya quedado en el borrador — silencioso,
+// sin su propio statusMsg ni su propio renderHorasExtrasPanel(), porque lo
+// llama tanto el botón "Confirmar todo" como el propio renderHorasExtrasPanel
+// (para que aprobar/rechazar/cambiar de pestaña, etc. nunca borre ediciones
+// sin guardar: si el panel se va a recargar igual por otra razón, aprovecha
+// y guarda lo pendiente en vez de perderlo en silencio).
+async function guardarEdicionesPendientesHorasExtra(){
+  const entradas = Object.entries(horasExtraEdicionesPendientes);
+  horasExtraEdicionesPendientes = {};
+  if (!entradas.length) return { ok: 0, invalidas: 0 };
+  let ok = 0, invalidas = 0;
+  for (const [key, valorTexto] of entradas){
+    const horas = parseFloat(String(valorTexto).replace(",", "."));
+    if (isNaN(horas) || horas < 0){ invalidas++; continue; }
+    try{
+      const r = await window.storage.get(key, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      if (!v) continue;
+      v.HORAS_EXTRA = Math.round(horas * 100) / 100;
+      v.EDITADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+      v.FECHA_EDICION = new Date().toISOString();
+      await window.storage.set(key, JSON.stringify(v), false);
+      ok++;
+    }catch(e){ /* se sigue con el resto aunque una falle */ }
+  }
+  return { ok, invalidas };
+}
+
+// Botón "Confirmar todo": el único momento en que corregir horas hace que la
+// pantalla recargue — después de escribir todas las correcciones que hagan
+// falta, no una por una.
+async function confirmarEdicionesHorasExtra(){
+  const { ok, invalidas } = await guardarEdicionesPendientesHorasExtra();
+  if (ok || invalidas) statusMsg(`${ok} edición(es) de horas guardada(s)${invalidas ? `, ${invalidas} con un número inválido se ignoraron` : ""}.`, invalidas === 0);
+  renderHorasExtrasPanel();
+}
+
+function descartarEdicionesHorasExtra(){
+  horasExtraEdicionesPendientes = {};
+  renderHorasExtrasPanel();
 }
 
 async function rechazarHoraExtra(key){
