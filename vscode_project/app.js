@@ -5757,6 +5757,103 @@ async function listarRegistrosHorasExtra(){
   return registros.filter(Boolean);
 }
 
+// Resumen de quincena para preparar el pago de planilla: el reporte de
+// "Días laborados" de más abajo cuenta días con marca real dentro del rango
+// que se le pida, pero la planilla se prepara con días de anticipación — la
+// máquina de marcación se sube antes de que cierre la quincena (el archivo
+// típico lee del 27 al 12/13, no hasta el día 15), así que nunca hay marca
+// para los últimos días. Por eso este cuadro no depende de las marcas: cada
+// quincena vale 15 días fijos, y solo se resta lo que ya quedó aprobado en
+// definitiva como incapacidad, permiso sin goce, cita médica o ausencia
+// injustificada. Las horas extra sí se siguen tomando de lo real aprobado
+// — para eso están las aprobaciones de horas extra de este mismo panel.
+const DIAS_BASE_QUINCENA = 15;
+const TIPOS_DIA_DESCUENTA_QUINCENA = {
+  incapacidad: "Incapacidad",
+  permiso_sin_goce: "Permiso sin goce",
+  ausencia_medica: "Cita médica",
+  ausencia: "Ausencia injust.",
+};
+
+// Quincena 1 = día 1 al 15. Quincena 2 = día 16 al último día del mes, pero
+// en meses de 31 días la legislación solo paga 30 días de salario base — el
+// día 31 no cuenta como día base (no resta aunque haya ausencia ese día, ni
+// suma si se trabajó normal), así que "finBase" topa en 30 mientras que
+// "fin" sí llega hasta el 31, para que las horas extra de ese día igual se
+// sumen si las hubo.
+function rangoQuincenaActual(hoy){
+  hoy = hoy || new Date();
+  const anio = hoy.getFullYear(), mes = hoy.getMonth();
+  const esPrimeraQuincena = hoy.getDate() <= 15;
+  const inicio = new Date(anio, mes, esPrimeraQuincena ? 1 : 16);
+  const fin = esPrimeraQuincena ? new Date(anio, mes, 15) : new Date(anio, mes + 1, 0);
+  const finBase = esPrimeraQuincena ? fin : new Date(anio, mes, Math.min(fin.getDate(), 30));
+  return { inicio, fin, finBase, esPrimeraQuincena };
+}
+
+// Por empleado, dentro de la quincena dada: horas extra aprobadas en todo el
+// rango (incluido el día 31 si lo hay) y cuántos de los 15 días base se
+// pierden por incapacidad/PSG/cita médica/ausencia — solo cuenta lo ya
+// aprobado en definitiva (ESTADO "aprobada"), igual que el resto de reportes
+// de planilla, para no restar ni sumar nada que todavía esté en revisión.
+function calcularResumenQuincena(registros, empleados, rango){
+  const inicioISO = isoDeFechaLocal(rango.inicio);
+  const finISO = isoDeFechaLocal(rango.fin);
+  const finBaseISO = isoDeFechaLocal(rango.finBase);
+  return empleados.map(emp => {
+    const delEmpleado = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
+    const horasExtra = delEmpleado.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+    const descPorTipo = {};
+    let totalDescuento = 0;
+    delEmpleado.forEach(r => {
+      if (r.FECHA > finBaseISO) return; // día 31 "extra": no resta ni suma días base
+      if (!TIPOS_DIA_DESCUENTA_QUINCENA[r.TIPO_DIA]) return;
+      descPorTipo[r.TIPO_DIA] = (descPorTipo[r.TIPO_DIA] || 0) + 1;
+      totalDescuento++;
+    });
+    const diasLaborados = Math.max(0, DIAS_BASE_QUINCENA - totalDescuento);
+    return { emp, horasExtra, descPorTipo, totalDescuento, diasLaborados };
+  });
+}
+
+function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado){
+  const rango = rangoQuincenaActual();
+  let visibles = empleados.filter(e => !e.ARCHIVADO);
+  if (esJefatura) visibles = visibles.filter(e => departamentoDeEmpleado(e) === deptoJefatura);
+  const filas = calcularResumenQuincena(registros, visibles, rango)
+    .sort((a, b) => (a.emp.NOMBRE_EMP || "").localeCompare(b.emp.NOMBRE_EMP || "", "es"));
+  if (!filas.length) return "";
+
+  const etiquetaRango = `${fmtFechaDesdeDate(rango.inicio)} – ${fmtFechaDesdeDate(rango.fin)}`;
+  const notaDia31 = (!rango.esPrimeraQuincena && rango.fin.getDate() > 30)
+    ? ` El día 31 no cuenta como día base de pago (ese mes solo se pagan 30 días de salario), pero si tuvo horas extra igual se suman en la columna de arriba.`
+    : "";
+  const cols = Object.keys(TIPOS_DIA_DESCUENTA_QUINCENA);
+
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">📋 Resumen de quincena para planilla — ${etiquetaRango}</div>
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:0 0 10px;">Días laborados = 15 días base menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango (no depende de que la marcación alcance a cubrir toda la quincena). Horas extra = lo ya aprobado en definitiva en todo el rango.${notaDia31}</p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead><tr style="border-bottom:2px solid #ccc; text-align:left;">
+        <th style="padding:4px 8px;">Empleado</th>
+        <th style="padding:4px 8px; text-align:center;">Días laborados</th>
+        ${cols.map(c => `<th style="padding:4px 8px; text-align:center;">${escapeHtml(TIPOS_DIA_DESCUENTA_QUINCENA[c])}</th>`).join("")}
+        <th style="padding:4px 8px; text-align:center;">Horas extra</th>
+      </tr></thead>
+      <tbody>
+        ${filas.map(f => `<tr style="border-bottom:1px solid #eee;">
+          <td style="padding:4px 8px;">${escapeHtml(f.emp.NOMBRE_EMP || f.emp.key)}</td>
+          <td style="padding:4px 8px; text-align:center; font-weight:700; color:${f.diasLaborados < DIAS_BASE_QUINCENA ? '#b23b3b' : 'var(--navy-deep)'};">${f.diasLaborados}</td>
+          ${cols.map(c => `<td style="padding:4px 8px; text-align:center;">${f.descPorTipo[c] || ""}</td>`).join("")}
+          <td style="padding:4px 8px; text-align:center; font-weight:700;">${f.horasExtra ? f.horasExtra.toFixed(1) : ""}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+    </div>
+  </div></div>`;
+}
+
 async function renderHorasExtrasPanel(){
   const panel = document.getElementById("horasextras-panel");
   if (!panel) return;
@@ -5802,11 +5899,15 @@ async function renderHorasExtrasPanel(){
     const esJefatura = rolActual === "jefatura";
     const esGerente = rolActual === "gerente";
     const puedeAprobar = puedeEditar || esJefatura; // + jefatura: aprobar/editar/rechazar SOLO su equipo (el servidor filtra qué le llega)
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">⏱️ Horas extras</div>
       <div style="font-size:12px; color:var(--ink-soft);">${esJefatura ? "Horas de tu equipo desde la máquina de marcación — apruébalas, corrígelas o recházalas. La aprobación final para planilla la hace gerencia." : "Importadas desde la máquina de marcación. Jefatura aprueba primero; gerencia da la aprobación final antes de que cuenten para el reporte de planilla."}</div>
     </div>`;
+
+    html += renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado);
 
     html += esJefatura
       ? `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
