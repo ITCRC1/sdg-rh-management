@@ -41,6 +41,8 @@ function claveValida(clave) {
 // HORAS_EXTRA_PREFIX) — si esos cambian ahí, deben cambiar aquí también.
 // --------------------------------------------------------------------------
 const HORAS_EXTRA_PREFIX = "horas_extra:";
+const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
+const COINCIDENCIA_PREFIX = "coincidencia_confirmada:";
 const EMPLEADO_PREFIX = "cat_empleado:";
 const PUESTO_PREFIX = "cat_puesto:";
 
@@ -57,18 +59,14 @@ async function valorDeClave(propiedad, clave) {
   }
 }
 
-// ¿El empleado dueño de esta clave de horas_extra pertenece al departamento
-// que lidera esta jefatura? El departamento sale de DEPARTAMENTO_MINISTERIO
-// en el puesto del empleado (ej. "COCINA" agrupa Cocinero A, Cocinero B,
-// Panadero y Steward — así lo clasifica el catálogo del Ministerio de
-// Trabajo). Un registro "sinmatch-" (todavía sin empleado identificado)
-// nunca pertenece a ninguna jefatura — esa asignación es trabajo de
-// master/gerente.
-async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departamentoLider) {
-  if (!departamentoLider) return false;
-  const empleadoKey = claveHorasExtra.split(":")[1] || "";
-  if (!empleadoKey || empleadoKey.startsWith("sinmatch-")) return false;
-
+// ¿Este empleado pertenece al departamento que lidera esta jefatura? El
+// departamento sale de DEPARTAMENTO_MINISTERIO en el puesto del empleado
+// (ej. "COCINA" agrupa Cocinero A, Cocinero B, Panadero y Steward — así lo
+// clasifica el catálogo del Ministerio de Trabajo). Compartido por
+// horas_extra: y solicitud_ausencia:, los dos únicos prefijos que una
+// jefatura puede llegar a tocar.
+async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider) {
+  if (!departamentoLider || !empleadoKey) return false;
   const empleado = await valorDeClave(propiedad, EMPLEADO_PREFIX + empleadoKey);
   if (!empleado || !empleado.PUESTO_KEY) return false;
 
@@ -76,6 +74,23 @@ async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departament
   if (!puesto) return false;
 
   return puesto.DEPARTAMENTO_MINISTERIO === departamentoLider;
+}
+
+// ¿El empleado dueño de esta clave de horas_extra pertenece al departamento
+// que lidera esta jefatura? Un registro "sinmatch-" (todavía sin empleado
+// identificado) nunca pertenece a ninguna jefatura — esa asignación es
+// trabajo de master/gerente.
+async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departamentoLider) {
+  const empleadoKey = claveHorasExtra.split(":")[1] || "";
+  if (!empleadoKey || empleadoKey.startsWith("sinmatch-")) return false;
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider);
+}
+
+// Igual que arriba, para solicitud_ausencia:<empleadoKey>:<id> — la clave
+// del empleado sale del mismo segundo segmento.
+async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamentoLider) {
+  const empleadoKey = claveSolicitud.split(":")[1] || "";
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider);
 }
 
 // ¿Puede este usuario escribir en esta clave? master/gerente: todo, como
@@ -109,26 +124,54 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
     return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
+  // Días libres/vacaciones: jefatura SOLO puede crear/editar solicitudes de
+  // su propio equipo mientras sigan "pendiente" — aprobar o rechazar es
+  // exclusivo de gerencia/master (ver especificación del módulo, sección 4:
+  // "Quién solicita: el líder o la jefatura... Quién aprueba: Gerencia y
+  // Máster"). Una vez que el estado deja de ser "pendiente", jefatura pierde
+  // el permiso de escritura sobre esa clave — no puede autoaprobarse.
+  if (usuario.rol === "jefatura" && clave.startsWith(SOLICITUD_AUSENCIA_PREFIX) && typeof valorNuevo === "string") {
+    let nuevo = null;
+    try {
+      nuevo = JSON.parse(valorNuevo);
+    } catch (e) {
+      return false;
+    }
+    if (!nuevo || nuevo.ESTADO !== "pendiente") return false;
+    return solicitudPerteneceAEquipo(propiedad, clave, usuario.puesto);
+  }
+  // Alertas de coincidencia (dos o más colaboradores del mismo departamento
+  // libres el mismo día): jefatura puede confirmar su lado, pero solo para
+  // el departamento que lidera — el nombre del departamento va literal en
+  // la clave (coincidencia_confirmada:<departamento>:<fecha>).
+  if (usuario.rol === "jefatura" && clave.startsWith(COINCIDENCIA_PREFIX) && usuario.puesto) {
+    return clave.startsWith(COINCIDENCIA_PREFIX + usuario.puesto + ":");
+  }
   return false;
 }
 
-// Filtra filas (con o sin `valor`) de horas_extra: dejando solo las del
-// equipo de esa jefatura. Secuencial y no en paralelo a propósito: son pocas
-// filas por período de 3 días, y evita abrir decenas de conexiones a la vez.
+// Filtra filas (con o sin `valor`) de horas_extra: o solicitud_ausencia:
+// dejando solo las del equipo de esa jefatura. Secuencial y no en paralelo a
+// propósito: son pocas filas por período, y evita abrir decenas de
+// conexiones a la vez.
 async function filtrarFilasPorEquipo(filas, propiedad, puestoLider) {
   const resultado = [];
   for (const fila of filas) {
-    if (await horaExtraPerteneceAEquipo(propiedad, fila.clave, puestoLider)) resultado.push(fila);
+    const pertenece = fila.clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)
+      ? await solicitudPerteneceAEquipo(propiedad, fila.clave, puestoLider)
+      : await horaExtraPerteneceAEquipo(propiedad, fila.clave, puestoLider);
+    if (pertenece) resultado.push(fila);
   }
   return resultado;
 }
 
-// Una jefatura no ve "la página de Recursos Humanos" — solo el módulo de
-// Horas extras. Por eso su lectura queda limitada a estos 3 prefijos:
-// horas_extra: (lo suyo), y cat_empleado:/cat_puesto: (para poder resolver
-// nombre, puesto y departamento de su propio equipo — nada de contratos,
-// documentos, otros catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
+// Una jefatura no ve "la página de Recursos Humanos" — solo horas extra y el
+// módulo de días libres/vacaciones. Por eso su lectura queda limitada a
+// estos 4 prefijos: horas_extra: y solicitud_ausencia: (lo suyo), y
+// cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
+// departamento de su propio equipo — nada de contratos, documentos, otros
+// catálogos, etc.).
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, COINCIDENCIA_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
 
 // ¿Puede leer esta clave (o este prefijo de listado)? true para todos los
 // roles salvo jefatura, que solo puede si arranca con uno de los prefijos
@@ -159,10 +202,11 @@ router.get("/", async (req, res, next) => {
     // El prefijo se pasa como parámetro y se escapa: nunca se concatena SQL.
     const like = prefijo.replace(/([\\%_])/g, "\\$1") + "%";
 
-    // Una jefatura solo ve horas_extra: de su propio equipo — nunca las de
-    // otros departamentos, aunque esté pidiendo el mismo prefijo que vería
-    // un master/gerente.
-    const filtrarPorEquipo = req.usuario.rol === "jefatura" && prefijo.startsWith(HORAS_EXTRA_PREFIX);
+    // Una jefatura solo ve horas_extra:/solicitud_ausencia: de su propio
+    // equipo — nunca las de otros departamentos, aunque esté pidiendo el
+    // mismo prefijo que vería un master/gerente.
+    const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX));
 
     if (conValores) {
       const { rows } = await query(
@@ -216,6 +260,10 @@ router.get("/:clave(*)", async (req, res, next) => {
 
     if (req.usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
       const enSuEquipo = await horaExtraPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)) {
+      const enSuEquipo = await solicitudPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
     }
     res.json(rows[0]);

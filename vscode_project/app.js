@@ -261,12 +261,14 @@ function aplicarModoSegunRol(rol){
   const btnCambiarPropiedad = document.getElementById("nav-btn-cambiar-propiedad");
   if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = rol === "master" ? "block" : "none";
 
-  // Jefatura no tiene "página de RH" — solo el módulo de Horas extras. Se
+  // Jefatura no tiene "página de RH" — solo Horas extras y el módulo de Días
+  // Libres y Vacaciones (ahí sí necesita entrar: la especificación dice que
+  // el líder/jefatura es quien solicita ausencias para su equipo). Se
   // esconde el resto del menú (el servidor ya bloquea esos datos aparte;
   // esto es para que la navegación no ofrezca puertas cerradas).
   if (rol === "jefatura"){
     ["navbtn-inicio","navbtn-empleados","navbtn-expedientes","navbtn-planilla",
-     "navbtn-vacaciones","navbtn-diaslibres","navbtn-incapacidades",
+     "navbtn-incapacidades",
      "navbtn-contratos","navbtn-documentos","navbtn-reportes",
      "navbtn-estadisticas","navbtn-asistente","navbtn-datos"].forEach(id => {
       const el = document.getElementById(id);
@@ -3678,7 +3680,8 @@ function showTab(which){
   // Esto es la comodidad visual (el servidor es quien de verdad bloquea el
   // resto de los datos): cubre el logo, "atrás" del navegador o cualquier
   // otro camino que intente llevarla a otra pestaña.
-  if (which !== "horasextras" && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
+  const TABS_PERMITIDAS_JEFATURA = ["horasextras", "vacaciones", "diaslibres"];
+  if (!TABS_PERMITIDAS_JEFATURA.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
     which = "horasextras";
   }
   document.getElementById("inicio-panel").style.display = which === "inicio" ? "block" : "none";
@@ -3709,6 +3712,7 @@ function showTab(which){
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
+  document.getElementById("diaslibresvacaciones-panel").style.display = (which === "vacaciones" || which === "diaslibres") ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
   document.getElementById("amonestacionform-toolbar").style.display = (which === "amonestacionform") ? "flex" : "none";
@@ -3757,6 +3761,7 @@ function showTab(which){
   if (which === "permisoform") renderPermisoForm();
   if (which === "vacacionesform") renderVacacionesForm();
   if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
+  if (which === "vacaciones" || which === "diaslibres") renderDiasLibresVacacionesPanel();
 }
 
 // ---------- dropdown navbar ----------
@@ -4817,9 +4822,7 @@ function formatoRelativoActividad(iso){
 // navegación ya refleja la estructura final aprobada y el desarrollo puede
 // ser incremental sin fingir funcionalidad a medias.
 const MODULOS_PENDIENTES = {
-  vacaciones: { icono: "🏖️", titulo: "Vacaciones", resumen: "Calendario general con código de color, y panel de solicitudes con aprobar/rechazar. (La carta de acción de personal de vacaciones ya existe — Documentos → Vacaciones, o desde Acciones en el perfil del empleado.)" },
-  diaslibres: { icono: "📅", titulo: "Días libres", resumen: "Módulo por definir en detalle." },
-  incapacidades: { icono: "🤒", titulo: "Incapacidades", resumen: "Panel de incapacidades activas y alertas automáticas de regreso." },
+  incapacidades: { icono: "🤒", titulo: "Incapacidades", resumen: "Panel de incapacidades activas y alertas automáticas de regreso — el módulo aparte que menciona la especificación de Días Libres y Vacaciones. Su efecto sobre el saldo de vacaciones (Art. 160 CT) ya se aplica desde ese módulo." },
   estadisticas: { icono: "📊", titulo: "Estadísticas", resumen: "Gráficos de distribución de personal y otros indicadores — separados del Dashboard a propósito." },
   asistente: { icono: "🤖", titulo: "Asistente IA", resumen: "Consultas en lenguaje natural sobre los datos internos (ej. \"¿cuántos empleados están incapacitados?\", \"contratos que vencen este mes\")." },
 };
@@ -5233,6 +5236,8 @@ const TIPOS_DIA_HORARIO = {
   incapacidad: { label: "Incapacidad", emoji: "🤒" },
   permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄" },
   vacaciones: { label: "Vacaciones", emoji: "🏖️" },
+  ausencia_medica: { label: "Ausencia médica (cita)", emoji: "🩺" },
+  cumpleanos: { label: "Día de cumpleaños", emoji: "🎂" },
   ausencia: { label: "Ausencia", emoji: "⚠️" },
 };
 
@@ -7609,6 +7614,781 @@ async function descargarVacacionesPDF(){
     empleadoCedula: data.CEDULA_VACACIONES || null,
     empleadoNombre: data.NOMBRE_VACACIONES || null,
   });
+}
+
+// ==========================================================================
+// Módulo de Días Libres y Vacaciones — saldo acumulado, solicitudes con
+// aprobación, reglas especiales del reglamento interno, calendario y
+// reportes. Reutiliza horas_extra: como fuente única de "qué pasó cada día"
+// (igual que ya hacen permiso sin goce y vacaciones por carta) para que el
+// Reporte de horarios para pago de planilla no tenga que mirar dos lugares.
+// ==========================================================================
+const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
+
+// Reglas de negocio fijas (especificación del módulo, secciones 2 y 4-5):
+const ACUMULACION_MENSUAL_VACACIONES = 4; // días por mes trabajado
+const TOPE_SALDO_VACACIONES = 10; // la ley no fija tope; este es el interno
+const ANTICIPACION_MINIMA_DIAS_SOLICITUD = 15;
+const DIA_CORTE_MENSUAL_SOLICITUD = 30;
+
+const TIPOS_SOLICITUD_AUSENCIA = {
+  vacaciones: { label: "Vacaciones", emoji: "🏖️", consumeSaldo: true, requiereComprobante: false, colorHex: "FFF5D06B" },
+  permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄", consumeSaldo: false, requiereComprobante: false, colorHex: "FF8FD3E8" },
+  ausencia_medica: { label: "Ausencia médica (cita)", emoji: "🩺", consumeSaldo: false, requiereComprobante: true, colorHex: "FFE68A8A" },
+};
+
+function isoDeHoy(){ return isoDeFechaLocal(new Date()); }
+
+// Días de incapacidad ya aprobados (fechas "AAAA-MM-DD") — se leen de los
+// mismos registros horas_extra: (TIPO_DIA "incapacidad", ESTADO "aprobada"),
+// para no mantener una segunda fuente de la verdad sobre incapacidades.
+function diasIncapacidadAprobados(registrosHorasExtra, empKey){
+  return registrosHorasExtra
+    .filter(r => r.EMPLEADO_KEY === empKey && r.TIPO_DIA === "incapacidad" && r.ESTADO === "aprobada")
+    .map(r => r.FECHA);
+}
+
+// Saldo de vacaciones: simulación cronológica, no una fórmula cerrada. Se
+// acredita 1 "período de un mes" (contado desde el aniversario de ingreso,
+// no desde el 1° del mes calendario) con 4 días, topado en 10; un período
+// con al menos un día de incapacidad aprobada NO acredita — Art. 160 CT:
+// la incapacidad pausa el cómputo del tiempo de servicio, no descuenta lo
+// ya ganado. Cada solicitud de VACACIONES aprobada resta sus días en la
+// fecha en que arrancan. El orden cronológico importa: si se usan días
+// antes de volver a tocar el tope, la acumulación siguiente sí "entra" —
+// sumar todo primero y restar el uso al final da un resultado distinto (y
+// equivocado) cuando el uso ocurre antes de llegar al tope de nuevo.
+function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasIncapacidad, fechaCorte){
+  const ingreso = parsearFechaDDMMYYYY(empleado && empleado.FECHA_INGRESO_EMP);
+  if (!ingreso || ingreso > fechaCorte) return 0;
+  const incapacidadSet = new Set(diasIncapacidad || []);
+
+  const eventos = [];
+  let inicioPeriodo = new Date(ingreso);
+  while (true){
+    const finPeriodo = new Date(inicioPeriodo.getFullYear(), inicioPeriodo.getMonth() + 1, inicioPeriodo.getDate());
+    if (finPeriodo > fechaCorte) break;
+    let pausado = false;
+    const cursorDia = new Date(inicioPeriodo);
+    while (cursorDia < finPeriodo){
+      if (incapacidadSet.has(isoDeFechaLocal(cursorDia))){ pausado = true; break; }
+      cursorDia.setDate(cursorDia.getDate() + 1);
+    }
+    if (!pausado) eventos.push({ fecha: finPeriodo, tipo: "acredita", dias: ACUMULACION_MENSUAL_VACACIONES });
+    inicioPeriodo = finPeriodo;
+  }
+  (solicitudesVacacionesAprobadas || []).forEach(s => {
+    const fecha = new Date(s.FECHA_INICIO + "T00:00:00");
+    if (fecha <= fechaCorte) eventos.push({ fecha, tipo: "usa", dias: s.DIAS || 0 });
+  });
+  eventos.sort((a,b) => a.fecha - b.fecha);
+
+  let saldo = 0;
+  eventos.forEach(ev => {
+    saldo = ev.tipo === "acredita" ? Math.min(saldo + ev.dias, TOPE_SALDO_VACACIONES) : Math.max(saldo - ev.dias, 0);
+  });
+  return saldo;
+}
+
+function diasEntreFechasISO(desde, hasta){
+  const a = new Date(desde + "T00:00:00");
+  const b = new Date(hasta + "T00:00:00");
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+async function listarSolicitudesAusencia(){
+  const res = await window.storage.list(SOLICITUD_AUSENCIA_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const registros = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return registros.filter(Boolean);
+}
+
+// Crea/justifica los días de un rango ISO ("AAAA-MM-DD") en horas_extra: —
+// versión de justificarRangoDeFechas que trabaja directo con fechas ISO en
+// vez de día/mes(nombre)/año, porque esta solicitud usa <input type=date>
+// en vez del selector de mes en español que usan las cartas.
+async function justificarRangoISO(empKey, fechaInicioISO, fechaFinISO, tipoDia, origen, camposExtra){
+  const cursor = new Date(fechaInicioISO + "T00:00:00");
+  const fin = new Date(fechaFinISO + "T00:00:00");
+  while (cursor <= fin){
+    await crearOJustificarDiaHorasExtra(empKey, isoDeFechaLocal(cursor), tipoDia, origen, camposExtra);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+}
+
+// Crea una solicitud de ausencia (vacaciones / permiso sin goce / ausencia
+// médica) — la crea jefatura/líder desde el perfil del colaborador, o
+// master/gerente. Valida la anticipación mínima (15 días) y, para citas
+// médicas, que venga comprobante adjunto. Queda "pendiente" hasta que
+// gerencia o master decidan (sección 4 de la especificación).
+async function crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre }){
+  if (!TIPOS_SOLICITUD_AUSENCIA[tipo]) throw new Error("Tipo de ausencia inválido.");
+  if (!empKey) throw new Error("Elegí un empleado.");
+  if (!fechaInicio || !fechaFin) throw new Error("Elegí las fechas.");
+  if (fechaFin < fechaInicio) throw new Error("La fecha de fin no puede ser anterior a la de inicio.");
+  const diasAnticipacion = Math.round((new Date(fechaInicio + "T00:00:00") - new Date(isoDeHoy() + "T00:00:00")) / 86400000);
+  if (diasAnticipacion < ANTICIPACION_MINIMA_DIAS_SOLICITUD){
+    const faltan = ANTICIPACION_MINIMA_DIAS_SOLICITUD - diasAnticipacion;
+    throw new Error(`Esta solicitud necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación (faltan ${faltan} día(s) para cumplirlo).`);
+  }
+  if (TIPOS_SOLICITUD_AUSENCIA[tipo].requiereComprobante && !comprobanteDataUrl){
+    throw new Error("Este tipo de ausencia necesita un comprobante adjunto.");
+  }
+  const dias = diasEntreFechasISO(fechaInicio, fechaFin);
+  const id = `${fechaInicio}-${Date.now()}`;
+  const key = SOLICITUD_AUSENCIA_PREFIX + empKey + ":" + id;
+  const value = {
+    EMPLEADO_KEY: empKey,
+    TIPO: tipo,
+    FECHA_INICIO: fechaInicio,
+    FECHA_FIN: fechaFin,
+    DIAS: dias,
+    COMPROBANTE_DATA_URL: comprobanteDataUrl || null,
+    COMPROBANTE_NOMBRE: comprobanteNombre || null,
+    SOLICITADO_POR: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
+    FECHA_SOLICITUD: new Date().toISOString(),
+    ESTADO: "pendiente",
+  };
+  await window.storage.set(key, JSON.stringify(value), false);
+  return key;
+}
+
+// Aprobación — exclusiva de gerencia/master (el servidor lo exige para
+// jefatura). Al aprobar se justifican los días en horas_extra: para que
+// cuenten en el reporte de planilla. Para SCP Corcovado Wilderness Lodge la
+// única regla especial del reglamento interno que aplica es el día de
+// cumpleaños (ver otorgarDiaCumpleanos) — día de viaje y día de entrada NO
+// aplican acá, así que no se generan.
+async function aprobarSolicitudAusencia(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "aprobada";
+    v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+
+    await justificarRangoISO(v.EMPLEADO_KEY, v.FECHA_INICIO, v.FECHA_FIN, v.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
+
+    statusMsg("Solicitud aprobada.");
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo aprobar: " + e.message, false); }
+}
+
+async function rechazarSolicitudAusencia(key){
+  const motivo = prompt("Motivo del rechazo (opcional):", "");
+  if (motivo === null) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "rechazada";
+    v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION = new Date().toISOString();
+    v.MOTIVO_RECHAZO = motivo.trim();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Solicitud rechazada.");
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo rechazar: " + e.message, false); }
+}
+
+async function cancelarSolicitudAusencia(key){
+  if (!confirm("¿Cancelar esta solicitud pendiente?")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Solicitud cancelada.");
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo cancelar: " + e.message, false); }
+}
+
+// ---------- Días Libres y Vacaciones: cumpleaños, coincidencias, UI ----------
+
+function departamentoDeEmpleadoGenerico(emp, puestosPorKey){
+  if (!emp || !emp.PUESTO_KEY) return "Sin departamento";
+  const p = puestosPorKey[emp.PUESTO_KEY];
+  return (p && p.DEPARTAMENTO_MINISTERIO) || "Sin departamento";
+}
+
+// Próxima ocurrencia del cumpleaños (este año, o el que viene si ya pasó),
+// dentro de una ventana de días — para la alerta de la sección 5. Un día de
+// cumpleaños es "todo o nada" por año: no se fracciona ni se acumula si no
+// se otorga (ver otorgadoEsteAnio).
+function proximoCumpleanosEn(fechaNacStr, hoy, ventanaDias){
+  const nacimiento = parsearFechaDDMMYYYY(fechaNacStr);
+  if (!nacimiento) return null;
+  let cumple = new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate());
+  if (cumple < new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())){
+    cumple = new Date(hoy.getFullYear() + 1, nacimiento.getMonth(), nacimiento.getDate());
+  }
+  const diasFaltan = Math.round((cumple - hoy) / 86400000);
+  return diasFaltan <= ventanaDias ? { fecha: cumple, diasFaltan } : null;
+}
+
+function otorgadoEsteAnio(emp, anio){
+  return !!(emp && emp.CUMPLEANOS_OTORGADO_ANIOS && emp.CUMPLEANOS_OTORGADO_ANIOS[String(anio)]);
+}
+
+async function otorgarDiaCumpleanos(empKey, fechaISO){
+  try{
+    const fullKey = CATALOGS.empleados.prefix + empKey;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value) return;
+    const emp = JSON.parse(res.value);
+    const anio = fechaISO.slice(0,4);
+    if (!emp.CUMPLEANOS_OTORGADO_ANIOS) emp.CUMPLEANOS_OTORGADO_ANIOS = {};
+    emp.CUMPLEANOS_OTORGADO_ANIOS[anio] = true;
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    await crearOJustificarDiaHorasExtra(empKey, fechaISO, "cumpleanos", "cumpleanos_otorgado", {});
+    statusMsg("Día de cumpleaños otorgado.");
+    renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo otorgar: " + e.message, false); }
+}
+
+// Dos o más colaboradores del MISMO departamento con vacaciones o permiso
+// sin goce programados el mismo día — no bloquea nada, solo alerta (sección
+// 6.5). Solo mira solicitudes aprobadas o pendientes (una rechazada/cancelada
+// ya no es un conflicto real).
+function detectarCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado){
+  const porDeptoFecha = {};
+  solicitudes
+    .filter(s => (s.ESTADO === "aprobada" || s.ESTADO === "pendiente") && (s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce"))
+    .forEach(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const depto = departamentoDeEmpleado(emp);
+      const cursor = new Date(s.FECHA_INICIO + "T00:00:00");
+      const fin = new Date(s.FECHA_FIN + "T00:00:00");
+      while (cursor <= fin){
+        const clave = depto + "|" + isoDeFechaLocal(cursor);
+        (porDeptoFecha[clave] = porDeptoFecha[clave] || []).push(s.EMPLEADO_KEY);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+  const coincidencias = [];
+  Object.keys(porDeptoFecha).forEach(clave => {
+    const empleadosUnicos = [...new Set(porDeptoFecha[clave])];
+    if (empleadosUnicos.length >= 2){
+      const [depto, fecha] = clave.split("|");
+      coincidencias.push({ depto, fecha, empleados: empleadosUnicos });
+    }
+  });
+  coincidencias.sort((a,b) => a.fecha.localeCompare(b.fecha));
+  return coincidencias;
+}
+
+const COINCIDENCIA_PREFIX = "coincidencia_confirmada:";
+
+// La solicitud NO se bloquea automáticamente: jefatura y gerencia/master
+// confirman cada quien su lado, y solo cuando ambos confirmaron se
+// considera aceptada (sección 6.5).
+async function confirmarCoincidencia(depto, fecha, quien){
+  const key = COINCIDENCIA_PREFIX + depto + ":" + fecha;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : { CONFIRMADO_JEFATURA: false, CONFIRMADO_GERENCIA: false };
+    if (quien === "jefatura") v.CONFIRMADO_JEFATURA = true;
+    if (quien === "gerencia") v.CONFIRMADO_GERENCIA = true;
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Confirmación registrada.");
+    renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo confirmar: " + e.message, false); }
+}
+
+async function obtenerConfirmacionesCoincidencia(){
+  const res = await window.storage.list(COINCIDENCIA_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const mapa = {};
+  await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      if (v) mapa[k.replace(COINCIDENCIA_PREFIX, "")] = v;
+    }catch(e){ /* se ignora ese registro suelto */ }
+  }));
+  return mapa;
+}
+
+let diasLibresFiltroDepto = "todos";
+let diasLibresMesCalendario = null; // "AAAA-MM" — se fija al mes actual la primera vez que se renderiza
+
+async function renderDiasLibresVacacionesPanel(){
+  const panel = document.getElementById("diaslibresvacaciones-panel");
+  if (!panel) return;
+  panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
+    const esJefatura = rolActual === "jefatura";
+    const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente: aprueban/rechazan
+    const puedeSolicitar = puedeAprobar || esJefatura;
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
+
+    const [empleados, solicitudes, registrosHorasExtra] = await Promise.all([
+      cargarEmpleadosDB(),
+      listarSolicitudesAusencia(),
+      listarRegistrosHorasExtra(),
+    ]);
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {};
+    puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const empleadosPorKey = {};
+    empleados.forEach(e => { empleadosPorKey[e.key] = e; });
+    const departamentoDeEmpleado = emp => departamentoDeEmpleadoGenerico(emp, puestosPorKey);
+
+    if (!diasLibresMesCalendario){
+      const hoy0 = new Date();
+      diasLibresMesCalendario = `${hoy0.getFullYear()}-${String(hoy0.getMonth()+1).padStart(2,"0")}`;
+    }
+
+    // Ámbito por rol (sección 6.2): jefatura fija a su propio departamento;
+    // master/gerente eligen "todos" o uno específico.
+    const deptoActivo = deptoJefatura || (diasLibresFiltroDepto === "todos" ? null : diasLibresFiltroDepto);
+    const empleadosVisibles = empleados.filter(e => !e.ARCHIVADO && (!deptoActivo || departamentoDeEmpleado(e) === deptoActivo));
+    const empleadosVisiblesKeys = new Set(empleadosVisibles.map(e => e.key));
+    const solicitudesVisibles = solicitudes.filter(s => empleadosVisiblesKeys.has(s.EMPLEADO_KEY));
+
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🏖️ Días Libres y Vacaciones</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Saldo acumulado (${ACUMULACION_MENSUAL_VACACIONES} días/mes, tope interno de ${TOPE_SALDO_VACACIONES}), solicitudes con aprobación de gerencia/master, y calendario del equipo.</div>
+    </div>`;
+
+    if (!esJefatura){
+      html += `<div style="margin-bottom:12px;">
+        <select onchange="diasLibresFiltroDepto=this.value; renderDiasLibresVacacionesPanel();">
+          <option value="todos"${diasLibresFiltroDepto==="todos"?" selected":""}>Todos los departamentos</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}"${diasLibresFiltroDepto===d?" selected":""}>${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </div>`;
+    }
+
+    // El día de cumpleaños es una regla exclusiva de SCP Corcovado Wilderness
+    // Lodge. Las demás propiedades (Oxygen, Ojochal, Amarena) no la manejan
+    // — su descanso es 1 día libre por semana o un bloque de 4 días, sin
+    // días pagados aparte.
+    if (currentPropiedadId === "corcovado"){
+      html += renderSeccionCumpleanos(empleadosVisibles, puedeAprobar);
+    }
+
+    const confirmaciones = await obtenerConfirmacionesCoincidencia();
+    html += renderSeccionCoincidencias(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, confirmaciones, esJefatura, puedeAprobar);
+
+    if (puedeSolicitar) html += renderFormularioSolicitud(empleadosVisibles);
+
+    html += renderListaSolicitudesPendientes(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, puedeAprobar, esJefatura);
+
+    html += renderTablaSaldos(empleadosVisibles, solicitudes, registrosHorasExtra, new Date());
+
+    html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario);
+
+    html += renderSeccionReportesAusencias();
+
+    panel.innerHTML = html;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo: ${escapeHtml(e.message || "")}</div>`;
+  }
+}
+
+function renderSeccionCumpleanos(empleados, puedeOtorgar){
+  const hoy = new Date();
+  const proximos = empleados
+    .map(e => {
+      const prox = proximoCumpleanosEn(e.FECHA_NACIMIENTO_EMP, hoy, 30);
+      if (!prox) return null;
+      if (otorgadoEsteAnio(e, prox.fecha.getFullYear())) return null;
+      return { emp: e, ...prox };
+    })
+    .filter(Boolean)
+    .sort((a,b) => a.diasFaltan - b.diasFaltan);
+  if (!proximos.length) return "";
+  return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🎂 Cumpleaños próximos — 1 día pagado, se pierde si no se otorga en el año</div>
+    ${proximos.map(p => `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="font-size:12.5px;"><b>${escapeHtml(p.emp.NOMBRE_EMP||"")}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : `en ${p.diasFaltan} día(s)`})</div>
+        ${puedeOtorgar ? `<button class="btn primary" style="padding:5px 10px; font-size:11px;" onclick="otorgarDiaCumpleanos('${p.emp.key}', '${isoDeFechaLocal(p.fecha)}')">🎁 Otorgar día</button>` : `<span class="meta">Pendiente — lo otorga gerencia/master</span>`}
+      </div>`).join("")}
+  </div></div>`;
+}
+
+function renderSeccionCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado, confirmaciones, esJefatura, puedeAprobar){
+  const coincidencias = detectarCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado);
+  const pendientes = coincidencias.filter(c => {
+    const conf = confirmaciones[c.depto + ":" + c.fecha];
+    return !(conf && conf.CONFIRMADO_JEFATURA && conf.CONFIRMADO_GERENCIA);
+  });
+  if (!pendientes.length) return "";
+  return `<div class="section-card" style="margin-bottom:14px; border-color:#D9A54A;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">⚠️ Coincidencias de días libres en el mismo departamento</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">No se bloquea automáticamente — jefatura y gerencia/master deben confirmar explícitamente que aceptan que salgan libres al mismo tiempo.</p>
+    ${pendientes.map(c => {
+      const conf = confirmaciones[c.depto + ":" + c.fecha] || {};
+      const nombres = c.empleados.map(k => (empleadosPorKey[k] && empleadosPorKey[k].NOMBRE_EMP) || k).join(", ");
+      const deptoEsc = c.depto.replace(/'/g,"\\'");
+      return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line); font-size:12.5px;">
+        <div><b>${escapeHtml(c.depto)}</b> — ${fmtFechaSimple(c.fecha)}: ${escapeHtml(nombres)}</div>
+        <div style="margin-top:4px; display:flex; gap:8px; flex-wrap:wrap;">
+          ${conf.CONFIRMADO_JEFATURA ? `<span class="meta">✅ Jefatura confirmó</span>` : ((esJefatura || puedeAprobar) ? `<button class="btn" style="padding:4px 9px; font-size:10.5px;" onclick="confirmarCoincidencia('${deptoEsc}', '${c.fecha}', 'jefatura')">Confirmar (jefatura)</button>` : "")}
+          ${conf.CONFIRMADO_GERENCIA ? `<span class="meta">✅ Gerencia/master confirmó</span>` : (puedeAprobar ? `<button class="btn" style="padding:4px 9px; font-size:10.5px;" onclick="confirmarCoincidencia('${deptoEsc}', '${c.fecha}', 'gerencia')">Confirmar (gerencia/master)</button>` : "")}
+        </div>
+      </div>`;
+    }).join("")}
+  </div></div>`;
+}
+
+function renderFormularioSolicitud(empleadosDisponibles){
+  const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">➕ Nueva solicitud</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación. Las citas médicas necesitan comprobante adjunto.</p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
+        <select id="solicitud-ausencia-empleado">
+          <option value="">— Elegí —</option>
+          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
+        <select id="solicitud-ausencia-tipo" onchange="document.getElementById('solicitud-ausencia-comprobante-wrap').style.display = this.value === 'ausencia_medica' ? 'flex' : 'none';">
+          ${Object.keys(TIPOS_SOLICITUD_AUSENCIA).map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+        <input type="date" id="solicitud-ausencia-desde">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+        <input type="date" id="solicitud-ausencia-hasta">
+      </label>
+      <label id="solicitud-ausencia-comprobante-wrap" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
+        <input type="file" id="solicitud-ausencia-comprobante" accept=".pdf,image/*">
+      </label>
+      <button class="btn primary" onclick="confirmarCrearSolicitudAusencia();">➕ Solicitar</button>
+    </div>
+    <div id="solicitud-ausencia-status" style="font-size:12px; margin-top:6px;"></div>
+  </div></div>`;
+}
+
+async function confirmarCrearSolicitudAusencia(){
+  const status = document.getElementById("solicitud-ausencia-status");
+  const empKey = (document.getElementById("solicitud-ausencia-empleado")||{}).value;
+  const tipo = (document.getElementById("solicitud-ausencia-tipo")||{}).value;
+  const fechaInicio = (document.getElementById("solicitud-ausencia-desde")||{}).value;
+  const fechaFin = (document.getElementById("solicitud-ausencia-hasta")||{}).value;
+  const inputComprobante = document.getElementById("solicitud-ausencia-comprobante");
+  const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
+  try{
+    let comprobanteDataUrl = null, comprobanteNombre = null;
+    if (archivo){
+      if (archivo.size > 3.5*1024*1024) throw new Error("El comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+      comprobanteDataUrl = await leerArchivoComoDataUrl(archivo);
+      comprobanteNombre = archivo.name;
+    }
+    await crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre });
+    statusMsg("Solicitud creada — pendiente de aprobación.");
+    renderDiasLibresVacacionesPanel();
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departamentoDeEmpleado, puedeAprobar, esJefatura){
+  const pendientes = solicitudes.filter(s => s.ESTADO === "pendiente").sort((a,b) => (a.FECHA_INICIO||"").localeCompare(b.FECHA_INICIO||""));
+  if (!pendientes.length){
+    return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body"><div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">📋 Solicitudes pendientes</div><div class="empty-state" style="padding:10px 0;">No hay solicitudes pendientes.</div></div></div>`;
+  }
+  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+  const miEmail = sesion ? sesion.email : "";
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📋 Solicitudes pendientes (${pendientes.length})</div>
+    ${pendientes.map(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+      const keyEsc = String(s.key).replace(/'/g, "\\'");
+      let acciones = "";
+      if (puedeAprobar){
+        acciones = `<button class="use" onclick="aprobarSolicitudAusencia('${keyEsc}')">✅ Aprobar</button>
+          <button class="del" onclick="rechazarSolicitudAusencia('${keyEsc}')">🚫 Rechazar</button>`;
+      } else if (esJefatura && s.SOLICITADO_POR === miEmail){
+        acciones = `<button class="del" onclick="cancelarSolicitudAusencia('${keyEsc}')">✖️ Cancelar</button>`;
+      }
+      return `<div class="catalog-item">
+        <div class="row1">
+          <div class="info">
+            <div class="name">${escapeHtml(emp ? emp.NOMBRE_EMP||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
+            <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s) · ${escapeHtml(departamentoDeEmpleado(emp))}${s.COMPROBANTE_DATA_URL ? " · 📎 comprobante adjunto" : ""}</div>
+          </div>
+          <div class="actions">${acciones}</div>
+        </div>
+      </div>`;
+    }).join("")}
+  </div></div>`;
+}
+
+function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, hoy){
+  const filas = empleados
+    .map(e => {
+      const solicitudesVacacionesAprobadas = todasLasSolicitudes.filter(s => s.EMPLEADO_KEY === e.key && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+      const incap = diasIncapacidadAprobados(registrosHorasExtra, e.key);
+      const saldo = calcularSaldoVacaciones(e, solicitudesVacacionesAprobadas, incap, hoy);
+      return { emp: e, saldo };
+    })
+    .sort((a,b) => (a.emp.NOMBRE_EMP||"").localeCompare(b.emp.NOMBRE_EMP||"", "es"));
+  if (!filas.length) return "";
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">💰 Saldo de vacaciones (hoy)</div>
+    <div style="display:grid; grid-template-columns:1fr auto; gap:4px 10px; font-size:12.5px;">
+      ${filas.map(f => `<div>${escapeHtml(f.emp.NOMBRE_EMP||f.emp.key)}</div><div style="text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>`).join("")}
+    </div>
+  </div></div>`;
+}
+
+function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtraEmp){
+  for (const s of solicitudesEmp){
+    if (s.ESTADO !== "aprobada") continue;
+    if (fechaISO >= s.FECHA_INICIO && fechaISO <= s.FECHA_FIN){
+      if (s.TIPO === "vacaciones") return { texto: "VAC", color: TIPOS_SOLICITUD_AUSENCIA.vacaciones.colorHex };
+      if (s.TIPO === "permiso_sin_goce") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.permiso_sin_goce.colorHex };
+      if (s.TIPO === "ausencia_medica") return { texto: "CITA", color: TIPOS_SOLICITUD_AUSENCIA.ausencia_medica.colorHex };
+    }
+  }
+  const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
+  if (horasDia){
+    if (horasDia.TIPO_DIA === "incapacidad") return { texto: "INCAP", color: "FFE68A8A" };
+    if (horasDia.TIPO_DIA === "cumpleanos") return { texto: "🎂", color: "FFE0C4F0" };
+  }
+  return null;
+}
+
+function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasExtra, mesStr){
+  const [anio, mes] = mesStr.split("-").map(Number);
+  const primerDia = new Date(anio, mes - 1, 1);
+  const ultimoDia = new Date(anio, mes, 0);
+  const dias = [];
+  for (let d = new Date(primerDia); d <= ultimoDia; d.setDate(d.getDate()+1)) dias.push(new Date(d));
+  const DIA_SEMANA = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+  const mesAnterior = new Date(anio, mes - 2, 1);
+  const mesSiguiente = new Date(anio, mes, 1);
+  const mesAnteriorStr = `${mesAnterior.getFullYear()}-${String(mesAnterior.getMonth()+1).padStart(2,"0")}`;
+  const mesSiguienteStr = `${mesSiguiente.getFullYear()}-${String(mesSiguiente.getMonth()+1).padStart(2,"0")}`;
+
+  const empleadosOrdenados = empleados.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+      <div style="font-weight:700; color:var(--navy-deep);">🗓️ Calendario — ${MESES[mes-1]} ${anio}</div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn" onclick="diasLibresMesCalendario='${mesAnteriorStr}'; renderDiasLibresVacacionesPanel();">← Mes anterior</button>
+        <button class="btn" onclick="diasLibresMesCalendario='${mesSiguienteStr}'; renderDiasLibresVacacionesPanel();">Mes siguiente →</button>
+      </div>
+    </div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">
+      <span style="background:#F5D06B; padding:1px 6px; border-radius:3px;">VAC</span>
+      <span style="background:#8FD3E8; padding:1px 6px; border-radius:3px; margin-left:6px;">LIBRE (permiso sin goce)</span>
+      <span style="background:#E68A8A; padding:1px 6px; border-radius:3px; margin-left:6px;">CITA / INCAP</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="border-collapse:collapse; font-size:10.5px; white-space:nowrap;">
+      <thead><tr>
+        <th style="position:sticky; left:0; background:var(--paper); padding:4px 8px; text-align:left; border:1px solid var(--paper-line);">Colaborador</th>
+        ${dias.map(d => `<th style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${DIA_SEMANA[d.getDay()]}<br>${d.getDate()}</th>`).join("")}
+      </tr></thead>
+      <tbody>
+        ${empleadosOrdenados.map(emp => {
+          const solicitudesEmp = todasLasSolicitudes.filter(s => s.EMPLEADO_KEY === emp.key);
+          const horasEmp = registrosHorasExtra.filter(r => r.EMPLEADO_KEY === emp.key);
+          return `<tr>
+            <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">${escapeHtml(emp.NOMBRE_EMP||emp.key)}</td>
+            ${dias.map(d => {
+              const fechaISO = isoDeFechaLocal(d);
+              const etiqueta = etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, horasEmp);
+              return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;${etiqueta ? ` background:#${etiqueta.color.slice(2)};` : ""}">${etiqueta ? escapeHtml(etiqueta.texto) : ""}</td>`;
+            }).join("")}
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+    </div>
+  </div></div>`;
+}
+
+function renderSeccionReportesAusencias(){
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📊 Reportes (Excel)</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+        <input type="date" id="reporte-ausencias-desde">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+        <input type="date" id="reporte-ausencias-hasta">
+      </label>
+      <button class="btn primary" onclick="exportarReporteAusenciasPorDepartamento();">⬇️ Por departamento</button>
+      <button class="btn" onclick="exportarReporteAusenciasPorPersona();">⬇️ Historial completo</button>
+      <button class="btn" onclick="exportarReportePendientesNoTomados();">⬇️ Pendientes / no tomados</button>
+    </div>
+    <div id="reporte-ausencias-status" style="font-size:12px;"></div>
+  </div></div>`;
+}
+
+async function exportarReporteAusenciasPorDepartamento(){
+  const status = document.getElementById("reporte-ausencias-status");
+  const desdeStr = (document.getElementById("reporte-ausencias-desde")||{}).value;
+  const hastaStr = (document.getElementById("reporte-ausencias-hasta")||{}).value;
+  if (!desdeStr || !hastaStr){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí ambas fechas.</span>`; return; }
+  if (typeof ExcelJS === "undefined"){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de Excel.</span>`; return; }
+  try{
+    const [empleados, solicitudes] = await Promise.all([cargarEmpleadosDB(), listarSolicitudesAusencia()]);
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {}; puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const empleadosPorKey = {}; empleados.forEach(e => { empleadosPorKey[e.key] = e; });
+    const departamentoDeEmpleado = emp => departamentoDeEmpleadoGenerico(emp, puestosPorKey);
+
+    const porDepto = {};
+    solicitudes.filter(s => s.ESTADO === "aprobada").forEach(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const depto = departamentoDeEmpleado(emp);
+      const ini = s.FECHA_INICIO < desdeStr ? desdeStr : s.FECHA_INICIO;
+      const fin = s.FECHA_FIN > hastaStr ? hastaStr : s.FECHA_FIN;
+      if (ini > fin) return;
+      const dias = diasEntreFechasISO(ini, fin);
+      if (!porDepto[depto]) porDepto[depto] = { totalDias: 0, personas: new Set() };
+      porDepto[depto].totalDias += dias;
+      porDepto[depto].personas.add(s.EMPLEADO_KEY);
+    });
+    const filas = Object.keys(porDepto).sort().map(depto => ({
+      depto, totalDias: porDepto[depto].totalDias, personas: porDepto[depto].personas.size,
+      promedio: Math.round((porDepto[depto].totalDias / porDepto[depto].personas.size) * 10) / 10,
+    }));
+    if (!filas.length){ if (status) status.innerHTML = "No hay solicitudes aprobadas en ese rango."; return; }
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Departamento","Total días tomados","Personas","Promedio por persona"];
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("POR DEPARTAMENTO");
+    ws.columns = COLUMNAS.map(() => ({ width: 22 }));
+    ws.mergeCells(1,1,1,COLUMNAS.length);
+    const t = ws.getCell(1,1); t.value = nombrePropiedad; t.fill = {type:"pattern",pattern:"solid",fgColor:{argb:NEGRO}}; t.font = {color:{argb:BLANCO},bold:true,size:13}; t.alignment = {horizontal:"center"};
+    ws.mergeCells(2,1,2,COLUMNAS.length);
+    const st = ws.getCell(2,1); st.value = `Días libres y vacaciones por departamento — del ${fmtFechaDesdeDate(new Date(desdeStr+"T00:00:00"))} al ${fmtFechaDesdeDate(new Date(hastaStr+"T00:00:00"))}`; st.font = {italic:true,size:10}; st.alignment = {horizontal:"center"};
+    const hdr = ws.getRow(3);
+    COLUMNAS.forEach((c,i) => { const cell = hdr.getCell(i+1); cell.value=c; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_HEADER}}; cell.font={bold:true}; cell.alignment={horizontal:"center"}; cell.border=bordeCelda; });
+    let fila = 4;
+    filas.forEach(f => {
+      [f.depto, f.totalDias, f.personas, f.promedio].forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
+      fila++;
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    descargarBlobComoArchivo(blob, `ausencias_por_departamento_${desdeStr}_a_${hastaStr}.xlsx`);
+    if (status) status.innerHTML = "Descargado.";
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar: ${escapeHtml(e.message)}</span>`; }
+}
+
+async function exportarReporteAusenciasPorPersona(){
+  const status = document.getElementById("reporte-ausencias-status");
+  if (typeof ExcelJS === "undefined"){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de Excel.</span>`; return; }
+  try{
+    const [empleados, solicitudes] = await Promise.all([cargarEmpleadosDB(), listarSolicitudesAusencia()]);
+    const empleadosPorKey = {}; empleados.forEach(e => { empleadosPorKey[e.key] = e; });
+    const filas = solicitudes.slice().sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""));
+    if (!filas.length){ if (status) status.innerHTML = "No hay solicitudes registradas."; return; }
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Nombre","Tipo","Desde","Hasta","Días","Estado","Solicitado por","Fecha de solicitud"];
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("HISTORIAL");
+    ws.columns = COLUMNAS.map(() => ({ width: 20 }));
+    ws.mergeCells(1,1,1,COLUMNAS.length);
+    const t = ws.getCell(1,1); t.value = nombrePropiedad; t.fill={type:"pattern",pattern:"solid",fgColor:{argb:NEGRO}}; t.font={color:{argb:BLANCO},bold:true,size:13}; t.alignment={horizontal:"center"};
+    ws.mergeCells(2,1,2,COLUMNAS.length);
+    const st = ws.getCell(2,1); st.value = "Historial completo de solicitudes de días libres y vacaciones"; st.font={italic:true,size:10}; st.alignment={horizontal:"center"};
+    const hdr = ws.getRow(3);
+    COLUMNAS.forEach((c,i) => { const cell = hdr.getCell(i+1); cell.value=c; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_HEADER}}; cell.font={bold:true}; cell.alignment={horizontal:"center"}; cell.border=bordeCelda; });
+    let fila = 4;
+    filas.forEach(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
+      const valores = [emp ? emp.NOMBRE_EMP||s.EMPLEADO_KEY : s.EMPLEADO_KEY, tipoInfo.label, s.FECHA_INICIO, s.FECHA_FIN, s.DIAS, s.ESTADO, s.SOLICITADO_POR||"", s.FECHA_SOLICITUD ? fmtFecha(s.FECHA_SOLICITUD) : ""];
+      valores.forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
+      fila++;
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    descargarBlobComoArchivo(blob, `historial_solicitudes_ausencias.xlsx`);
+    if (status) status.innerHTML = "Descargado.";
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar: ${escapeHtml(e.message)}</span>`; }
+}
+
+async function exportarReportePendientesNoTomados(){
+  const status = document.getElementById("reporte-ausencias-status");
+  if (typeof ExcelJS === "undefined"){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de Excel.</span>`; return; }
+  try{
+    const [empleados, solicitudes, registrosHorasExtra] = await Promise.all([cargarEmpleadosDB(), listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
+    const hoy = new Date();
+    const filas = empleados.filter(e => !e.ARCHIVADO).map(e => {
+      const solicitudesVacacionesAprobadas = solicitudes.filter(s => s.EMPLEADO_KEY === e.key && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+      const incap = diasIncapacidadAprobados(registrosHorasExtra, e.key);
+      const saldo = calcularSaldoVacaciones(e, solicitudesVacacionesAprobadas, incap, hoy);
+      return { emp: e, saldo };
+    }).filter(f => f.saldo > 0).sort((a,b) => b.saldo - a.saldo);
+    if (!filas.length){ if (status) status.innerHTML = "Nadie tiene saldo de vacaciones pendiente de usar."; return; }
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Nombre","Saldo acumulado (días)","¿Llegó al tope interno?"];
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("PENDIENTES");
+    ws.columns = COLUMNAS.map(() => ({ width: 24 }));
+    ws.mergeCells(1,1,1,COLUMNAS.length);
+    const t = ws.getCell(1,1); t.value = nombrePropiedad; t.fill={type:"pattern",pattern:"solid",fgColor:{argb:NEGRO}}; t.font={color:{argb:BLANCO},bold:true,size:13}; t.alignment={horizontal:"center"};
+    ws.mergeCells(2,1,2,COLUMNAS.length);
+    const st = ws.getCell(2,1); st.value = `Días de vacaciones pendientes de usar — al ${fmtFechaDesdeDate(hoy)} (tope interno: ${TOPE_SALDO_VACACIONES} días)`; st.font={italic:true,size:10}; st.alignment={horizontal:"center"};
+    const hdr = ws.getRow(3);
+    COLUMNAS.forEach((c,i) => { const cell = hdr.getCell(i+1); cell.value=c; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_HEADER}}; cell.font={bold:true}; cell.alignment={horizontal:"center"}; cell.border=bordeCelda; });
+    let fila = 4;
+    filas.forEach(f => {
+      const valores = [f.emp.NOMBRE_EMP||f.emp.key, f.saldo, f.saldo >= TOPE_SALDO_VACACIONES ? "Sí" : "No"];
+      valores.forEach((v,i) => {
+        const cell = ws.getRow(fila).getCell(i+1);
+        cell.value = v;
+        cell.border = bordeCelda;
+        if (i === 2 && v === "Sí") cell.font = { color:{argb:"FFB23B3B"}, bold:true };
+      });
+      fila++;
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    descargarBlobComoArchivo(blob, `vacaciones_pendientes_${isoDeFechaLocal(hoy)}.xlsx`);
+    if (status) status.innerHTML = "Descargado.";
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar: ${escapeHtml(e.message)}</span>`; }
 }
 
 // ---------- generic signed-PDF backup uploads (contrato / permiso / salida) ----------
