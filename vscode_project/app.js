@@ -9723,9 +9723,61 @@ function renderSeccionCumpleanosEmpleado(emp, empKey){
   </div></div>`;
 }
 
+// Buscador propio de Expedientes: antes, la única forma de llegar a
+// verPerfilEmpleado() era desde la pestaña Empleados (clic en el nombre) —
+// entrar directo a "3. Expedientes" desde el menú dejaba perfilActualKey en
+// null y mostraba "Selecciona un empleado desde la lista" SIN ninguna
+// lista real ahí. Aparte de empleadosSearchTerm (el buscador de la pestaña
+// Empleados) para no interferir entre sí si ambos quedan con texto a la vez.
+let perfilBusqueda = "";
+
+async function renderListaPerfilBusqueda(){
+  const cont = document.getElementById("perfil-busqueda-lista");
+  if (!cont) return;
+  try{
+    const empleados = await cargarEmpleadosDB();
+    const termino = perfilBusqueda.toLowerCase();
+    const filtrados = termino
+      ? empleados.filter(e => (e.NOMBRE_EMP||"").toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
+      : empleados;
+    const ordenados = filtrados.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+    if (!ordenados.length){ cont.innerHTML = `<div class="empty-state">Ningún empleado coincide con la búsqueda.</div>`; return; }
+    cont.innerHTML = ordenados.map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="verPerfilEmpleado('${e.key.replace(/'/g,"\\'")}')">
+      <div class="row1">
+        <div class="info">
+          <div class="name">${escapeHtml(e.NOMBRE_EMP||e.key)}${e.ARCHIVADO ? ` <span class="meta" style="color:var(--ink-soft);">(archivado)</span>` : ""}</div>
+          <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
+        </div>
+      </div>
+    </div>`).join("");
+  }catch(e){ cont.innerHTML = `<div class="empty-state">No se pudo cargar la lista de empleados.</div>`; }
+}
+
+const _renderPerfilBusquedaDebounced = debounce(async function(){
+  await renderListaPerfilBusqueda();
+  restaurarFocoBusqueda("perfil-busqueda-search");
+}, 350);
+function filtrarPerfilBusquedaInput(val){
+  perfilBusqueda = val;
+  _renderPerfilBusquedaDebounced();
+}
+
+function renderSelectorPerfilEmpleado(){
+  const panel = document.getElementById("perfil-panel");
+  panel.innerHTML = `
+    <div style="font-size:18px; font-weight:800; color:var(--navy-deep); margin-bottom:4px;">📁 Expedientes</div>
+    <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Buscá un empleado (activo o archivado) para ver su expediente completo.</div>
+    <div class="field" style="margin-bottom:10px;">
+      <input type="text" id="perfil-busqueda-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(perfilBusqueda)}" oninput="filtrarPerfilBusquedaInput(this.value)">
+    </div>
+    <div id="perfil-busqueda-lista"><div class="empty-state">Cargando…</div></div>
+  `;
+  renderListaPerfilBusqueda();
+}
+
 async function renderPerfilEmpleado(){
   const panel = document.getElementById("perfil-panel");
-  if (!perfilActualKey){ panel.innerHTML = `<div class="empty-state">Selecciona un empleado desde la lista.</div>`; return; }
+  if (!perfilActualKey){ renderSelectorPerfilEmpleado(); return; }
   panel.innerHTML = `<div class="empty-state">Cargando perfil…</div>`;
   try{
     const fullKey = CATALOGS.empleados.prefix + perfilActualKey;
@@ -9792,6 +9844,7 @@ async function renderPerfilEmpleado(){
     const historial = Array.isArray(emp.HISTORIAL) ? emp.HISTORIAL : [];
 
     panel.innerHTML = `
+      <button class="btn" onclick="perfilActualKey=null; renderPerfilEmpleado();" style="margin-bottom:12px;">🔍 Buscar otro empleado</button>
       <button class="btn" onclick="showTab('empleados')" style="margin-bottom:12px;">← Volver a Empleados</button>
       <div class="section-card" style="border-color:var(--leaf);">
         <div class="section-body">
