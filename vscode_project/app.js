@@ -3745,7 +3745,7 @@ function showTab(which){
   // Esto es la comodidad visual (el servidor es quien de verdad bloquea el
   // resto de los datos): cubre el logo, "atrás" del navegador o cualquier
   // otro camino que intente llevarla a otra pestaña.
-  const TABS_PERMITIDAS_JEFATURA = ["horasextras", "vacaciones", "diaslibres"];
+  const TABS_PERMITIDAS_JEFATURA = ["horasextras", "vacaciones"];
   if (!TABS_PERMITIDAS_JEFATURA.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
     which = "horasextras";
   }
@@ -3777,7 +3777,7 @@ function showTab(which){
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
-  document.getElementById("diaslibresvacaciones-panel").style.display = (which === "vacaciones" || which === "diaslibres") ? "block" : "none";
+  document.getElementById("diaslibresvacaciones-panel").style.display = which === "vacaciones" ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
   document.getElementById("amonestacionform-toolbar").style.display = (which === "amonestacionform") ? "flex" : "none";
@@ -3792,13 +3792,13 @@ function showTab(which){
     despidoform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos",
     datos:"datos",
     planilla:"planilla",
-    vacaciones:"vacaciones", diaslibres:"diaslibres", incapacidades:"incapacidades", horasextras:"horasextras",
+    vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"horasextras",
     reporte:"reportes",
     estadisticas:"estadisticas",
     asistente:"asistente",
     faq:"configuracion", format:"configuracion",
   };
-  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","diaslibres","incapacidades","horasextras","reportes","estadisticas","asistente","configuracion"].forEach(g => {
+  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","horasextras","reportes","estadisticas","asistente","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
@@ -3826,7 +3826,7 @@ function showTab(which){
   if (which === "permisoform") renderPermisoForm();
   if (which === "vacacionesform") renderVacacionesForm();
   if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
-  if (which === "vacaciones" || which === "diaslibres") renderDiasLibresVacacionesPanel();
+  if (which === "vacaciones") renderDiasLibresVacacionesPanel();
 }
 
 // ---------- dropdown navbar ----------
