@@ -269,7 +269,7 @@ function aplicarModoSegunRol(rol){
   if (rol === "jefatura"){
     ["navbtn-inicio","navbtn-empleados","navbtn-expedientes","navbtn-planilla",
      "navbtn-incapacidades",
-     "navbtn-contratos","navbtn-documentos","navbtn-reportes",
+     "navbtn-contratos","navbtn-documentos","navbtn-permiso","navbtn-reportes",
      "navbtn-estadisticas","navbtn-asistente","navbtn-datos"].forEach(id => {
       const el = document.getElementById(id);
       if (el) (el.closest(".nav-dd") || el).style.display = "none";

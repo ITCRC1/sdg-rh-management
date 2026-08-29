@@ -108,12 +108,17 @@
       <button onclick="navCloseAndRun(function(){ showTab('amonestacionform'); })">⚠️ Nueva amonestación</button>
       <div class="nav-dd-sep">Recomendación laboral</div>
       <button onclick="navCloseAndRun(function(){ showTab('recomform'); })">📝 Nueva recomendación</button>
-      <div class="nav-dd-sep">Permiso sin goce salarial</div>
-      <button onclick="navCloseAndRun(function(){ showTab('permisoform'); })">🗓️ Nueva acción de personal</button>
       <div class="nav-dd-sep">Vacaciones</div>
       <button onclick="navCloseAndRun(function(){ showTab('vacacionesform'); })">🏖️ Nueva acción de personal</button>
       <div class="nav-dd-sep">Próximamente</div>
       <div style="padding:8px 14px 10px; font-size:11px; color:var(--ink-soft); line-height:1.5;">⏳ Carga masiva de archivos, plantillas de documentos, vista de documentos recientes por empleado y permisos por rol para documentos sensibles.</div>
+    </div>
+  </div>
+
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-permiso" onclick="toggleNavMenu('permiso')">🗓️ Permiso sin goce <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-permiso">
+      <button onclick="navCloseAndRun(function(){ showTab('permisoform'); })">🗓️ Nueva acción de personal</button>
     </div>
   </div>
 
