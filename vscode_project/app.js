@@ -2418,7 +2418,14 @@ async function saveCatalogItem(type){
     catalogEditing.values.SALARIO_MINISTERIO = catalogEditing.ministerioRef.salarioMin;
     catalogEditing.values.DEPARTAMENTO_MINISTERIO = catalogEditing.ministerioRef.departamento || "";
   }
-  const newKey = slugify(name);
+  // La clave se asigna UNA sola vez, al crear — nunca se recalcula al editar
+  // (antes se re-derivaba del nombre en cada guardado: corregir un nombre ya
+  // guardado, ej. un error de tipeo, generaba una clave nueva y borraba la
+  // vieja, dejando huérfano todo lo que ya apuntaba a esa clave — horas
+  // extra, solicitudes, contratos vinculados, bitácora, y el perfil abierto
+  // en pantalla, que seguía usando la clave vieja y por eso mostraba
+  // "Key not found" al volver a consultarlo).
+  const newKey = catalogEditing.key || slugify(name);
   const storageKey = cfg.prefix + newKey;
   try{
     // for empleados, compare against the previous saved values to log meaningful changes in the bitácora
@@ -2440,10 +2447,6 @@ async function saveCatalogItem(type){
           catalogEditing.values.HISTORIAL = prev.HISTORIAL || [];
         }
       }catch(e){ /* ignore */ }
-    }
-    // if renaming (key changed), remove the old entry
-    if (catalogEditing.key && catalogEditing.key !== newKey){
-      try{ await window.storage.delete(cfg.prefix + catalogEditing.key, false); }catch(e){}
     }
     const res = await window.storage.set(storageKey, JSON.stringify(catalogEditing.values), false);
     if (res){
