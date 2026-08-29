@@ -7914,8 +7914,15 @@ async function descargarVacacionesPDF(){
 const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
 
 // Reglas de negocio fijas (especificación del módulo, secciones 2 y 4-5):
-const ACUMULACION_MENSUAL_VACACIONES = 4; // días por mes trabajado
-const TOPE_SALDO_VACACIONES = 10; // la ley no fija tope; este es el interno
+// 1 día por cada mes completo trabajado — 12 días al año, la forma
+// simplificada que se usa acá del derecho a vacaciones del Art. 153 CT (2
+// semanas por cada 50 semanas laboradas).
+const ACUMULACION_MENSUAL_VACACIONES = 1; // días por mes trabajado
+// La ley no fija un tope de acumulación (Art. 159 CT solo limita cuándo se
+// puede APLAZAR tomarlas, no cuánto se puede juntar); 24 = dos años
+// completos sin tomar ni un día, como margen interno razonable antes de
+// obligar a que se usen — es un valor de configuración, ajustable.
+const TOPE_SALDO_VACACIONES = 24;
 const ANTICIPACION_MINIMA_DIAS_SOLICITUD = 15;
 const DIA_CORTE_MENSUAL_SOLICITUD = 30;
 
@@ -7936,25 +7943,62 @@ function diasIncapacidadAprobados(registrosHorasExtra, empKey){
     .map(r => r.FECHA);
 }
 
+// 1° de diciembre en o después de la fecha dada — el corte anual fijo que
+// comparten TODOS los empleados con más de 1 año de antigüedad (no cada
+// quien por su propio aniversario), tal como se definió el módulo.
+function proximoPrimeroDeDiciembre(d){
+  const dic1EsteAnio = new Date(d.getFullYear(), 11, 1);
+  return d <= dic1EsteAnio ? dic1EsteAnio : new Date(d.getFullYear() + 1, 11, 1);
+}
+
 // Saldo de vacaciones: simulación cronológica, no una fórmula cerrada. Se
-// acredita 1 "período de un mes" (contado desde el aniversario de ingreso,
-// no desde el 1° del mes calendario) con 4 días, topado en 10; un período
-// con al menos un día de incapacidad aprobada NO acredita — Art. 160 CT:
-// la incapacidad pausa el cómputo del tiempo de servicio, no descuenta lo
-// ya ganado. Cada solicitud de VACACIONES aprobada resta sus días en la
-// fecha en que arrancan. El orden cronológico importa: si se usan días
-// antes de volver a tocar el tope, la acumulación siguiente sí "entra" —
-// sumar todo primero y restar el uso al final da un resultado distinto (y
-// equivocado) cuando el uso ocurre antes de llegar al tope de nuevo.
+// acredita 1 día por cada mes completo trabajado (12 días/año); un período
+// con al menos un día de incapacidad aprobada NO acredita — Art. 160 CT: la
+// incapacidad pausa el cómputo del tiempo de servicio, no descuenta lo ya
+// ganado.
+//
+// El PASO de los meses cambia según la antigüedad:
+// - Primer año: por aniversario personal (mismo día del mes que el
+//   ingreso) — "cada mes cumplido desde que entró, acumula 1 día".
+// - Desde que cumple 1 año: el conteo pasa al calendario fijo de la
+//   empresa (1° de diciembre a 30 de noviembre), igual para todos sin
+//   importar la fecha de ingreso de cada quien. El tramo entre el
+//   aniversario y el próximo 1° de diciembre NO se pierde ni se acredita
+//   de golpe — sigue sumando normal, mes a mes por aniversario, hasta ese
+//   1° de diciembre; recién ahí el paso salta al calendario fijo.
+// Nunca se resetea el saldo a cero en ese cambio de fase ni en cada 1° de
+// diciembre — es una sola cuenta corriente (topada en
+// TOPE_SALDO_VACACIONES), para que el saldo disponible quede reflejado con
+// flexibilidad en cualquier fecha, sin importar cuándo se pida.
+//
+// Cada solicitud de VACACIONES aprobada resta sus días en la fecha en que
+// arrancan. El orden cronológico importa: si se usan días antes de volver a
+// tocar el tope, la acumulación siguiente sí "entra" — sumar todo primero y
+// restar el uso al final da un resultado distinto (y equivocado) cuando el
+// uso ocurre antes de llegar al tope de nuevo.
 function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasIncapacidad, fechaCorte){
   const ingreso = parsearFechaDDMMYYYY(empleado && empleado.FECHA_INGRESO_EMP);
   if (!ingreso || ingreso > fechaCorte) return 0;
   const incapacidadSet = new Set(diasIncapacidad || []);
+  const primerAniversario = new Date(ingreso.getFullYear() + 1, ingreso.getMonth(), ingreso.getDate());
 
   const eventos = [];
   let inicioPeriodo = new Date(ingreso);
+  let cicloFijo = false; // true desde el 1° de diciembre en que ya se cumplió 1 año
   while (true){
-    const finPeriodo = new Date(inicioPeriodo.getFullYear(), inicioPeriodo.getMonth() + 1, inicioPeriodo.getDate());
+    let finPeriodo;
+    if (cicloFijo){
+      finPeriodo = new Date(inicioPeriodo.getFullYear(), inicioPeriodo.getMonth() + 1, 1);
+    } else {
+      finPeriodo = new Date(inicioPeriodo.getFullYear(), inicioPeriodo.getMonth() + 1, inicioPeriodo.getDate());
+      if (finPeriodo >= primerAniversario){
+        const proximoDic1 = proximoPrimeroDeDiciembre(inicioPeriodo);
+        if (finPeriodo >= proximoDic1){
+          finPeriodo = proximoDic1; // el paso "salta" justo al 1° de diciembre, sin saltarse ni repetir un mes
+          cicloFijo = true;
+        }
+      }
+    }
     if (finPeriodo > fechaCorte) break;
     let pausado = false;
     const cursorDia = new Date(inicioPeriodo);
@@ -8044,6 +8088,44 @@ async function crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, com
     ESTADO: "pendiente",
   };
   await window.storage.set(key, JSON.stringify(value), false);
+  return key;
+}
+
+// Asignación directa — exclusiva de gerencia/master. A diferencia de una
+// solicitud (la crea jefatura y queda "pendiente" hasta que gerencia/master
+// decida), esto lo crea gerencia/master directamente YA aprobado: no pasa
+// por la cola de pendientes ni exige los 15 días de anticipación (esa regla
+// es para la solicitud que pide jefatura, no para quien ya tiene la
+// autoridad final de aprobarla).
+async function asignarAusenciaDirecta({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre }){
+  if (!TIPOS_SOLICITUD_AUSENCIA[tipo]) throw new Error("Tipo de ausencia inválido.");
+  if (!empKey) throw new Error("Elegí un empleado.");
+  if (!fechaInicio || !fechaFin) throw new Error("Elegí las fechas.");
+  if (fechaFin < fechaInicio) throw new Error("La fecha de fin no puede ser anterior a la de inicio.");
+  if (TIPOS_SOLICITUD_AUSENCIA[tipo].requiereComprobante && !comprobanteDataUrl){
+    throw new Error("Este tipo de ausencia necesita un comprobante adjunto.");
+  }
+  const dias = diasEntreFechasISO(fechaInicio, fechaFin);
+  const id = `${fechaInicio}-${Date.now()}`;
+  const key = SOLICITUD_AUSENCIA_PREFIX + empKey + ":" + id;
+  const email = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+  const value = {
+    EMPLEADO_KEY: empKey,
+    TIPO: tipo,
+    FECHA_INICIO: fechaInicio,
+    FECHA_FIN: fechaFin,
+    DIAS: dias,
+    COMPROBANTE_DATA_URL: comprobanteDataUrl || null,
+    COMPROBANTE_NOMBRE: comprobanteNombre || null,
+    SOLICITADO_POR: email,
+    FECHA_SOLICITUD: new Date().toISOString(),
+    ESTADO: "aprobada",
+    APROBADO_POR: email,
+    FECHA_DECISION: new Date().toISOString(),
+    ORIGEN: "asignacion_directa",
+  };
+  await window.storage.set(key, JSON.stringify(value), false);
+  await justificarRangoISO(empKey, fechaInicio, fechaFin, tipo, "asignacion_directa", { SOLICITUD_KEY: key });
   return key;
 }
 
@@ -8212,8 +8294,7 @@ async function renderDiasLibresVacacionesPanel(){
   try{
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
     const esJefatura = rolActual === "jefatura";
-    const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente: aprueban/rechazan
-    const puedeSolicitar = puedeAprobar || esJefatura;
+    const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente: aprueban/rechazan/asignan directo
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
     const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
 
@@ -8249,7 +8330,7 @@ async function renderDiasLibresVacacionesPanel(){
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🏖️ Días Libres y Vacaciones</div>
-      <div style="font-size:12px; color:var(--ink-soft);">Saldo acumulado (${ACUMULACION_MENSUAL_VACACIONES} días/mes, tope interno de ${TOPE_SALDO_VACACIONES}), solicitudes con aprobación de gerencia/master, y calendario del equipo.</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Saldo acumulado (${ACUMULACION_MENSUAL_VACACIONES} día${ACUMULACION_MENSUAL_VACACIONES===1?"":"s"}/mes — primer año por aniversario de ingreso, luego por el ciclo fijo 1° dic al 30 nov —, tope interno de ${TOPE_SALDO_VACACIONES}), solicitudes con aprobación de gerencia/master, y calendario del equipo.</div>
     </div>`;
 
     if (!esJefatura){
@@ -8272,15 +8353,24 @@ async function renderDiasLibresVacacionesPanel(){
     const confirmaciones = await obtenerConfirmacionesCoincidencia();
     html += renderSeccionCoincidencias(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, confirmaciones, esJefatura, puedeAprobar);
 
-    if (puedeSolicitar) html += renderFormularioSolicitud(empleadosVisibles);
+    // Quién pide y quién asigna son roles distintos: jefatura PIDE (queda
+    // pendiente hasta que gerencia/master decida) — gerencia/master no
+    // necesita pedirse nada a sí mismo, así que en vez del formulario de
+    // solicitud tiene uno propio de asignación directa (ver
+    // asignarAusenciaDirecta), que ya queda aprobado de una vez.
+    if (esJefatura) html += renderFormularioSolicitud(empleadosVisibles);
+    if (puedeAprobar) html += renderFormularioAsignacionDirecta(empleadosVisibles);
 
     html += renderListaSolicitudesPendientes(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, puedeAprobar, esJefatura);
-
-    html += renderTablaSaldos(empleadosVisibles, solicitudes, registrosHorasExtra, new Date());
 
     html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario);
 
     html += renderSeccionReportesAusencias();
+
+    // La tabla de saldos es una fila por empleado (fácilmente 40-50 filas
+    // entre varias propiedades) — va al final, después de todo lo que
+    // requiere acción (solicitudes, calendario, reportes), no primero.
+    html += renderTablaSaldos(empleadosVisibles, solicitudes, registrosHorasExtra, new Date());
 
     panel.innerHTML = html;
   }catch(e){
@@ -8384,6 +8474,64 @@ async function confirmarCrearSolicitudAusencia(){
     }
     await crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre });
     statusMsg("Solicitud creada — pendiente de aprobación.");
+    renderDiasLibresVacacionesPanel();
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+// Formulario aparte para gerencia/master: asigna ya aprobado, sin la cola de
+// pendientes ni la anticipación mínima de 15 días que sí exige la
+// solicitud de jefatura (ver renderFormularioSolicitud / asignarAusenciaDirecta).
+function renderFormularioAsignacionDirecta(empleadosDisponibles){
+  const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+  return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Asignar directamente</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar).</p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
+        <select id="asignacion-directa-empleado">
+          <option value="">— Elegí —</option>
+          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
+        <select id="asignacion-directa-tipo" onchange="document.getElementById('asignacion-directa-comprobante-wrap').style.display = this.value === 'ausencia_medica' ? 'flex' : 'none';">
+          ${Object.keys(TIPOS_SOLICITUD_AUSENCIA).map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+        <input type="date" id="asignacion-directa-desde">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+        <input type="date" id="asignacion-directa-hasta">
+      </label>
+      <label id="asignacion-directa-comprobante-wrap" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
+        <input type="file" id="asignacion-directa-comprobante" accept=".pdf,image/*">
+      </label>
+      <button class="btn primary" onclick="confirmarAsignacionDirecta();">✅ Asignar</button>
+    </div>
+    <div id="asignacion-directa-status" style="font-size:12px; margin-top:6px;"></div>
+  </div></div>`;
+}
+
+async function confirmarAsignacionDirecta(){
+  const status = document.getElementById("asignacion-directa-status");
+  const empKey = (document.getElementById("asignacion-directa-empleado")||{}).value;
+  const tipo = (document.getElementById("asignacion-directa-tipo")||{}).value;
+  const fechaInicio = (document.getElementById("asignacion-directa-desde")||{}).value;
+  const fechaFin = (document.getElementById("asignacion-directa-hasta")||{}).value;
+  const inputComprobante = document.getElementById("asignacion-directa-comprobante");
+  const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
+  try{
+    let comprobanteDataUrl = null, comprobanteNombre = null;
+    if (archivo){
+      if (archivo.size > 3.5*1024*1024) throw new Error("El comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+      comprobanteDataUrl = await leerArchivoComoDataUrl(archivo);
+      comprobanteNombre = archivo.name;
+    }
+    await asignarAusenciaDirecta({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre });
+    statusMsg("Asignado y aprobado.");
     renderDiasLibresVacacionesPanel();
   }catch(e){
     if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
