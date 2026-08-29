@@ -1320,6 +1320,7 @@ async function generarPermisoDeEmpleado(key){
     data.DIA_FIN_PERMISO = ""; data.MES_FIN_PERMISO = ""; data.ANIO_FIN_PERMISO = "";
     data.TOTAL_DIAS_PERMISO = "";
     data.NUMERO_ACCION_PERMISO = "";
+    permisoGuardadoParaAccion = null; // nueva acción: la anterior (si la hubo) no debe bloquear el guardado de esta
     // Quien tiene la sesión abierta manda como firmante: es literalmente quien
     // está generando el documento. Solo se recurre al firmante del catálogo de
     // Puestos cuando la app corre sin backend, sin sesión que consultar
@@ -1377,6 +1378,7 @@ async function generarVacacionesDeEmpleado(key){
     data.DIA_FIN_VACACIONES = ""; data.MES_FIN_VACACIONES = ""; data.ANIO_FIN_VACACIONES = "";
     data.TOTAL_DIAS_VACACIONES = "";
     data.NUMERO_ACCION_VACACIONES = "";
+    vacacionesGuardadaParaAccion = null; // nueva acción: la anterior (si la hubo) no debe bloquear el guardado de esta
     if (trabajadorActual){
       data.FIRMANTE_VACACIONES_NOMBRE = trabajadorActual.nombre;
       data.FIRMANTE_VACACIONES_CEDULA = trabajadorActual.cedula;
@@ -7825,34 +7827,63 @@ async function guardarPermisoEnHistorial(key){
   }catch(e){ /* best effort — the printable document already went out either way */ }
 }
 
-async function descargarPermisoPDF(){
+// Antes, guardar en el historial del empleado + aplicar los días a planilla
+// + archivar el documento SOLO pasaba como efecto secundario de "Descargar
+// PDF" — sin botón propio ni confirmación clara, así que no quedaba visible
+// que la acción hubiera quedado guardada de verdad. Ahora es su propia
+// función con su propio botón "💾 Guardar", que "Descargar PDF" también usa
+// (para no duplicar lógica) antes de imprimir. permisoGuardadoParaAccion
+// evita guardar dos veces el mismo N° de acción si se presiona Guardar y
+// después también Descargar (o viceversa).
+let permisoGuardadoParaAccion = null;
+
+async function guardarAccionPersonalPermiso(){
   if (!data.TOTAL_DIAS_PERMISO || Number(data.TOTAL_DIAS_PERMISO) <= 0){
-    statusMsg("Completa las fechas de inicio y fin del permiso antes de descargar (el total de días debe ser mayor a cero).", false);
-    return;
+    statusMsg("Completa las fechas de inicio y fin del permiso antes de guardar (el total de días debe ser mayor a cero).", false);
+    return false;
+  }
+  if (!currentEmpKeyForLetter){
+    statusMsg("No se pudo guardar: esta acción de personal no está vinculada a ningún empleado.", false);
+    return false;
   }
   if (!data.NUMERO_ACCION_PERMISO){
     data.NUMERO_ACCION_PERMISO = await siguienteNumeroAccion();
   }
-  const original = document.title;
-  const nombreBase = data.NOMBRE_PERMISO ? data.NOMBRE_PERMISO.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
-  document.title = ("Accion_Personal_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
-  renderAccionPersonal();
-  mostrarSoloPermiso();
-  window.print();
-  setTimeout(() => { document.title = original; }, 1000);
-  if (currentEmpKeyForLetter){
+  const yaGuardado = permisoGuardadoParaAccion === data.NUMERO_ACCION_PERMISO;
+  if (!yaGuardado){
     await guardarPermisoEnHistorial(currentEmpKeyForLetter);
     agregarBitacora(currentEmpKeyForLetter, "Acción de personal generada: permiso sin goce salarial de " + data.TOTAL_DIAS_PERMISO + " día(s) (" + data.NUMERO_ACCION_PERMISO + ").");
     await crearDiasPermisoSinGoceParaPlanilla(currentEmpKeyForLetter);
+    permisoGuardadoParaAccion = data.NUMERO_ACCION_PERMISO;
   }
-  await congelarEmitido("permiso-root", {
-    tipo: "accion_personal",
-    titulo: "Acción de personal " + (data.NUMERO_ACCION_PERMISO || "") + " — " + (data.NOMBRE_PERMISO || "sin nombre"),
-    nombreArchivo: "Accion_Personal_" + nombreBase,
-    claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
-    empleadoCedula: data.CEDULA_PERMISO || null,
-    empleadoNombre: data.NOMBRE_PERMISO || null,
-  });
+
+  renderAccionPersonal();
+  mostrarSoloPermiso();
+  const nombreBase = data.NOMBRE_PERMISO ? data.NOMBRE_PERMISO.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  const puedeArchivarDocumento = CON_BACKEND && (!window.sdgApi || window.sdgApi.puedeEditar());
+  if (puedeArchivarDocumento){
+    await congelarEmitido("permiso-root", {
+      tipo: "accion_personal",
+      titulo: "Acción de personal " + (data.NUMERO_ACCION_PERMISO || "") + " — " + (data.NOMBRE_PERMISO || "sin nombre"),
+      nombreArchivo: "Accion_Personal_" + nombreBase,
+      claveOrigen: CATALOGS.empleados.prefix + currentEmpKeyForLetter,
+      empleadoCedula: data.CEDULA_PERMISO || null,
+      empleadoNombre: data.NOMBRE_PERMISO || null,
+    }); // ya deja su propio mensaje de éxito/error
+  } else {
+    statusMsg(`Guardado en el historial de ${data.NOMBRE_PERMISO || "el empleado"} y aplicado a planilla${yaGuardado ? " (ya estaba guardado)" : ""}. El documento en sí no se archivó (${CON_BACKEND ? "tu rol no tiene permiso para archivar documentos" : "la app corre sin conexión al servidor"}).`, true);
+  }
+  return true;
+}
+
+async function descargarPermisoPDF(){
+  const guardadoOk = await guardarAccionPersonalPermiso();
+  if (!guardadoOk) return;
+  const original = document.title;
+  const nombreBase = data.NOMBRE_PERMISO ? data.NOMBRE_PERMISO.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Accion_Personal_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
 }
 
 async function guardarVacacionesEnHistorial(key){
@@ -7874,34 +7905,59 @@ async function guardarVacacionesEnHistorial(key){
   }catch(e){ /* best effort — the printable document already went out either way */ }
 }
 
-async function descargarVacacionesPDF(){
+// Mismo patrón que guardarAccionPersonalPermiso: "Guardar" tiene su propio
+// botón (guarda en el historial del empleado + aplica los días a planilla +
+// archiva el documento) y "Descargar PDF" lo reutiliza antes de imprimir, en
+// vez de que guardar fuera un efecto secundario invisible de descargar.
+let vacacionesGuardadaParaAccion = null;
+
+async function guardarAccionPersonalVacaciones(){
   if (!data.TOTAL_DIAS_VACACIONES || Number(data.TOTAL_DIAS_VACACIONES) <= 0){
-    statusMsg("Completa las fechas de inicio y fin de vacaciones antes de descargar (el total de días debe ser mayor a cero).", false);
-    return;
+    statusMsg("Completa las fechas de inicio y fin de vacaciones antes de guardar (el total de días debe ser mayor a cero).", false);
+    return false;
+  }
+  if (!currentEmpKeyForLetter){
+    statusMsg("No se pudo guardar: esta acción de personal no está vinculada a ningún empleado.", false);
+    return false;
   }
   if (!data.NUMERO_ACCION_VACACIONES){
     data.NUMERO_ACCION_VACACIONES = await siguienteNumeroAccion();
   }
-  const original = document.title;
-  const nombreBase = data.NOMBRE_VACACIONES ? data.NOMBRE_VACACIONES.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
-  document.title = ("Accion_Personal_Vacaciones_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
-  renderAccionVacaciones();
-  mostrarSoloVacaciones();
-  window.print();
-  setTimeout(() => { document.title = original; }, 1000);
-  if (currentEmpKeyForLetter){
+  const yaGuardada = vacacionesGuardadaParaAccion === data.NUMERO_ACCION_VACACIONES;
+  if (!yaGuardada){
     await guardarVacacionesEnHistorial(currentEmpKeyForLetter);
     agregarBitacora(currentEmpKeyForLetter, "Acción de personal generada: vacaciones de " + data.TOTAL_DIAS_VACACIONES + " día(s) (" + data.NUMERO_ACCION_VACACIONES + ").");
     await crearDiasVacacionesParaPlanilla(currentEmpKeyForLetter);
+    vacacionesGuardadaParaAccion = data.NUMERO_ACCION_VACACIONES;
   }
-  await congelarEmitido("vacaciones-root", {
-    tipo: "accion_personal_vacaciones",
-    titulo: "Acción de personal " + (data.NUMERO_ACCION_VACACIONES || "") + " — " + (data.NOMBRE_VACACIONES || "sin nombre"),
-    nombreArchivo: "Accion_Personal_Vacaciones_" + nombreBase,
-    claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
-    empleadoCedula: data.CEDULA_VACACIONES || null,
-    empleadoNombre: data.NOMBRE_VACACIONES || null,
-  });
+
+  renderAccionVacaciones();
+  mostrarSoloVacaciones();
+  const nombreBase = data.NOMBRE_VACACIONES ? data.NOMBRE_VACACIONES.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  const puedeArchivarDocumento = CON_BACKEND && (!window.sdgApi || window.sdgApi.puedeEditar());
+  if (puedeArchivarDocumento){
+    await congelarEmitido("vacaciones-root", {
+      tipo: "accion_personal_vacaciones",
+      titulo: "Acción de personal " + (data.NUMERO_ACCION_VACACIONES || "") + " — " + (data.NOMBRE_VACACIONES || "sin nombre"),
+      nombreArchivo: "Accion_Personal_Vacaciones_" + nombreBase,
+      claveOrigen: CATALOGS.empleados.prefix + currentEmpKeyForLetter,
+      empleadoCedula: data.CEDULA_VACACIONES || null,
+      empleadoNombre: data.NOMBRE_VACACIONES || null,
+    }); // ya deja su propio mensaje de éxito/error
+  } else {
+    statusMsg(`Guardado en el historial de ${data.NOMBRE_VACACIONES || "el empleado"} y aplicado a planilla${yaGuardada ? " (ya estaba guardado)" : ""}. El documento en sí no se archivó (${CON_BACKEND ? "tu rol no tiene permiso para archivar documentos" : "la app corre sin conexión al servidor"}).`, true);
+  }
+  return true;
+}
+
+async function descargarVacacionesPDF(){
+  const guardadoOk = await guardarAccionPersonalVacaciones();
+  if (!guardadoOk) return;
+  const original = document.title;
+  const nombreBase = data.NOMBRE_VACACIONES ? data.NOMBRE_VACACIONES.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Accion_Personal_Vacaciones_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
 }
 
 // ==========================================================================
