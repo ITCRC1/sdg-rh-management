@@ -8006,6 +8006,15 @@ const ACUMULACION_MENSUAL_VACACIONES = 1; // días por mes trabajado
 // completos sin tomar ni un día, como margen interno razonable antes de
 // obligar a que se usen — es un valor de configuración, ajustable.
 const TOPE_SALDO_VACACIONES = 24;
+
+// El ciclo fijo compartido (1° de diciembre a 30 de noviembre) es una
+// política nueva que arranca este 1° de diciembre de 2026 — no aplica hacia
+// atrás. Sin este piso, a un empleado antiguo (ingresado, por ejemplo, en
+// 2015) el cálculo lo habría pasado al ciclo fijo en algún 1° de diciembre
+// de hace años, mucho antes de que la política existiera. Hasta que llegue
+// esta fecha, TODOS siguen acumulando por su propio aniversario, sin
+// importar cuánta antigüedad tengan.
+const INICIO_CICLO_FIJO_VACACIONES = new Date(2026, 11, 1);
 const ANTICIPACION_MINIMA_DIAS_SOLICITUD = 15;
 const DIA_CORTE_MENSUAL_SOLICITUD = 30;
 
@@ -8075,7 +8084,10 @@ function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasI
     } else {
       finPeriodo = new Date(inicioPeriodo.getFullYear(), inicioPeriodo.getMonth() + 1, inicioPeriodo.getDate());
       if (finPeriodo >= primerAniversario){
-        const proximoDic1 = proximoPrimeroDeDiciembre(inicioPeriodo);
+        const proximoDic1Natural = proximoPrimeroDeDiciembre(inicioPeriodo);
+        // Nunca antes del piso de la política (INICIO_CICLO_FIJO_VACACIONES),
+        // aunque el aniversario de esta persona sea muy anterior a 2026.
+        const proximoDic1 = proximoDic1Natural < INICIO_CICLO_FIJO_VACACIONES ? INICIO_CICLO_FIJO_VACACIONES : proximoDic1Natural;
         if (finPeriodo >= proximoDic1){
           finPeriodo = proximoDic1; // el paso "salta" justo al 1° de diciembre, sin saltarse ni repetir un mes
           cicloFijo = true;
@@ -8096,13 +8108,60 @@ function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasI
     const fecha = new Date(s.FECHA_INICIO + "T00:00:00");
     if (fecha <= fechaCorte) eventos.push({ fecha, tipo: "usa", dias: s.DIAS || 0 });
   });
+  // Ajustes manuales (ver agregarAjusteVacaciones) — master/gerente corrige
+  // el saldo a mano (típicamente para quitar un excedente que ya se sabe que
+  // el empleado disfrutó fuera de este sistema, o para una corrección de
+  // arrastre). dias puede ser negativo (quitar) o positivo (otorgar) y se
+  // aplica directo, sin el tope de la acumulación automática — es una
+  // corrección deliberada, no una acreditación más.
+  (empleado && empleado.AJUSTES_VACACIONES || []).forEach(a => {
+    const fecha = new Date(a.fecha + "T00:00:00");
+    if (fecha <= fechaCorte) eventos.push({ fecha, tipo: "ajuste", dias: a.dias || 0 });
+  });
   eventos.sort((a,b) => a.fecha - b.fecha);
 
   let saldo = 0;
   eventos.forEach(ev => {
-    saldo = ev.tipo === "acredita" ? Math.min(saldo + ev.dias, TOPE_SALDO_VACACIONES) : Math.max(saldo - ev.dias, 0);
+    if (ev.tipo === "acredita") saldo = Math.min(saldo + ev.dias, TOPE_SALDO_VACACIONES);
+    else if (ev.tipo === "ajuste") saldo = Math.max(0, saldo + ev.dias);
+    else saldo = Math.max(0, saldo - ev.dias);
   });
   return saldo;
+}
+
+// Ajuste manual del saldo de vacaciones — exclusivo de master/gerente desde
+// la UI (renderTablaSaldos). Se guarda como un evento más (con motivo y
+// quién lo hizo) en vez de sobrescribir un número suelto, para no perder el
+// rastro de por qué cambió. dias negativo quita un excedente; positivo
+// otorga días extra (ej. un acuerdo puntual fuera del cálculo automático).
+async function agregarAjusteVacaciones(empKey, dias, motivo){
+  const fullKey = CATALOGS.empleados.prefix + empKey;
+  const res = await window.storage.get(fullKey, false);
+  if (!res || !res.value) throw new Error("No se encontró ese empleado.");
+  const emp = JSON.parse(res.value);
+  if (!Array.isArray(emp.AJUSTES_VACACIONES)) emp.AJUSTES_VACACIONES = [];
+  emp.AJUSTES_VACACIONES.push({
+    fecha: isoDeHoy(),
+    dias,
+    motivo: motivo || "",
+    hechoPor: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
+    hechoEn: new Date().toISOString(),
+  });
+  await window.storage.set(fullKey, JSON.stringify(emp), false);
+  await agregarBitacora(empKey, `Ajuste manual de vacaciones: ${dias > 0 ? "+" : ""}${dias} día(s)${motivo ? " — " + motivo : ""}.`);
+}
+
+async function pedirAjusteVacaciones(empKey, nombreEmp, saldoActual){
+  const texto = prompt(`Saldo actual de ${nombreEmp}: ${saldoActual} día(s).\nEscribe cuántos días sumar (positivo) o quitar (negativo). Ej: -5 para quitar un excedente de 5 días.`, "0");
+  if (texto === null) return; // canceló
+  const dias = parseFloat(String(texto).replace(",", "."));
+  if (isNaN(dias) || dias === 0){ statusMsg("Escribe un número distinto de cero.", false); return; }
+  const motivo = prompt("Motivo del ajuste (opcional, queda en la bitácora del empleado):", "") || "";
+  try{
+    await agregarAjusteVacaciones(empKey, dias, motivo.trim());
+    statusMsg(`Ajuste aplicado: ${dias > 0 ? "+" : ""}${dias} día(s) para ${nombreEmp}.`);
+    renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo aplicar el ajuste: " + e.message, false); }
 }
 
 function diasEntreFechasISO(desde, hasta){
@@ -8655,6 +8714,7 @@ function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departam
 }
 
 function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, hoy){
+  const puedeAjustar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente
   const filas = empleados
     .map(e => {
       const solicitudesVacacionesAprobadas = todasLasSolicitudes.filter(s => s.EMPLEADO_KEY === e.key && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
@@ -8666,8 +8726,11 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
   if (!filas.length) return "";
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">💰 Saldo de vacaciones (hoy)</div>
-    <div style="display:grid; grid-template-columns:1fr auto; gap:4px 10px; font-size:12.5px;">
-      ${filas.map(f => `<div>${escapeHtml(f.emp.NOMBRE_EMP||f.emp.key)}</div><div style="text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>`).join("")}
+    <div style="display:grid; grid-template-columns:1fr auto${puedeAjustar ? " auto" : ""}; gap:4px 10px; align-items:center; font-size:12.5px;">
+      ${filas.map(f => {
+        const nombreEsc = (f.emp.NOMBRE_EMP || f.emp.key).replace(/'/g, "\\'");
+        return `<div>${escapeHtml(f.emp.NOMBRE_EMP||f.emp.key)}</div><div style="text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>${puedeAjustar ? `<div><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
+      }).join("")}
     </div>
   </div></div>`;
 }
