@@ -532,6 +532,18 @@
 
   .doc-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
 
+  /* Resalta brevemente un botón al llegar por un acceso directo (ej. "Ver →"
+     desde el aviso de colillas faltantes hasta el uploader del menú Datos),
+     para que quede claro dónde aterrizó sin tener que buscarlo. */
+  @keyframes resaltadoPulso{
+    0%, 100%{ box-shadow:0 0 0 0 rgba(194,161,90,0); }
+    50%{ box-shadow:0 0 0 6px rgba(194,161,90,0.55); }
+  }
+  .resaltado-temporal{
+    animation:resaltadoPulso 0.6s ease-in-out 3;
+    border-color:var(--gold) !important;
+  }
+
   @media print{
     .app-sidebar, .app-topbar, .app-header, .tabs, .toolbar, .status-msg, .toast, #form-panel, #contracts-panel, #empresas-panel, #puestos-panel, #propiedades-panel, #empleados-panel, #format-panel, .doc-footer-note{ display:none !important; }
     .app-shell, .app-main{ display:block !important; }

@@ -4633,9 +4633,30 @@ async function mostrarModalColillasFaltantes(){
       faltantes.map(e => `
         <div id="faltante-${escapeHtml(e.key)}" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
           <div style="font-size:12.5px;"><b>${escapeHtml(e.NOMBRE_EMP)}</b> — falta colilla de pago</div>
-          <button class="btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="document.getElementById('faltante-${escapeHtml(e.key)}').remove();">Aceptar</button>
+          <div style="display:flex; gap:6px; flex-shrink:0;">
+            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="irASubirColilla();">Ver →</button>
+            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="document.getElementById('faltante-${escapeHtml(e.key)}').remove();">Aceptar</button>
+          </div>
         </div>`).join("");
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista: ${escapeHtml(e.message)}</div>`; }
+}
+
+// Acceso directo desde "Colillas de pago faltantes" hasta donde se suben de
+// verdad — el módulo de Datos (la subida es por lote de PDFs que el sistema
+// reparte solo por número de empleado/cédula/nombre, así que no hay un
+// destino "de este empleado en particular" al que saltar; lo que sí se
+// puede hacer es llevar de una vez a ese uploader, en vez de dejar que la
+// persona tenga que acordarse dónde queda dentro del menú Datos).
+function irASubirColilla(){
+  cerrarModalIncompletos();
+  showTab("datos");
+  setTimeout(() => {
+    const boton = document.querySelector('#colillas-panel button[onclick*="colillas-pdf-input"]');
+    if (!boton) return;
+    boton.scrollIntoView({ behavior: "smooth", block: "center" });
+    boton.classList.add("resaltado-temporal");
+    setTimeout(() => boton.classList.remove("resaltado-temporal"), 2000);
+  }, 50);
 }
 
 // ---------- missing-data popup ----------
