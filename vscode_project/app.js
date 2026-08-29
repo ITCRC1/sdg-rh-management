@@ -6768,7 +6768,10 @@ async function renderInicio(){
       const filas = (hist && hist.actividad) || [];
       if (filas.length){
         actividadHtml = filas.map(f => {
-          const quien = (f.actor_email || "").split("@")[0] || "—";
+          // actor_nombre viene del JOIN contra usuarios en el servidor — solo
+          // cae al correo (o a su usuario antes de la @) si esa cuenta ya no
+          // existe, para no dejar la fila sin nada que mostrar.
+          const quien = f.actor_nombre || (f.actor_email || "").split("@")[0] || "—";
           const inicial = quien.charAt(0).toUpperCase();
           return `<div class="dash-activity-row"><div class="av2">${escapeHtml(inicial)}</div><div><span class="who2">${escapeHtml(quien)}</span> ${etiquetaAccionActividad(f.accion)} ${etiquetaClaveActividad(f.clave)}</div><div class="when">${formatoRelativoActividad(f.creado_en)}</div></div>`;
         }).join("");

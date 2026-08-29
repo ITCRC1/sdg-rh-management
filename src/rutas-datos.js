@@ -403,10 +403,16 @@ historial.get("/", async (req, res, next) => {
     const limite = Math.min(Number(req.query.limite) || 100, 500);
     if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
 
+    // actor_email queda grabado tal cual inició sesión quien hizo el cambio
+    // (ver set_config('app.actor_email', ...) en db.js) — el LEFT JOIN suma
+    // el nombre para mostrar en vez del correo; si esa cuenta ya no existe
+    // (usuario eliminado) actor_nombre sale null y el front cae de vuelta al
+    // correo.
     if (clave) {
       const { rows } = await query(
-        `SELECT h.version, h.valor, h.accion, h.actor_email, host(h.actor_ip) AS ip, h.creado_en
+        `SELECT h.version, h.valor, h.accion, h.actor_email, u.nombre AS actor_nombre, host(h.actor_ip) AS ip, h.creado_en
            FROM documentos_historial h
+           LEFT JOIN usuarios u ON lower(u.email) = lower(h.actor_email)
           WHERE h.propiedad_id = $1 AND h.clave = $2
           ORDER BY h.version DESC, h.id DESC
           LIMIT $3`,
@@ -417,8 +423,9 @@ historial.get("/", async (req, res, next) => {
 
     // Sin clave: actividad reciente de toda la propiedad.
     const { rows } = await query(
-      `SELECT h.clave, h.version, h.accion, h.actor_email, h.creado_en
+      `SELECT h.clave, h.version, h.accion, h.actor_email, u.nombre AS actor_nombre, h.creado_en
          FROM documentos_historial h
+         LEFT JOIN usuarios u ON lower(u.email) = lower(h.actor_email)
         WHERE h.propiedad_id = $1
         ORDER BY h.id DESC
         LIMIT $2`,
