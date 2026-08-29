@@ -8360,6 +8360,12 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
     await crearOJustificarDiaHorasExtra(empKey, fechaISO, "cumpleanos", "cumpleanos_otorgado", {});
     statusMsg("Día de cumpleaños otorgado.");
     renderDiasLibresVacacionesPanel();
+    // También se puede otorgar desde el expediente (Perfil) — si es ese
+    // empleado el que está abierto ahí, se refresca también, no solo el
+    // panel de Días Libres y Vacaciones.
+    if (typeof perfilActualKey !== "undefined" && perfilActualKey === empKey && typeof renderPerfilEmpleado === "function"){
+      renderPerfilEmpleado();
+    }
   }catch(e){ statusMsg("No se pudo otorgar: " + e.message, false); }
 }
 
@@ -9076,6 +9082,7 @@ function descargarRecomendacionPDF(){
     titulo: "Recomendación laboral — " + (data.NOMBRE_RECOM || "sin nombre"),
     nombreArchivo: "Recomendacion_Laboral_" + nombreBase,
     claveOrigen: currentEmpKeyForLetter ? CATALOGS.empleados.prefix + currentEmpKeyForLetter : null,
+    empleadoCedula: data.CEDULA_RECOM || null,
     empleadoNombre: data.NOMBRE_RECOM || null,
   });
 }
@@ -9626,6 +9633,96 @@ async function verPerfilEmpleado(key){
   showTab("perfil");
 }
 
+// Etiqueta de cada tipo de documento archivado (ver congelarEmitido) para
+// la sección "Todos los documentos" del expediente — un tipo que no esté
+// en este mapa (documento futuro que todavía no se contempla acá) igual se
+// muestra, con su propio nombre de `tipo` tal cual, en vez de desaparecer.
+const TIPOS_DOCUMENTO_EXPEDIENTE = {
+  contrato: { emoji: "📄", label: "Contrato" },
+  constancia_handbook: { emoji: "📋", label: "Constancia Handbook" },
+  carta_despido: { emoji: "⚖️", label: "Carta de despido" },
+  accion_personal: { emoji: "🗓️", label: "Permiso sin goce salarial" },
+  accion_personal_vacaciones: { emoji: "🏖️", label: "Vacaciones" },
+  recomendacion: { emoji: "📝", label: "Recomendación laboral" },
+  amonestacion: { emoji: "⚠️", label: "Amonestación" },
+  colilla_pago: { emoji: "💰", label: "Colilla de pago" },
+};
+
+// Todos los documentos archivados de un empleado (cualquier tipo), ya
+// vienen del servidor ordenados por fecha reciente primero (GET
+// /api/documentos?cedula=...). Un documento anulado se muestra igual —
+// atenuado y marcado — en vez de desaparecer, para que el expediente no
+// oculte que algo se generó y después se anuló.
+function renderSeccionDocumentosEmpleado(documentos){
+  if (!documentos.length){
+    return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:6px;">📁 Todos los documentos</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Sin documentos archivados todavía.</div>
+    </div></div>`;
+  }
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:8px;">📁 Todos los documentos (${documentos.length})</div>
+    ${documentos.map(d => {
+      const info = TIPOS_DOCUMENTO_EXPEDIENTE[d.tipo] || { emoji: "📄", label: d.tipo || "Documento" };
+      const anulado = !!d.anulado_en;
+      return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;${anulado ? " opacity:0.6;" : ""}">
+        <div>
+          <b>${info.emoji} ${escapeHtml(info.label)}</b>${anulado ? ` <span style="color:#B3261E; font-weight:700;">(anulado${d.anulado_motivo ? ": " + escapeHtml(d.anulado_motivo) : ""})</span>` : ""}
+          <div style="color:var(--ink-soft);">${escapeHtml(d.titulo || "")}</div>
+          <div style="color:var(--ink-soft); font-size:11px;">${d.emitido_en ? fmtFecha(d.emitido_en) : ""}</div>
+        </div>
+        <a class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0; text-decoration:none;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">👁️ Ver</a>
+      </div>`;
+    }).join("")}
+  </div></div>`;
+}
+
+// Agrupa fechas ISO ("AAAA-MM-DD") consecutivas en rangos — un empleado
+// incapacitado 5 días seguidos queda como un solo período, no 5 filas
+// sueltas. Más reciente primero.
+function agruparFechasConsecutivas(fechasISO){
+  const ordenadas = [...new Set(fechasISO)].sort();
+  const grupos = [];
+  ordenadas.forEach(f => {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo){
+      const diff = Math.round((new Date(f + "T00:00:00") - new Date(ultimo.fin + "T00:00:00")) / 86400000);
+      if (diff === 1){ ultimo.fin = f; ultimo.dias++; return; }
+    }
+    grupos.push({ inicio: f, fin: f, dias: 1 });
+  });
+  return grupos.reverse();
+}
+
+// Incapacidades ya aprobadas de este empleado — la misma fuente que usa el
+// cálculo de vacaciones (Art. 160 CT: pausan la acumulación), agrupadas en
+// períodos para que se lean como "del 15 al 18 de agosto", no día por día.
+function renderSeccionIncapacidades(fechasISO){
+  if (!fechasISO.length) return "";
+  const grupos = agruparFechasConsecutivas(fechasISO);
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:8px;">🤒 Incapacidades (${fechasISO.length} día(s) en total)</div>
+    ${grupos.map(g => `<div style="font-size:12px; padding:4px 0; border-bottom:1px solid var(--paper-line);">${g.inicio === g.fin ? fmtFechaSimple(g.inicio) : fmtFechaSimple(g.inicio) + " al " + fmtFechaSimple(g.fin)} — ${g.dias} día(s)</div>`).join("")}
+  </div></div>`;
+}
+
+// Día de cumpleaños (regla exclusiva de SCP Corcovado Wilderness Lodge —
+// ver renderSeccionCumpleanos en el módulo de Días Libres y Vacaciones).
+// Muestra la próxima fecha y si ya se otorgó este año; el botón para
+// otorgarlo reutiliza otorgarDiaCumpleanos tal cual.
+function renderSeccionCumpleanosEmpleado(emp, empKey){
+  if (currentPropiedadId !== "corcovado") return "";
+  const prox = proximoCumpleanosEn(emp.FECHA_NACIMIENTO_EMP, new Date(), 365);
+  if (!prox) return "";
+  const yaOtorgado = otorgadoEsteAnio(emp, prox.fecha.getFullYear());
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:6px;">🎂 Día de cumpleaños</div>
+    <div style="font-size:12.5px;">Próximo: ${fmtFechaDesdeDate(prox.fecha)} (${prox.diasFaltan === 0 ? "hoy" : `en ${prox.diasFaltan} día(s)`})</div>
+    <div style="font-size:12.5px; margin-top:4px;">${yaOtorgado ? "✅ Ya otorgado este año." : "⏳ Pendiente de otorgar este año."}</div>
+    ${(!yaOtorgado && window.sdgApi && window.sdgApi.puedeEditar()) ? `<button class="btn primary" style="margin-top:6px;" onclick="otorgarDiaCumpleanos('${empKey}', '${isoDeFechaLocal(prox.fecha)}')">🎁 Otorgar día</button>` : ""}
+  </div></div>`;
+}
+
 async function renderPerfilEmpleado(){
   const panel = document.getElementById("perfil-panel");
   if (!perfilActualKey){ panel.innerHTML = `<div class="empty-state">Selecciona un empleado desde la lista.</div>`; return; }
@@ -9637,6 +9734,38 @@ async function renderPerfilEmpleado(){
     const emp = JSON.parse(res.value);
     await buildContratosPorCedulaIndex();
     const contratos = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
+
+    // Todo lo que ya quedó archivado a nombre de esta cédula al generarse
+    // (congelarEmitido), sin importar el tipo — contratos, cartas de
+    // despido, amonestaciones, recomendaciones, permisos, vacaciones,
+    // colillas de pago. El servidor ya filtra por cédula y ordena por fecha
+    // reciente primero (ver GET /api/documentos). Si falla, el resto del
+    // perfil se sigue mostrando igual — esta sección es informativa, no
+    // bloqueante.
+    let documentosEmpleado = [];
+    if (emp.IDENTIFICACION_EMP && window.sdgApi){
+      try{ documentosEmpleado = await window.sdgApi.documentos({ cedula: emp.IDENTIFICACION_EMP, limite: 200 }); }
+      catch(e){ /* best effort */ }
+    }
+
+    // Saldo de vacaciones, resumen de horas extra e incapacidades — mismos
+    // datos que ya usan los módulos de Vacaciones y Horas Extra, solo que
+    // acá se filtran a este único empleado. Sale de horas_extra:/
+    // solicitud_ausencia: (no de campos guardados en el propio empleado),
+    // así que siempre refleja lo mismo que verían esos módulos.
+    let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 }, diasIncapacidad = [];
+    try{
+      const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
+      const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+      diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, perfilActualKey);
+      saldoVacaciones = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidad, new Date());
+      const registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === perfilActualKey);
+      resumenHorasExtra = {
+        pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
+        aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
+        horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada").reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
+      };
+    }catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
 
     // compliance alerts
     let alertas = [];
@@ -9670,6 +9799,12 @@ async function renderPerfilEmpleado(){
           <div style="font-size:12.5px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(emp.DEPARTAMENTO_EMP||"")} · ${escapeHtml(emp.IDENTIFICACION_EMP||"")}</div>
           <div style="font-size:12.5px; color:var(--ink-soft);">Salario: ${salarioNum ? "₡"+salarioNum.toLocaleString("es-CR") : "—"} · Ingreso: ${escapeHtml(emp.FECHA_INGRESO_EMP||"—")}</div>
         </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr); margin-top:10px;">
+        <div class="kpi-card c-gold" style="cursor:pointer;" onclick="showTab('vacaciones')"><div class="ic">🏖️</div><div class="val">${saldoVacaciones}</div><div class="lbl">Día(s) de vacaciones disponibles</div></div>
+        <div class="kpi-card c-warn" style="cursor:pointer;" onclick="showTab('horasextras')"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
+        <div class="kpi-card c-navy" style="cursor:pointer;" onclick="showTab('horasextras')"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (histórico)</div></div>
       </div>
 
       ${alertas.length ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body">
@@ -9711,6 +9846,8 @@ async function renderPerfilEmpleado(){
         ${emp.ARCHIVADO && emp.TIPO_SALIDA ? `<div class="hint" style="margin-top:6px;">Tipo de salida: <b>${escapeHtml(emp.TIPO_SALIDA)}</b>${!emp.SALIDA_PDF_FIRMADO ? " — sin carta firmada adjunta todavía." : ""}</div>` : ""}
       </div></div>
 
+      ${renderSeccionDocumentosEmpleado(documentosEmpleado)}
+
       ${Array.isArray(emp.PERMISOS_HISTORIAL) && emp.PERMISOS_HISTORIAL.length > 0 ? `
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:8px;">🗓️ Permisos sin goce salarial</div>
@@ -9740,6 +9877,10 @@ async function renderPerfilEmpleado(){
               : `<button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="subirVacacionesFirmado('${perfilActualKey}', ${i})">📎 Subir firmado</button>`}
           </div>`).join("")}
       </div></div>` : ""}
+
+      ${renderSeccionIncapacidades(diasIncapacidad)}
+
+      ${renderSeccionCumpleanosEmpleado(emp, perfilActualKey)}
 
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:6px;">🕒 Bitácora</div>
