@@ -159,31 +159,40 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   if (usuario.rol === "jefatura" && clave.startsWith(COINCIDENCIA_PREFIX) && usuario.puesto) {
     return clave.startsWith(COINCIDENCIA_PREFIX + usuario.puesto + ":");
   }
+  // incapacidad: queda fuera a propósito, sin excepción: jefatura puede
+  // CONSULTAR el historial de su equipo (ver PREFIJOS_LECTURA_JEFATURA) pero
+  // nunca registrar ni editar una incapacidad — no es una decisión de la
+  // empresa, así que ni siquiera master/gerente la "aprueban", y jefatura
+  // queda completamente afuera de escribirla.
   return false;
 }
 
-// Filtra filas (con o sin `valor`) de horas_extra: o solicitud_ausencia:
-// dejando solo las del equipo de esa jefatura. Secuencial y no en paralelo a
-// propósito: son pocas filas por período, y evita abrir decenas de
-// conexiones a la vez.
+// Filtra filas (con o sin `valor`) de horas_extra:, solicitud_ausencia: o
+// incapacidad: dejando solo las del equipo de esa jefatura. Secuencial y no
+// en paralelo a propósito: son pocas filas por período, y evita abrir
+// decenas de conexiones a la vez.
 async function filtrarFilasPorEquipo(filas, propiedad, puestoLider) {
   const resultado = [];
   for (const fila of filas) {
     const pertenece = fila.clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)
       ? await solicitudPerteneceAEquipo(propiedad, fila.clave, puestoLider)
+      : fila.clave.startsWith(INCAPACIDAD_PREFIX)
+      ? await incapacidadPerteneceAEquipo(propiedad, fila.clave, puestoLider)
       : await horaExtraPerteneceAEquipo(propiedad, fila.clave, puestoLider);
     if (pertenece) resultado.push(fila);
   }
   return resultado;
 }
 
-// Una jefatura no ve "la página de Recursos Humanos" — solo horas extra y el
-// módulo de días libres/vacaciones. Por eso su lectura queda limitada a
-// estos 4 prefijos: horas_extra: y solicitud_ausencia: (lo suyo), y
-// cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
-// departamento de su propio equipo — nada de contratos, documentos, otros
-// catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, COINCIDENCIA_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
+// Una jefatura no ve "la página de Recursos Humanos" — solo horas extra, el
+// módulo de días libres/vacaciones, y (solo lectura) el historial de
+// incapacidades de su equipo, para el cálculo de pago en colillas. Por eso
+// su lectura queda limitada a estos 5 prefijos: horas_extra:,
+// solicitud_ausencia: e incapacidad: (lo suyo, filtrado por equipo — ver
+// filtrarFilasPorEquipo), y cat_empleado:/cat_puesto: (para poder resolver
+// nombre, puesto y departamento de su propio equipo — nada de contratos,
+// documentos, otros catálogos, etc.).
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, COINCIDENCIA_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
 
 // ¿Puede leer esta clave (o este prefijo de listado)? true para todos los
 // roles salvo jefatura, que solo puede si arranca con uno de los prefijos
@@ -214,11 +223,11 @@ router.get("/", async (req, res, next) => {
     // El prefijo se pasa como parámetro y se escapa: nunca se concatena SQL.
     const like = prefijo.replace(/([\\%_])/g, "\\$1") + "%";
 
-    // Una jefatura solo ve horas_extra:/solicitud_ausencia: de su propio
-    // equipo — nunca las de otros departamentos, aunque esté pidiendo el
-    // mismo prefijo que vería un master/gerente.
+    // Una jefatura solo ve horas_extra:/solicitud_ausencia:/incapacidad: de
+    // su propio equipo — nunca las de otros departamentos, aunque esté
+    // pidiendo el mismo prefijo que vería un master/gerente.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
-      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX));
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX));
 
     if (conValores) {
       const { rows } = await query(
@@ -276,6 +285,10 @@ router.get("/:clave(*)", async (req, res, next) => {
     }
     if (req.usuario.rol === "jefatura" && clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)) {
       const enSuEquipo = await solicitudPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(INCAPACIDAD_PREFIX)) {
+      const enSuEquipo = await incapacidadPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
     }
     res.json(rows[0]);

@@ -261,14 +261,16 @@ function aplicarModoSegunRol(rol){
   const btnCambiarPropiedad = document.getElementById("nav-btn-cambiar-propiedad");
   if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = rol === "master" ? "block" : "none";
 
-  // Jefatura no tiene "página de RH" — solo Horas extras y el módulo de Días
+  // Jefatura no tiene "página de RH" — solo Horas extras, el módulo de Días
   // Libres y Vacaciones (ahí sí necesita entrar: la especificación dice que
-  // el líder/jefatura es quien solicita ausencias para su equipo). Se
-  // esconde el resto del menú (el servidor ya bloquea esos datos aparte;
-  // esto es para que la navegación no ofrezca puertas cerradas).
+  // el líder/jefatura es quien solicita ausencias para su equipo), e
+  // Incapacidades en modo solo consulta (ve el historial de su propio
+  // equipo, para el cálculo de pago en colillas — nunca puede registrar ni
+  // el servidor se lo permitiría). Se esconde el resto del menú (el
+  // servidor ya bloquea esos datos aparte; esto es para que la navegación
+  // no ofrezca puertas cerradas).
   if (rol === "jefatura"){
     ["navbtn-inicio","navbtn-empleados","navbtn-expedientes","navbtn-planilla",
-     "navbtn-incapacidades",
      "navbtn-contratos","navbtn-documentos","navbtn-reportes",
      "navbtn-estadisticas","navbtn-asistente","navbtn-datos"].forEach(id => {
       const el = document.getElementById(id);
