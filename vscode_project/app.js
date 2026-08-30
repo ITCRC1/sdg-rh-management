@@ -8193,26 +8193,23 @@ function isoDeHoy(){ return isoDeFechaLocal(new Date()); }
 // incapacidad varias veces) y el salario diario promedio de referencia para
 // que RH sepa cuánto le corresponde completar a la empresa.
 //
-// Se registra ya "aprobada" (no pasa por cola de pendientes como
-// vacaciones/permiso): para cuando alguien la registra ya existe la boleta
-// física/digital en mano, no es algo que gerencia tenga que aprobar después.
+// No pasa por cola de aprobación ni se puede anular: una incapacidad no es
+// una decisión de la empresa (la boleta CCSS/INS ya la respalda), así que
+// registrarla es un hecho consumado — solo existe para calcular su pago en
+// colillas, no para que alguien la apruebe, niegue o revierta después.
 // Al registrarla se justifican los días en horas_extra: (mismo mecanismo que
 // usan vacaciones/permiso — ver justificarRangoISO) con TIPO_DIA
-// "incapacidad" ya "aprobada" de una vez, que es lo que
-// diasIncapacidadAprobados() lee para pausar la acumulación de vacaciones
-// (Art. 160 CT) — no hace falta tocar calcularSaldoVacaciones para nada.
+// "incapacidad" y ESTADO "aprobada" (el estado fijo que usa ese ledger para
+// que el día cuente en calendario/planilla — no es una aprobación de la
+// incapacidad en sí), que es lo que diasIncapacidadAprobados() lee para
+// pausar la acumulación de vacaciones (Art. 160 CT) — no hace falta tocar
+// calcularSaldoVacaciones para nada.
 const INCAPACIDAD_PREFIX = "incapacidad:";
 const TIPOS_INCAPACIDAD = {
   enfermedad_comun: { label: "Enfermedad común", emoji: "🤒" },
   riesgo_trabajo: { label: "Riesgo de trabajo", emoji: "⚠️" },
   maternidad: { label: "Maternidad", emoji: "🤰" },
 };
-// Config de la propiedad activa: si la empresa completa el salario en
-// incapacidades por riesgo de trabajo (no hay motor de planilla que calcule
-// montos todavía — ver comentario en el módulo de Planilla —, así que esto
-// solo se muestra como referencia informativa junto a cada registro).
-const CONFIG_INCAPACIDAD_KEY = "config_incapacidad";
-
 // ---------- Motor de reglas de nómina para incapacidades ----------
 // Traducción directa del pseudocódigo de nómina: para un registro YA
 // guardado, calcula cuánto le corresponde pagar al patrono (el resto lo
@@ -8221,19 +8218,13 @@ const CONFIG_INCAPACIDAD_KEY = "config_incapacidad";
 // el futuro módulo de recibos de nómina/SICERE — y NO toca
 // calcularSaldoVacaciones (ver nota de conflicto más abajo).
 //
-// Día 46+ de riesgo de trabajo con "completar salario" activo: el propio
-// pseudocódigo de nómina deja esta fórmula sin definir ("requiere lógica
-// adicional según el salario mínimo de la ocupación"). En vez de inventar un
-// monto, se devuelve NaN — la UI lo muestra como "revisar con nómina" en vez
-// de un número que podría estar mal. Reemplaza esta función en cuanto nómina
-// confirme la fórmula real (probablemente contra buscarSalarioMinimoPorDepartamento).
-function calcularDiferenciaExcedenteIns(salarioDiario){
-  return NaN;
-}
-
-// Devuelve { montoAPagarPlanilla, diasValidosAguinaldo, diasValidosVacaciones,
-// requiereRevisionNomina }. montoAPagarPlanilla es null si no hay
-// SALARIO_DIARIO_PROMEDIO guardado (no se puede calcular sin ese dato).
+// La regla es la misma para las 4 propiedades — no hay configuración por
+// propiedad: en riesgo de trabajo el patrono no completa nada, el INS asume
+// el subsidio completo (regla estándar de ley).
+//
+// Devuelve { montoAPagarPlanilla, diasValidosAguinaldo, diasValidosVacaciones }.
+// montoAPagarPlanilla es null si no hay SALARIO_DIARIO_PROMEDIO guardado (no
+// se puede calcular sin ese dato).
 //
 // ⚠️ Los "días válidos para vacaciones" que exige este motor (todos los días
 // de enfermedad_comun/riesgo_trabajo/maternidad SÍ acumulan) contradicen a
@@ -8241,13 +8232,12 @@ function calcularDiferenciaExcedenteIns(salarioDiario){
 // CT tal como se implementó ahí: un período con incapacidad NO acredita —
 // "pausa" en vez de "acumula"). Este motor se dejó aparte, sin tocar esa
 // función, hasta confirmar cuál de las dos reglas debe regir el saldo real.
-function calcularPagoIncapacidad(incapacidad, configEmpresa){
+function calcularPagoIncapacidad(incapacidad){
   const dias = incapacidad.DIAS || 0;
   const salarioDiario = (incapacidad.SALARIO_DIARIO_PROMEDIO || incapacidad.SALARIO_DIARIO_PROMEDIO === 0) ? incapacidad.SALARIO_DIARIO_PROMEDIO : null;
   let montoAPagarPlanilla = 0;
   let diasValidosAguinaldo = 0;
   let diasValidosVacaciones = 0;
-  let requiereRevisionNomina = false;
 
   switch (incapacidad.TIPO_INCAPACIDAD){
     case "enfermedad_comun": {
@@ -8268,25 +8258,10 @@ function calcularPagoIncapacidad(incapacidad, configEmpresa){
       break;
     }
     case "riesgo_trabajo": {
-      // Todo lo asume el INS por defecto. Vacaciones acumulan; aguinaldo no.
+      // Todo lo asume el INS — el patrono no completa nada, en ninguna propiedad.
       diasValidosVacaciones = dias;
       diasValidosAguinaldo = 0;
-      const completaSalario = !!(configEmpresa && configEmpresa.completarSalarioRiesgoTrabajo);
-      if (!completaSalario){
-        montoAPagarPlanilla = 0; // regla estándar de ley: patrono no paga nada
-      } else if (salarioDiario === null){
-        montoAPagarPlanilla = null;
-      } else {
-        for (let dia = 1; dia <= dias; dia++){
-          if (dia <= 45){
-            montoAPagarPlanilla += salarioDiario * 0.40; // INS paga 60%, patrono completa el 40%
-          } else {
-            const diferencia = calcularDiferenciaExcedenteIns(salarioDiario);
-            if (isNaN(diferencia)) requiereRevisionNomina = true;
-            else montoAPagarPlanilla += diferencia;
-          }
-        }
-      }
+      montoAPagarPlanilla = 0;
       break;
     }
     case "maternidad": {
@@ -8302,7 +8277,7 @@ function calcularPagoIncapacidad(incapacidad, configEmpresa){
       montoAPagarPlanilla = null;
   }
 
-  return { montoAPagarPlanilla, diasValidosAguinaldo, diasValidosVacaciones, requiereRevisionNomina };
+  return { montoAPagarPlanilla, diasValidosAguinaldo, diasValidosVacaciones };
 }
 
 async function listarIncapacidades(){
@@ -8316,20 +8291,6 @@ async function listarIncapacidades(){
     }catch(e){ return null; }
   }));
   return registros.filter(Boolean);
-}
-
-async function obtenerConfigIncapacidad(){
-  try{
-    const r = await window.storage.get(CONFIG_INCAPACIDAD_KEY, false);
-    return r && r.value ? JSON.parse(r.value) : { completarSalarioRiesgoTrabajo: false };
-  }catch(e){ return { completarSalarioRiesgoTrabajo: false }; }
-}
-
-async function setConfigIncapacidad(completar){
-  try{
-    await window.storage.set(CONFIG_INCAPACIDAD_KEY, JSON.stringify({ completarSalarioRiesgoTrabajo: !!completar }), false);
-    renderIncapacidadesPanel();
-  }catch(e){ statusMsg("No se pudo guardar la configuración: " + e.message, false); }
 }
 
 async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, salarioDiarioPromedio, comprobanteDataUrl, comprobanteNombre }){
@@ -8353,7 +8314,6 @@ async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBol
     SALARIO_DIARIO_PROMEDIO: (salarioDiarioPromedio || salarioDiarioPromedio === 0) ? salarioDiarioPromedio : null,
     COMPROBANTE_DATA_URL: comprobanteDataUrl || null,
     COMPROBANTE_NOMBRE: comprobanteNombre || null,
-    ESTADO: "aprobada",
     REGISTRADO_POR: email,
     FECHA_REGISTRO: new Date().toISOString(),
   };
@@ -8369,21 +8329,6 @@ async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBol
   return key;
 }
 
-async function anularIncapacidad(key){
-  if (!confirm("¿Anular este registro de incapacidad? Los días ya justificados en Horas Extra no se revierten solos — corrígelos ahí si hace falta.")) return;
-  try{
-    const r = await window.storage.get(key, false);
-    const v = r && r.value ? JSON.parse(r.value) : null;
-    if (!v) return;
-    v.ESTADO = "anulada";
-    v.ANULADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
-    v.FECHA_ANULACION = new Date().toISOString();
-    await window.storage.set(key, JSON.stringify(v), false);
-    statusMsg("Incapacidad anulada.");
-    renderIncapacidadesPanel();
-  }catch(e){ statusMsg("No se pudo anular: " + e.message, false); }
-}
-
 // Cache del último listado para poblar el selector de prórroga sin
 // re-consultar el servidor en cada cambio del <select> de empleado.
 let incapacidadesCacheParaProrroga = [];
@@ -8392,7 +8337,7 @@ function actualizarSelectorProrrogaIncapacidad(){
   const empKey = (document.getElementById("incapacidad-empleado") || {}).value;
   const sel = document.getElementById("incapacidad-original");
   if (!sel) return;
-  const delEmpleado = incapacidadesCacheParaProrroga.filter(i => i.EMPLEADO_KEY === empKey && i.ESTADO !== "anulada");
+  const delEmpleado = incapacidadesCacheParaProrroga.filter(i => i.EMPLEADO_KEY === empKey);
   sel.innerHTML = `<option value="">— Ninguna —</option>` + delEmpleado.map(i =>
     `<option value="${i.key}">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")}${i.NUMERO_BOLETA ? " — " + escapeHtml(i.NUMERO_BOLETA) : ""}</option>`
   ).join("");
@@ -8402,7 +8347,7 @@ function renderFormularioIncapacidad(empleadosDisponibles){
   const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📝 Registrar incapacidad</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobada de inmediato (ya existe la boleta) y pausa la acumulación de vacaciones mientras dure.</p>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Es un registro directo para el cálculo de pago en colillas — no pasa por aprobación ni se puede anular. Pausa la acumulación de vacaciones mientras dure.</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
         <select id="incapacidad-empleado" onchange="actualizarSelectorProrrogaIncapacidad()">
@@ -8474,25 +8419,20 @@ async function confirmarRegistroIncapacidad(){
   }
 }
 
-function renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar, config){
+function renderFilaIncapacidad(i, empleadosPorKey){
   const emp = empleadosPorKey[i.EMPLEADO_KEY];
   const tipo = TIPOS_INCAPACIDAD[i.TIPO_INCAPACIDAD] || { label: i.TIPO_INCAPACIDAD || "—", emoji: "🤒" };
-  const anulada = i.ESTADO === "anulada";
-  let lineaNomina = "";
-  if (!anulada){
-    const r = calcularPagoIncapacidad(i, config);
-    const montoTxt = r.montoAPagarPlanilla === null
-      ? "sin salario diario guardado"
-      : `₡${Math.round(r.montoAPagarPlanilla).toLocaleString("es-CR")}${r.requiereRevisionNomina ? " (parcial — revisar con nómina)" : ""}`;
-    lineaNomina = `<span class="meta">💰 Pago patrono estimado: ${montoTxt} · vacaciones: ${r.diasValidosVacaciones} día(s) · aguinaldo: ${r.diasValidosAguinaldo} día(s)</span><br>`;
-  }
-  return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line); ${anulada ? "opacity:0.5;" : ""}">
+  const r = calcularPagoIncapacidad(i);
+  const montoTxt = r.montoAPagarPlanilla === null
+    ? "sin salario diario guardado"
+    : `₡${Math.round(r.montoAPagarPlanilla).toLocaleString("es-CR")}`;
+  const lineaNomina = `<span class="meta">💰 Pago patrono estimado: ${montoTxt} · vacaciones: ${r.diasValidosVacaciones} día(s) · aguinaldo: ${r.diasValidosAguinaldo} día(s)</span><br>`;
+  return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line);">
     <div style="font-size:12.5px;">
       <b>${escapeHtml(emp ? (emp.NOMBRE_EMP||emp.key) : i.EMPLEADO_KEY)}</b> — ${tipo.emoji} ${escapeHtml(tipo.label)}${i.ES_PRORROGA ? " (prórroga)" : ""}<br>
-      <span class="meta">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")} · ${i.DIAS} día(s)${i.NUMERO_BOLETA ? " · boleta " + escapeHtml(i.NUMERO_BOLETA) : ""}${anulada ? " · ANULADA" : ""}</span><br>
+      <span class="meta">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")} · ${i.DIAS} día(s)${i.NUMERO_BOLETA ? " · boleta " + escapeHtml(i.NUMERO_BOLETA) : ""}</span><br>
       ${lineaNomina}
     </div>
-    ${(puedeRegistrar && !anulada) ? `<button class="btn" style="padding:4px 8px; font-size:10.5px;" onclick="anularIncapacidad('${i.key}')">Anular</button>` : ""}
   </div>`;
 }
 
@@ -8502,23 +8442,22 @@ async function renderIncapacidadesPanel(){
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const puedeRegistrar = !!(window.sdgApi && window.sdgApi.puedeEditar());
-    const [empleados, incapacidades, config] = await Promise.all([
-      cargarEmpleadosDB(), listarIncapacidades(), obtenerConfigIncapacidad(),
+    const [empleados, incapacidades] = await Promise.all([
+      cargarEmpleadosDB(), listarIncapacidades(),
     ]);
     const empleadosActivos = empleados.filter(e => !e.ARCHIVADO);
     const empleadosPorKey = {};
     empleadosActivos.forEach(e => { empleadosPorKey[e.key] = e; });
     incapacidadesCacheParaProrroga = incapacidades;
 
-    const vigentes = incapacidades.filter(i => i.ESTADO !== "anulada");
     const hoyISO = isoDeHoy();
-    const activas = vigentes.filter(i => i.FECHA_INICIO <= hoyISO && i.FECHA_FIN >= hoyISO).sort((a,b) => (a.FECHA_FIN||"").localeCompare(b.FECHA_FIN||""));
+    const activas = incapacidades.filter(i => i.FECHA_INICIO <= hoyISO && i.FECHA_FIN >= hoyISO).sort((a,b) => (a.FECHA_FIN||"").localeCompare(b.FECHA_FIN||""));
     const proximasARegresar = activas.filter(i => {
       const diasParaRegreso = Math.round((new Date(i.FECHA_FIN + "T00:00:00") - new Date(hoyISO + "T00:00:00")) / 86400000);
       return diasParaRegreso <= 3;
     });
     const historial = incapacidades
-      .filter(i => !(i.ESTADO !== "anulada" && i.FECHA_INICIO <= hoyISO && i.FECHA_FIN >= hoyISO))
+      .filter(i => !(i.FECHA_INICIO <= hoyISO && i.FECHA_FIN >= hoyISO))
       .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""))
       .slice(0, 30);
 
@@ -8539,25 +8478,17 @@ async function renderIncapacidadesPanel(){
     }
 
     if (puedeRegistrar){
-      html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
-        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:6px;">⚙️ Riesgo de trabajo</div>
-        <label style="font-size:12.5px; display:flex; align-items:center; gap:6px;">
-          <input type="checkbox" ${config.completarSalarioRiesgoTrabajo ? "checked" : ""} onchange="setConfigIncapacidad(this.checked)">
-          Completar el salario en incapacidades por riesgo de trabajo
-        </label>
-        <div style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Referencia informativa junto a cada registro — el módulo de Planilla todavía no calcula montos (ver Datos → Planilla).</div>
-      </div></div>`;
       html += renderFormularioIncapacidad(empleadosActivos);
     }
 
     html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📋 Incapacidades activas (${activas.length})</div>
-      ${activas.length ? activas.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar, config)).join("") : `<div class="empty-state" style="padding:10px 0;">Nadie está incapacitado hoy.</div>`}
+      ${activas.length ? activas.map(i => renderFilaIncapacidad(i, empleadosPorKey)).join("") : `<div class="empty-state" style="padding:10px 0;">Nadie está incapacitado hoy.</div>`}
     </div></div>`;
 
     html += `<div class="section-card"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗂️ Historial reciente</div>
-      ${historial.length ? historial.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar, config)).join("") : `<div class="empty-state" style="padding:10px 0;">Sin registros anteriores.</div>`}
+      ${historial.length ? historial.map(i => renderFilaIncapacidad(i, empleadosPorKey)).join("") : `<div class="empty-state" style="padding:10px 0;">Sin registros anteriores.</div>`}
     </div></div>`;
 
     panel.innerHTML = html;
