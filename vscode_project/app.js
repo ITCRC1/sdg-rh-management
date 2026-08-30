@@ -9427,10 +9427,23 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
     if (s.ESTADO !== "aprobada") continue;
     if (fechaISO >= s.FECHA_INICIO && fechaISO <= s.FECHA_FIN){
       if (s.TIPO === "vacaciones") return { texto: "VAC", color: TIPOS_SOLICITUD_AUSENCIA.vacaciones.colorHex };
-      if (s.TIPO === "dia_libre") return { texto: "D.LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.dia_libre.colorHex };
+      if (s.TIPO === "dia_libre") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.dia_libre.colorHex };
       if (s.TIPO === "permiso_sin_goce") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.permiso_sin_goce.colorHex };
       if (s.TIPO === "ausencia_medica") return { texto: "CITA", color: TIPOS_SOLICITUD_AUSENCIA.ausencia_medica.colorHex };
     }
+  }
+  // El día siguiente al último día de un bloque de "Día libre" es cuando el
+  // empleado vuelve a trabajar — se marca "SALE" (así lo nombra la
+  // operación: sale del bloque de libres) para que el calendario lo
+  // distinga de un día normal. Se revisa en un segundo bucle, después del
+  // de arriba, para que un día que además cae DENTRO de otro tramo de
+  // ausencia (ej. entra directo a otro bloque libre) siempre gane esa
+  // etiqueta en vez de "SALE".
+  for (const s of solicitudesEmp){
+    if (s.ESTADO !== "aprobada" || s.TIPO !== "dia_libre") continue;
+    const diaSiguiente = new Date(s.FECHA_FIN + "T00:00:00");
+    diaSiguiente.setDate(diaSiguiente.getDate() + 1);
+    if (isoDeFechaLocal(diaSiguiente) === fechaISO) return { texto: "SALE", color: "FFD9D9D9" };
   }
   const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
   if (horasDia){
