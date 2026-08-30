@@ -1214,18 +1214,83 @@ function renderEmpleadoVinculadoCard(nombre, cedula, extra, extraHtml, destTab){
   </div>`;
 }
 
-function renderElegirEmpleadoGate(mensaje, destTab, destLabel){
+// Texto de búsqueda de cada "gate" (uno por tipo de documento: vacaciones,
+// despido, amonestación, permiso, recomendación) — separado por gateId para
+// que buscar en un formulario no pise lo que se buscó en otro.
+const gateBusquedaTexto = {};
+
+// "Gate" que se muestra en un formulario de Documentos (despido, amonestación,
+// permiso, vacaciones, recomendación) cuando todavía no hay un empleado
+// vinculado. `opts.gateId` + `opts.onSeleccionar` habilitan un buscador
+// inline (nombre/puesto/cédula) para elegirlo ahí mismo, sin salir a la
+// pestaña de Empleados/Archivo — esa pestaña queda solo como atajo opcional.
+function renderElegirEmpleadoGate(mensaje, destTab, destLabel, opts){
   const tab = destTab || "empleados";
   const label = destLabel || tr("Ir a Empleados","Go to Employees");
-  return `<div class="section-card" style="border-color:var(--gold);">
-    <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-      <div>
-        <div style="font-weight:700; color:var(--navy-deep); font-size:13.5px;">${tr("Primero elige el empleado","First choose the employee")}</div>
-        <div style="font-size:12px; color:var(--ink-soft);">${escapeHtml(mensaje)}</div>
+  if (!opts || !opts.gateId || !opts.onSeleccionar){
+    return `<div class="section-card" style="border-color:var(--gold);">
+      <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div>
+          <div style="font-weight:700; color:var(--navy-deep); font-size:13.5px;">${tr("Primero elige el empleado","First choose the employee")}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${escapeHtml(mensaje)}</div>
+        </div>
+        <button class="btn primary" onclick="showTab('${tab}')" style="flex-shrink:0;">${escapeHtml(label)}</button>
       </div>
-      <button class="btn primary" onclick="showTab('${tab}')" style="flex-shrink:0;">${escapeHtml(label)}</button>
+    </div>`;
+  }
+  const gateId = opts.gateId;
+  if (!(gateId in gateBusquedaTexto)) gateBusquedaTexto[gateId] = "";
+  const inputId = `gate-busqueda-${gateId}`;
+  const listaId = `gate-lista-${gateId}`;
+  setTimeout(() => renderListaGateBusqueda(gateId, opts.onSeleccionar, !!opts.soloArchivados), 0);
+  return `<div class="section-card" style="border-color:var(--gold);">
+    <div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); font-size:13.5px; margin-bottom:4px;">${tr("Primero elige el empleado","First choose the employee")}</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">${escapeHtml(mensaje)}</div>
+      <input type="text" id="${inputId}" placeholder="${escapeHtml(tr("🔍 Buscar por nombre, puesto o cédula…","🔍 Search by name, position or ID…"))}" value="${escapeHtml(gateBusquedaTexto[gateId])}" oninput="filtrarGateBusquedaInput('${gateId}', this.value, '${opts.onSeleccionar}', ${!!opts.soloArchivados})" style="margin-bottom:10px;">
+      <div id="${listaId}"><div class="empty-state">${tr("Cargando…","Loading…")}</div></div>
+      <div style="text-align:right; margin-top:10px;">
+        <button class="btn" onclick="showTab('${tab}')" style="font-size:11.5px;">${escapeHtml(label)}</button>
+      </div>
     </div>
   </div>`;
+}
+
+async function renderListaGateBusqueda(gateId, onSeleccionar, soloArchivados){
+  const cont = document.getElementById(`gate-lista-${gateId}`);
+  if (!cont) return; // el panel cambió (o ya no está visible) antes de que esto terminara de cargar
+  try{
+    const empleados = await cargarEmpleadosDB();
+    const base = empleados.filter(e => !!e.ARCHIVADO === !!soloArchivados);
+    const termino = (gateBusquedaTexto[gateId] || "").toLowerCase().trim();
+    const filtrados = termino
+      ? base.filter(e => (e.NOMBRE_EMP||"").toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
+      : base;
+    const ordenados = filtrados.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+    if (!ordenados.length){
+      cont.innerHTML = `<div class="empty-state">${tr("Ningún empleado coincide con la búsqueda.","No employee matches the search.")}</div>`;
+      return;
+    }
+    cont.innerHTML = ordenados.slice(0, 50).map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="${onSeleccionar}('${e.key.replace(/'/g,"\\'")}')">
+      <div class="row1">
+        <div class="info">
+          <div class="name">${escapeHtml(e.NOMBRE_EMP||e.key)}</div>
+          <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
+        </div>
+      </div>
+    </div>`).join("");
+  }catch(e){
+    if (cont) cont.innerHTML = `<div class="empty-state">${tr("No se pudo cargar la lista de empleados.","Could not load the employee list.")}</div>`;
+  }
+}
+
+const _renderGateBusquedaDebounced = debounce(async function(gateId, onSeleccionar, soloArchivados){
+  await renderListaGateBusqueda(gateId, onSeleccionar, soloArchivados);
+  restaurarFocoBusqueda(`gate-busqueda-${gateId}`);
+}, 350);
+function filtrarGateBusquedaInput(gateId, val, onSeleccionar, soloArchivados){
+  gateBusquedaTexto[gateId] = val;
+  _renderGateBusquedaDebounced(gateId, onSeleccionar, soloArchivados);
 }
 
 function renderForm(){
@@ -1251,7 +1316,8 @@ function renderDespidoForm(){
   if (!data.NOMBRE_TRABAJADOR || !data.IDENTIFICACION){
     document.getElementById("despidoform-panel").innerHTML = renderElegirEmpleadoGate(
       tr("La carta de despido siempre se genera desde el registro del empleado, para que el nombre, la cédula y los datos patronales nunca se escriban a mano ni se desalineen con Empleados.",
-         "The dismissal letter is always generated from the employee record, so the name, ID and employer details are never hand-typed or out of sync with Employees.")
+         "The dismissal letter is always generated from the employee record, so the name, ID and employer details are never hand-typed or out of sync with Employees."),
+      null, null, { gateId: "despido", onSeleccionar: "generarDespidoDeEmpleado" }
     );
     return;
   }
@@ -1270,7 +1336,8 @@ function renderRecomForm(){
       tr("La recomendación laboral solo aplica a empleados que ya salieron de la empresa — se genera desde el Archivo, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados.",
          "The recommendation letter only applies to employees who already left the company — it's generated from the Archive, so the name and ID are never hand-typed or out of sync with Employees."),
       "archivo",
-      tr("Ir a Archivo","Go to Archive")
+      tr("Ir a Archivo","Go to Archive"),
+      { gateId: "recom", onSeleccionar: "generarRecomendacionDeEmpleado", soloArchivados: true }
     );
     return;
   }
@@ -1287,7 +1354,8 @@ function renderPermisoForm(){
   if (!data.NOMBRE_PERMISO || !data.CEDULA_PERMISO){
     document.getElementById("permisoform-panel").innerHTML = renderElegirEmpleadoGate(
       tr("La acción de personal siempre se genera desde el registro del empleado, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados.",
-         "The personnel action is always generated from the employee record, so the name and ID are never hand-typed or out of sync with Employees.")
+         "The personnel action is always generated from the employee record, so the name and ID are never hand-typed or out of sync with Employees."),
+      null, null, { gateId: "permiso", onSeleccionar: "generarPermisoDeEmpleado" }
     );
     return;
   }
@@ -1345,7 +1413,8 @@ function renderVacacionesForm(){
   if (!data.NOMBRE_VACACIONES || !data.CEDULA_VACACIONES){
     document.getElementById("vacacionesform-panel").innerHTML = renderElegirEmpleadoGate(
       tr("La acción de personal siempre se genera desde el registro del empleado, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados.",
-         "The personnel action is always generated from the employee record, so the name and ID are never hand-typed or out of sync with Employees.")
+         "The personnel action is always generated from the employee record, so the name and ID are never hand-typed or out of sync with Employees."),
+      null, null, { gateId: "vacaciones", onSeleccionar: "generarVacacionesDeEmpleado" }
     );
     return;
   }
@@ -1376,13 +1445,28 @@ async function actualizarSaldoVacacionesInfo(){
     const res = await window.storage.get(CATALOGS.empleados.prefix + empKey, false);
     if (!res || !res.value) throw new Error("empleado no encontrado");
     const emp = JSON.parse(res.value);
+    // La fecha de ingreso se muestra aparte (no solo el resultado) para que
+    // se note a simple vista si el dato guardado no se pudo interpretar —
+    // en vez de un "0" silencioso indistinguible de alguien recién entrado.
+    const ingresoCrudo = String(emp.FECHA_INGRESO_EMP || "").trim();
+    const ingresoParseado = parsearFechaEmpleado(ingresoCrudo);
+    if (!ingresoCrudo){
+      if (document.getElementById("vacaciones-saldo-info") !== box || currentEmpKeyForLetter !== empKey) return;
+      box.innerHTML = `<div class="section-body" style="font-size:12px; color:var(--ink-soft);">⚠️ ${tr("Este empleado no tiene fecha de ingreso guardada en su ficha — sin eso no se puede calcular el saldo de vacaciones. Agrégala en Empleados.","This employee has no start date saved on their record — the vacation balance can't be calculated without it. Add it under Employees.")}</div>`;
+      return;
+    }
+    if (!ingresoParseado){
+      if (document.getElementById("vacaciones-saldo-info") !== box || currentEmpKeyForLetter !== empKey) return;
+      box.innerHTML = `<div class="section-body" style="font-size:12px; color:var(--ink-soft);">⚠️ ${tr(`No se pudo interpretar la fecha de ingreso guardada ("${escapeHtml(ingresoCrudo)}") — corrígela en Empleados (formato DD/MM/AAAA) para que el saldo se calcule.`, `Could not interpret the saved start date ("${escapeHtml(ingresoCrudo)}") — fix it under Employees (DD/MM/YYYY format) so the balance can be calculated.`)}</div>`;
+      return;
+    }
     const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
     const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === empKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
     const diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, empKey);
     const saldo = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidad, new Date());
     if (document.getElementById("vacaciones-saldo-info") !== box || currentEmpKeyForLetter !== empKey) return; // el panel cambió mientras cargaba
     box.innerHTML = `<div class="section-body" style="font-size:12px; color:var(--ink-soft);">
-      💰 ${tr(`Días de vacaciones acumulados a hoy: <b>${saldo}</b>.`, `Vacation days accumulated as of today: <b>${saldo}</b>.`)}
+      💰 ${tr(`Días de vacaciones acumulados a hoy: <b>${saldo}</b> (ingreso: ${fmtFecha(ingresoParseado.toISOString())}).`, `Vacation days accumulated as of today: <b>${saldo}</b> (start date: ${fmtFecha(ingresoParseado.toISOString())}).`)}
     </div>`;
   }catch(e){
     box.innerHTML = `<div class="section-body" style="font-size:12px; color:var(--ink-soft);">${tr("No se pudo calcular el saldo de vacaciones acumulado.","Could not calculate the accumulated vacation balance.")}</div>`;
@@ -9484,7 +9568,8 @@ function toggleReincidenciaAmonestacion(){
 function renderAmonestacionForm(){
   if (!data.NOMBRE_AMONESTACION || !data.CEDULA_AMONESTACION){
     document.getElementById("amonestacionform-panel").innerHTML = renderElegirEmpleadoGate(
-      "La amonestación siempre se genera desde el registro del empleado, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados."
+      "La amonestación siempre se genera desde el registro del empleado, para que el nombre y la cédula nunca se escriban a mano ni se desalineen con Empleados.",
+      null, null, { gateId: "amonestacion", onSeleccionar: "generarAmonestacionDeEmpleado" }
     );
     return;
   }
