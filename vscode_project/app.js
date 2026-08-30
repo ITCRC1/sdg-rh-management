@@ -8163,6 +8163,18 @@ const INICIO_CICLO_FIJO_VACACIONES = new Date(2026, 11, 1);
 const ANTICIPACION_MINIMA_DIAS_SOLICITUD = 15;
 const DIA_CORTE_MENSUAL_SOLICITUD = 30;
 
+// SCP Corcovado Wilderness Lodge acumuló excedentes de vacaciones muy
+// grandes por antigüedad (años sin tope real). Por pedido de gerencia, SOLO
+// para el cálculo del saldo de vacaciones de esa propiedad, el período
+// actual se trata como si arrancara el 1° de diciembre de 2025 — sin tocar
+// FECHA_INGRESO_EMP (que sigue rigiendo antigüedad, período de prueba,
+// planilla, incidencias, etc. tal cual está en la ficha del empleado). A
+// quien ingresó DESPUÉS de esta fecha no se le adelanta el arranque: sigue
+// acumulando desde su propio ingreso real (ver calcularSaldoVacaciones,
+// que aplica esto tomando el más tardío entre los dos). Ninguna otra
+// propiedad se ve afectada.
+const RESET_VACACIONES_CORCOVADO = { propiedad: "corcovado", fecha: new Date(2025, 11, 1) };
+
 const TIPOS_SOLICITUD_AUSENCIA = {
   vacaciones: { label: "Vacaciones", emoji: "🏖️", consumeSaldo: true, requiereComprobante: false, colorHex: "FFF5D06B" },
   permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄", consumeSaldo: false, requiereComprobante: false, colorHex: "FF8FD3E8" },
@@ -8214,8 +8226,15 @@ function proximoPrimeroDeDiciembre(d){
 // restar el uso al final da un resultado distinto (y equivocado) cuando el
 // uso ocurre antes de llegar al tope de nuevo.
 function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasIncapacidad, fechaCorte){
-  const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
+  let ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   if (!ingreso || ingreso > fechaCorte) return 0;
+  // Reinicio del período de acumulación solo para Corcovado (ver
+  // RESET_VACACIONES_CORCOVADO) — únicamente adelanta el arranque de la
+  // simulación cuando el ingreso real es anterior a esa fecha; a quien
+  // ingresó después no se le adelanta nada, sigue con su ingreso real.
+  if (currentPropiedadId === RESET_VACACIONES_CORCOVADO.propiedad && ingreso < RESET_VACACIONES_CORCOVADO.fecha){
+    ingreso = RESET_VACACIONES_CORCOVADO.fecha;
+  }
   const incapacidadSet = new Set(diasIncapacidad || []);
   const primerAniversario = new Date(ingreso.getFullYear() + 1, ingreso.getMonth(), ingreso.getDate());
 
