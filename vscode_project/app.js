@@ -9432,18 +9432,22 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
       if (s.TIPO === "ausencia_medica") return { texto: "CITA", color: TIPOS_SOLICITUD_AUSENCIA.ausencia_medica.colorHex };
     }
   }
-  // El día siguiente al último día de un bloque de "Día libre" es cuando el
-  // empleado vuelve a trabajar — se marca "SALE" (así lo nombra la
-  // operación: sale del bloque de libres) para que el calendario lo
-  // distinga de un día normal. Se revisa en un segundo bucle, después del
-  // de arriba, para que un día que además cae DENTRO de otro tramo de
-  // ausencia (ej. entra directo a otro bloque libre) siempre gane esa
-  // etiqueta en vez de "SALE".
+  // El día ANTES de que arranque un bloque de "Día libre" es cuando el
+  // empleado sale (su último día trabajado antes de salir libre) — se marca
+  // "SALE". El día DESPUÉS de que termina es cuando vuelve a trabajar — se
+  // marca "ENTRA". Se revisan en un segundo bucle, después del de arriba,
+  // para que un día que además cae DENTRO de otro tramo de ausencia (ej.
+  // entra directo a otro bloque libre) siempre gane esa etiqueta en vez de
+  // "SALE"/"ENTRA".
   for (const s of solicitudesEmp){
     if (s.ESTADO !== "aprobada" || s.TIPO !== "dia_libre") continue;
-    const diaSiguiente = new Date(s.FECHA_FIN + "T00:00:00");
-    diaSiguiente.setDate(diaSiguiente.getDate() + 1);
-    if (isoDeFechaLocal(diaSiguiente) === fechaISO) return { texto: "SALE", color: "FFD9D9D9" };
+    const diaAntes = new Date(s.FECHA_INICIO + "T00:00:00");
+    diaAntes.setDate(diaAntes.getDate() - 1);
+    if (isoDeFechaLocal(diaAntes) === fechaISO) return { texto: "SALE", color: "FFD9D9D9" };
+
+    const diaDespues = new Date(s.FECHA_FIN + "T00:00:00");
+    diaDespues.setDate(diaDespues.getDate() + 1);
+    if (isoDeFechaLocal(diaDespues) === fechaISO) return { texto: "ENTRA", color: "FFD9D9D9" };
   }
   const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
   if (horasDia){
@@ -9478,8 +9482,10 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
     </div>
     <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">
       <span style="background:#F5D06B; padding:1px 6px; border-radius:3px;">VAC</span>
+      <span style="background:#B3E6B3; padding:1px 6px; border-radius:3px; margin-left:6px;">LIBRE (día libre)</span>
       <span style="background:#8FD3E8; padding:1px 6px; border-radius:3px; margin-left:6px;">LIBRE (permiso sin goce)</span>
       <span style="background:#E68A8A; padding:1px 6px; border-radius:3px; margin-left:6px;">CITA / INCAP</span>
+      <span style="background:#D9D9D9; padding:1px 6px; border-radius:3px; margin-left:6px;">SALE / ENTRA</span>
     </div>
     <div style="overflow-x:auto;">
     <table style="border-collapse:collapse; font-size:10.5px; white-space:nowrap;">
