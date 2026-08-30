@@ -574,6 +574,7 @@ const CATALOGS = {
     fields: [
       ["grp", "Datos del puesto"],
       ["NOMBRE_EMP","text_nombre_emp","1. Nombre completo","Ej. ISAAC QUIROS MORA","mayus"],
+      ["APELLIDOS_EMP","text_nombre_emp","Apellidos (para ordenar las listas alfabéticamente)","Ej. QUIROS MORA","mayus"],
       ["TIPO_IDENTIFICACION_EMP","select_tipo_identificacion_emp","Tipo de identidad",""],
       ["IDENTIFICACION_EMP","text_cedula_emp","2. Número de cédula","Formato: 1-1112-1111"],
       ["PUESTO_KEY","select_puesto_catalogo","3. Puesto a contratar",""],
@@ -1268,7 +1269,7 @@ async function renderListaGateBusqueda(gateId, onSeleccionar, soloArchivados){
     const filtrados = termino
       ? base.filter(e => (e.NOMBRE_EMP||"").toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
       : base;
-    const ordenados = filtrados.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+    const ordenados = filtrados.slice().sort(compararPorApellido);
     if (!ordenados.length){
       cont.innerHTML = `<div class="empty-state">${tr("Ningún empleado coincide con la búsqueda.","No employee matches the search.")}</div>`;
       return;
@@ -4181,6 +4182,23 @@ async function cargarEmpleadosDB(){
   }));
 }
 
+// Orden alfabético "oficial" del sistema para listas de empleados: por las
+// primeras 2 letras del apellido (campo APELLIDOS_EMP, capturado aparte
+// porque NOMBRE_EMP es texto libre de formato inconsistente entre
+// registros — ver ficha del empleado). Se usan solo 2 letras a propósito
+// (más simple de capturar que el apellido completo) — empleados que
+// compartan esas 2 letras quedan sin un orden fino entre ellos. Si un
+// empleado todavía no tiene apellido capturado (fichas creadas antes de
+// que existiera el campo), cae de vuelta al nombre completo para no
+// dejarlo fuera de orden mientras se actualiza su ficha.
+function apellidoParaOrden(emp){
+  const base = (emp && (emp.APELLIDOS_EMP || emp.NOMBRE_EMP)) || "";
+  return base.trim().slice(0, 2);
+}
+function compararPorApellido(a, b){
+  return apellidoParaOrden(a).localeCompare(apellidoParaOrden(b), "es");
+}
+
 function construirIndicesEmpleados(empleadosDB){
   const porNumero = {}, porCedula = {}, porNombre = {};
   empleadosDB.forEach(e => {
@@ -5222,7 +5240,7 @@ async function generarReporteIncidencias(){
       }
       filas.push({ emp: e, tipo, fechaEvento });
     });
-    filas.sort((a,b) => a.fechaEvento - b.fechaEvento || (a.emp.NOMBRE_EMP||"").localeCompare(b.emp.NOMBRE_EMP||"", "es"));
+    filas.sort((a,b) => a.fechaEvento - b.fechaEvento || compararPorApellido(a.emp, b.emp));
 
     if (!filas.length){
       if (status) status.innerHTML = `No hubo ingresos ni salidas de personal en ese rango de fechas.`;
@@ -5358,7 +5376,7 @@ async function generarReporteHorarioPlanilla(){
     const empleados = await cargarEmpleadosDB();
 
     const filas = calcularResumenQuincena(registros, empleados, rango)
-      .sort((a, b) => (a.emp.DEPARTAMENTO_EMP || "").localeCompare(b.emp.DEPARTAMENTO_EMP || "", "es") || (a.emp.NOMBRE_EMP || "").localeCompare(b.emp.NOMBRE_EMP || "", "es"));
+      .sort((a, b) => (a.emp.DEPARTAMENTO_EMP || "").localeCompare(b.emp.DEPARTAMENTO_EMP || "", "es") || compararPorApellido(a.emp, b.emp));
 
     if (!filas.length){
       if (status) status.innerHTML = `No hay ningún empleado activo dentro de esa quincena.`;
@@ -6094,7 +6112,7 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
   let visibles = empleados.filter(e => !e.ARCHIVADO);
   if (esJefatura) visibles = visibles.filter(e => departamentoDeEmpleado(e) === deptoJefatura);
   const filas = calcularResumenQuincena(registros, visibles, rango)
-    .sort((a, b) => (a.emp.NOMBRE_EMP || "").localeCompare(b.emp.NOMBRE_EMP || "", "es"));
+    .sort((a, b) => compararPorApellido(a.emp, b.emp));
   if (!filas.length) return "";
 
   const etiquetaRango = `${fmtFechaDesdeDate(rango.inicio)} – ${fmtFechaDesdeDate(rango.fin)}`;
@@ -6757,7 +6775,7 @@ async function mostrarModalAsignarHoraExtra(key){
       const vv = rr && rr.value ? JSON.parse(rr.value) : {};
       return { key: k.replace(CATALOGS.empleados.prefix, ""), ...vv };
     }));
-    const activos = empleados.filter(e => !e.ARCHIVADO).sort((a,b) => (a.NOMBRE_EMP || "").localeCompare(b.NOMBRE_EMP || ""));
+    const activos = empleados.filter(e => !e.ARCHIVADO).sort(compararPorApellido);
     const datosArchivo = [
       v.CODIGO_ARCHIVO ? "código " + v.CODIGO_ARCHIVO : "",
       v.NOMBRE_ARCHIVO || "",
@@ -8368,7 +8386,7 @@ function actualizarSelectorProrrogaIncapacidad(){
 }
 
 function renderFormularioIncapacidad(empleadosDisponibles){
-  const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+  const ordenados = empleadosDisponibles.slice().sort(compararPorApellido);
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📝 Registrar incapacidad</div>
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Es un registro directo para el cálculo de pago en colillas — no pasa por aprobación ni se puede anular. El salario diario se toma automático de la ficha del empleado (no se pide a mano). Pausa la acumulación de vacaciones mientras dure.</p>
@@ -9203,7 +9221,7 @@ function renderSeccionCoincidencias(solicitudes, empleadosPorKey, departamentoDe
 }
 
 function renderFormularioSolicitud(empleadosDisponibles){
-  const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+  const ordenados = empleadosDisponibles.slice().sort(compararPorApellido);
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">➕ Nueva solicitud</div>
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación. Las citas médicas necesitan comprobante adjunto.</p>
@@ -9261,7 +9279,7 @@ async function confirmarCrearSolicitudAusencia(){
 // pendientes ni la anticipación mínima de 15 días que sí exige la
 // solicitud de jefatura (ver renderFormularioSolicitud / asignarAusenciaDirecta).
 function renderFormularioAsignacionDirecta(empleadosDisponibles){
-  const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+  const ordenados = empleadosDisponibles.slice().sort(compararPorApellido);
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Asignar directamente</div>
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar).</p>
@@ -9357,7 +9375,7 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
       const saldo = calcularSaldoVacaciones(e, solicitudesVacacionesAprobadas, incap, hoy);
       return { emp: e, saldo };
     })
-    .sort((a,b) => (a.emp.NOMBRE_EMP||"").localeCompare(b.emp.NOMBRE_EMP||"", "es"));
+    .sort((a,b) => compararPorApellido(a.emp, b.emp));
   if (!filas.length) return "";
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">💰 Saldo de vacaciones (hoy)</div>
@@ -9400,7 +9418,7 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
   const mesAnteriorStr = `${mesAnterior.getFullYear()}-${String(mesAnterior.getMonth()+1).padStart(2,"0")}`;
   const mesSiguienteStr = `${mesSiguiente.getFullYear()}-${String(mesSiguiente.getMonth()+1).padStart(2,"0")}`;
 
-  const empleadosOrdenados = empleados.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+  const empleadosOrdenados = empleados.slice().sort(compararPorApellido);
 
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
@@ -9528,7 +9546,7 @@ async function exportarReporteAusenciasPorPersona(){
   try{
     const [empleados, solicitudes] = await Promise.all([cargarEmpleadosDB(), listarSolicitudesAusencia()]);
     const empleadosPorKey = {}; empleados.forEach(e => { empleadosPorKey[e.key] = e; });
-    const filas = solicitudes.slice().sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""));
+    const filas = solicitudes.slice().sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||"") || compararPorApellido(empleadosPorKey[a.EMPLEADO_KEY], empleadosPorKey[b.EMPLEADO_KEY]));
     if (!filas.length){ if (status) status.innerHTML = "No hay solicitudes registradas."; return; }
 
     const prop = getPropiedadActual();
@@ -10370,7 +10388,7 @@ async function renderListaPerfilBusqueda(){
     const filtrados = termino
       ? empleados.filter(e => (e.NOMBRE_EMP||"").toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
       : empleados;
-    const ordenados = filtrados.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+    const ordenados = filtrados.slice().sort(compararPorApellido);
     if (!ordenados.length){ cont.innerHTML = `<div class="empty-state">Ningún empleado coincide con la búsqueda.</div>`; return; }
     cont.innerHTML = ordenados.map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="verPerfilEmpleado('${e.key.replace(/'/g,"\\'")}')">
       <div class="row1">
