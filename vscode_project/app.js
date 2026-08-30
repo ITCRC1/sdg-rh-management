@@ -407,6 +407,15 @@ function setPropiedadActual(id){
   currentPropiedadId = id;
   try{ localStorage.setItem("gcw:propiedad-actual", id); }catch(e){}
 
+  // La caché en memoria de storage-api.js está indexada solo por clave, sin
+  // el id de propiedad — un empleado de otra propiedad con la misma clave
+  // (p.ej. mismo nombre, mismo slug) podía quedar cacheado y "colarse" al
+  // cambiar de propiedad, sin que el navegador volviera a preguntarle al
+  // servidor. Invalidar todo aquí (el único lugar donde cambia la propiedad
+  // activa) es lo que fuerza a releer todo desde cero, ya filtrado por la
+  // propiedad correcta.
+  if (window.storage && typeof window.storage.invalidar === "function") window.storage.invalidar();
+
   // La propiedad se refleja en la pestaña, no en el <title> del HTML: así
   // quien tiene varias pestañas abiertas sabe cuál es cuál, y el enlace
   // compartido sigue mostrando el título neutral.
@@ -3835,6 +3844,7 @@ async function seleccionarPropiedad(id){
   currentKey = null;
   currentEmpKeyForContract = null;
   currentEmpKeyForLetter = null;
+  perfilActualKey = null; // el expediente abierto era de la propiedad anterior — nunca de la nueva
   FIELDS_META.forEach(f => { if (f[0] !== "grp") data[f[0]] = ""; });
   data.COMISION_SI_NO = "NO";
   data.TELETRABAJO_SI_NO = "NO";
@@ -4197,6 +4207,20 @@ function apellidoParaOrden(emp){
 }
 function compararPorApellido(a, b){
   return apellidoParaOrden(a).localeCompare(apellidoParaOrden(b), "es");
+}
+
+// Filtro de búsqueda para un <select> largo de empleados: oculta (no
+// elimina) las <option> cuyo texto no coincida, así el value que termine
+// eligiéndose sigue siendo la key real del empleado — la búsqueda es solo
+// para encontrarlo más rápido en la lista, nunca cambia qué se guarda.
+function filtrarSelectEmpleados(inputBusqueda, selectId){
+  const termino = inputBusqueda.value.toLowerCase().trim();
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  Array.from(select.options).forEach(opt => {
+    if (!opt.value) return; // "— Elegí —" siempre visible
+    opt.hidden = !(!termino || opt.textContent.toLowerCase().includes(termino));
+  });
 }
 
 function construirIndicesEmpleados(empleadosDB){
@@ -9227,6 +9251,7 @@ function renderFormularioSolicitud(empleadosDisponibles){
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación. Las citas médicas necesitan comprobante adjunto.</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
+        <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'solicitud-ausencia-empleado')" style="margin-bottom:3px;">
         <select id="solicitud-ausencia-empleado">
           <option value="">— Elegí —</option>
           ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
@@ -9285,6 +9310,7 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar).</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
+        <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
         <select id="asignacion-directa-empleado">
           <option value="">— Elegí —</option>
           ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
