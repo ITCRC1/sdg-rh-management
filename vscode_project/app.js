@@ -582,37 +582,37 @@ const CATALOGS = {
     noApply: true,
     fields: [
       ["grp", "Datos del puesto"],
-      ["NOMBRE_EMP","text_nombre_emp","1. Nombre completo","Ej. ISAAC QUIROS MORA","mayus"],
-      ["APELLIDOS_EMP","text_nombre_emp","Apellidos (para ordenar las listas alfabéticamente)","Ej. QUIROS MORA","mayus"],
+      ["NOMBRE_EMP","text_nombre_emp","1. Nombre","Ej. ISAAC","mayus"],
+      ["APELLIDOS_EMP","text_nombre_emp","2. Apellidos","Ej. QUIROS MORA","mayus"],
       ["TIPO_IDENTIFICACION_EMP","select_tipo_identificacion_emp","Tipo de identidad",""],
-      ["IDENTIFICACION_EMP","text_cedula_emp","2. Número de cédula","Formato: 1-1112-1111"],
-      ["PUESTO_KEY","select_puesto_catalogo","3. Puesto a contratar",""],
+      ["IDENTIFICACION_EMP","text_cedula_emp","3. Número de cédula","Formato: 1-1112-1111"],
+      ["PUESTO_KEY","select_puesto_catalogo","4. Puesto a contratar",""],
       ["DEPARTAMENTO_EMP","text","Puesto / departamento (texto libre, se llena solo al elegir arriba)","","libre"],
       ["NUMERO_EMPLEADO","text","Número de empleado (planilla)",""],
-      ["FECHA_INGRESO_DATE","date_ingreso_emp","4. Fecha de ingreso",""],
+      ["FECHA_INGRESO_DATE","date_ingreso_emp","5. Fecha de ingreso",""],
       ["grp", "Salario"],
       ["MONEDA_SALARIO_EMP","select_moneda_salario_emp","Moneda del salario",""],
-      ["SALARIO_MODO_EMP","select_salario_modo_emp","5. Salario",""],
+      ["SALARIO_MODO_EMP","select_salario_modo_emp","6. Salario",""],
       ["SALARIO_EMP","salario_num_emp","Monto bruto mensual",""],
       ["SALARIO_USD_EMP","salario_usd_emp","Salario bruto mensual en dólares",""],
       ["grp", "Contacto"],
-      ["CELULAR_EMP","text","6. Teléfono personal",""],
-      ["CORREO_EMP","text","7. Correo electrónico",""],
+      ["CELULAR_EMP","text","7. Teléfono personal",""],
+      ["CORREO_EMP","text","8. Correo electrónico",""],
       ["DIRECCION_EMP","text","Dirección (domicilio)","","libre"],
       ["grp", "Cuenta bancaria"],
-      ["BANCO_EMP","select_banco_cr","8. Banco",""],
+      ["BANCO_EMP","select_banco_cr","9. Banco",""],
       ["NUMERO_CUENTA_EMP","cuenta_bancaria_emp","Número de cuenta","Elige el tipo y escribe el número"],
       ["grp", "Adjuntos"],
-      ["ADJUNTO_ID_EMP","file_adjunto_emp","9. Foto de cédula / pasaporte / permiso laboral",""],
+      ["ADJUNTO_ID_EMP","file_adjunto_emp","10. Foto de cédula / pasaporte / permiso laboral",""],
       ["ADJUNTO_CUENTA_EMP","file_adjunto_emp","Foto de la cuenta bancaria (para doble confirmación)",""],
       ["grp", "Datos personales"],
-      ["ESTADO_CIVIL_EMP","select_estado_civil","10. Estado civil",""],
-      ["HIJOS_EMP","select_sino_cantidad","11. Hijos",""],
-      ["ENFERMEDAD_CRONICA_EMP","select_sino_detalle","12. Padece alguna enfermedad crónica",""],
+      ["ESTADO_CIVIL_EMP","select_estado_civil","11. Estado civil",""],
+      ["HIJOS_EMP","select_sino_cantidad","12. Hijos",""],
+      ["ENFERMEDAD_CRONICA_EMP","select_sino_detalle","13. Padece alguna enfermedad crónica",""],
       ["MEDICAMENTOS_CRONICOS_EMP","select_sino_detalle","¿Toma medicamentos para enfermedades crónicas?",""],
-      ["FECHA_NACIMIENTO_EMP","date","13. Fecha de nacimiento",""],
+      ["FECHA_NACIMIENTO_EMP","date","14. Fecha de nacimiento",""],
       ["grp", "Contacto de emergencia"],
-      ["CONTACTO_EMERGENCIA_NOMBRE","text","14. Nombre del contacto de emergencia","","mayus"],
+      ["CONTACTO_EMERGENCIA_NOMBRE","text","15. Nombre del contacto de emergencia","","mayus"],
       ["CONTACTO_EMERGENCIA_ID","text_cedula_emp","Identificación del contacto de emergencia","Formato: 1-1112-1111"],
       ["CONTACTO_EMERGENCIA_TEL","text","Teléfono del contacto de emergencia",""],
       ["CONTACTO_EMERGENCIA_PARENTESCO","text","Parentesco del contacto de emergencia","","libre"],
@@ -1276,7 +1276,7 @@ async function renderListaGateBusqueda(gateId, onSeleccionar, soloArchivados){
     const base = empleados.filter(e => !!e.ARCHIVADO === !!soloArchivados);
     const termino = (gateBusquedaTexto[gateId] || "").toLowerCase().trim();
     const filtrados = termino
-      ? base.filter(e => (e.NOMBRE_EMP||"").toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
+      ? base.filter(e => nombreCompletoEmpleado(e).toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
       : base;
     const ordenados = filtrados.slice().sort(compararPorApellido);
     if (!ordenados.length){
@@ -1286,7 +1286,7 @@ async function renderListaGateBusqueda(gateId, onSeleccionar, soloArchivados){
     cont.innerHTML = ordenados.slice(0, 50).map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="${onSeleccionar}('${e.key.replace(/'/g,"\\'")}')">
       <div class="row1">
         <div class="info">
-          <div class="name">${escapeHtml(e.NOMBRE_EMP||e.key)}</div>
+          <div class="name">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}</div>
           <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
         </div>
       </div>
@@ -1385,7 +1385,7 @@ async function generarPermisoDeEmpleado(key){
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
     if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
     const emp = JSON.parse(res.value);
-    data.NOMBRE_PERMISO = emp.NOMBRE_EMP || "";
+    data.NOMBRE_PERMISO = nombreCompletoEmpleado(emp);
     data.CEDULA_PERMISO = emp.IDENTIFICACION_EMP || "";
     let puestoNombre = emp.DEPARTAMENTO_EMP || "";
     if (emp.PUESTO_KEY){
@@ -1417,7 +1417,7 @@ async function generarPermisoDeEmpleado(key){
     }
     currentEmpKeyForLetter = key;
     showTab("permisoform");
-    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados. Elige las fechas del permiso.");
+    statusMsg("Datos de " + (nombreCompletoEmpleado(emp) || "el empleado") + " cargados. Elige las fechas del permiso.");
   }catch(e){ statusMsg("No se pudo preparar la acción de personal.", false); }
 }
 
@@ -1490,7 +1490,7 @@ async function generarVacacionesDeEmpleado(key){
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
     if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
     const emp = JSON.parse(res.value);
-    data.NOMBRE_VACACIONES = emp.NOMBRE_EMP || "";
+    data.NOMBRE_VACACIONES = nombreCompletoEmpleado(emp);
     data.CEDULA_VACACIONES = emp.IDENTIFICACION_EMP || "";
     let puestoNombre = emp.DEPARTAMENTO_EMP || "";
     if (emp.PUESTO_KEY){
@@ -1519,7 +1519,7 @@ async function generarVacacionesDeEmpleado(key){
     }
     currentEmpKeyForLetter = key;
     showTab("vacacionesform");
-    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados. Elige las fechas de vacaciones.");
+    statusMsg("Datos de " + (nombreCompletoEmpleado(emp) || "el empleado") + " cargados. Elige las fechas de vacaciones.");
   }catch(e){ statusMsg("No se pudo preparar la acción de personal.", false); }
 }
 
@@ -2491,11 +2491,11 @@ async function onAdjuntoEmpChange(fieldId, inputEl){
   try{
     const r = await window.sdgApi.congelarDocumento(file, {
       tipo: "adjunto_empleado",
-      titulo: (catalogEditing.values.NOMBRE_EMP || "Empleado") + " — " + file.name,
+      titulo: (nombreCompletoEmpleado(catalogEditing.values) || "Empleado") + " — " + file.name,
       nombreArchivo: file.name,
       claveOrigen: catalogEditing.key ? CATALOGS.empleados.prefix + catalogEditing.key : null,
       empleadoCedula: catalogEditing.values.IDENTIFICACION_EMP || null,
-      empleadoNombre: catalogEditing.values.NOMBRE_EMP || null,
+      empleadoNombre: nombreCompletoEmpleado(catalogEditing.values) || null,
     });
     catalogEditing.values[fieldId] = "doc:" + r.id;
     catalogEditing.values[fieldId + "_NOMBRE"] = file.name;
@@ -2733,9 +2733,10 @@ function parseCSV(text){
   });
 }
 
-// Para comparar nombres entre un archivo externo y NOMBRE_EMP: mayúsculas,
-// sin tildes, sin comas (el archivo puede traer "Nombre Apellidos" y
-// NOMBRE_EMP guarda "Apellidos, Nombre") y espacios colapsados.
+// Para comparar nombres entre un archivo externo y el nombre completo del
+// empleado (ver nombreCompletoEmpleado): mayúsculas, sin tildes, sin comas
+// (el archivo puede traer "Nombre Apellidos" y el sistema arma "Apellidos,
+// Nombre" en otro orden) y espacios colapsados.
 function normalizarNombreParaMatch(nombre){
   return String(nombre || "")
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -2772,7 +2773,7 @@ async function construirIndicesEmpleadosPorFila(){
   existentes.forEach(e => {
     if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
     if (e.NUMERO_EMPLEADO) porNumero[normalizarCodigoEmpleado(e.NUMERO_EMPLEADO)] = e;
-    if (e.NOMBRE_EMP) porNombre[normalizarNombreParaMatch(e.NOMBRE_EMP)] = e;
+    if (e.NOMBRE_EMP) porNombre[normalizarNombreParaMatch(nombreCompletoEmpleado(e))] = e;
   });
   return { existentes, porCedula, porNumero, porNombre };
 }
@@ -2850,8 +2851,10 @@ async function guardarFilasEmpleadosNuevos(rows){
       const prevRes = await window.storage.get(key, false);
       if (prevRes && prevRes.value){ omitidos++; continue; } // misma llave por nombre, aunque no tuviera cédula/número guardados
     }catch(e){ /* no existe todavía bajo esa llave — sigue */ }
+    const nombrePartido = dividirNombreCompleto(nombre);
     const value = {
-      NOMBRE_EMP: nombre,
+      NOMBRE_EMP: nombrePartido.nombre,
+      APELLIDOS_EMP: nombrePartido.apellidos,
       NUMERO_EMPLEADO: String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim(),
       DEPARTAMENTO_EMP: String(row["DEPARTAMENTO"] || "").trim(),
       IDENTIFICACION_EMP: String(row["IDENTIFICACION"] || "").trim(),
@@ -3343,7 +3346,8 @@ async function renderCatalogTab(type){
           const n = Number(String(v.SALARIO_PUESTO).replace(/[^0-9.]/g, ""));
           if (n) metaParts.push("₡" + n.toLocaleString("es-CR"));
         }
-        return { key: short, name: v[cfg.nameField] || short, meta: metaParts.join(" · "), raw: v };
+        const nombreItem = type === "empleados" ? nombreCompletoEmpleado(v) : v[cfg.nameField];
+        return { key: short, name: nombreItem || short, meta: metaParts.join(" · "), raw: v };
       }catch(e){
         return { key: short, name: short, meta: "", raw: {} };
       }
@@ -3415,7 +3419,7 @@ async function renderCatalogTab(type){
             ? `<button class="link-badge" onclick="openContract('${contratosVinculados[0].key.replace(/'/g,"\\'")}')">📄 Contrato vinculado: abrir</button>`
             : `<span style="color:var(--ink-soft); font-size:10.5px;">📄 Sin contrato registrado con esta cédula</span>`;
           const tieneSalario = it.raw.MONEDA_SALARIO_EMP === "USD" ? it.raw.SALARIO_USD_EMP : it.raw.SALARIO_EMP;
-          const completo = it.raw.NOMBRE_EMP && it.raw.IDENTIFICACION_EMP && it.raw.DEPARTAMENTO_EMP && tieneSalario;
+          const completo = it.raw.NOMBRE_EMP && it.raw.APELLIDOS_EMP && it.raw.IDENTIFICACION_EMP && it.raw.DEPARTAMENTO_EMP && tieneSalario;
           const dot = `<span class="completeness-dot ${completo ? 'dot-ok' : 'dot-warn'}" title="${completo ? 'Datos completos' : 'Faltan datos básicos'}"></span>`;
           const k2 = it.key.replace(/'/g,"\\'");
           return `<div class="catalog-item">
@@ -4079,11 +4083,11 @@ async function renderReporteMensual(){
       </div></div>
       ${handbooksPendientes.length ? `<div class="section-card" style="margin-top:10px; border-color:#D9A54A;"><div class="section-body">
         <div style="font-weight:700; color:#8a6d1f; margin-bottom:4px;">Pendientes de firmar Handbook</div>
-        ${handbooksPendientes.map(e => `<div style="font-size:12.5px;">• ${escapeHtml(e.NOMBRE_EMP||"")}</div>`).join("")}
+        ${handbooksPendientes.map(e => `<div style="font-size:12.5px;">• ${escapeHtml(nombreCompletoEmpleado(e))}</div>`).join("")}
       </div></div>` : ""}
       ${salariosBajoMinimo.length ? `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
         <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">Salarios bajo el mínimo legal</div>
-        ${salariosBajoMinimo.map(e => `<div style="font-size:12.5px;">• ${escapeHtml(e.NOMBRE_EMP||"")} — ${escapeHtml(e.DEPARTAMENTO_EMP||"")}</div>`).join("")}
+        ${salariosBajoMinimo.map(e => `<div style="font-size:12.5px;">• ${escapeHtml(nombreCompletoEmpleado(e))} — ${escapeHtml(e.DEPARTAMENTO_EMP||"")}</div>`).join("")}
       </div></div>` : ""}
       <button class="btn gold" style="width:100%; margin-top:14px;" onclick="window.print()">⬇️ Descargar este reporte (PDF)</button>
     `;
@@ -4170,7 +4174,7 @@ function buscarCoincidenciaDifusa(nombreColilla, empleadosDB){
   const wordsColilla = normalizarNombre(nombreColilla).split(" ").filter(Boolean);
   let mejor = null, mejorScore = Infinity;
   empleadosDB.forEach(e => {
-    const wordsDB = normalizarNombre(e.NOMBRE_EMP).split(" ").filter(Boolean);
+    const wordsDB = normalizarNombre(nombreCompletoEmpleado(e)).split(" ").filter(Boolean);
     if (wordsDB.length !== wordsColilla.length) return; // only compare names with the same word count, for safety
     let totalDist = 0;
     for (let i=0;i<wordsColilla.length;i++) totalDist += levenshtein(wordsColilla[i], wordsDB[i]);
@@ -4193,13 +4197,12 @@ async function cargarEmpleadosDB(){
 }
 
 // Orden alfabético "oficial" del sistema para listas de empleados: por las
-// primeras 2 letras del apellido (campo APELLIDOS_EMP, capturado aparte
-// porque NOMBRE_EMP es texto libre de formato inconsistente entre
-// registros — ver ficha del empleado). Se usan solo 2 letras a propósito
-// (más simple de capturar que el apellido completo) — empleados que
-// compartan esas 2 letras quedan sin un orden fino entre ellos. Si un
-// empleado todavía no tiene apellido capturado (fichas creadas antes de
-// que existiera el campo), cae de vuelta al nombre completo para no
+// primeras 2 letras del apellido (campo APELLIDOS_EMP). Se usan solo 2
+// letras a propósito (más simple de capturar que el apellido completo) —
+// empleados que compartan esas 2 letras quedan sin un orden fino entre
+// ellos. Si un empleado todavía no tiene apellido capturado (fichas
+// creadas antes de que existiera el campo, cuando NOMBRE_EMP todavía
+// guardaba el nombre completo), cae de vuelta a NOMBRE_EMP para no
 // dejarlo fuera de orden mientras se actualiza su ficha.
 function apellidoParaOrden(emp){
   const base = (emp && (emp.APELLIDOS_EMP || emp.NOMBRE_EMP)) || "";
@@ -4207,6 +4210,37 @@ function apellidoParaOrden(emp){
 }
 function compararPorApellido(a, b){
   return apellidoParaOrden(a).localeCompare(apellidoParaOrden(b), "es");
+}
+
+// Nombre legal completo de un empleado: NOMBRE_EMP (solo el nombre de
+// pila, ej. "ISAAC") + APELLIDOS_EMP (ej. "QUIROS MORA"). Esta es la única
+// función que debe usarse para MOSTRAR el nombre de un empleado — en
+// contratos, cartas, reportes, el calendario, etc. Fallback: si
+// APELLIDOS_EMP todavía no se capturó (fichas creadas antes de que
+// existiera el campo separado), NOMBRE_EMP en esos registros viejos SÍ
+// tiene el nombre completo, así que devolverlo solo no rompe nada.
+function nombreCompletoEmpleado(emp){
+  if (!emp) return "";
+  const nombre = (emp.NOMBRE_EMP || "").trim();
+  const apellidos = (emp.APELLIDOS_EMP || "").trim();
+  return apellidos ? `${nombre} ${apellidos}`.trim() : nombre;
+}
+
+// Heurística para partir un nombre completo en texto libre (ej. el que
+// trae una colilla de pago externa) en nombre de pila + apellidos: se
+// asume el formato más común en Costa Rica, "Nombre(s) Apellido1
+// Apellido2" — las últimas 2 palabras son los apellidos, el resto es el
+// nombre. Con exactamente 2 palabras se parte 1 y 1; con 1 sola palabra,
+// todo queda como nombre (no hay nada que partir). Es una heurística, no
+// una certeza — puede fallar con apellidos de una sola palabra o nombres
+// compuestos; por eso solo se usa para la corrección automática de un
+// typo ya detectado por coincidencia difusa contra un empleado existente
+// (ver emparejarRegistroColilla), nunca para adivinar de cero.
+function dividirNombreCompleto(nombreCompleto){
+  const palabras = String(nombreCompleto || "").trim().split(/\s+/).filter(Boolean);
+  if (palabras.length <= 1) return { nombre: palabras.join(" "), apellidos: "" };
+  if (palabras.length === 2) return { nombre: palabras[0], apellidos: palabras[1] };
+  return { nombre: palabras.slice(0, -2).join(" "), apellidos: palabras.slice(-2).join(" ") };
 }
 
 // Filtro de búsqueda para un <select> largo de empleados: oculta (no
@@ -4228,7 +4262,7 @@ function construirIndicesEmpleados(empleadosDB){
   empleadosDB.forEach(e => {
     if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).trim().replace(/^0+/,"")] = e;
     if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
-    porNombre[normalizarNombre(e.NOMBRE_EMP)] = e;
+    porNombre[normalizarNombre(nombreCompletoEmpleado(e))] = e;
   });
   return { porNumero, porCedula, porNombre };
 }
@@ -4254,7 +4288,7 @@ function emparejarRegistroColilla(p, indices, empleadosDB){
     const fuzzy = buscarCoincidenciaDifusa(p.nombre, empleadosDB);
     if (fuzzy){
       match = fuzzy;
-      nombreCorregido = { anterior: fuzzy.NOMBRE_EMP, nuevo: p.nombre };
+      nombreCorregido = { anterior: nombreCompletoEmpleado(fuzzy), nuevo: p.nombre };
       matchedBy = "nombre (con corrección)";
     }
   }
@@ -4323,7 +4357,7 @@ function renderColillasPreview(){
         const anteriorUsd = r.match.SALARIO_USD_EMP;
         const cambia = String(anteriorUsd||"").trim() !== String(r.salario).trim();
         return `<div style="font-size:12px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
-          <b>${escapeHtml(r.match.NOMBRE_EMP)}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
+          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
           ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
           Salario en dólares: ${anteriorUsd ? "$"+Number(anteriorUsd).toLocaleString("en-US") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">$${r.salario.toLocaleString("en-US")}</b>
           ${r.puestoCoincide === false ? `<br><span style="color:#8a6d1f;">⚠️ Puesto distinto — catálogo: "${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}" / colilla: "${escapeHtml(r.ocupacion)}"</span>` : ""}
@@ -4340,7 +4374,7 @@ function renderColillasPreview(){
       ${sospechosos.map((r, i) => {
         const idx = colillasResultadosCache.indexOf(r);
         return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-          <b>${escapeHtml(r.match.NOMBRE_EMP)}</b> — № ${escapeHtml(r.numero)}<br>
+          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)}<br>
           Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)
           <div style="margin-top:4px;">
             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="aplicarColillaIndividual(${idx})">Aplicar de todas formas</button>
@@ -4358,7 +4392,7 @@ function renderColillasPreview(){
       ${encontrados.map(r => {
         const cambia = String(r.match.SALARIO_EMP||"").trim() !== String(r.salario).trim();
         return `<div style="font-size:12px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
-          <b>${escapeHtml(r.match.NOMBRE_EMP)}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
+          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
           ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
           Salario: ${r.match.SALARIO_EMP ? "₡"+Number(r.match.SALARIO_EMP).toLocaleString("es-CR") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">₡${r.salario.toLocaleString("es-CR")}</b>
           ${r.puestoCoincide === false ? `<br><span style="color:#8a6d1f;">⚠️ Puesto distinto — catálogo: "${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}" / colilla: "${escapeHtml(r.ocupacion)}"</span>` : ""}
@@ -4387,10 +4421,14 @@ async function aplicarColillaIndividual(idx){
   const salarioAnterior = r.match.SALARIO_EMP || "—";
   r.match.SALARIO_EMP = String(r.salario);
   if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
-  if (r.nombreCorregido) r.match.NOMBRE_EMP = r.nombreCorregido.nuevo;
+  if (r.nombreCorregido){
+    const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
+    r.match.NOMBRE_EMP = partido.nombre;
+    r.match.APELLIDOS_EMP = partido.apellidos;
+  }
   await window.storage.set(fullKey, JSON.stringify(r.match), false);
   await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago (confirmado a mano tras aviso de monto sospechoso): ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
-  statusMsg(`Salario de ${r.match.NOMBRE_EMP} actualizado.`);
+  statusMsg(`Salario de ${nombreCompletoEmpleado(r.match)} actualizado.`);
   colillasResultadosCache[idx] = Object.assign({}, r, { match: null }); // ya aplicado, se quita de la lista de pendientes
   renderColillasPreview();
 }
@@ -4413,7 +4451,11 @@ async function aplicarColillasUSD(){
     r.match.SALARIO_USD_EMP_NETO = netoUsd.toFixed(2);
     r.match.SALARIO_USD_EMP_NETO_LETRAS = salarioEnLetras(netoUsd, "dólares", "es");
     if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
-    if (r.nombreCorregido) r.match.NOMBRE_EMP = r.nombreCorregido.nuevo;
+    if (r.nombreCorregido){
+      const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
+      r.match.NOMBRE_EMP = partido.nombre;
+      r.match.APELLIDOS_EMP = partido.apellidos;
+    }
     await window.storage.set(fullKey, JSON.stringify(r.match), false);
     if (r.nombreCorregido){
       await agregarBitacora(r.match.key, `Nombre corregido automáticamente desde colilla: "${r.nombreCorregido.anterior}" → "${r.nombreCorregido.nuevo}".`);
@@ -4449,10 +4491,12 @@ async function aplicarColillas(){
     if (!numeroAnterior){
       r.match.NUMERO_EMPLEADO = r.numero;
     } else if (numeroAnterior !== numeroNuevo){
-      numerosSospechosos.push(`${r.match.NOMBRE_EMP}: tenía № ${r.match.NUMERO_EMPLEADO} guardado, la colilla trae № ${r.numero} — no se cambió, revísalo a mano.`);
+      numerosSospechosos.push(`${nombreCompletoEmpleado(r.match)}: tenía № ${r.match.NUMERO_EMPLEADO} guardado, la colilla trae № ${r.numero} — no se cambió, revísalo a mano.`);
     }
     if (r.nombreCorregido){
-      r.match.NOMBRE_EMP = r.nombreCorregido.nuevo;
+      const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
+      r.match.NOMBRE_EMP = partido.nombre;
+      r.match.APELLIDOS_EMP = partido.apellidos;
     }
     await window.storage.set(fullKey, JSON.stringify(r.match), false);
     if (r.nombreCorregido){
@@ -4604,11 +4648,11 @@ async function archivarColillasPDF(file){
     try{
       await window.sdgApi.congelarDocumento(blob, {
         tipo: "colilla_pago",
-        titulo: "Colilla de pago" + (periodoTxt ? " — " + periodoTxt : "") + " — " + match.NOMBRE_EMP,
-        nombreArchivo: "Colilla_" + String(match.NOMBRE_EMP || "").replace(/[^a-zA-Z0-9]+/g,"_") + "_" + reg.periodoInicio.replace(/\//g,"-") + ".pdf",
+        titulo: "Colilla de pago" + (periodoTxt ? " — " + periodoTxt : "") + " — " + nombreCompletoEmpleado(match),
+        nombreArchivo: "Colilla_" + nombreCompletoEmpleado(match).replace(/[^a-zA-Z0-9]+/g,"_") + "_" + reg.periodoInicio.replace(/\//g,"-") + ".pdf",
         claveOrigen: CATALOGS.empleados.prefix + match.key,
         empleadoCedula: match.IDENTIFICACION_EMP || null,
-        empleadoNombre: match.NOMBRE_EMP || null,
+        empleadoNombre: nombreCompletoEmpleado(match) || null,
       });
       archivados++;
     }catch(e){
@@ -4823,7 +4867,7 @@ async function mostrarModalColillasFaltantes(){
     body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${faltantes.length} de ${elegibles.length} empleados que ya deben tener colilla del período <b>${periodoTexto}</b> no la tienen archivada.</div>` +
       faltantes.map(e => `
         <div id="faltante-${escapeHtml(e.key)}" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-          <div style="font-size:12.5px;"><b>${escapeHtml(e.NOMBRE_EMP)}</b> — falta colilla de pago</div>
+          <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(e))}</b> — falta colilla de pago</div>
           <div style="display:flex; gap:6px; flex-shrink:0;">
             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="irASubirColilla();">Ver →</button>
             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="document.getElementById('faltante-${escapeHtml(e.key)}').remove();">Aceptar</button>
@@ -4854,6 +4898,7 @@ function irASubirColilla(){
 function evaluarCamposFaltantes(e){
   const faltan = [];
   if (!e.NOMBRE_EMP) faltan.push("Nombre");
+  if (!e.APELLIDOS_EMP) faltan.push("Apellidos");
   if (!e.IDENTIFICACION_EMP || !/^\d-\d{4}-\d{4}$/.test(e.IDENTIFICACION_EMP)) faltan.push("Cédula (formato completo)");
   if (!e.PUESTO_KEY && !e.DEPARTAMENTO_EMP) faltan.push("Puesto");
   if (!e.FECHA_INGRESO_EMP) faltan.push("Fecha de ingreso");
@@ -4903,7 +4948,7 @@ async function mostrarModalIncompletos(){
     body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${conFaltantes.length} de ${activos.length} empleados tienen datos pendientes.</div>` +
       conFaltantes.map(({e, faltan}) => `
         <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
-          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(e.NOMBRE_EMP || e.key)} <span style="font-weight:400; color:#B3261E; font-size:11px;">(${faltan.length} pendiente${faltan.length>1?"s":""})</span></div>
+          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(nombreCompletoEmpleado(e) || e.key)} <span style="font-weight:400; color:#B3261E; font-size:11px;">(${faltan.length} pendiente${faltan.length>1?"s":""})</span></div>
           <div style="font-size:11.5px; color:#8a3b34; margin-top:2px;">${faltan.map(escapeHtml).join(" · ")}</div>
           <button class="btn" style="padding:5px 10px; font-size:11px; margin-top:5px;" onclick="cerrarModalIncompletos(); openCatalogForm('empleados','${e.key.replace(/'/g,"\\'")}');">Completar ahora</button>
         </div>`).join("");
@@ -4953,7 +4998,7 @@ async function mostrarModalDuplicados(){
     body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Se encontraron ${grupos.length} grupo(s) de posibles duplicados — misma cédula o número de empleado guardados dos veces.</div>` +
       grupos.map((g, gi) => `
         <div style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
-          ${g.map(e => `<div style="font-size:12px; padding:4px 0;"><b>${escapeHtml(e.NOMBRE_EMP)}</b> — ${escapeHtml(e.DEPARTAMENTO_EMP||"")} · ${e.MONEDA_SALARIO_EMP === "USD" ? (e.SALARIO_USD_EMP ? "$"+Number(e.SALARIO_USD_EMP).toLocaleString("en-US") : "—") : (e.SALARIO_EMP ? "₡"+Number(e.SALARIO_EMP).toLocaleString("es-CR") : "—")} · ${e.IDENTIFICACION_EMP||"sin cédula"} · № ${e.NUMERO_EMPLEADO||"—"}</div>`).join("")}
+          ${g.map(e => `<div style="font-size:12px; padding:4px 0;"><b>${escapeHtml(nombreCompletoEmpleado(e))}</b> — ${escapeHtml(e.DEPARTAMENTO_EMP||"")} · ${e.MONEDA_SALARIO_EMP === "USD" ? (e.SALARIO_USD_EMP ? "$"+Number(e.SALARIO_USD_EMP).toLocaleString("en-US") : "—") : (e.SALARIO_EMP ? "₡"+Number(e.SALARIO_EMP).toLocaleString("es-CR") : "—")} · ${e.IDENTIFICACION_EMP||"sin cédula"} · № ${e.NUMERO_EMPLEADO||"—"}</div>`).join("")}
           <button class="btn primary" style="padding:6px 12px; font-size:11.5px; margin-top:4px;" onclick="fusionarDuplicados(${gi})">🔀 Fusionar en uno solo</button>
         </div>`).join("");
     window._duplicadosCache = grupos;
@@ -4981,7 +5026,7 @@ async function fusionarDuplicados(gi){
   for (const dup of grupo.slice(1)){
     await window.storage.delete(CATALOGS.empleados.prefix + dup.key, false);
   }
-  statusMsg(`Fusionado: "${principal.NOMBRE_EMP}" — se eliminaron ${grupo.length - 1} duplicado(s).`);
+  statusMsg(`Fusionado: "${nombreCompletoEmpleado(principal)}" — se eliminaron ${grupo.length - 1} duplicado(s).`);
   mostrarModalDuplicados();
 }
 
@@ -5310,7 +5355,7 @@ async function generarReporteIncidencias(){
     let filaActual = 4;
     filas.forEach(({ emp, tipo }) => {
       const valores = [
-        emp.NOMBRE_EMP || "",
+        nombreCompletoEmpleado(emp),
         emp.IDENTIFICACION_EMP || "",
         emp.NUMERO_EMPLEADO || "",
         emp.DEPARTAMENTO_EMP || "",
@@ -5446,7 +5491,7 @@ async function generarReporteHorarioPlanilla(){
     let filaActual = 4;
     filas.forEach(f => {
       const valores = [
-        f.emp.NOMBRE_EMP || "",
+        nombreCompletoEmpleado(f.emp),
         f.emp.NUMERO_EMPLEADO || "",
         f.emp.DEPARTAMENTO_EMP || "",
         f.diasLaborados,
@@ -6165,7 +6210,7 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
             ? "✅"
             : (f.diasLibresQuincena > 0 ? `⏳ ${DIAS_LIBRES_POR_MES - f.diasLibresMes} pendiente(s), se esperan la otra quincena` : `⏳ ${DIAS_LIBRES_POR_MES - f.diasLibresMes} pendiente(s)`);
           return `<tr style="border-bottom:1px solid #eee;">
-          <td style="padding:4px 8px;">${escapeHtml(f.emp.NOMBRE_EMP || f.emp.key)}</td>
+          <td style="padding:4px 8px;">${escapeHtml(nombreCompletoEmpleado(f.emp) || f.emp.key)}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700; color:${f.diasLaborados < f.diasBase ? '#b23b3b' : 'var(--navy-deep)'};">${f.diasLaborados}${f.diasBase !== DIAS_BASE_QUINCENA ? ` / ${f.diasBase}` : ""}</td>
           ${cols.map(c => `<td style="padding:4px 8px; text-align:center;">${f.descPorTipo[c] || ""}</td>`).join("")}
           <td style="padding:4px 8px; text-align:center;">${f.diasLibresQuincena || ""}</td>
@@ -6293,7 +6338,7 @@ async function renderHorasExtrasPanel(){
 
     const renderFilaHorasExtra = r => {
       const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
-      const nombre = emp ? (emp.NOMBRE_EMP || "") : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "");
+      const nombre = emp ? nombreCompletoEmpleado(emp) : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "");
       const puesto = emp ? (emp.DEPARTAMENTO_EMP || "") : "";
       const jornadaEmpleado = jornadaDiariaDePuesto(emp && emp.PUESTO_KEY ? puestosPorKey[emp.PUESTO_KEY] : null);
       const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
@@ -6376,7 +6421,7 @@ async function renderHorasExtrasPanel(){
         const keysSel = diasCompletos.map(d => d.key);
         html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraEmpleadoSeleccionado=null; renderHorasExtrasPanel();">← Volver a la lista</button>`;
         html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
-          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(emp ? emp.NOMBRE_EMP || empKeySel : empKeySel)}</div>
+          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(emp ? nombreCompletoEmpleado(emp) || empKeySel : empKeySel)}</div>
           <div style="font-size:12px; color:var(--ink-soft);">${diasSel.length} día(s) pendientes · ${diasSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra en total${diasIncompletos.length ? ` · ⚠️ ${diasIncompletos.length} turno(s) sin marcar` : ""}</div>
         </div></div>`;
         if (puedeAprobar && diasCompletos.length > 1){
@@ -6410,7 +6455,7 @@ async function renderHorasExtrasPanel(){
               return `<div class="catalog-item" style="cursor:pointer;${incompletos ? " border-color:#D9A54A;" : ""}" onclick="horasExtraEmpleadoSeleccionado='${empKey.replace(/'/g,"\\'")}'; renderHorasExtrasPanel();">
                 <div class="row1">
                   <div class="info">
-                    <div class="name">${escapeHtml(emp ? emp.NOMBRE_EMP || empKey : empKey)}</div>
+                    <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp) || empKey : empKey)}</div>
                     <div class="meta">${dias.length} día(s) pendientes · ${dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra${incompletos ? ` · ⚠️ ${incompletos} sin marcar` : ""}</div>
                   </div>
                   <div class="actions"><span class="meta">Ver →</span></div>
@@ -6705,7 +6750,7 @@ async function mostrarModalCompletarTurno(key){
       try{
         const re = await window.storage.get(CATALOGS.empleados.prefix + v.EMPLEADO_KEY, false);
         const emp = re && re.value ? JSON.parse(re.value) : null;
-        if (emp && emp.NOMBRE_EMP) nombre = emp.NOMBRE_EMP;
+        if (emp && emp.NOMBRE_EMP) nombre = nombreCompletoEmpleado(emp);
       }catch(e){ /* se queda con el nombre del archivo */ }
     }
     body.innerHTML = `
@@ -6811,7 +6856,7 @@ async function mostrarModalAsignarHoraExtra(key){
         <label>Empleado correcto</label>
         <select id="horasextra-asignar-select">
           <option value="">— Selecciona —</option>
-          ${activos.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.NOMBRE_EMP || e.key)}${e.IDENTIFICACION_EMP ? " (" + escapeHtml(e.IDENTIFICACION_EMP) + ")" : ""}</option>`).join("")}
+          ${activos.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}${e.IDENTIFICACION_EMP ? " (" + escapeHtml(e.IDENTIFICACION_EMP) + ")" : ""}</option>`).join("")}
         </select>
       </div>
       <button class="btn primary" style="margin-top:8px;" onclick="confirmarAsignarHoraExtra('${key.replace(/'/g,"\\'")}')">Asignar</button>`;
@@ -8426,7 +8471,7 @@ function renderFormularioIncapacidad(empleadosDisponibles){
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
         <select id="incapacidad-empleado" onchange="actualizarSelectorProrrogaIncapacidad()">
           <option value="">— Elegí —</option>
-          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
@@ -8501,7 +8546,7 @@ function renderFilaIncapacidad(i, empleadosPorKey){
   const lineaNomina = `<span class="meta">💰 Pago patrono estimado: ${montoTxt} · vacaciones: ${r.diasValidosVacaciones} día(s) · aguinaldo: ${r.diasValidosAguinaldo} día(s)</span><br>`;
   return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line);">
     <div style="font-size:12.5px;">
-      <b>${escapeHtml(emp ? (emp.NOMBRE_EMP||emp.key) : i.EMPLEADO_KEY)}</b> — ${tipo.emoji} ${escapeHtml(tipo.label)}${i.ES_PRORROGA ? " (prórroga)" : ""}<br>
+      <b>${escapeHtml(emp ? (nombreCompletoEmpleado(emp)||emp.key) : i.EMPLEADO_KEY)}</b> — ${tipo.emoji} ${escapeHtml(tipo.label)}${i.ES_PRORROGA ? " (prórroga)" : ""}<br>
       <span class="meta">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")} · ${i.DIAS} día(s)${i.NUMERO_BOLETA ? " · boleta " + escapeHtml(i.NUMERO_BOLETA) : ""}</span><br>
       ${lineaNomina}
     </div>
@@ -8544,7 +8589,7 @@ async function renderIncapacidadesPanel(){
         ${proximasARegresar.map(i => {
           const emp = empleadosPorKey[i.EMPLEADO_KEY];
           const diasParaRegreso = Math.round((new Date(i.FECHA_FIN + "T00:00:00") - new Date(hoyISO + "T00:00:00")) / 86400000);
-          return `<div style="font-size:12.5px; padding:4px 0;"><b>${escapeHtml(emp ? (emp.NOMBRE_EMP||emp.key) : i.EMPLEADO_KEY)}</b> — regresa el ${fmtFecha(i.FECHA_FIN + "T00:00:00")} (${diasParaRegreso <= 0 ? "hoy o ya pasó" : `en ${diasParaRegreso} día(s)`})</div>`;
+          return `<div style="font-size:12.5px; padding:4px 0;"><b>${escapeHtml(emp ? (nombreCompletoEmpleado(emp)||emp.key) : i.EMPLEADO_KEY)}</b> — regresa el ${fmtFecha(i.FECHA_FIN + "T00:00:00")} (${diasParaRegreso <= 0 ? "hoy o ya pasó" : `en ${diasParaRegreso} día(s)`})</div>`;
         }).join("")}
       </div></div>`;
     }
@@ -9221,8 +9266,8 @@ function renderSeccionCumpleanos(empleados, puedeOtorgar){
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🎂 Cumpleaños próximos — 1 día pagado, se pierde si no se otorga en el año</div>
     ${proximos.map(p => `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
-        <div style="font-size:12.5px;"><b>${escapeHtml(p.emp.NOMBRE_EMP||"")}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : `en ${p.diasFaltan} día(s)`})</div>
-        ${puedeOtorgar ? `<button class="btn primary" style="padding:5px 10px; font-size:11px;" onclick="abrirModalOtorgarCumpleanos('${p.emp.key}', '${(p.emp.NOMBRE_EMP||"").replace(/'/g,"\\'")}', '${isoDeFechaLocal(p.fecha)}')">🎁 Otorgar día</button>` : `<span class="meta">Pendiente — lo otorga gerencia/master</span>`}
+        <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(p.emp))}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : `en ${p.diasFaltan} día(s)`})</div>
+        ${puedeOtorgar ? `<button class="btn primary" style="padding:5px 10px; font-size:11px;" onclick="abrirModalOtorgarCumpleanos('${p.emp.key}', '${nombreCompletoEmpleado(p.emp).replace(/'/g,"\\'")}', '${isoDeFechaLocal(p.fecha)}')">🎁 Otorgar día</button>` : `<span class="meta">Pendiente — lo otorga gerencia/master</span>`}
       </div>`).join("")}
   </div></div>`;
 }
@@ -9239,7 +9284,7 @@ function renderSeccionCoincidencias(solicitudes, empleadosPorKey, departamentoDe
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">No se bloquea automáticamente — jefatura y gerencia/master deben confirmar explícitamente que aceptan que salgan libres al mismo tiempo.</p>
     ${pendientes.map(c => {
       const conf = confirmaciones[c.depto + ":" + c.fecha] || {};
-      const nombres = c.empleados.map(k => (empleadosPorKey[k] && empleadosPorKey[k].NOMBRE_EMP) || k).join(", ");
+      const nombres = c.empleados.map(k => (empleadosPorKey[k] && nombreCompletoEmpleado(empleadosPorKey[k])) || k).join(", ");
       const deptoEsc = c.depto.replace(/'/g,"\\'");
       return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line); font-size:12.5px;">
         <div><b>${escapeHtml(c.depto)}</b> — ${fmtFechaSimple(c.fecha)}: ${escapeHtml(nombres)}</div>
@@ -9262,7 +9307,7 @@ function renderFormularioSolicitud(empleadosDisponibles){
         <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'solicitud-ausencia-empleado')" style="margin-bottom:3px;">
         <select id="solicitud-ausencia-empleado">
           <option value="">— Elegí —</option>
-          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
@@ -9321,7 +9366,7 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
         <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
         <select id="asignacion-directa-empleado">
           <option value="">— Elegí —</option>
-          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
@@ -9390,7 +9435,7 @@ function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departam
       return `<div class="catalog-item">
         <div class="row1">
           <div class="info">
-            <div class="name">${escapeHtml(emp ? emp.NOMBRE_EMP||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
+            <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
             <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s) · ${escapeHtml(departamentoDeEmpleado(emp))}${s.COMPROBANTE_DATA_URL ? " · 📎 comprobante adjunto" : ""}</div>
           </div>
           <div class="actions">${acciones}</div>
@@ -9415,8 +9460,8 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">💰 Saldo de vacaciones (hoy)</div>
     <div style="display:grid; grid-template-columns:1fr auto${puedeAjustar ? " auto" : ""}; gap:4px 10px; align-items:center; font-size:12.5px;">
       ${filas.map(f => {
-        const nombreEsc = (f.emp.NOMBRE_EMP || f.emp.key).replace(/'/g, "\\'");
-        return `<div>${escapeHtml(f.emp.NOMBRE_EMP||f.emp.key)}</div><div style="text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>${puedeAjustar ? `<div><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
+        const nombreEsc = (nombreCompletoEmpleado(f.emp) || f.emp.key).replace(/'/g, "\\'");
+        return `<div>${escapeHtml(nombreCompletoEmpleado(f.emp)||f.emp.key)}</div><div style="text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>${puedeAjustar ? `<div><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
       }).join("")}
     </div>
   </div></div>`;
@@ -9498,7 +9543,7 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
           const solicitudesEmp = todasLasSolicitudes.filter(s => s.EMPLEADO_KEY === emp.key);
           const horasEmp = registrosHorasExtra.filter(r => r.EMPLEADO_KEY === emp.key);
           return `<tr>
-            <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">${escapeHtml(emp.NOMBRE_EMP||emp.key)}</td>
+            <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">${escapeHtml(nombreCompletoEmpleado(emp)||emp.key)}</td>
             ${dias.map(d => {
               const fechaISO = isoDeFechaLocal(d);
               const etiqueta = etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, horasEmp);
@@ -9622,7 +9667,7 @@ async function exportarReporteAusenciasPorPersona(){
     filas.forEach(s => {
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
       const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
-      const valores = [emp ? emp.NOMBRE_EMP||s.EMPLEADO_KEY : s.EMPLEADO_KEY, tipoInfo.label, s.FECHA_INICIO, s.FECHA_FIN, s.DIAS, s.ESTADO, s.SOLICITADO_POR||"", s.FECHA_SOLICITUD ? fmtFecha(s.FECHA_SOLICITUD) : ""];
+      const valores = [emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY, tipoInfo.label, s.FECHA_INICIO, s.FECHA_FIN, s.DIAS, s.ESTADO, s.SOLICITADO_POR||"", s.FECHA_SOLICITUD ? fmtFecha(s.FECHA_SOLICITUD) : ""];
       valores.forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
       fila++;
     });
@@ -9664,7 +9709,7 @@ async function exportarReportePendientesNoTomados(){
     COLUMNAS.forEach((c,i) => { const cell = hdr.getCell(i+1); cell.value=c; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_HEADER}}; cell.font={bold:true}; cell.alignment={horizontal:"center"}; cell.border=bordeCelda; });
     let fila = 4;
     filas.forEach(f => {
-      const valores = [f.emp.NOMBRE_EMP||f.emp.key, f.saldo, f.saldo >= TOPE_SALDO_VACACIONES ? "Sí" : "No"];
+      const valores = [nombreCompletoEmpleado(f.emp)||f.emp.key, f.saldo, f.saldo >= TOPE_SALDO_VACACIONES ? "Sí" : "No"];
       valores.forEach((v,i) => {
         const cell = ws.getRow(fila).getCell(i+1);
         cell.value = v;
@@ -9735,7 +9780,7 @@ async function onGenericPdfSelected(inputEl){
       emp.CONTRATO_PDF_FIRMADO = dataUrl;
       emp.CONTRATO_PDF_NOMBRE = file.name;
       emp.HISTORIAL.unshift({ fecha: fmtFecha(new Date().toISOString()), texto: `Contrato firmado adjuntado ("${file.name}").` });
-      statusMsg("Contrato firmado guardado para " + (emp.NOMBRE_EMP || "el empleado") + ".");
+      statusMsg("Contrato firmado guardado para " + (nombreCompletoEmpleado(emp) || "el empleado") + ".");
     } else if (ctx.tipo === "permiso"){
       if (Array.isArray(emp.PERMISOS_HISTORIAL) && emp.PERMISOS_HISTORIAL[ctx.index]){
         emp.PERMISOS_HISTORIAL[ctx.index].pdfFirmado = dataUrl;
@@ -9867,7 +9912,7 @@ async function descargarDatosCCSS(key){
     const fila = {
       "Cédula": emp.IDENTIFICACION_EMP || "",
       "Tipo de identificación": emp.TIPO_IDENTIFICACION_EMP || "",
-      "Nombre completo": emp.NOMBRE_EMP || "",
+      "Nombre completo": nombreCompletoEmpleado(emp),
       "Fecha de nacimiento": emp.FECHA_NACIMIENTO_EMP || "",
       "Fecha de ingreso": emp.FECHA_INGRESO_EMP || "",
       "Puesto / Ocupación": emp.DEPARTAMENTO_EMP || "",
@@ -9881,7 +9926,7 @@ async function descargarDatosCCSS(key){
     const ws = XLSX.utils.json_to_sheet([fila]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "CCSS");
-    const nombreArchivo = "CCSS_" + String(emp.NOMBRE_EMP || "empleado").replace(/[^a-zA-Z0-9]+/g,"_") + ".xlsx";
+    const nombreArchivo = "CCSS_" + (nombreCompletoEmpleado(emp) || "empleado").replace(/[^a-zA-Z0-9]+/g,"_") + ".xlsx";
     XLSX.writeFile(wb, nombreArchivo);
     statusMsg("Descargado. Revisa que las columnas calcen con lo que pide el portal de la CCSS antes de subirlo — este formato es un punto de partida, no la plantilla oficial confirmada.", true);
   }catch(e){
@@ -9898,7 +9943,7 @@ async function generarRecomendacionDeEmpleado(key){
       statusMsg("La recomendación laboral solo aplica cuando el empleado ya salió de la empresa. Archívalo primero desde Empleados → Acciones → Archivar.", false);
       return;
     }
-    data.NOMBRE_RECOM = emp.NOMBRE_EMP || "";
+    data.NOMBRE_RECOM = nombreCompletoEmpleado(emp);
     data.CEDULA_RECOM = emp.IDENTIFICACION_EMP || "";
     data.PUESTO_RECOM = emp.DEPARTAMENTO_EMP || "";
     data.DEPARTAMENTO_RECOM = emp.DEPARTAMENTO_EMP || "";
@@ -9914,7 +9959,7 @@ async function generarRecomendacionDeEmpleado(key){
     currentEmpKeyForLetter = key;
     showTab("recomform");
     const tieneBorrador = emp.RECOM_RAZON_SALIDA || emp.RECOM_DESEMPENO || emp.RECOM_CUALIDADES;
-    statusMsg("Datos de " + (emp.NOMBRE_EMP || "el empleado") + " cargados" +
+    statusMsg("Datos de " + (nombreCompletoEmpleado(emp) || "el empleado") + " cargados" +
       (tieneBorrador ? " (con el borrador guardado)" : "") + ". Revisa los campos y descarga desde el botón dorado de arriba.");
   }catch(e){ statusMsg("No se pudo generar la recomendación.", false); }
 }
@@ -9939,7 +9984,7 @@ async function guardarBorradorRecomendacion(){
     emp.RECOM_LUGAR_FIRMA = data.LUGAR_FIRMA_RECOM || "";
     emp.RECOM_FECHA_FIRMA = data.FECHA_FIRMA_RECOM || "";
     await window.storage.set(fullKey, JSON.stringify(emp), false);
-    statusMsg("Borrador guardado — la próxima vez que generes la recomendación de " + (emp.NOMBRE_EMP || "este empleado") + " ya vendrá con estos datos.", true);
+    statusMsg("Borrador guardado — la próxima vez que generes la recomendación de " + (nombreCompletoEmpleado(emp) || "este empleado") + " ya vendrá con estos datos.", true);
   }catch(e){
     statusMsg("No se pudo guardar el borrador: " + e.message, false);
   }
@@ -9950,7 +9995,7 @@ async function generarDespidoDeEmpleado(key){
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
     if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
     const emp = JSON.parse(res.value);
-    data.NOMBRE_TRABAJADOR = emp.NOMBRE_EMP || data.NOMBRE_TRABAJADOR || "";
+    data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp) || data.NOMBRE_TRABAJADOR || "";
     data.IDENTIFICACION = emp.IDENTIFICACION_EMP || data.IDENTIFICACION || "";
     data.PUESTO = emp.DEPARTAMENTO_EMP || data.PUESTO || "";
 
@@ -9980,7 +10025,7 @@ async function generarDespidoDeEmpleado(key){
 
     currentEmpKeyForLetter = key;
     showTab("despidoform");
-    statusMsg("Listo — solo elige la modalidad y el motivo para " + (emp.NOMBRE_EMP || "el empleado") + ". El resto ya está completo.");
+    statusMsg("Listo — solo elige la modalidad y el motivo para " + (nombreCompletoEmpleado(emp) || "el empleado") + ". El resto ya está completo.");
   }catch(e){ statusMsg("No se pudo preparar la carta de despido.", false); }
 }
 
@@ -9990,7 +10035,7 @@ async function generarAmonestacionDeEmpleado(key){
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
     if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
     const emp = JSON.parse(res.value);
-    data.NOMBRE_AMONESTACION = emp.NOMBRE_EMP || "";
+    data.NOMBRE_AMONESTACION = nombreCompletoEmpleado(emp);
     data.CEDULA_AMONESTACION = emp.IDENTIFICACION_EMP || "";
     data.PUESTO_AMONESTACION = emp.DEPARTAMENTO_EMP || "";
 
@@ -10059,7 +10104,7 @@ async function generarAmonestacionDeEmpleado(key){
 
     currentEmpKeyForLetter = key;
     showTab("amonestacionform");
-    statusMsg("Listo — elige la falta del listado (o \"Otro\") y describe los hechos para " + (emp.NOMBRE_EMP || "el empleado") + ".");
+    statusMsg("Listo — elige la falta del listado (o \"Otro\") y describe los hechos para " + (nombreCompletoEmpleado(emp) || "el empleado") + ".");
   }catch(e){ statusMsg("No se pudo preparar la amonestación.", false); }
 }
 
@@ -10421,7 +10466,7 @@ function renderSeccionCumpleanosEmpleado(emp, empKey){
     <div style="font-weight:700; margin-bottom:6px;">🎂 Día de cumpleaños</div>
     <div style="font-size:12.5px;">Próximo: ${fmtFechaDesdeDate(prox.fecha)} (${prox.diasFaltan === 0 ? "hoy" : `en ${prox.diasFaltan} día(s)`})</div>
     <div style="font-size:12.5px; margin-top:4px;">${yaOtorgado ? "✅ Ya otorgado este año." : "⏳ Pendiente de otorgar este año."}</div>
-    ${(!yaOtorgado && window.sdgApi && window.sdgApi.puedeEditar()) ? `<button class="btn primary" style="margin-top:6px;" onclick="abrirModalOtorgarCumpleanos('${empKey}', '${(emp.NOMBRE_EMP||"").replace(/'/g,"\\'")}', '${isoDeFechaLocal(prox.fecha)}')">🎁 Otorgar día</button>` : ""}
+    ${(!yaOtorgado && window.sdgApi && window.sdgApi.puedeEditar()) ? `<button class="btn primary" style="margin-top:6px;" onclick="abrirModalOtorgarCumpleanos('${empKey}', '${nombreCompletoEmpleado(emp).replace(/'/g,"\\'")}', '${isoDeFechaLocal(prox.fecha)}')">🎁 Otorgar día</button>` : ""}
   </div></div>`;
 }
 
@@ -10440,14 +10485,14 @@ async function renderListaPerfilBusqueda(){
     const empleados = await cargarEmpleadosDB();
     const termino = perfilBusqueda.toLowerCase();
     const filtrados = termino
-      ? empleados.filter(e => (e.NOMBRE_EMP||"").toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
+      ? empleados.filter(e => nombreCompletoEmpleado(e).toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
       : empleados;
     const ordenados = filtrados.slice().sort(compararPorApellido);
     if (!ordenados.length){ cont.innerHTML = `<div class="empty-state">Ningún empleado coincide con la búsqueda.</div>`; return; }
     cont.innerHTML = ordenados.map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="verPerfilEmpleado('${e.key.replace(/'/g,"\\'")}')">
       <div class="row1">
         <div class="info">
-          <div class="name">${escapeHtml(e.NOMBRE_EMP||e.key)}${e.ARCHIVADO ? ` <span class="meta" style="color:var(--ink-soft);">(archivado)</span>` : ""}</div>
+          <div class="name">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}${e.ARCHIVADO ? ` <span class="meta" style="color:var(--ink-soft);">(archivado)</span>` : ""}</div>
           <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
         </div>
       </div>
@@ -10550,7 +10595,7 @@ async function renderPerfilEmpleado(){
       <button class="btn" onclick="showTab('empleados')" style="margin-bottom:12px;">← Volver a Empleados</button>
       <div class="section-card" style="border-color:var(--leaf);">
         <div class="section-body">
-          <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">${escapeHtml(emp.NOMBRE_EMP||"")}</div>
+          <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">${escapeHtml(nombreCompletoEmpleado(emp))}</div>
           <div style="font-size:12.5px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(emp.DEPARTAMENTO_EMP||"")} · ${escapeHtml(emp.IDENTIFICACION_EMP||"")}</div>
           <div style="font-size:12.5px; color:var(--ink-soft);">Salario: ${salarioNum ? "₡"+salarioNum.toLocaleString("es-CR") : "—"} · Ingreso: ${escapeHtml(emp.FECHA_INGRESO_EMP||"—")}</div>
         </div>
@@ -10666,7 +10711,7 @@ async function actualizarContratoDeEmpleado(key){
     const vinculados = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
     if (vinculados.length){
       await openContract(vinculados[0].key);
-      statusMsg("Se abrió el contrato ya existente de " + (emp.NOMBRE_EMP || "el empleado") + " para actualizarlo.");
+      statusMsg("Se abrió el contrato ya existente de " + (nombreCompletoEmpleado(emp) || "el empleado") + " para actualizarlo.");
       return;
     }
 
@@ -10676,7 +10721,7 @@ async function actualizarContratoDeEmpleado(key){
     if (emp.PUESTO_KEY){
       await usePuesto(emp.PUESTO_KEY);
     }
-    data.NOMBRE_TRABAJADOR = emp.NOMBRE_EMP || "";
+    data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp);
     data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
     currentEmpKeyForContract = key;
     if (!emp.PUESTO_KEY && !data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
@@ -10690,7 +10735,7 @@ async function actualizarContratoDeEmpleado(key){
     updateUpdateBtn();
     renderForm();
     showTab("form");
-    statusMsg("Contrato nuevo iniciado con los datos de " + (emp.NOMBRE_EMP || "el empleado") + " y su puesto. Completa empresa, propiedad y salario para terminarlo.");
+    statusMsg("Contrato nuevo iniciado con los datos de " + (nombreCompletoEmpleado(emp) || "el empleado") + " y su puesto. Completa empresa, propiedad y salario para terminarlo.");
   }catch(e){ statusMsg("No se pudo cargar ese empleado.", false); }
 }
 
@@ -10733,7 +10778,7 @@ async function mostrarModalConfirmarHandbook(key, file){
   try{
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
     const emp = res && res.value ? JSON.parse(res.value) : {};
-    nombreEmp = emp.NOMBRE_EMP || "";
+    nombreEmp = nombreCompletoEmpleado(emp);
   }catch(e){ /* si no se puede leer el nombre, igual se puede confirmar */ }
   body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;">Vas a archivar este PDF como el Handbook firmado de <b>${escapeHtml(nombreEmp || "este empleado")}</b>:</div>
     <div class="portfolio-box" style="margin-bottom:14px;">📎 ${escapeHtml(file.name)} (${(file.size/1024).toFixed(0)} KB)</div>
@@ -10774,7 +10819,7 @@ async function guardarHandbookConfirmado(){
     cerrarModalIncompletos();
     handbookPdfPendingKey = null;
     handbookPdfPendingFile = null;
-    statusMsg("Firma del Handbook confirmada y PDF guardado para " + (emp.NOMBRE_EMP || "el empleado") + ".");
+    statusMsg("Firma del Handbook confirmada y PDF guardado para " + (nombreCompletoEmpleado(emp) || "el empleado") + ".");
     renderCatalogTab("empleados");
     if (typeof perfilActualKey !== "undefined" && perfilActualKey === key && typeof renderPerfilEmpleado === "function"){
       renderPerfilEmpleado();
@@ -10881,7 +10926,7 @@ async function mostrarModalDesignarJefatura(key){
     }
 
     body.innerHTML = `
-      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Esto crea una cuenta de acceso para <b>${escapeHtml(emp.NOMBRE_EMP||"")}</b> con el rol Jefatura: verá el portal en modo solo lectura, y podrá aprobar, corregir o rechazar las horas extra de su departamento.</div>
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Esto crea una cuenta de acceso para <b>${escapeHtml(nombreCompletoEmpleado(emp))}</b> con el rol Jefatura: verá el portal en modo solo lectura, y podrá aprobar, corregir o rechazar las horas extra de su departamento.</div>
       <div class="field">
         <label>Correo de acceso</label>
         <input type="email" id="jefatura-email" value="${escapeHtml(emp.CORREO_EMP||"")}" placeholder="correo@empresa.com">
@@ -10915,7 +10960,7 @@ async function confirmarDesignarJefatura(key){
     const emp = res && res.value ? JSON.parse(res.value) : null;
     const prop = getPropiedadActual();
     await window.sdgApi.usuarios.crear({
-      nombre: emp ? emp.NOMBRE_EMP : "",
+      nombre: emp ? nombreCompletoEmpleado(emp) : "",
       email,
       cedula: emp ? emp.IDENTIFICACION_EMP : "",
       password,
@@ -10998,7 +11043,7 @@ async function confirmarArchivarEmpleado(){
     await window.storage.set(fullKey, JSON.stringify(emp), false);
     cerrarModalArchivar();
     renderCatalogTab("empleados");
-    statusMsg((emp.NOMBRE_EMP || "El empleado") + " fue archivado.", true, async function(){
+    statusMsg((nombreCompletoEmpleado(emp) || "El empleado") + " fue archivado.", true, async function(){
       await reactivarEmpleado(key);
     });
   }catch(e){ statusMsg("No se pudo archivar.", false); }
@@ -11015,7 +11060,7 @@ async function reactivarEmpleado(key){
     await window.storage.set(fullKey, JSON.stringify(emp), false);
     const empleadosVisible = document.getElementById("empleados-panel").style.display !== "none";
     if (empleadosVisible) renderCatalogTab("empleados"); else renderArchivoList();
-    statusMsg((emp.NOMBRE_EMP || "El empleado") + " fue reactivado.");
+    statusMsg((nombreCompletoEmpleado(emp) || "El empleado") + " fue reactivado.");
   }catch(e){ statusMsg("No se pudo reactivar.", false); }
 }
 
@@ -11041,7 +11086,7 @@ async function renderArchivoList(){
       return `<div class="catalog-item">
         <div class="row1">
           <div class="info">
-            <div class="name">${escapeHtml(it.NOMBRE_EMP || it.key)}</div>
+            <div class="name">${escapeHtml(nombreCompletoEmpleado(it) || it.key)}</div>
             ${meta ? `<div class="meta">${escapeHtml(meta)}</div>` : ""}
             ${it.SALIDA_PDF_FIRMADO ? `<div style="margin-top:3px;"><button class="link-badge" onclick="descargarSalidaFirmada('${k2}')">📎 Ver carta firmada</button></div>` : `<div class="hint" style="margin:2px 0 0;">⚠️ Sin carta de salida firmada adjunta</div>`}
           </div>
