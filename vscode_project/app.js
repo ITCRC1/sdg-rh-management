@@ -2725,6 +2725,22 @@ async function leerFilasArchivo(file, esCSV){
   return mejores;
 }
 
+// Convierte la celda de fecha de una fila importada (Excel/CSV) al formato
+// DD/MM/AAAA que el resto de la app espera para FECHA_INGRESO_EMP (ver
+// parsearFechaEmpleado) — la celda puede llegar como texto en cualquier
+// formato, como objeto Date (si la hoja trae fechas nativas) o como número
+// de serie de Excel. Si no se puede interpretar, se guarda tal cual llegó
+// en vez de perderla, para no ocultar el dato crudo.
+function normalizarFechaImportada(raw){
+  if (raw instanceof Date){
+    return isNaN(raw.getTime()) ? "" : `${String(raw.getDate()).padStart(2,"0")}/${String(raw.getMonth()+1).padStart(2,"0")}/${raw.getFullYear()}`;
+  }
+  const s = String(raw == null ? "" : raw).trim();
+  if (!s) return "";
+  const d = parsearFechaEmpleado(s);
+  return d ? `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}` : s;
+}
+
 // "Importar Empleados" — SOLO crea. Si la cédula o el número de empleado de la
 // fila ya existe, esa fila se omite tal cual está guardada (para actualizar a
 // alguien que ya existe se usa "Actualizar datos de Empleados").
@@ -2745,7 +2761,7 @@ async function guardarFilasEmpleadosNuevos(rows){
       NUMERO_EMPLEADO: String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim(),
       DEPARTAMENTO_EMP: String(row["DEPARTAMENTO"] || "").trim(),
       IDENTIFICACION_EMP: String(row["IDENTIFICACION"] || "").trim(),
-      FECHA_INGRESO_EMP: String(row["FECHA DE INGRESO"] || "").trim(),
+      FECHA_INGRESO_EMP: normalizarFechaImportada(row["FECHA DE INGRESO"]),
       SALARIO_EMP: String(row["SALARIO"] || "").trim(),
       CORREO_EMP: String(row["CORREO"] || "").trim(),
       CELULAR_EMP: String(row["CELULAR PERSONAL"] || "").trim(),
@@ -5075,6 +5091,29 @@ function parsearFechaDDMMYYYY(str){
   return isNaN(d.getTime()) ? null : d;
 }
 
+// Envoltorio tolerante para FECHA_INGRESO_EMP: casi siempre es DD/MM/AAAA
+// (parsearFechaDDMMYYYY basta), pero un empleado cargado por "Importar
+// Empleados" puede tener la celda de Excel guardada tal cual llegó — a
+// veces un número de serie de fecha de Excel (días desde 1899-12-30), a
+// veces otro formato de texto. Sin este respaldo, esas fechas quedan sin
+// interpretarse y el saldo de vacaciones (que depende de la antigüedad)
+// se calcula en 0 sin ningún aviso.
+function parsearFechaEmpleado(str){
+  const directa = parsearFechaDDMMYYYY(str);
+  if (directa) return directa;
+  const s = String(str == null ? "" : str).trim();
+  if (!s) return null;
+  if (/^\d+(\.\d+)?$/.test(s)){
+    const serial = Number(s);
+    if (serial > 0 && serial < 100000){
+      const ms = Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000;
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    }
+  }
+  return parseFechaFlexible(s);
+}
+
 // Reporte de "incidencias" (movimientos de personal) entre dos fechas: quién
 // entró y quién salió en ese rango. No es un roster completo — igual que el
 // script de referencia del usuario, solo aparece quien tuvo un ingreso o una
@@ -5110,7 +5149,7 @@ async function generarReporteIncidencias(){
     const empleados = await cargarEmpleadosDB();
     const filas = [];
     empleados.forEach(e => {
-      const ingreso = parsearFechaDDMMYYYY(e.FECHA_INGRESO_EMP);
+      const ingreso = parsearFechaEmpleado(e.FECHA_INGRESO_EMP);
       const salida = e.ARCHIVADO ? parsearFechaDDMMYYYY(e.FECHA_ARCHIVADO) : null;
       const ingresoEnRango = ingreso && ingreso >= desde && ingreso <= hasta;
       const salidaEnRango = salida && salida >= desde && salida <= hasta;
@@ -5633,7 +5672,7 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
   let ausenciasDetectadas = 0;
   for (const [empKey, empleado] of empleadosEnArchivo){
     const fechasConRegistro = fechasPorEmpleado.get(empKey) || new Set();
-    const ingreso = parsearFechaDDMMYYYY(empleado && empleado.FECHA_INGRESO_EMP);
+    const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
     const salidaStr = (empleado && empleado.ARCHIVADO && empleado.FECHA_ARCHIVADO)
       ? (parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO) ? isoDeFechaLocal(parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO)) : null)
       : null;
@@ -5938,7 +5977,7 @@ function rangoQuincenaActual(hoy){
 // para no pagarle días de una quincena en la que ni siquiera estaba
 // contratado. null si ni un día de la quincena cae dentro de su contrato.
 function diasBaseParaEmpleadoEnQuincena(empleado, rango){
-  const ingreso = parsearFechaDDMMYYYY(empleado && empleado.FECHA_INGRESO_EMP);
+  const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   const salida = (empleado && empleado.ARCHIVADO) ? parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO) : null;
   const inicioEfectivo = (ingreso && ingreso > rango.inicio) ? ingreso : rango.inicio;
   const finEfectivo = (salida && salida < rango.fin) ? salida : rango.fin;
@@ -8120,7 +8159,7 @@ function proximoPrimeroDeDiciembre(d){
 // restar el uso al final da un resultado distinto (y equivocado) cuando el
 // uso ocurre antes de llegar al tope de nuevo.
 function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasIncapacidad, fechaCorte){
-  const ingreso = parsearFechaDDMMYYYY(empleado && empleado.FECHA_INGRESO_EMP);
+  const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   if (!ingreso || ingreso > fechaCorte) return 0;
   const incapacidadSet = new Set(diasIncapacidad || []);
   const primerAniversario = new Date(ingreso.getFullYear() + 1, ingreso.getMonth(), ingreso.getDate());
@@ -9877,7 +9916,7 @@ async function renderPerfilEmpleado(){
     if (refMin && refMin.salarioMin && salarioNum && salarioNum < refMin.salarioMin){
       alertas.push(`⚠️ El salario guardado (₡${salarioNum.toLocaleString("es-CR")}) está por debajo del mínimo legal MTSS para ${escapeHtml(refMin.puestoEs)} (₡${Math.round(refMin.salarioMin).toLocaleString("es-CR")}).`);
     }
-    const fechaIngreso = parseFechaFlexible(emp.FECHA_INGRESO_EMP);
+    const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
     if (fechaIngreso && !emp.ARCHIVADO){
       const finPrueba = new Date(fechaIngreso); finPrueba.setMonth(finPrueba.getMonth()+3);
       const diasRestantes = Math.round((finPrueba - new Date())/86400000);
@@ -10029,7 +10068,7 @@ async function actualizarContratoDeEmpleado(key){
     data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
     currentEmpKeyForContract = key;
     if (!emp.PUESTO_KEY && !data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
-    const fechaIngreso = parseFechaFlexible(emp.FECHA_INGRESO_EMP);
+    const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
     if (fechaIngreso){
       data.DIA_INICIO = String(fechaIngreso.getDate());
       data.MES_INICIO = MESES[fechaIngreso.getMonth()];
