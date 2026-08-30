@@ -3923,6 +3923,7 @@ function showTab(which){
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
   document.getElementById("diaslibresvacaciones-panel").style.display = which === "vacaciones" ? "block" : "none";
+  document.getElementById("incapacidades-panel").style.display = which === "incapacidades" ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
   document.getElementById("amonestacionform-toolbar").style.display = (which === "amonestacionform") ? "flex" : "none";
@@ -3972,6 +3973,7 @@ function showTab(which){
   if (which === "vacacionesform") renderVacacionesForm();
   if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
   if (which === "vacaciones") renderDiasLibresVacacionesPanel();
+  if (which === "incapacidades") renderIncapacidadesPanel();
 }
 
 // ---------- dropdown navbar ----------
@@ -5011,7 +5013,6 @@ function formatoRelativoActividad(iso){
 // navegación ya refleja la estructura final aprobada y el desarrollo puede
 // ser incremental sin fingir funcionalidad a medias.
 const MODULOS_PENDIENTES = {
-  incapacidades: { icono: "🤒", titulo: "Incapacidades", resumen: "Panel de incapacidades activas y alertas automáticas de regreso — el módulo aparte que menciona la especificación de Días Libres y Vacaciones. Su efecto sobre el saldo de vacaciones (Art. 160 CT) ya se aplica desde ese módulo." },
   estadisticas: { icono: "📊", titulo: "Estadísticas", resumen: "Gráficos de distribución de personal y otros indicadores — separados del Dashboard a propósito." },
   asistente: { icono: "🤖", titulo: "Asistente IA", resumen: "Consultas en lenguaje natural sobre los datos internos (ej. \"¿cuántos empleados están incapacitados?\", \"contratos que vencen este mes\")." },
 };
@@ -8182,6 +8183,287 @@ const TIPOS_SOLICITUD_AUSENCIA = {
 };
 
 function isoDeHoy(){ return isoDeFechaLocal(new Date()); }
+
+// ---------- Incapacidades (CCSS/INS) ----------
+// Registro propio (no reutiliza solicitud_ausencia:) porque necesita datos
+// que las demás ausencias no tienen: tipo legal (distinto tratamiento cada
+// uno: enfermedad común, riesgo de trabajo — Art. 218 CT/INS obliga a veces
+// a completar salario, maternidad), número de boleta oficial para trazar
+// contra la CCSS/INS, encadenado de prórrogas (la CCSS extiende la misma
+// incapacidad varias veces) y el salario diario promedio de referencia para
+// que RH sepa cuánto le corresponde completar a la empresa.
+//
+// Se registra ya "aprobada" (no pasa por cola de pendientes como
+// vacaciones/permiso): para cuando alguien la registra ya existe la boleta
+// física/digital en mano, no es algo que gerencia tenga que aprobar después.
+// Al registrarla se justifican los días en horas_extra: (mismo mecanismo que
+// usan vacaciones/permiso — ver justificarRangoISO) con TIPO_DIA
+// "incapacidad" ya "aprobada" de una vez, que es lo que
+// diasIncapacidadAprobados() lee para pausar la acumulación de vacaciones
+// (Art. 160 CT) — no hace falta tocar calcularSaldoVacaciones para nada.
+const INCAPACIDAD_PREFIX = "incapacidad:";
+const TIPOS_INCAPACIDAD = {
+  enfermedad_comun: { label: "Enfermedad común", emoji: "🤒" },
+  riesgo_trabajo: { label: "Riesgo de trabajo", emoji: "⚠️" },
+  maternidad: { label: "Maternidad", emoji: "🤰" },
+};
+// Config de la propiedad activa: si la empresa completa el salario en
+// incapacidades por riesgo de trabajo (no hay motor de planilla que calcule
+// montos todavía — ver comentario en el módulo de Planilla —, así que esto
+// solo se muestra como referencia informativa junto a cada registro).
+const CONFIG_INCAPACIDAD_KEY = "config_incapacidad";
+
+async function listarIncapacidades(){
+  const res = await window.storage.list(INCAPACIDAD_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const registros = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      return v ? { key: k, ...v } : null;
+    }catch(e){ return null; }
+  }));
+  return registros.filter(Boolean);
+}
+
+async function obtenerConfigIncapacidad(){
+  try{
+    const r = await window.storage.get(CONFIG_INCAPACIDAD_KEY, false);
+    return r && r.value ? JSON.parse(r.value) : { completarSalarioRiesgoTrabajo: false };
+  }catch(e){ return { completarSalarioRiesgoTrabajo: false }; }
+}
+
+async function setConfigIncapacidad(completar){
+  try{
+    await window.storage.set(CONFIG_INCAPACIDAD_KEY, JSON.stringify({ completarSalarioRiesgoTrabajo: !!completar }), false);
+    renderIncapacidadesPanel();
+  }catch(e){ statusMsg("No se pudo guardar la configuración: " + e.message, false); }
+}
+
+async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, salarioDiarioPromedio, comprobanteDataUrl, comprobanteNombre }){
+  if (!TIPOS_INCAPACIDAD[tipo]) throw new Error("Tipo de incapacidad inválido.");
+  if (!empKey) throw new Error("Elegí un empleado.");
+  if (!fechaInicio || !fechaFin) throw new Error("Elegí las fechas.");
+  if (fechaFin < fechaInicio) throw new Error("La fecha de fin no puede ser anterior a la de inicio.");
+  const dias = diasEntreFechasISO(fechaInicio, fechaFin);
+  const id = `${fechaInicio}-${Date.now()}`;
+  const key = INCAPACIDAD_PREFIX + empKey + ":" + id;
+  const email = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+  const value = {
+    EMPLEADO_KEY: empKey,
+    TIPO_INCAPACIDAD: tipo,
+    ES_PRORROGA: !!esProrroga,
+    INCAPACIDAD_ORIGINAL_KEY: esProrroga ? (incapacidadOriginalKey || null) : null,
+    NUMERO_BOLETA: (numeroBoleta || "").trim(),
+    FECHA_INICIO: fechaInicio,
+    FECHA_FIN: fechaFin,
+    DIAS: dias,
+    SALARIO_DIARIO_PROMEDIO: (salarioDiarioPromedio || salarioDiarioPromedio === 0) ? salarioDiarioPromedio : null,
+    COMPROBANTE_DATA_URL: comprobanteDataUrl || null,
+    COMPROBANTE_NOMBRE: comprobanteNombre || null,
+    ESTADO: "aprobada",
+    REGISTRADO_POR: email,
+    FECHA_REGISTRO: new Date().toISOString(),
+  };
+  await window.storage.set(key, JSON.stringify(value), false);
+  await justificarRangoISO(empKey, fechaInicio, fechaFin, "incapacidad", "incapacidad_registro", {
+    ESTADO: "aprobada",
+    APROBADO_POR: email,
+    FECHA_DECISION: new Date().toISOString(),
+    INCAPACIDAD_KEY: key,
+  });
+  const tipoLabel = TIPOS_INCAPACIDAD[tipo].label;
+  await agregarBitacora(empKey, `Incapacidad registrada (${tipoLabel}${esProrroga ? ", prórroga" : ""}): del ${fmtFecha(fechaInicio + "T00:00:00")} al ${fmtFecha(fechaFin + "T00:00:00")} (${dias} día(s))${numeroBoleta ? " — boleta " + numeroBoleta : ""}.`);
+  return key;
+}
+
+async function anularIncapacidad(key){
+  if (!confirm("¿Anular este registro de incapacidad? Los días ya justificados en Horas Extra no se revierten solos — corrígelos ahí si hace falta.")) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "anulada";
+    v.ANULADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_ANULACION = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Incapacidad anulada.");
+    renderIncapacidadesPanel();
+  }catch(e){ statusMsg("No se pudo anular: " + e.message, false); }
+}
+
+// Cache del último listado para poblar el selector de prórroga sin
+// re-consultar el servidor en cada cambio del <select> de empleado.
+let incapacidadesCacheParaProrroga = [];
+
+function actualizarSelectorProrrogaIncapacidad(){
+  const empKey = (document.getElementById("incapacidad-empleado") || {}).value;
+  const sel = document.getElementById("incapacidad-original");
+  if (!sel) return;
+  const delEmpleado = incapacidadesCacheParaProrroga.filter(i => i.EMPLEADO_KEY === empKey && i.ESTADO !== "anulada");
+  sel.innerHTML = `<option value="">— Ninguna —</option>` + delEmpleado.map(i =>
+    `<option value="${i.key}">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")}${i.NUMERO_BOLETA ? " — " + escapeHtml(i.NUMERO_BOLETA) : ""}</option>`
+  ).join("");
+}
+
+function renderFormularioIncapacidad(empleadosDisponibles){
+  const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
+  return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📝 Registrar incapacidad</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobada de inmediato (ya existe la boleta) y pausa la acumulación de vacaciones mientras dure.</p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
+        <select id="incapacidad-empleado" onchange="actualizarSelectorProrrogaIncapacidad()">
+          <option value="">— Elegí —</option>
+          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(e.NOMBRE_EMP || e.key)}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
+        <select id="incapacidad-tipo">
+          ${Object.keys(TIPOS_INCAPACIDAD).map(t => `<option value="${t}">${TIPOS_INCAPACIDAD[t].emoji} ${TIPOS_INCAPACIDAD[t].label}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+        <input type="date" id="incapacidad-desde">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+        <input type="date" id="incapacidad-hasta">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">N° de boleta (CCSS/INS)
+        <input type="text" id="incapacidad-boleta" placeholder="Ej. CCSS-9938472-A">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Salario diario promedio (opcional)
+        <input type="text" id="incapacidad-salario" placeholder="₡ referencia SICERE">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
+        <input type="file" id="incapacidad-comprobante" accept=".pdf,image/*">
+      </label>
+    </div>
+    <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;">
+        <input type="checkbox" id="incapacidad-es-prorroga" onchange="document.getElementById('incapacidad-prorroga-wrap').style.display = this.checked ? 'flex' : 'none';">
+        Es prórroga de una incapacidad anterior
+      </label>
+      <label id="incapacidad-prorroga-wrap" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px; flex:1; min-width:220px;">Incapacidad original
+        <select id="incapacidad-original"><option value="">— Elegí primero al empleado —</option></select>
+      </label>
+    </div>
+    <button class="btn primary" style="margin-top:10px;" onclick="confirmarRegistroIncapacidad();">✅ Registrar incapacidad</button>
+    <div id="incapacidad-status" style="font-size:12px; margin-top:6px;"></div>
+  </div></div>`;
+}
+
+async function confirmarRegistroIncapacidad(){
+  const status = document.getElementById("incapacidad-status");
+  const empKey = (document.getElementById("incapacidad-empleado")||{}).value;
+  const tipo = (document.getElementById("incapacidad-tipo")||{}).value;
+  const fechaInicio = (document.getElementById("incapacidad-desde")||{}).value;
+  const fechaFin = (document.getElementById("incapacidad-hasta")||{}).value;
+  const numeroBoleta = (document.getElementById("incapacidad-boleta")||{}).value;
+  const salarioTxt = (document.getElementById("incapacidad-salario")||{}).value;
+  const esProrroga = !!(document.getElementById("incapacidad-es-prorroga")||{}).checked;
+  const incapacidadOriginalKey = (document.getElementById("incapacidad-original")||{}).value || null;
+  const inputComprobante = document.getElementById("incapacidad-comprobante");
+  const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
+  try{
+    if (!empKey) throw new Error("Elegí un empleado.");
+    let comprobanteDataUrl = null, comprobanteNombre = null;
+    if (archivo){
+      if (archivo.size > 3.5*1024*1024) throw new Error("El comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+      comprobanteDataUrl = await leerArchivoComoDataUrl(archivo);
+      comprobanteNombre = archivo.name;
+    }
+    const salarioDiarioPromedio = salarioTxt ? (Number(String(salarioTxt).replace(/[^0-9.]/g,"")) || null) : null;
+    await crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, salarioDiarioPromedio, comprobanteDataUrl, comprobanteNombre });
+    statusMsg("Incapacidad registrada.");
+    renderIncapacidadesPanel();
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar){
+  const emp = empleadosPorKey[i.EMPLEADO_KEY];
+  const tipo = TIPOS_INCAPACIDAD[i.TIPO_INCAPACIDAD] || { label: i.TIPO_INCAPACIDAD || "—", emoji: "🤒" };
+  const anulada = i.ESTADO === "anulada";
+  return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line); ${anulada ? "opacity:0.5;" : ""}">
+    <div style="font-size:12.5px;">
+      <b>${escapeHtml(emp ? (emp.NOMBRE_EMP||emp.key) : i.EMPLEADO_KEY)}</b> — ${tipo.emoji} ${escapeHtml(tipo.label)}${i.ES_PRORROGA ? " (prórroga)" : ""}<br>
+      <span class="meta">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")} · ${i.DIAS} día(s)${i.NUMERO_BOLETA ? " · boleta " + escapeHtml(i.NUMERO_BOLETA) : ""}${anulada ? " · ANULADA" : ""}</span>
+    </div>
+    ${(puedeRegistrar && !anulada) ? `<button class="btn" style="padding:4px 8px; font-size:10.5px;" onclick="anularIncapacidad('${i.key}')">Anular</button>` : ""}
+  </div>`;
+}
+
+async function renderIncapacidadesPanel(){
+  const panel = document.getElementById("incapacidades-panel");
+  if (!panel) return;
+  panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const puedeRegistrar = !!(window.sdgApi && window.sdgApi.puedeEditar());
+    const [empleados, incapacidades, config] = await Promise.all([
+      cargarEmpleadosDB(), listarIncapacidades(), obtenerConfigIncapacidad(),
+    ]);
+    const empleadosActivos = empleados.filter(e => !e.ARCHIVADO);
+    const empleadosPorKey = {};
+    empleadosActivos.forEach(e => { empleadosPorKey[e.key] = e; });
+    incapacidadesCacheParaProrroga = incapacidades;
+
+    const vigentes = incapacidades.filter(i => i.ESTADO !== "anulada");
+    const hoyISO = isoDeHoy();
+    const activas = vigentes.filter(i => i.FECHA_INICIO <= hoyISO && i.FECHA_FIN >= hoyISO).sort((a,b) => (a.FECHA_FIN||"").localeCompare(b.FECHA_FIN||""));
+    const proximasARegresar = activas.filter(i => {
+      const diasParaRegreso = Math.round((new Date(i.FECHA_FIN + "T00:00:00") - new Date(hoyISO + "T00:00:00")) / 86400000);
+      return diasParaRegreso <= 3;
+    });
+    const historial = incapacidades
+      .filter(i => !(i.ESTADO !== "anulada" && i.FECHA_INICIO <= hoyISO && i.FECHA_FIN >= hoyISO))
+      .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""))
+      .slice(0, 30);
+
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🤒 Incapacidades</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Registro con boleta CCSS/INS, incapacidades activas y alerta cuando se acerca la fecha de regreso. Pausa la acumulación de vacaciones automáticamente (Art. 160 CT) mientras está activa.</div>
+    </div>`;
+
+    if (proximasARegresar.length){
+      html += `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold); background:#FBF6E8;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:6px;">⏳ Regreso próximo</div>
+        ${proximasARegresar.map(i => {
+          const emp = empleadosPorKey[i.EMPLEADO_KEY];
+          const diasParaRegreso = Math.round((new Date(i.FECHA_FIN + "T00:00:00") - new Date(hoyISO + "T00:00:00")) / 86400000);
+          return `<div style="font-size:12.5px; padding:4px 0;"><b>${escapeHtml(emp ? (emp.NOMBRE_EMP||emp.key) : i.EMPLEADO_KEY)}</b> — regresa el ${fmtFecha(i.FECHA_FIN + "T00:00:00")} (${diasParaRegreso <= 0 ? "hoy o ya pasó" : `en ${diasParaRegreso} día(s)`})</div>`;
+        }).join("")}
+      </div></div>`;
+    }
+
+    if (puedeRegistrar){
+      html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:6px;">⚙️ Riesgo de trabajo</div>
+        <label style="font-size:12.5px; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" ${config.completarSalarioRiesgoTrabajo ? "checked" : ""} onchange="setConfigIncapacidad(this.checked)">
+          Completar el salario en incapacidades por riesgo de trabajo
+        </label>
+        <div style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Referencia informativa junto a cada registro — el módulo de Planilla todavía no calcula montos (ver Datos → Planilla).</div>
+      </div></div>`;
+      html += renderFormularioIncapacidad(empleadosActivos);
+    }
+
+    html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📋 Incapacidades activas (${activas.length})</div>
+      ${activas.length ? activas.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar)).join("") : `<div class="empty-state" style="padding:10px 0;">Nadie está incapacitado hoy.</div>`}
+    </div></div>`;
+
+    html += `<div class="section-card"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗂️ Historial reciente</div>
+      ${historial.length ? historial.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar)).join("") : `<div class="empty-state" style="padding:10px 0;">Sin registros anteriores.</div>`}
+    </div></div>`;
+
+    panel.innerHTML = html;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo: ${escapeHtml(e.message || "")}</div>`;
+  }
+}
 
 // Días de incapacidad ya aprobados (fechas "AAAA-MM-DD") — se leen de los
 // mismos registros horas_extra: (TIPO_DIA "incapacidad", ESTADO "aprobada"),
