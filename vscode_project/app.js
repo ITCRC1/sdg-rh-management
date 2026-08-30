@@ -8225,8 +8225,10 @@ const TIPOS_INCAPACIDAD = {
 // el subsidio completo (regla estándar de ley).
 //
 // Devuelve { montoAPagarPlanilla, diasValidosAguinaldo, diasValidosVacaciones }.
-// montoAPagarPlanilla es null si no hay SALARIO_DIARIO_PROMEDIO guardado (no
-// se puede calcular sin ese dato).
+// SALARIO_DIARIO_PROMEDIO se calcula solo, al registrar la incapacidad, a
+// partir del salario mensual ya guardado en la ficha del empleado (ver
+// salarioDiarioDeEmpleado) — nunca se captura a mano. montoAPagarPlanilla es
+// null solo si a ese empleado no se le había guardado un salario en su ficha.
 //
 // ⚠️ Los "días válidos para vacaciones" que exige este motor (todos los días
 // de enfermedad_comun/riesgo_trabajo/maternidad SÍ acumulan) contradicen a
@@ -8295,7 +8297,23 @@ async function listarIncapacidades(){
   return registros.filter(Boolean);
 }
 
-async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, salarioDiarioPromedio, comprobanteDataUrl, comprobanteNombre }){
+// Salario diario promedio para el cálculo de pago en colillas: sale directo
+// del salario mensual bruto ya guardado en la ficha del empleado (SALARIO_EMP
+// o SALARIO_USD_EMP según MONEDA_SALARIO_EMP), entre 30 — la misma regla que
+// ya usa el cálculo de horas extra (ver salarioHora en renderHorasExtrasPanel)
+// para pasar de mensual a diario. Nunca se pide a mano: así siempre coincide
+// con lo que ya está en el sistema y se actualiza solo si cambia el salario
+// del empleado (queda "congelado" en el registro al momento de crearlo, para
+// que un aumento posterior no altere una incapacidad ya registrada).
+function salarioDiarioDeEmpleado(emp){
+  if (!emp) return { monto: null, moneda: "CRC" };
+  const moneda = emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC";
+  const bruto = moneda === "USD" ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP;
+  const n = Number(String(bruto || "").replace(/[^0-9.]/g, ""));
+  return { monto: (n && !isNaN(n)) ? n / 30 : null, moneda };
+}
+
+async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, comprobanteDataUrl, comprobanteNombre }){
   if (!TIPOS_INCAPACIDAD[tipo]) throw new Error("Tipo de incapacidad inválido.");
   if (!empKey) throw new Error("Elegí un empleado.");
   if (!fechaInicio || !fechaFin) throw new Error("Elegí las fechas.");
@@ -8304,6 +8322,9 @@ async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBol
   const id = `${fechaInicio}-${Date.now()}`;
   const key = INCAPACIDAD_PREFIX + empKey + ":" + id;
   const email = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+  const empRes = await window.storage.get(CATALOGS.empleados.prefix + empKey, false);
+  const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+  const { monto: salarioDiarioPromedio, moneda: salarioMoneda } = salarioDiarioDeEmpleado(emp);
   const value = {
     EMPLEADO_KEY: empKey,
     TIPO_INCAPACIDAD: tipo,
@@ -8313,7 +8334,8 @@ async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBol
     FECHA_INICIO: fechaInicio,
     FECHA_FIN: fechaFin,
     DIAS: dias,
-    SALARIO_DIARIO_PROMEDIO: (salarioDiarioPromedio || salarioDiarioPromedio === 0) ? salarioDiarioPromedio : null,
+    SALARIO_DIARIO_PROMEDIO: salarioDiarioPromedio,
+    SALARIO_MONEDA: salarioMoneda,
     COMPROBANTE_DATA_URL: comprobanteDataUrl || null,
     COMPROBANTE_NOMBRE: comprobanteNombre || null,
     REGISTRADO_POR: email,
@@ -8349,7 +8371,7 @@ function renderFormularioIncapacidad(empleadosDisponibles){
   const ordenados = empleadosDisponibles.slice().sort((a,b) => (a.NOMBRE_EMP||"").localeCompare(b.NOMBRE_EMP||"", "es"));
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📝 Registrar incapacidad</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Es un registro directo para el cálculo de pago en colillas — no pasa por aprobación ni se puede anular. Pausa la acumulación de vacaciones mientras dure.</p>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Es un registro directo para el cálculo de pago en colillas — no pasa por aprobación ni se puede anular. El salario diario se toma automático de la ficha del empleado (no se pide a mano). Pausa la acumulación de vacaciones mientras dure.</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
         <select id="incapacidad-empleado" onchange="actualizarSelectorProrrogaIncapacidad()">
@@ -8370,9 +8392,6 @@ function renderFormularioIncapacidad(empleadosDisponibles){
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">N° de boleta (CCSS/INS)
         <input type="text" id="incapacidad-boleta" placeholder="Ej. CCSS-9938472-A">
-      </label>
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Salario diario promedio (opcional)
-        <input type="text" id="incapacidad-salario" placeholder="₡ referencia SICERE">
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
         <input type="file" id="incapacidad-comprobante" accept=".pdf,image/*">
@@ -8399,7 +8418,6 @@ async function confirmarRegistroIncapacidad(){
   const fechaInicio = (document.getElementById("incapacidad-desde")||{}).value;
   const fechaFin = (document.getElementById("incapacidad-hasta")||{}).value;
   const numeroBoleta = (document.getElementById("incapacidad-boleta")||{}).value;
-  const salarioTxt = (document.getElementById("incapacidad-salario")||{}).value;
   const esProrroga = !!(document.getElementById("incapacidad-es-prorroga")||{}).checked;
   const incapacidadOriginalKey = (document.getElementById("incapacidad-original")||{}).value || null;
   const inputComprobante = document.getElementById("incapacidad-comprobante");
@@ -8412,8 +8430,7 @@ async function confirmarRegistroIncapacidad(){
       comprobanteDataUrl = await leerArchivoComoDataUrl(archivo);
       comprobanteNombre = archivo.name;
     }
-    const salarioDiarioPromedio = salarioTxt ? (Number(String(salarioTxt).replace(/[^0-9.]/g,"")) || null) : null;
-    await crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, salarioDiarioPromedio, comprobanteDataUrl, comprobanteNombre });
+    await crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, comprobanteDataUrl, comprobanteNombre });
     statusMsg("Incapacidad registrada.");
     renderIncapacidadesPanel();
   }catch(e){
@@ -8425,8 +8442,11 @@ function renderFilaIncapacidad(i, empleadosPorKey){
   const emp = empleadosPorKey[i.EMPLEADO_KEY];
   const tipo = TIPOS_INCAPACIDAD[i.TIPO_INCAPACIDAD] || { label: i.TIPO_INCAPACIDAD || "—", emoji: "🤒" };
   const r = calcularPagoIncapacidad(i);
+  const esUsd = i.SALARIO_MONEDA === "USD";
   const montoTxt = r.montoAPagarPlanilla === null
-    ? "sin salario diario guardado"
+    ? "sin salario guardado en la ficha del empleado"
+    : esUsd
+    ? `$${r.montoAPagarPlanilla.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2})}`
     : `₡${Math.round(r.montoAPagarPlanilla).toLocaleString("es-CR")}`;
   const lineaNomina = `<span class="meta">💰 Pago patrono estimado: ${montoTxt} · vacaciones: ${r.diasValidosVacaciones} día(s) · aguinaldo: ${r.diasValidosAguinaldo} día(s)</span><br>`;
   return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line);">
