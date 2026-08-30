@@ -8597,6 +8597,49 @@ function otorgadoEsteAnio(emp, anio){
   return !!(emp && emp.CUMPLEANOS_OTORGADO_ANIOS && emp.CUMPLEANOS_OTORGADO_ANIOS[String(anio)]);
 }
 
+// El botón "Otorgar día" sugería la fecha calculada del próximo cumpleaños
+// sin dar oportunidad de corregirla (ej. si el día libre se toma otro día
+// distinto al cumpleaños exacto, como el viernes anterior si cae en fin de
+// semana). Este modal muestra un calendario con esa fecha ya sugerida —
+// basta con confirmar en el caso normal, pero se puede cambiar antes de
+// otorgar.
+let otorgarCumpleanosCtx = null;
+
+function abrirModalOtorgarCumpleanos(empKey, nombreEmp, fechaSugeridaISO){
+  otorgarCumpleanosCtx = { empKey, nombreEmp, fecha: fechaSugeridaISO };
+  renderModalOtorgarCumpleanos();
+  document.getElementById("modal-otorgar-cumpleanos").classList.add("open");
+}
+
+function cerrarModalOtorgarCumpleanos(){
+  const modal = document.getElementById("modal-otorgar-cumpleanos");
+  if (modal) modal.classList.remove("open");
+  otorgarCumpleanosCtx = null;
+}
+
+function renderModalOtorgarCumpleanos(){
+  const ctx = otorgarCumpleanosCtx;
+  const body = document.getElementById("modal-otorgar-cumpleanos-body");
+  if (!ctx || !body) return;
+  body.innerHTML = `
+    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Elige el día que se le otorga a <b>${escapeHtml(ctx.nombreEmp)}</b> — ya viene con la fecha de su cumpleaños, ajústala si el día libre se toma otro día.</div>
+    <div class="field">
+      <label>Fecha a otorgar</label>
+      <input type="date" value="${ctx.fecha}" onchange="otorgarCumpleanosCtx.fecha = this.value;">
+    </div>
+    <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarOtorgarCumpleanos()">🎁 Otorgar día</button>
+  `;
+}
+
+async function confirmarOtorgarCumpleanos(){
+  const ctx = otorgarCumpleanosCtx;
+  if (!ctx) return;
+  if (!ctx.fecha){ statusMsg("Elige una fecha.", false); return; }
+  const empKey = ctx.empKey, fecha = ctx.fecha;
+  cerrarModalOtorgarCumpleanos();
+  await otorgarDiaCumpleanos(empKey, fecha);
+}
+
 async function otorgarDiaCumpleanos(empKey, fechaISO){
   try{
     const fullKey = CATALOGS.empleados.prefix + empKey;
@@ -8793,7 +8836,7 @@ function renderSeccionCumpleanos(empleados, puedeOtorgar){
     ${proximos.map(p => `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
         <div style="font-size:12.5px;"><b>${escapeHtml(p.emp.NOMBRE_EMP||"")}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : `en ${p.diasFaltan} día(s)`})</div>
-        ${puedeOtorgar ? `<button class="btn primary" style="padding:5px 10px; font-size:11px;" onclick="otorgarDiaCumpleanos('${p.emp.key}', '${isoDeFechaLocal(p.fecha)}')">🎁 Otorgar día</button>` : `<span class="meta">Pendiente — lo otorga gerencia/master</span>`}
+        ${puedeOtorgar ? `<button class="btn primary" style="padding:5px 10px; font-size:11px;" onclick="abrirModalOtorgarCumpleanos('${p.emp.key}', '${(p.emp.NOMBRE_EMP||"").replace(/'/g,"\\'")}', '${isoDeFechaLocal(p.fecha)}')">🎁 Otorgar día</button>` : `<span class="meta">Pendiente — lo otorga gerencia/master</span>`}
       </div>`).join("")}
   </div></div>`;
 }
@@ -9970,7 +10013,7 @@ function renderSeccionCumpleanosEmpleado(emp, empKey){
     <div style="font-weight:700; margin-bottom:6px;">🎂 Día de cumpleaños</div>
     <div style="font-size:12.5px;">Próximo: ${fmtFechaDesdeDate(prox.fecha)} (${prox.diasFaltan === 0 ? "hoy" : `en ${prox.diasFaltan} día(s)`})</div>
     <div style="font-size:12.5px; margin-top:4px;">${yaOtorgado ? "✅ Ya otorgado este año." : "⏳ Pendiente de otorgar este año."}</div>
-    ${(!yaOtorgado && window.sdgApi && window.sdgApi.puedeEditar()) ? `<button class="btn primary" style="margin-top:6px;" onclick="otorgarDiaCumpleanos('${empKey}', '${isoDeFechaLocal(prox.fecha)}')">🎁 Otorgar día</button>` : ""}
+    ${(!yaOtorgado && window.sdgApi && window.sdgApi.puedeEditar()) ? `<button class="btn primary" style="margin-top:6px;" onclick="abrirModalOtorgarCumpleanos('${empKey}', '${(emp.NOMBRE_EMP||"").replace(/'/g,"\\'")}', '${isoDeFechaLocal(prox.fecha)}')">🎁 Otorgar día</button>` : ""}
   </div></div>`;
 }
 
