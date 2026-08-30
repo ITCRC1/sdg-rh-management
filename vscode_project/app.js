@@ -5164,14 +5164,30 @@ function descargarBlobComoArchivo(blob, nombre){
 }
 
 // FECHA_INGRESO_EMP y FECHA_ARCHIVADO se guardan siempre como DD/MM/AAAA
-// (ver onFechaIngresoEmpChange y el archivado de empleados) — a diferencia de
-// parseFechaFlexible (que existe para leer fechas pegadas desde Excel y por
-// eso asume MM/DD cuando el primer número es ambiguo), acá el formato es
-// conocido, así que se interpreta directo para no correr el mes.
+// cuando se editan desde esta app (ver onFechaIngresoEmpChange y el
+// archivado de empleados) — a diferencia de parseFechaFlexible (que existe
+// para leer fechas pegadas desde Excel y por eso asume MM/DD cuando el
+// primer número es ambiguo), acá el formato esperado es conocido, así que
+// se interpreta directo.
+//
+// PERO: un registro importado desde Excel puede haber quedado guardado tal
+// cual llegó, en MM/DD/AAAA (caso real: a alguien que ingresó el 21 de
+// diciembre de 2025 se le guardó "12/21/2025" — mes=21 no existe). Si el
+// segundo número no puede ser un mes válido pero el primero sí, es que
+// vienen invertidos: se reordenan en vez de desbordar el mes hacia una
+// fecha sin sentido (12/21/2025 desbordaba silenciosamente a septiembre de
+// 2026). Si NINGUNO de los dos cabe como mes, el dato está corrupto de
+// verdad y se devuelve null en vez de adivinar.
 function parsearFechaDDMMYYYY(str){
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(str || "").trim());
   if (!m) return null;
-  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  let dia = Number(m[1]), mes = Number(m[2]);
+  const anio = Number(m[3]);
+  if (mes > 12 && dia <= 12){
+    [dia, mes] = [mes, dia];
+  }
+  if (mes < 1 || mes > 12) return null;
+  const d = new Date(anio, mes - 1, dia);
   return isNaN(d.getTime()) ? null : d;
 }
 
