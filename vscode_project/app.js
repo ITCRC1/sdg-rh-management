@@ -6118,14 +6118,14 @@ function calcularResumenQuincena(registros, empleados, rango){
     let diasLibresQuincena = 0;
     delEmpleadoEnRango.forEach(r => {
       if (!esDiaBaseDePago(r.FECHA)) return; // día 31 "extra": no resta ni suma días base
-      if (r.TIPO_DIA === "vacaciones"){ diasLibresQuincena++; return; } // día libre programado: no resta, se muestra aparte
+      if (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre"){ diasLibresQuincena++; return; } // día libre programado: no resta, se muestra aparte
       if (!TIPOS_DIA_DESCUENTA_QUINCENA[r.TIPO_DIA]) return;
       descPorTipo[r.TIPO_DIA] = (descPorTipo[r.TIPO_DIA] || 0) + 1;
       totalDescuento++;
     });
     const diasLaborados = Math.max(0, activo.diasBase - totalDescuento);
 
-    const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.TIPO_DIA === "vacaciones" && r.FECHA.startsWith(anioMes)).length;
+    const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre") && r.FECHA.startsWith(anioMes)).length;
 
     return { emp, activo: true, horasExtra, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
   }).filter(f => f.activo);
@@ -8222,6 +8222,14 @@ const RESET_VACACIONES_CORCOVADO = { propiedad: "corcovado", fecha: new Date(202
 
 const TIPOS_SOLICITUD_AUSENCIA = {
   vacaciones: { label: "Vacaciones", emoji: "🏖️", consumeSaldo: true, requiereComprobante: false, colorHex: "FFF5D06B" },
+  // Descanso programado del rol (el día libre semanal o el bloque que le
+  // corresponde al empleado) — no es vacación (no resta del saldo
+  // acumulado) ni permiso sin goce (no es una excepción sin pago). Alimenta
+  // el mismo contador de "días libres" del reporte de horario de planilla
+  // que hasta ahora solo se llenaba con "vacaciones" (ver
+  // calcularResumenQuincena) — antes no había forma de registrar el
+  // descanso regular sin usar por error el tipo Vacaciones.
+  dia_libre: { label: "Día libre", emoji: "🛌", consumeSaldo: false, requiereComprobante: false, colorHex: "FFB3E6B3" },
   permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄", consumeSaldo: false, requiereComprobante: false, colorHex: "FF8FD3E8" },
   ausencia_medica: { label: "Ausencia médica (cita)", emoji: "🩺", consumeSaldo: false, requiereComprobante: true, colorHex: "FFE68A8A" },
 };
@@ -9047,7 +9055,7 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
 function detectarCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado){
   const porDeptoFecha = {};
   solicitudes
-    .filter(s => (s.ESTADO === "aprobada" || s.ESTADO === "pendiente") && (s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce"))
+    .filter(s => (s.ESTADO === "aprobada" || s.ESTADO === "pendiente") && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "permiso_sin_goce"))
     .forEach(s => {
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
       const depto = departamentoDeEmpleado(emp);
@@ -9419,6 +9427,7 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
     if (s.ESTADO !== "aprobada") continue;
     if (fechaISO >= s.FECHA_INICIO && fechaISO <= s.FECHA_FIN){
       if (s.TIPO === "vacaciones") return { texto: "VAC", color: TIPOS_SOLICITUD_AUSENCIA.vacaciones.colorHex };
+      if (s.TIPO === "dia_libre") return { texto: "D.LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.dia_libre.colorHex };
       if (s.TIPO === "permiso_sin_goce") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.permiso_sin_goce.colorHex };
       if (s.TIPO === "ausencia_medica") return { texto: "CITA", color: TIPOS_SOLICITUD_AUSENCIA.ausencia_medica.colorHex };
     }
