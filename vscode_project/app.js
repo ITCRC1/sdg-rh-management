@@ -1352,10 +1352,41 @@ function renderVacacionesForm(){
   const intro = renderEmpleadoVinculadoCard(data.NOMBRE_VACACIONES, data.CEDULA_VACACIONES, data.PUESTO_VACACIONES)
     + `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
       <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
-        🏖️ ${tr("Elige las fechas de vacaciones — el total de días se calcula automáticamente.","Choose the vacation dates — the total days are calculated automatically.")}
+        🏖️ ${tr("Elige las fechas de vacaciones — el total de días se calcula automáticamente. Al completar la fecha de inicio, la fecha de fin se llena sola con ese mismo día (podés ajustarla después).","Choose the vacation dates — the total days are calculated automatically. Once you finish the start date, the end date fills in with that same day (you can adjust it afterward).")}
       </div>
+    </div>
+    <div id="vacaciones-saldo-info" class="section-card" style="border-color:var(--leaf); margin-bottom:12px;">
+      <div class="section-body" style="font-size:12px; color:var(--ink-soft);">${tr("Calculando días de vacaciones acumulados a hoy…","Calculating vacation days accumulated as of today…")}</div>
     </div>`;
   renderFieldSections("vacacionesform-panel", title => VACACIONES_SECTION_TITLES.includes(title), intro, new Set(["NOMBRE_VACACIONES","CEDULA_VACACIONES"]));
+  actualizarSaldoVacacionesInfo();
+}
+
+// Saldo de vacaciones acumulado a hoy para el empleado de esta acción de
+// personal — mismo cálculo (calcularSaldoVacaciones) que ya usan el módulo
+// de Días Libres y el perfil del empleado, para que el número nunca se
+// desalinee entre pantallas. Se resuelve aparte (async) y se pinta en el
+// placeholder de arriba para no bloquear el resto del formulario mientras
+// carga.
+async function actualizarSaldoVacacionesInfo(){
+  const box = document.getElementById("vacaciones-saldo-info");
+  if (!box || !currentEmpKeyForLetter) return;
+  try{
+    const empKey = currentEmpKeyForLetter;
+    const res = await window.storage.get(CATALOGS.empleados.prefix + empKey, false);
+    if (!res || !res.value) throw new Error("empleado no encontrado");
+    const emp = JSON.parse(res.value);
+    const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
+    const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === empKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+    const diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, empKey);
+    const saldo = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidad, new Date());
+    if (document.getElementById("vacaciones-saldo-info") !== box || currentEmpKeyForLetter !== empKey) return; // el panel cambió mientras cargaba
+    box.innerHTML = `<div class="section-body" style="font-size:12px; color:var(--ink-soft);">
+      💰 ${tr(`Días de vacaciones acumulados a hoy: <b>${saldo}</b>.`, `Vacation days accumulated as of today: <b>${saldo}</b>.`)}
+    </div>`;
+  }catch(e){
+    box.innerHTML = `<div class="section-body" style="font-size:12px; color:var(--ink-soft);">${tr("No se pudo calcular el saldo de vacaciones acumulado.","Could not calculate the accumulated vacation balance.")}</div>`;
+  }
 }
 
 async function generarVacacionesDeEmpleado(key){
@@ -1379,6 +1410,7 @@ async function generarVacacionesDeEmpleado(key){
     data.TOTAL_DIAS_VACACIONES = "";
     data.NUMERO_ACCION_VACACIONES = "";
     vacacionesGuardadaParaAccion = null; // nueva acción: la anterior (si la hubo) no debe bloquear el guardado de esta
+    vacacionesFinTocadoManualmente = false; // nueva acción: la fecha de fin vuelve a autocompletarse con la de inicio
     if (trabajadorActual){
       data.FIRMANTE_VACACIONES_NOMBRE = trabajadorActual.nombre;
       data.FIRMANTE_VACACIONES_CEDULA = trabajadorActual.cedula;
@@ -1634,6 +1666,22 @@ function onInput(id, val){
   }
   const VACACIONES_DATE_FIELDS = ["DIA_INICIO_VACACIONES","MES_INICIO_VACACIONES","ANIO_INICIO_VACACIONES","DIA_FIN_VACACIONES","MES_FIN_VACACIONES","ANIO_FIN_VACACIONES"];
   if (VACACIONES_DATE_FIELDS.includes(id)){
+    const VACACIONES_FIN_FIELDS = ["DIA_FIN_VACACIONES","MES_FIN_VACACIONES","ANIO_FIN_VACACIONES"];
+    if (VACACIONES_FIN_FIELDS.includes(id)){
+      vacacionesFinTocadoManualmente = true; // el usuario ya eligió su propia fecha de fin, no la pisamos más
+    } else if (!vacacionesFinTocadoManualmente && data.DIA_INICIO_VACACIONES && data.MES_INICIO_VACACIONES && data.ANIO_INICIO_VACACIONES){
+      // fecha de inicio recién completada y el usuario aún no tocó el fin:
+      // la copiamos para que nunca quede vacía por descuido (vacación de 1 día por defecto, editable).
+      data.DIA_FIN_VACACIONES = data.DIA_INICIO_VACACIONES;
+      data.MES_FIN_VACACIONES = data.MES_INICIO_VACACIONES;
+      data.ANIO_FIN_VACACIONES = data.ANIO_INICIO_VACACIONES;
+      const diaFinEl = document.querySelector('[data-field="DIA_FIN_VACACIONES"]');
+      const mesFinEl = document.querySelector('[data-field="MES_FIN_VACACIONES"]');
+      const anioFinEl = document.querySelector('[data-field="ANIO_FIN_VACACIONES"]');
+      if (diaFinEl) diaFinEl.value = data.DIA_FIN_VACACIONES;
+      if (mesFinEl) mesFinEl.value = data.MES_FIN_VACACIONES;
+      if (anioFinEl) anioFinEl.value = data.ANIO_FIN_VACACIONES;
+    }
     calcularDiasVacaciones();
   }
   if (id === "SALARIO_BRUTO_NUM"){
@@ -7937,6 +7985,9 @@ async function guardarVacacionesEnHistorial(key){
 // archiva el documento) y "Descargar PDF" lo reutiliza antes de imprimir, en
 // vez de que guardar fuera un efecto secundario invisible de descargar.
 let vacacionesGuardadaParaAccion = null;
+// true en cuanto el usuario edita a mano alguna parte de la fecha de fin —
+// a partir de ahí dejamos de pisarla cuando cambie la fecha de inicio.
+let vacacionesFinTocadoManualmente = false;
 
 async function guardarAccionPersonalVacaciones(){
   if (!data.TOTAL_DIAS_VACACIONES || Number(data.TOTAL_DIAS_VACACIONES) <= 0){
