@@ -35,14 +35,18 @@ function claveValida(clave) {
 }
 
 // --------------------------------------------------------------------------
-// Alcance de "jefatura" sobre horas_extra: — el único dato que ese rol puede
-// tocar, y solo el de su propio equipo. Espeja los prefijos que usa el
-// cliente (app.js: CATALOGS.empleados.prefix, CATALOGS.puestos.prefix,
-// HORAS_EXTRA_PREFIX) — si esos cambian ahí, deben cambiar aquí también.
+// Alcance de "jefatura": horas_extra: es lo único que ese rol puede escribir,
+// y solo lo de su propio equipo. incapacidad: se le suma como SOLO LECTURA
+// (registrarlas sigue siendo exclusivo de master/gerente — ver
+// puedeEscribirClave) para que pueda consultar el historial de su equipo.
+// Espeja los prefijos que usa el cliente (app.js: CATALOGS.empleados.prefix,
+// CATALOGS.puestos.prefix, HORAS_EXTRA_PREFIX, INCAPACIDAD_PREFIX) — si esos
+// cambian ahí, deben cambiar aquí también.
 // --------------------------------------------------------------------------
 const HORAS_EXTRA_PREFIX = "horas_extra:";
 const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
 const COINCIDENCIA_PREFIX = "coincidencia_confirmada:";
+const INCAPACIDAD_PREFIX = "incapacidad:";
 const EMPLEADO_PREFIX = "cat_empleado:";
 const PUESTO_PREFIX = "cat_puesto:";
 
@@ -63,8 +67,8 @@ async function valorDeClave(propiedad, clave) {
 // departamento sale de DEPARTAMENTO_MINISTERIO en el puesto del empleado
 // (ej. "COCINA" agrupa Cocinero A, Cocinero B, Panadero y Steward — así lo
 // clasifica el catálogo del Ministerio de Trabajo). Compartido por
-// horas_extra: y solicitud_ausencia:, los dos únicos prefijos que una
-// jefatura puede llegar a tocar.
+// horas_extra:, solicitud_ausencia: e incapacidad:, los únicos prefijos que
+// una jefatura puede llegar a tocar o consultar.
 async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider) {
   if (!departamentoLider || !empleadoKey) return false;
   const empleado = await valorDeClave(propiedad, EMPLEADO_PREFIX + empleadoKey);
@@ -90,6 +94,14 @@ async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departament
 // del empleado sale del mismo segundo segmento.
 async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamentoLider) {
   const empleadoKey = claveSolicitud.split(":")[1] || "";
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider);
+}
+
+// Igual que arriba, para incapacidad:<empleadoKey>:<id> — a diferencia de
+// horas_extra: no existe un "sinmatch-" aquí (crearIncapacidad siempre exige
+// elegir un empleado ya identificado), así que no hace falta esa excepción.
+async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departamentoLider) {
+  const empleadoKey = claveIncapacidad.split(":")[1] || "";
   return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider);
 }
 
