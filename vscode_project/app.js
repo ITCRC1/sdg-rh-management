@@ -8315,15 +8315,101 @@ async function agregarAjusteVacaciones(empKey, dias, motivo){
   await agregarBitacora(empKey, `Ajuste manual de vacaciones: ${dias > 0 ? "+" : ""}${dias} día(s)${motivo ? " — " + motivo : ""}.`);
 }
 
-async function pedirAjusteVacaciones(empKey, nombreEmp, saldoActual){
-  const texto = prompt(`Saldo actual de ${nombreEmp}: ${saldoActual} día(s).\nEscribe cuántos días sumar (positivo) o quitar (negativo). Ej: -5 para quitar un excedente de 5 días.`, "0");
-  if (texto === null) return; // canceló
-  const dias = parseFloat(String(texto).replace(",", "."));
-  if (isNaN(dias) || dias === 0){ statusMsg("Escribe un número distinto de cero.", false); return; }
-  const motivo = prompt("Motivo del ajuste (opcional, queda en la bitácora del empleado):", "") || "";
+// Estado del modal de ajuste de saldo — se abre por fechas (calcula los
+// días automático, para no tener que contarlos a mano) o por número directo
+// (se deja como opción B para ajustes que no corresponden a un rango de
+// fechas real, ej. un acuerdo puntual).
+let ajusteVacacionesCtx = null;
+
+function pedirAjusteVacaciones(empKey, nombreEmp, saldoActual){
+  ajusteVacacionesCtx = { empKey, nombreEmp, saldoActual, modo: "fechas", desde: "", hasta: "", diasManual: "", signo: -1, motivo: "" };
+  renderModalAjusteVacaciones();
+  document.getElementById("modal-ajuste-vacaciones").classList.add("open");
+}
+
+function cerrarModalAjusteVacaciones(){
+  const modal = document.getElementById("modal-ajuste-vacaciones");
+  if (modal) modal.classList.remove("open");
+  ajusteVacacionesCtx = null;
+}
+
+function actualizarAjusteVacacionesCtx(campo, valor){
+  if (!ajusteVacacionesCtx) return;
+  ajusteVacacionesCtx[campo] = valor;
+  renderModalAjusteVacaciones();
+}
+
+function renderModalAjusteVacaciones(){
+  const ctx = ajusteVacacionesCtx;
+  const body = document.getElementById("modal-ajuste-vacaciones-body");
+  if (!ctx || !body) return;
+
+  const rangoInvalido = ctx.modo === "fechas" && ctx.desde && ctx.hasta && ctx.hasta < ctx.desde;
+  let dias = null;
+  if (ctx.modo === "fechas"){
+    if (ctx.desde && ctx.hasta && !rangoInvalido) dias = diasEntreFechasISO(ctx.desde, ctx.hasta);
+  } else {
+    const n = parseFloat(String(ctx.diasManual).replace(",", "."));
+    if (!isNaN(n) && n > 0) dias = n;
+  }
+  const ajuste = dias ? dias * ctx.signo : null;
+
+  body.innerHTML = `
+    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Saldo actual de <b>${escapeHtml(ctx.nombreEmp)}</b>: ${ctx.saldoActual} día(s).</div>
+    <div class="sino-toggle" style="margin-bottom:10px;">
+      <button type="button" class="${ctx.modo==='fechas'?'active':''}" onclick="actualizarAjusteVacacionesCtx('modo','fechas')">📅 Por fechas</button>
+      <button type="button" class="${ctx.modo==='numero'?'active':''}" onclick="actualizarAjusteVacacionesCtx('modo','numero')">🔢 Por número</button>
+    </div>
+    ${ctx.modo === "fechas" ? `
+      <div style="display:flex; gap:8px;">
+        <div class="field" style="flex:1;">
+          <label>Fecha de inicio</label>
+          <input type="date" value="${ctx.desde}" onchange="actualizarAjusteVacacionesCtx('desde', this.value)">
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Fecha de fin</label>
+          <input type="date" value="${ctx.hasta}" onchange="actualizarAjusteVacacionesCtx('hasta', this.value)">
+        </div>
+      </div>
+      ${rangoInvalido ? `<div class="hint-error">La fecha de fin no puede ser anterior a la de inicio.</div>` : ""}
+    ` : `
+      <div class="field">
+        <label>Cantidad de días</label>
+        <input type="text" value="${escapeHtml(ctx.diasManual)}" placeholder="Ej. 5" oninput="actualizarAjusteVacacionesCtx('diasManual', this.value)">
+      </div>
+    `}
+    <div class="sino-toggle" style="margin:10px 0;">
+      <button type="button" class="${ctx.signo===-1?'active':''}" onclick="actualizarAjusteVacacionesCtx('signo',-1)">➖ Quitar (ya disfrutadas / excedente)</button>
+      <button type="button" class="${ctx.signo===1?'active':''}" onclick="actualizarAjusteVacacionesCtx('signo',1)">➕ Sumar</button>
+    </div>
+    ${dias ? `<div style="font-weight:700; color:var(--navy-deep); margin-bottom:10px;">Ajuste: ${ajuste > 0 ? "+" : ""}${ajuste} día(s) (${dias} día${dias===1?"":"s"}${ctx.modo==="fechas"?" del rango elegido":""}) → nuevo saldo estimado: ${Math.max(0, ctx.saldoActual + ajuste)} día(s).</div>` : ""}
+    <div class="field">
+      <label>Motivo (opcional, queda en la bitácora)</label>
+      <input type="text" value="${escapeHtml(ctx.motivo)}" oninput="ajusteVacacionesCtx.motivo = this.value;">
+    </div>
+    <button class="btn primary" style="width:100%;" ${dias ? "" : "disabled"} onclick="confirmarAjusteVacacionesModal()">✅ Aplicar ajuste</button>
+  `;
+}
+
+async function confirmarAjusteVacacionesModal(){
+  const ctx = ajusteVacacionesCtx;
+  if (!ctx) return;
+  let dias, motivoBase = "";
+  if (ctx.modo === "fechas"){
+    if (!ctx.desde || !ctx.hasta || ctx.hasta < ctx.desde){ statusMsg("Elige una fecha de inicio y una de fin válidas.", false); return; }
+    dias = diasEntreFechasISO(ctx.desde, ctx.hasta) * ctx.signo;
+    motivoBase = `Del ${fmtFecha(ctx.desde + "T00:00:00")} al ${fmtFecha(ctx.hasta + "T00:00:00")}`;
+  } else {
+    const n = parseFloat(String(ctx.diasManual).replace(",", "."));
+    if (isNaN(n) || n <= 0){ statusMsg("Escribe una cantidad de días válida.", false); return; }
+    dias = n * ctx.signo;
+  }
+  const motivo = [motivoBase, ctx.motivo.trim()].filter(Boolean).join(" — ");
+  const empKey = ctx.empKey, nombreEmp = ctx.nombreEmp;
   try{
-    await agregarAjusteVacaciones(empKey, dias, motivo.trim());
+    await agregarAjusteVacaciones(empKey, dias, motivo);
     statusMsg(`Ajuste aplicado: ${dias > 0 ? "+" : ""}${dias} día(s) para ${nombreEmp}.`);
+    cerrarModalAjusteVacaciones();
     renderDiasLibresVacacionesPanel();
   }catch(e){ statusMsg("No se pudo aplicar el ajuste: " + e.message, false); }
 }
