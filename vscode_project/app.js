@@ -8213,6 +8213,98 @@ const TIPOS_INCAPACIDAD = {
 // solo se muestra como referencia informativa junto a cada registro).
 const CONFIG_INCAPACIDAD_KEY = "config_incapacidad";
 
+// ---------- Motor de reglas de nómina para incapacidades ----------
+// Traducción directa del pseudocódigo de nómina: para un registro YA
+// guardado, calcula cuánto le corresponde pagar al patrono (el resto lo
+// cubre el subsidio CCSS/INS) y cuántos de sus días cuentan para vacaciones
+// y para aguinaldo. Es una lectura derivada — informativa por ahora, para
+// el futuro módulo de recibos de nómina/SICERE — y NO toca
+// calcularSaldoVacaciones (ver nota de conflicto más abajo).
+//
+// Día 46+ de riesgo de trabajo con "completar salario" activo: el propio
+// pseudocódigo de nómina deja esta fórmula sin definir ("requiere lógica
+// adicional según el salario mínimo de la ocupación"). En vez de inventar un
+// monto, se devuelve NaN — la UI lo muestra como "revisar con nómina" en vez
+// de un número que podría estar mal. Reemplaza esta función en cuanto nómina
+// confirme la fórmula real (probablemente contra buscarSalarioMinimoPorDepartamento).
+function calcularDiferenciaExcedenteIns(salarioDiario){
+  return NaN;
+}
+
+// Devuelve { montoAPagarPlanilla, diasValidosAguinaldo, diasValidosVacaciones,
+// requiereRevisionNomina }. montoAPagarPlanilla es null si no hay
+// SALARIO_DIARIO_PROMEDIO guardado (no se puede calcular sin ese dato).
+//
+// ⚠️ Los "días válidos para vacaciones" que exige este motor (todos los días
+// de enfermedad_comun/riesgo_trabajo/maternidad SÍ acumulan) contradicen a
+// calcularSaldoVacaciones, que hoy hace lo contrario por diseño (Art. 160
+// CT tal como se implementó ahí: un período con incapacidad NO acredita —
+// "pausa" en vez de "acumula"). Este motor se dejó aparte, sin tocar esa
+// función, hasta confirmar cuál de las dos reglas debe regir el saldo real.
+function calcularPagoIncapacidad(incapacidad, configEmpresa){
+  const dias = incapacidad.DIAS || 0;
+  const salarioDiario = (incapacidad.SALARIO_DIARIO_PROMEDIO || incapacidad.SALARIO_DIARIO_PROMEDIO === 0) ? incapacidad.SALARIO_DIARIO_PROMEDIO : null;
+  let montoAPagarPlanilla = 0;
+  let diasValidosAguinaldo = 0;
+  let diasValidosVacaciones = 0;
+  let requiereRevisionNomina = false;
+
+  switch (incapacidad.TIPO_INCAPACIDAD){
+    case "enfermedad_comun": {
+      // Las vacaciones sí acumulan siempre por ley; el aguinaldo no.
+      diasValidosVacaciones = dias;
+      diasValidosAguinaldo = 0;
+      if (incapacidad.ES_PRORROGA){
+        // Prórroga: todo asumido al 60% por la CCSS, el patrono paga 0.
+        montoAPagarPlanilla = 0;
+      } else if (salarioDiario === null){
+        montoAPagarPlanilla = null;
+      } else {
+        for (let dia = 1; dia <= dias; dia++){
+          if (dia <= 3) montoAPagarPlanilla += salarioDiario * 0.50; // primeros 3 días: patrono paga 50%
+          // día 4 en adelante: patrono paga 0% (CCSS asume el 60%)
+        }
+      }
+      break;
+    }
+    case "riesgo_trabajo": {
+      // Todo lo asume el INS por defecto. Vacaciones acumulan; aguinaldo no.
+      diasValidosVacaciones = dias;
+      diasValidosAguinaldo = 0;
+      const completaSalario = !!(configEmpresa && configEmpresa.completarSalarioRiesgoTrabajo);
+      if (!completaSalario){
+        montoAPagarPlanilla = 0; // regla estándar de ley: patrono no paga nada
+      } else if (salarioDiario === null){
+        montoAPagarPlanilla = null;
+      } else {
+        for (let dia = 1; dia <= dias; dia++){
+          if (dia <= 45){
+            montoAPagarPlanilla += salarioDiario * 0.40; // INS paga 60%, patrono completa el 40%
+          } else {
+            const diferencia = calcularDiferenciaExcedenteIns(salarioDiario);
+            if (isNaN(diferencia)) requiereRevisionNomina = true;
+            else montoAPagarPlanilla += diferencia;
+          }
+        }
+      }
+      break;
+    }
+    case "maternidad": {
+      // Acumula TODO (vacaciones y aguinaldo). Patrono paga fijo 50% de todo el período.
+      diasValidosVacaciones = dias;
+      diasValidosAguinaldo = dias;
+      montoAPagarPlanilla = salarioDiario === null ? null : (salarioDiario * dias) * 0.50;
+      break;
+    }
+    default:
+      diasValidosVacaciones = dias;
+      diasValidosAguinaldo = 0;
+      montoAPagarPlanilla = null;
+  }
+
+  return { montoAPagarPlanilla, diasValidosAguinaldo, diasValidosVacaciones, requiereRevisionNomina };
+}
+
 async function listarIncapacidades(){
   const res = await window.storage.list(INCAPACIDAD_PREFIX, false);
   const keys = (res && res.keys) || [];
@@ -8382,14 +8474,23 @@ async function confirmarRegistroIncapacidad(){
   }
 }
 
-function renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar){
+function renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar, config){
   const emp = empleadosPorKey[i.EMPLEADO_KEY];
   const tipo = TIPOS_INCAPACIDAD[i.TIPO_INCAPACIDAD] || { label: i.TIPO_INCAPACIDAD || "—", emoji: "🤒" };
   const anulada = i.ESTADO === "anulada";
+  let lineaNomina = "";
+  if (!anulada){
+    const r = calcularPagoIncapacidad(i, config);
+    const montoTxt = r.montoAPagarPlanilla === null
+      ? "sin salario diario guardado"
+      : `₡${Math.round(r.montoAPagarPlanilla).toLocaleString("es-CR")}${r.requiereRevisionNomina ? " (parcial — revisar con nómina)" : ""}`;
+    lineaNomina = `<span class="meta">💰 Pago patrono estimado: ${montoTxt} · vacaciones: ${r.diasValidosVacaciones} día(s) · aguinaldo: ${r.diasValidosAguinaldo} día(s)</span><br>`;
+  }
   return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line); ${anulada ? "opacity:0.5;" : ""}">
     <div style="font-size:12.5px;">
       <b>${escapeHtml(emp ? (emp.NOMBRE_EMP||emp.key) : i.EMPLEADO_KEY)}</b> — ${tipo.emoji} ${escapeHtml(tipo.label)}${i.ES_PRORROGA ? " (prórroga)" : ""}<br>
-      <span class="meta">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")} · ${i.DIAS} día(s)${i.NUMERO_BOLETA ? " · boleta " + escapeHtml(i.NUMERO_BOLETA) : ""}${anulada ? " · ANULADA" : ""}</span>
+      <span class="meta">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")} · ${i.DIAS} día(s)${i.NUMERO_BOLETA ? " · boleta " + escapeHtml(i.NUMERO_BOLETA) : ""}${anulada ? " · ANULADA" : ""}</span><br>
+      ${lineaNomina}
     </div>
     ${(puedeRegistrar && !anulada) ? `<button class="btn" style="padding:4px 8px; font-size:10.5px;" onclick="anularIncapacidad('${i.key}')">Anular</button>` : ""}
   </div>`;
@@ -8451,12 +8552,12 @@ async function renderIncapacidadesPanel(){
 
     html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📋 Incapacidades activas (${activas.length})</div>
-      ${activas.length ? activas.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar)).join("") : `<div class="empty-state" style="padding:10px 0;">Nadie está incapacitado hoy.</div>`}
+      ${activas.length ? activas.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar, config)).join("") : `<div class="empty-state" style="padding:10px 0;">Nadie está incapacitado hoy.</div>`}
     </div></div>`;
 
     html += `<div class="section-card"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗂️ Historial reciente</div>
-      ${historial.length ? historial.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar)).join("") : `<div class="empty-state" style="padding:10px 0;">Sin registros anteriores.</div>`}
+      ${historial.length ? historial.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar, config)).join("") : `<div class="empty-state" style="padding:10px 0;">Sin registros anteriores.</div>`}
     </div></div>`;
 
     panel.innerHTML = html;
