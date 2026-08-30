@@ -571,7 +571,7 @@ const CATALOGS = {
     noApply: true,
     fields: [
       ["grp", "Datos del puesto"],
-      ["NOMBRE_EMP","text_nombre_emp","1. Nombre (Apellidos, Primer nombre, Segundo nombre)","Ej. QUIROS MORA, ISAAC","mayus"],
+      ["NOMBRE_EMP","text_nombre_emp","1. Nombre completo","Ej. ISAAC QUIROS MORA","mayus"],
       ["TIPO_IDENTIFICACION_EMP","select_tipo_identificacion_emp","Tipo de identidad",""],
       ["IDENTIFICACION_EMP","text_cedula_emp","2. Número de cédula","Formato: 1-1112-1111"],
       ["PUESTO_KEY","select_puesto_catalogo","3. Puesto a contratar",""],
@@ -1942,9 +1942,7 @@ function catalogFieldHtml(meta){
     control = `<input type="text" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="
         this.value = this.value.toUpperCase();
         catalogEditing.values['${id}'] = this.value;
-        document.getElementById('hint-nombre-emp').textContent = /^[^,]+,\\s*[^,]+/.test(this.value) ? '' : 'Falta el formato: Apellidos, Primer nombre, Segundo nombre (separados por coma).';
-      ">
-      <div class="hint-error" id="hint-nombre-emp">${/^[^,]+,\s*[^,]+/.test(val) ? "" : (val ? "Falta el formato: Apellidos, Primer nombre, Segundo nombre (separados por coma)." : "")}</div>`;
+      ">`;
   } else if (type === "text_cedula_emp"){
     const cedulaOk = /^\d-\d{4}-\d{4}$/.test(val);
     control = `<input type="text" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="
@@ -3250,7 +3248,6 @@ async function renderCatalogTab(type){
       </div></div>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
-      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalNombresIncorrectos()">🔤 Ver nombres con formato incorrecto</button>
       <div class="field" style="margin-bottom:10px;">
         <input type="text" id="empleados-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
       </div>
@@ -4810,7 +4807,7 @@ function irASubirColilla(){
 // ---------- missing-data popup ----------
 function evaluarCamposFaltantes(e){
   const faltan = [];
-  if (!e.NOMBRE_EMP || !/^[^,]+,\s*[^,]+/.test(e.NOMBRE_EMP)) faltan.push("Nombre (formato Apellidos, Nombre)");
+  if (!e.NOMBRE_EMP) faltan.push("Nombre");
   if (!e.IDENTIFICACION_EMP || !/^\d-\d{4}-\d{4}$/.test(e.IDENTIFICACION_EMP)) faltan.push("Cédula (formato completo)");
   if (!e.PUESTO_KEY && !e.DEPARTAMENTO_EMP) faltan.push("Puesto");
   if (!e.FECHA_INGRESO_EMP) faltan.push("Fecha de ingreso");
@@ -4869,48 +4866,6 @@ async function mostrarModalIncompletos(){
 
 function cerrarModalIncompletos(){
   document.getElementById("modal-incompletos").classList.remove("open");
-}
-
-// ---------- nombres con formato incorrecto ----------
-// El formato pedido es "Apellidos, Nombre(s)" (una sola coma) — lo mismo que
-// ya exige el campo Nombre del formulario (text_nombre_emp). Esto revisa la
-// lista completa de una vez, para detectar a quienes quedaron con otro
-// formato (ej. importados de un Excel/CSV viejo sin la coma). No se reordena
-// nada automáticamente — separar apellidos de nombres a ciegas es ambiguo
-// (apellidos compuestos como "DE LA CRUZ"), así que cada caso se corrige a
-// mano desde su propia ficha, con la misma validación que ya tiene ese campo.
-function nombreTieneFormatoCorrecto(nombre){
-  return /^[^,]+,\s*[^,]+/.test((nombre || "").trim());
-}
-
-async function mostrarModalNombresIncorrectos(){
-  const body = document.getElementById("modal-incompletos-body");
-  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔤 Nombres con formato incorrecto";
-  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
-  document.getElementById("modal-incompletos").classList.add("open");
-  try{
-    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
-    const keys = (res && res.keys) || [];
-    const empleados = await Promise.all(keys.map(async k => {
-      const r = await window.storage.get(k, false);
-      const v = r && r.value ? JSON.parse(r.value) : {};
-      return { key: k.replace(CATALOGS.empleados.prefix,""), ...v };
-    }));
-    const activos = empleados.filter(e => !e.ARCHIVADO);
-    const malFormateados = activos.filter(e => !nombreTieneFormatoCorrecto(e.NOMBRE_EMP));
-
-    if (malFormateados.length === 0){
-      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados activos tienen el nombre en formato "Apellidos, Nombre(s)".</div>`;
-      return;
-    }
-    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${malFormateados.length} de ${activos.length} empleados activos no están en el formato "Apellidos, Nombre(s)" (con coma). Corrígelos uno por uno — separar apellidos de nombres a ciegas puede equivocarse con apellidos compuestos, así que no se reordenan solos.</div>` +
-      malFormateados.map(e => `
-        <div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
-          <div style="font-weight:700; color:#B3261E;">${escapeHtml(e.NOMBRE_EMP || "(sin nombre guardado)")}</div>
-          <div style="font-size:11px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
-          <button class="btn" style="padding:5px 10px; font-size:11px; margin-top:5px;" onclick="cerrarModalIncompletos(); openCatalogForm('empleados','${e.key.replace(/'/g,"\\'")}');">Corregir ahora</button>
-        </div>`).join("");
-  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista.</div>`; }
 }
 
 // ---------- duplicate detection & merge ----------
