@@ -4722,6 +4722,7 @@ async function onColillasPdfSelected(inputEl){
   let archivadosTotal = 0;
   let sinArchivarTotal = 0;
   let duplicadosTotal = 0;
+  let sinArchivarDetalle = [];
   // Se carga una sola vez y se comparte entre todos los archivos de esta
   // subida, así detecta tanto "esta colilla ya estaba archivada de antes"
   // como "este mismo lote trae la misma colilla repetida".
@@ -4751,6 +4752,7 @@ async function onColillasPdfSelected(inputEl){
       archivadosTotal += resultado.archivados;
       sinArchivarTotal += resultado.sinCoincidencia.length;
       duplicadosTotal += resultado.duplicados;
+      sinArchivarDetalle.push(...resultado.sinCoincidencia.map(r => Object.assign({ archivo: file.name }, r)));
     }catch(e){
       statusMsg(`Se leyó "${file.name}" pero no se pudieron archivar las colillas individuales: ${e.message}`, false);
     }
@@ -4765,6 +4767,25 @@ async function onColillasPdfSelected(inputEl){
           (sinArchivarTotal ? ` (${sinArchivarTotal} sin coincidencia)` : "") +
           (duplicadosTotal ? ` (${duplicadosTotal} ya estaban archivadas, no se repitieron)` : "") + "." : "") +
         (!archivadosTotal && duplicadosTotal ? ` — ${duplicadosTotal} colilla(s) ya estaban archivadas, no se repitieron.` : "");
+      // renderColillasPreview() (llamado dentro de procesarColillas) ya
+      // reemplazó el contenido de #colillas-resultados con lo que dice el
+      // emparejado por NOMBRE sobre texto completo — eso puede coincidir aunque
+      // el recorte página-por-página que archiva el PDF individual haya
+      // fallado para esa misma persona. Sin esto, esa falla quedaba invisible:
+      // solo se veía "(N sin coincidencia)" en el status, sin decir quién ni
+      // por qué, así que agregamos el detalle en un bloque aparte.
+      if (sinArchivarDetalle.length){
+        const wrap = document.getElementById("colillas-resultados");
+        const bloque = document.createElement("div");
+        bloque.className = "section-card";
+        bloque.style.cssText = "margin-top:10px; border-color:#B3261E;";
+        bloque.innerHTML = `<div class="section-body">
+          <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🧾 Colilla individual NO archivada — ${sinArchivarDetalle.length} (esto es aparte de la actualización de salario de arriba):</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">Se leyó el nombre/número en esta página del PDF pero no coincidió con ningún empleado de tu lista al intentar guardar su colilla individual — revisa número, cédula y nombre en su ficha.</div>
+          ${sinArchivarDetalle.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre||"(nombre no leído)")} — № ${escapeHtml(r.numero||"—")}${r.cedula ? ` — cédula ${escapeHtml(r.cedula)}` : ""}${r.errorArchivo ? ` — error: ${escapeHtml(r.errorArchivo)}` : ""} <span style="color:var(--ink-soft);">(${escapeHtml(r.archivo)})</span></div>`).join("")}
+        </div>`;
+        if (wrap) wrap.appendChild(bloque);
+      }
     }catch(e){
       statusEl.textContent = "⚠️ El PDF se leyó pero no se pudo procesar: " + e.message;
     }
