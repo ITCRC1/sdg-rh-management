@@ -4213,6 +4213,78 @@ async function cargarEmpleadosDB(){
   }));
 }
 
+// Catálogo de puestos de la propiedad activa — lo usa el emparejado de
+// colillas para poder ofrecer el selector de "a qué puesto corresponde esta
+// ocupación de planilla" (ver cargarMapaOcupaciones).
+async function cargarPuestosDB(){
+  const res = await window.storage.list(CATALOGS.puestos.prefix, false);
+  const keys = (res && res.keys) || [];
+  return Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    const v = r && r.value ? JSON.parse(r.value) : {};
+    return { key: k.replace(CATALOGS.puestos.prefix,""), ...v };
+  }));
+}
+
+// La colilla trae la "Ocupación" con el vocabulario del proveedor de
+// planillas (ej. "GUIA NATURISTA", en español), que casi nunca coincide
+// textualmente con el nombre del puesto en el catálogo interno (ej. "Tour
+// Guide", en inglés) aunque sea exactamente el mismo puesto — comparar el
+// texto tal cual solo generaba una alerta falsa en casi todos los empleados.
+// Este mapa guarda, una sola vez por cada ocupación distinta que aparezca en
+// una colilla, a qué PUESTO_KEY del catálogo corresponde — lo arma RH a mano
+// la primera vez que ve esa ocupación (ver guardarMapeoOcupacionDesdeColilla),
+// y de ahí en adelante el emparejado es automático y confiable.
+const PREFIJO_MAPA_OCUPACION_COLILLA = "colilla_ocupacion_map:";
+
+async function cargarMapaOcupaciones(){
+  const res = await window.storage.list(PREFIJO_MAPA_OCUPACION_COLILLA, false);
+  const keys = (res && res.keys) || [];
+  const mapa = {};
+  await Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    if (r && r.value){
+      mapa[k.replace(PREFIJO_MAPA_OCUPACION_COLILLA, "")] = JSON.parse(r.value);
+    }
+  }));
+  return mapa;
+}
+
+async function guardarMapaOcupacion(ocupacion, puestoKey, puestoNombre){
+  const email = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+  await window.storage.set(
+    PREFIJO_MAPA_OCUPACION_COLILLA + normalizarNombre(ocupacion),
+    JSON.stringify({ ocupacionOriginal: ocupacion, puestoKey, puestoNombre, guardadoPor: email, fecha: new Date().toISOString() }),
+    false
+  );
+}
+
+// Estado del puesto de un registro de colilla frente al mapa de equivalencias:
+//  - null: sin ocupación leída o sin empleado emparejado, no hay nada que revisar.
+//  - "sin_mapear": la ocupación nunca se mapeó a un puesto — hay que elegirlo una vez.
+//  - "coincide": el puesto mapeado es el mismo que ya tiene el empleado — nada que hacer.
+//  - "distinto": el puesto mapeado es DIFERENTE al que tiene el empleado — reasignación real.
+function calcularPuestoInfo(p, match, mapaOcupaciones){
+  if (!match || !p.ocupacion) return null;
+  const mapeo = mapaOcupaciones[normalizarNombre(p.ocupacion)];
+  if (!mapeo) return { estado: "sin_mapear", ocupacion: p.ocupacion };
+  if (mapeo.puestoKey === match.PUESTO_KEY) return { estado: "coincide" };
+  return { estado: "distinto", puestoKey: mapeo.puestoKey, puestoNombre: mapeo.puestoNombre, ocupacion: p.ocupacion };
+}
+
+// Al aplicar una colilla con puesto "distinto" confirmado por el mapa, PUESTO_KEY
+// y DEPARTAMENTO_EMP se actualizan siempre juntos — nunca uno sin el otro, para
+// no dejar la ficha mostrando un puesto que ya no corresponde a su PUESTO_KEY
+// real (eso rompería jornada asignada, jefatura que aprueba horas extra, etc.
+// — todo lo que cuelga de PUESTO_KEY en el catálogo de puestos).
+function aplicarPuestoDesdeColilla(r){
+  if (!r.puestoInfo || r.puestoInfo.estado !== "distinto") return null;
+  const anterior = r.match.DEPARTAMENTO_EMP || "—";
+  r.match.PUESTO_KEY = r.puestoInfo.puestoKey;
+  r.match.DEPARTAMENTO_EMP = r.puestoInfo.puestoNombre;
+  return `Puesto actualizado desde colilla de pago: "${anterior}" → "${r.puestoInfo.puestoNombre}" (ocupación en colilla: "${r.puestoInfo.ocupacion}").`;
+}
+
 // Orden alfabético "oficial" del sistema para listas de empleados: por las
 // primeras 2 letras del apellido (campo APELLIDOS_EMP). Se usan solo 2
 // letras a propósito (más simple de capturar que el apellido completo) —
@@ -4325,18 +4397,23 @@ async function procesarColillas(){
     return;
   }
 
-  let empleadosDB;
+  let empleadosDB, puestosDB, mapaOcupaciones;
   try{
-    empleadosDB = await cargarEmpleadosDB();
+    [empleadosDB, puestosDB, mapaOcupaciones] = await Promise.all([
+      cargarEmpleadosDB(),
+      cargarPuestosDB(),
+      cargarMapaOcupaciones(),
+    ]);
   }catch(e){
-    statusMsg("No se pudo cargar la lista de empleados para comparar: " + e.message, false);
+    statusMsg("No se pudo cargar la lista de empleados/puestos para comparar: " + e.message, false);
     return;
   }
+  window._puestosDBCache = puestosDB; // lo usa el selector de mapeo en renderColillasPreview
   const indices = construirIndicesEmpleados(empleadosDB);
 
   colillasResultadosCache = parsed.map(p => {
     const { match, nombreCorregido, matchedBy } = emparejarRegistroColilla(p, indices, empleadosDB);
-    const puestoCoincide = match ? (normalizarNombre(match.DEPARTAMENTO_EMP) === normalizarNombre(p.ocupacion)) : null;
+    const puestoInfo = calcularPuestoInfo(p, match, mapaOcupaciones);
     // Un salario en colones que cae a menos de un tercio del que ya tenía
     // guardado (o que se triplica) casi nunca es un cambio real dentro de la
     // misma moneda — el caso típico es una colilla en dólares sin marcar como
@@ -4347,8 +4424,63 @@ async function procesarColillas(){
       const anterior = Number(String(match.SALARIO_EMP).replace(/[^0-9.]/g,""));
       if (anterior > 0 && (p.salario < anterior * 0.3 || p.salario > anterior * 3)) salarioSospechoso = true;
     }
-    return Object.assign({}, p, { match, puestoCoincide, nombreCorregido, matchedBy, salarioSospechoso });
+    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso });
   });
+  renderColillasPreview();
+}
+
+// Devuelve el HTML del aviso de puesto para una fila (o "" si no hay nada que
+// avisar). "sin_mapear" ofrece mapear la ocupación ahí mismo, una sola vez —
+// después de mapeada, todas las filas con esa misma ocupación se resuelven
+// solas. "distinto" solo informa: el cambio real de PUESTO_KEY/DEPARTAMENTO_EMP
+// ocurre al aplicar (ver aplicarPuestoDesdeColilla), junto con el salario.
+function renderPuestoAvisoHtml(r){
+  const info = r.puestoInfo;
+  if (!info || info.estado === "coincide") return "";
+  const idx = colillasResultadosCache.indexOf(r);
+  if (info.estado === "sin_mapear"){
+    const puestos = (window._puestosDBCache || []).slice().sort((a,b) => (a.PUESTO||"").localeCompare(b.PUESTO||"", "es"));
+    return `<div style="margin-top:5px; padding:6px; background:rgba(217,165,74,0.12); border-radius:6px;">
+      <span style="color:#8a6d1f;">❓ Ocupación de la colilla sin mapear a un puesto del catálogo: "${escapeHtml(info.ocupacion)}"</span>
+      <div style="display:flex; gap:6px; margin-top:4px; align-items:center; flex-wrap:wrap;">
+        <select id="mapeo-puesto-${idx}" style="font-size:11px; flex:1; min-width:160px;">
+          <option value="">— Elegí a qué puesto corresponde —</option>
+          ${puestos.map(p => `<option value="${escapeHtml(p.key)}">${escapeHtml(p.PUESTO || p.key)}</option>`).join("")}
+        </select>
+        <button class="btn" style="padding:4px 8px; font-size:11px; flex-shrink:0;" onclick="guardarMapeoOcupacionDesdeColilla(${idx})">Guardar mapeo</button>
+      </div>
+    </div>`;
+  }
+  // estado === "distinto"
+  return `<br><span style="color:#B3261E;">🔁 Puesto cambió — catálogo: "${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}" → colilla indica: "${escapeHtml(info.puestoNombre)}" (se actualiza al aplicar)</span>`;
+}
+
+async function guardarMapeoOcupacionDesdeColilla(idx){
+  const r = colillasResultadosCache[idx];
+  if (!r || !r.puestoInfo || r.puestoInfo.estado !== "sin_mapear") return;
+  const select = document.getElementById(`mapeo-puesto-${idx}`);
+  const puestoKey = select && select.value;
+  if (!puestoKey){ statusMsg("Elegí un puesto antes de guardar el mapeo.", false); return; }
+  const puesto = (window._puestosDBCache || []).find(p => p.key === puestoKey);
+  const puestoNombre = puesto ? (puesto.PUESTO || puesto.key) : puestoKey;
+  const ocupacion = r.puestoInfo.ocupacion;
+  try{
+    await guardarMapaOcupacion(ocupacion, puestoKey, puestoNombre);
+  }catch(e){
+    statusMsg("No se pudo guardar el mapeo: " + e.message, false);
+    return;
+  }
+  // Probablemente varias personas comparten esta misma ocupación de planilla
+  // — se resuelven todas de una vez, no solo la fila donde se hizo el mapeo.
+  const claveOcup = normalizarNombre(ocupacion);
+  colillasResultadosCache.forEach(row => {
+    if (row.match && row.ocupacion && normalizarNombre(row.ocupacion) === claveOcup){
+      row.puestoInfo = (puestoKey === row.match.PUESTO_KEY)
+        ? { estado: "coincide" }
+        : { estado: "distinto", puestoKey, puestoNombre, ocupacion: row.ocupacion };
+    }
+  });
+  statusMsg(`Mapeo guardado: "${ocupacion}" → ${puestoNombre}.`);
   renderColillasPreview();
 }
 
@@ -4360,10 +4492,12 @@ function renderColillasPreview(){
   const encontrados = resto.filter(r => !r.salarioSospechoso);
   const sospechosos = resto.filter(r => r.salarioSospechoso);
   const noEncontrados = colillasResultadosCache.filter(r => !r.match);
+  const puestosSinMapear = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "sin_mapear").length;
+  const puestosDistintos = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "distinto").length;
 
   let html = `<div class="section-card" style="border-color:var(--leaf); margin-top:12px;"><div class="section-body">
     <div style="font-weight:700; margin-bottom:4px;">Resumen</div>
-    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} con salario sospechoso</b>` : ""}${usd.length ? ` · <b style="color:var(--navy-deep);">${usd.length} en dólares</b>` : ""}</div>
+    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} con salario sospechoso</b>` : ""}${usd.length ? ` · <b style="color:var(--navy-deep);">${usd.length} en dólares</b>` : ""}${puestosSinMapear ? ` · <b style="color:#8a6d1f;">${puestosSinMapear} ocupación(es) sin mapear</b>` : ""}${puestosDistintos ? ` · <b style="color:#B3261E;">${puestosDistintos} con puesto para actualizar</b>` : ""}</div>
   </div></div>`;
 
   if (usd.length){
@@ -4377,7 +4511,7 @@ function renderColillasPreview(){
           <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
           ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
           Salario en dólares: ${anteriorUsd ? "$"+Number(anteriorUsd).toLocaleString("en-US") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">$${r.salario.toLocaleString("en-US")}</b>
-          ${r.puestoCoincide === false ? `<br><span style="color:#8a6d1f;">⚠️ Puesto distinto — catálogo: "${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}" / colilla: "${escapeHtml(r.ocupacion)}"</span>` : ""}
+          ${renderPuestoAvisoHtml(r)}
         </div>`;
       }).join("")}
       <button class="btn primary" style="width:100%; margin-top:10px;" onclick="aplicarColillasUSD()">💵 Aplicar ${usd.length} actualización(es) en dólares</button>
@@ -4393,6 +4527,7 @@ function renderColillasPreview(){
         return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
           <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)}<br>
           Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)
+          ${renderPuestoAvisoHtml(r)}
           <div style="margin-top:4px;">
             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="aplicarColillaIndividual(${idx})">Aplicar de todas formas</button>
             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="colillasResultadosCache[${idx}].match=null; renderColillasPreview();">Ignorar esta fila</button>
@@ -4412,7 +4547,7 @@ function renderColillasPreview(){
           <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
           ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
           Salario: ${r.match.SALARIO_EMP ? "₡"+Number(r.match.SALARIO_EMP).toLocaleString("es-CR") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">₡${r.salario.toLocaleString("es-CR")}</b>
-          ${r.puestoCoincide === false ? `<br><span style="color:#8a6d1f;">⚠️ Puesto distinto — catálogo: "${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}" / colilla: "${escapeHtml(r.ocupacion)}"</span>` : ""}
+          ${renderPuestoAvisoHtml(r)}
         </div>`;
       }).join("")}
       <button class="btn primary" style="width:100%; margin-top:10px;" onclick="aplicarColillas()">✅ Aplicar ${encontrados.length} actualización(es)${corregidos.length ? " (incluye " + corregidos.length + " corrección(es) de nombre)" : ""}</button>
@@ -4443,8 +4578,10 @@ async function aplicarColillaIndividual(idx){
     r.match.NOMBRE_EMP = partido.nombre;
     r.match.APELLIDOS_EMP = partido.apellidos;
   }
+  const notaPuesto = aplicarPuestoDesdeColilla(r);
   await window.storage.set(fullKey, JSON.stringify(r.match), false);
   await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago (confirmado a mano tras aviso de monto sospechoso): ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
+  if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
   statusMsg(`Salario de ${nombreCompletoEmpleado(r.match)} actualizado.`);
   colillasResultadosCache[idx] = Object.assign({}, r, { match: null }); // ya aplicado, se quita de la lista de pendientes
   renderColillasPreview();
@@ -4473,6 +4610,7 @@ async function aplicarColillasUSD(){
       r.match.NOMBRE_EMP = partido.nombre;
       r.match.APELLIDOS_EMP = partido.apellidos;
     }
+    const notaPuesto = aplicarPuestoDesdeColilla(r);
     await window.storage.set(fullKey, JSON.stringify(r.match), false);
     if (r.nombreCorregido){
       await agregarBitacora(r.match.key, `Nombre corregido automáticamente desde colilla: "${r.nombreCorregido.anterior}" → "${r.nombreCorregido.nuevo}".`);
@@ -4480,6 +4618,7 @@ async function aplicarColillasUSD(){
     if (String(anteriorUsd) !== String(r.salario)){
       await agregarBitacora(r.match.key, `Salario en dólares actualizado desde colilla de pago: ${anteriorUsd} → ${r.salario} (№ empleado ${r.numero}).`);
     }
+    if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
     count++;
   }
   statusMsg(`Actualizado el salario en dólares de ${count} empleado(s).`);
@@ -4515,6 +4654,7 @@ async function aplicarColillas(){
       r.match.NOMBRE_EMP = partido.nombre;
       r.match.APELLIDOS_EMP = partido.apellidos;
     }
+    const notaPuesto = aplicarPuestoDesdeColilla(r);
     await window.storage.set(fullKey, JSON.stringify(r.match), false);
     if (r.nombreCorregido){
       await agregarBitacora(r.match.key, `Nombre corregido automáticamente desde colilla: "${r.nombreCorregido.anterior}" → "${r.nombreCorregido.nuevo}".`);
@@ -4522,6 +4662,7 @@ async function aplicarColillas(){
     if (String(salarioAnterior) !== String(r.salario)){
       await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago: ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
     }
+    if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
     count++;
   }
   const fechaHoy = fmtFecha(new Date().toISOString());
