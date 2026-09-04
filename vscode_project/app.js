@@ -4622,12 +4622,41 @@ function parseColillaConPeriodo(texto){
   };
 }
 
+// Identifica una colilla archivada por empleado (cédula, o nombre si no tiene
+// cédula capturada) + inicio de período — dos colillas con esa misma clave
+// son "la misma quincena de la misma persona", sin importar si el PDF subido
+// es byte-por-byte idéntico o solo corresponde al mismo período.
+function claveColillaArchivada(cedula, nombreCompleto, periodoInicio){
+  return (cedula || normalizarNombre(nombreCompleto)) + "|" + (periodoInicio || "");
+}
+
+// Trae las colillas ya archivadas de la propiedad y arma el set de claves
+// para detectar duplicados antes de volver a guardar una. periodoInicio no se
+// guarda en su propia columna — se recupera del nombre de archivo, que
+// siempre termina en "_DD-MM-YYYY.pdf" (ver archivarColillasPDF). Las
+// anuladas no cuentan como duplicado: si alguien anuló una colilla, sí debe
+// poder archivarse una nueva para ese mismo período.
+async function cargarClavesColillasArchivadas(){
+  const docs = (await window.sdgApi.documentos({ tipo: "colilla_pago", limite: 5000 })) || [];
+  const claves = new Set();
+  docs.forEach(d => {
+    if (d.anulado_en) return;
+    const m = String(d.nombre_archivo || "").match(/_(\d{2})-(\d{2})-(\d{4})\.pdf$/i);
+    const periodoInicio = m ? `${m[1]}/${m[2]}/${m[3]}` : "";
+    claves.add(claveColillaArchivada(d.empleado_cedula, d.empleado_nombre, periodoInicio));
+  });
+  return claves;
+}
+
 // Lee un PDF de colillas página por página (cada página = una colilla), recorta
 // la página de cada empleado que logre emparejar con el catálogo de Empleados
 // como su propio PDF de una hoja, y la archiva en documentos_emitidos — igual
 // que ya se archivan los contratos y cartas, solo con tipo "colilla_pago".
 // La página del PDF original NUNCA se modifica, solo se copia.
-async function archivarColillasPDF(file){
+// clavesYaArchivadas es compartido entre todos los archivos de una misma
+// subida (ver onColillasPdfSelected), así que también detecta duplicados
+// dentro del mismo lote, no solo contra lo que ya estaba guardado antes.
+async function archivarColillasPDF(file, clavesYaArchivadas){
   if (typeof pdfjsLib === "undefined" || typeof PDFLib === "undefined"){
     throw new Error("El lector/escritor de PDF no está disponible en este navegador.");
   }
@@ -4640,20 +4669,24 @@ async function archivarColillasPDF(file){
     const parsed = parseColillaConPeriodo(textoDePagina(content));
     if (parsed) registros.push(Object.assign({ pageIndex: i - 1 }, parsed));
   }
-  if (!registros.length) return { archivados: 0, sinCoincidencia: [], total: 0 };
+  if (!registros.length) return { archivados: 0, duplicados: 0, sinCoincidencia: [], total: 0 };
 
   const empleadosDB = await cargarEmpleadosDB();
   const indices = construirIndicesEmpleados(empleadosDB);
+  if (!clavesYaArchivadas) clavesYaArchivadas = await cargarClavesColillasArchivadas();
 
   const bufEscritura = await file.arrayBuffer(); // copia aparte: pdf.js puede dejar inservible el buffer que ya usó
   const { PDFDocument } = PDFLib;
   const srcDoc = await PDFDocument.load(bufEscritura);
 
-  let archivados = 0;
+  let archivados = 0, duplicados = 0;
   const sinCoincidencia = [];
   for (const reg of registros){
     const { match } = emparejarRegistroColilla(reg, indices, empleadosDB);
     if (!match){ sinCoincidencia.push(reg); continue; }
+
+    const clave = claveColillaArchivada(match.IDENTIFICACION_EMP, nombreCompletoEmpleado(match), reg.periodoInicio);
+    if (clavesYaArchivadas.has(clave)){ duplicados++; continue; }
 
     const nuevoDoc = await PDFDocument.create();
     const [copiada] = await nuevoDoc.copyPages(srcDoc, [reg.pageIndex]);
@@ -4672,11 +4705,12 @@ async function archivarColillasPDF(file){
         empleadoNombre: nombreCompletoEmpleado(match) || null,
       });
       archivados++;
+      clavesYaArchivadas.add(clave);
     }catch(e){
       sinCoincidencia.push(Object.assign({}, reg, { errorArchivo: e.message }));
     }
   }
-  return { archivados, sinCoincidencia, total: registros.length };
+  return { archivados, duplicados, sinCoincidencia, total: registros.length };
 }
 
 async function onColillasPdfSelected(inputEl){
@@ -4687,6 +4721,16 @@ async function onColillasPdfSelected(inputEl){
   let leidos = [];
   let archivadosTotal = 0;
   let sinArchivarTotal = 0;
+  let duplicadosTotal = 0;
+  // Se carga una sola vez y se comparte entre todos los archivos de esta
+  // subida, así detecta tanto "esta colilla ya estaba archivada de antes"
+  // como "este mismo lote trae la misma colilla repetida".
+  let clavesYaArchivadas;
+  try{
+    clavesYaArchivadas = await cargarClavesColillasArchivadas();
+  }catch(e){
+    clavesYaArchivadas = new Set(); // si falla la consulta, no bloquea la subida — solo no filtra duplicados de antes
+  }
   for (const file of files){
     statusEl.textContent = `Leyendo ${file.name} (${leidos.length + 1} de ${files.length})…`;
     try{
@@ -4703,9 +4747,10 @@ async function onColillasPdfSelected(inputEl){
     // por persona. Si esto falla, no debe impedir que el salario sí se actualice.
     try{
       statusEl.textContent = `Archivando colillas individuales de ${file.name}…`;
-      const resultado = await archivarColillasPDF(file);
+      const resultado = await archivarColillasPDF(file, clavesYaArchivadas);
       archivadosTotal += resultado.archivados;
       sinArchivarTotal += resultado.sinCoincidencia.length;
+      duplicadosTotal += resultado.duplicados;
     }catch(e){
       statusMsg(`Se leyó "${file.name}" pero no se pudieron archivar las colillas individuales: ${e.message}`, false);
     }
@@ -4717,7 +4762,9 @@ async function onColillasPdfSelected(inputEl){
       await procesarColillas();
       statusEl.textContent = "✅ " + leidos.length + " PDF(s) procesado(s): " + leidos.join(", ") +
         (archivadosTotal ? ` — ${archivadosTotal} colilla(s) individual(es) archivada(s)` +
-          (sinArchivarTotal ? ` (${sinArchivarTotal} sin coincidencia)` : "") + "." : "");
+          (sinArchivarTotal ? ` (${sinArchivarTotal} sin coincidencia)` : "") +
+          (duplicadosTotal ? ` (${duplicadosTotal} ya estaban archivadas, no se repitieron)` : "") + "." : "") +
+        (!archivadosTotal && duplicadosTotal ? ` — ${duplicadosTotal} colilla(s) ya estaban archivadas, no se repitieron.` : "");
     }catch(e){
       statusEl.textContent = "⚠️ El PDF se leyó pero no se pudo procesar: " + e.message;
     }
