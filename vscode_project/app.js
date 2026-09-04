@@ -4804,8 +4804,12 @@ async function mostrarModalColillasArchivadas(){
   body.innerHTML = `<div class="empty-state">Cargando…</div>`;
   document.getElementById("modal-incompletos").classList.add("open");
   try{
-    const docs = await window.sdgApi.documentos({ tipo: "colilla_pago" });
-    window._colillasArchivadasCache = docs;
+    const todos = await window.sdgApi.documentos({ tipo: "colilla_pago" });
+    window._colillasArchivadasCache = todos;
+    // Las anuladas (incluidas las que deja "eliminar duplicados") no se borran
+    // nunca de la base — documentos_emitidos es de solo-inserción — pero ya no
+    // deben aparecer aquí como si siguieran vigentes.
+    const docs = todos.filter(d => !d.anulado_en);
     if (!docs.length){
       body.innerHTML = `<div class="empty-state">Todavía no hay colillas archivadas — se archivan solas la próxima vez que subas un PDF de planilla en "Subir PDF(s) de colillas".</div>`;
       return;
@@ -4827,8 +4831,12 @@ async function mostrarModalColillasArchivadas(){
     });
     grupos.sort((a,b) => a.nombre.localeCompare(b.nombre, "es"));
 
+    const duplicados = encontrarColillasDuplicadas(docs);
+    const totalDuplicados = duplicados.reduce((n,g) => n + g.duplicados.length, 0);
+
     body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${docs.length} colilla(s) archivada(s) de ${grupos.length} trabajador(es).</div>
-      <button class="btn" style="width:100%; margin-bottom:12px;" onclick="descargarTodasLasColillas()">⬇️ Descargar absolutamente todas (${docs.length})</button>` +
+      <button class="btn" style="width:100%; margin-bottom:8px;" onclick="descargarTodasLasColillas()">⬇️ Descargar absolutamente todas (${docs.length})</button>
+      <button class="btn" style="width:100%; margin-bottom:12px;${totalDuplicados ? " border-color:#B3261E; color:#B3261E;" : ""}" onclick="mostrarModalDuplicadosColillas()">🧹 Buscar y eliminar duplicados${totalDuplicados ? ` (${totalDuplicados})` : ""}</button>` +
       grupos.map((g, gi) => `
         <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
@@ -4843,6 +4851,78 @@ async function mostrarModalColillasArchivadas(){
         </div>`).join("");
     window._colillasArchivadasGrupos = grupos;
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar la lista: ${escapeHtml(e.message)}</div>`; }
+}
+
+// Agrupa por la misma clave que usa el archivador (cédula/nombre + inicio de
+// período, ver claveColillaArchivada) y devuelve solo los grupos con más de
+// una colilla activa — esas son las duplicadas. De cada grupo se conserva la
+// más reciente (emitido_en) y el resto queda propuesto para anular.
+function encontrarColillasDuplicadas(docs){
+  const grupos = {};
+  (docs || []).forEach(d => {
+    if (d.anulado_en) return;
+    const m = String(d.nombre_archivo || "").match(/_(\d{2})-(\d{2})-(\d{4})\.pdf$/i);
+    const periodoInicio = m ? `${m[1]}/${m[2]}/${m[3]}` : "";
+    const clave = claveColillaArchivada(d.empleado_cedula, d.empleado_nombre, periodoInicio);
+    (grupos[clave] || (grupos[clave] = [])).push(d);
+  });
+  return Object.values(grupos)
+    .filter(g => g.length > 1)
+    .map(g => {
+      const ordenados = g.slice().sort((a,b) => (b.emitido_en||"").localeCompare(a.emitido_en||""));
+      return { conservar: ordenados[0], duplicados: ordenados.slice(1) };
+    });
+}
+
+// No borra nada — documentos_emitidos es de solo-inserción — solo anula
+// (marca anulado_en) las copias de más de cada período repetido, dejando la
+// más reciente vigente. Muestra antes cuál se conserva y cuáles se anulan
+// para que se confirme a mano.
+async function mostrarModalDuplicadosColillas(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🧹 Colillas duplicadas";
+  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
+  try{
+    const docs = (window._colillasArchivadasCache || []).filter(d => !d.anulado_en);
+    const grupos = encontrarColillasDuplicadas(docs);
+    if (!grupos.length){
+      body.innerHTML = `<div class="empty-state">✅ No se encontraron colillas duplicadas (mismo empleado y mismo período).</div>
+        <button class="btn" style="width:100%; margin-top:10px;" onclick="mostrarModalColillasArchivadas()">← Volver</button>`;
+      return;
+    }
+    const totalDuplicados = grupos.reduce((n,g) => n + g.duplicados.length, 0);
+    window._duplicadosColillasCache = grupos;
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
+        Se encontraron ${totalDuplicados} colilla(s) repetida(s) en ${grupos.length} caso(s) de mismo empleado + mismo período. De cada uno se conserva la más reciente; el resto se anula (no se borra: queda marcada como anulada en el historial, y ya no cuenta como archivada).
+      </div>` +
+      grupos.map(g => `
+        <div style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--paper-line);">
+          <div style="font-weight:700; font-size:12.5px; margin-bottom:4px;">${escapeHtml(g.conservar.empleado_nombre || "Sin nombre")}</div>
+          <div style="font-size:11.5px; color:var(--leaf);">✅ Se conserva — ${g.conservar.emitido_en ? new Date(g.conservar.emitido_en).toLocaleString("es-CR") : "—"} · ${escapeHtml(g.conservar.titulo)}</div>
+          ${g.duplicados.map(d => `<div style="font-size:11.5px; color:#B3261E;">🗑️ Se anula — ${d.emitido_en ? new Date(d.emitido_en).toLocaleString("es-CR") : "—"} · ${escapeHtml(d.titulo)}</div>`).join("")}
+        </div>`).join("") +
+      `<div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn" style="flex:1;" onclick="mostrarModalColillasArchivadas()">Cancelar</button>
+        <button class="btn primary" style="flex:1;" onclick="confirmarEliminarDuplicadosColillas()">🗑️ Anular ${totalDuplicados} duplicado(s)</button>
+      </div>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar duplicados: ${escapeHtml(e.message)}</div>`; }
+}
+
+async function confirmarEliminarDuplicadosColillas(){
+  const grupos = window._duplicadosColillasCache || [];
+  const body = document.getElementById("modal-incompletos-body");
+  body.innerHTML = `<div class="empty-state">Anulando duplicados…</div>`;
+  let ok = 0, fallidos = 0;
+  for (const g of grupos){
+    for (const d of g.duplicados){
+      try{
+        await window.sdgApi.anularDocumento(d.id, "Duplicado — colilla repetida del mismo empleado y período; se conservó la más reciente.");
+        ok++;
+      }catch(e){ fallidos++; }
+    }
+  }
+  statusMsg(`${ok} colilla(s) duplicada(s) anulada(s)` + (fallidos ? ` — ${fallidos} no se pudieron anular.` : "."), fallidos === 0);
+  await mostrarModalColillasArchivadas();
 }
 
 async function descargarVariasColillas(docs){
