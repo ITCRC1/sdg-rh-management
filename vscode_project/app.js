@@ -4122,6 +4122,23 @@ function detectarMonedaArchivo(nombreArchivo){
   return "CRC";
 }
 
+// Cuando el nombre completo del empleado es largo, la plantilla de la colilla lo
+// envuelve a una segunda línea (comparte fila con "Departamento" en el diseño,
+// pero esa línea queda más abajo en el PDF). Como el lector de texto ordena por
+// posición vertical, esa línea suelta con el resto del nombre termina apareciendo
+// DESPUÉS de "Salario Mensual" en el texto extraído, y la regex principal (que no
+// cruza líneas) la deja fuera — el nombre queda cortado (ej. "...DE LOS" sin
+// "ANGELES"). Esto rompe el emparejado por nombre contra la ficha del empleado.
+// Aquí se reconstruye: si justo antes de "Departamento" hay una línea suelta sin
+// ":" (no es otro campo con etiqueta), es la continuación del nombre envuelto.
+function completarNombreConLineaSuelta(chunk, m, nombre){
+  const finMatch = m.index + m[0].length;
+  const nlIdx = chunk.indexOf("\n", finMatch);
+  if (nlIdx === -1) return nombre;
+  const cont = chunk.slice(nlIdx + 1).match(/^([^\n:]{1,40})\n\s*Departamento/);
+  return cont ? `${nombre} ${cont[1].trim()}`.replace(/\s+/g," ").trim() : nombre;
+}
+
 // onColillasPdfSelected marca el inicio del texto de cada archivo con
 // "[[MONEDA:CRC]]" o "[[MONEDA:USD]]" antes de concatenarlo — así, aunque se
 // suban varios PDF a la vez (uno en colones y otro en dólares), cada registro
@@ -4141,7 +4158,7 @@ function parseColillas(text){
       const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)/s);
       if (!m) return;
       const numero = m[1];
-      const nombre = m[2].replace(/\s+/g," ").trim();
+      const nombre = completarNombreConLineaSuelta(chunk, m, m[2].replace(/\s+/g," ").trim());
       const salario = parseFloat(m[3].replace(/,/g,""));
       const deptMatch = chunk.match(/Departamento\s*:\s*([^\n]{1,60})/);
       const ocupMatch = chunk.match(/Ocupaci[oó]n:\s*([^\n]{1,60})/);
@@ -4595,7 +4612,7 @@ function parseColillaConPeriodo(texto){
   const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)(?:\s+(\d{2}\/\d{2}\/\d{4})\s+Al\s*:\s*(\d{2}\/\d{2}\/\d{4}))?/s);
   if (!m) return null;
   const numero = m[1];
-  const nombre = m[2].replace(/\s+/g," ").trim();
+  const nombre = completarNombreConLineaSuelta(chunk, m, m[2].replace(/\s+/g," ").trim());
   const salario = parseFloat(m[3].replace(/,/g,""));
   const cedulaMatch = chunk.match(/[Cc]édula\D{0,10}(\d[\d-]{7,10}\d)/);
   return {
