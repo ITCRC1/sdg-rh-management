@@ -5749,9 +5749,17 @@ async function generarReporteHorarioPlanilla(){
 
     const registros = await listarRegistrosHorasExtra();
     const empleados = await cargarEmpleadosDB();
+    // DEPARTAMENTO_EMP es texto libre autocompletado con el NOMBRE DEL PUESTO
+    // (ver definición del campo, "Puesto / departamento (texto libre...)")
+    // — no es el departamento real. El departamento real vive en el catálogo
+    // de puestos (DEPARTAMENTO_MINISTERIO), igual que ya lo resuelve el panel
+    // de Horas Extras y el de Días Libres/Vacaciones.
+    const puestosDB = await cargarPuestosDB();
+    const puestosPorKey = {};
+    puestosDB.forEach(p => { puestosPorKey[p.key] = p; });
 
     const filas = calcularResumenQuincena(registros, empleados, rango)
-      .sort((a, b) => (a.emp.DEPARTAMENTO_EMP || "").localeCompare(b.emp.DEPARTAMENTO_EMP || "", "es") || compararPorApellido(a.emp, b.emp));
+      .sort((a, b) => departamentoDeEmpleadoGenerico(a.emp, puestosPorKey).localeCompare(departamentoDeEmpleadoGenerico(b.emp, puestosPorKey), "es") || compararPorApellido(a.emp, b.emp));
 
     if (!filas.length){
       if (status) status.innerHTML = `No hay ningún empleado activo dentro de esa quincena.`;
@@ -5760,7 +5768,7 @@ async function generarReporteHorarioPlanilla(){
 
     const prop = getPropiedadActual();
     const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
-    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Horas extra"];
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Horas extra","Monto horas extra (₡)"];
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
@@ -5796,10 +5804,17 @@ async function generarReporteHorarioPlanilla(){
 
     let filaActual = 4;
     filas.forEach(f => {
+      // Misma fórmula que ya usa el estimado en pantalla del panel de Horas
+      // Extras (salario mensual / 30 días / jornada diaria = salario por
+      // hora, a tiempo y medio) — solo cubre salario en colones, igual que
+      // ese estimado: si el empleado gana en dólares, queda en blanco.
+      const jornadaEmpleado = jornadaDiariaDePuesto(puestosPorKey[f.emp.PUESTO_KEY]);
+      const salarioHora = f.emp.SALARIO_EMP ? (parseFloat(f.emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
+      const montoHorasExtra = (salarioHora && !isNaN(salarioHora)) ? Math.round(salarioHora * TARIFA_HORAS_EXTRA * f.horasExtra * 100) / 100 : "";
       const valores = [
         nombreCompletoEmpleado(f.emp),
         f.emp.NUMERO_EMPLEADO || "",
-        f.emp.DEPARTAMENTO_EMP || "",
+        departamentoDeEmpleadoGenerico(f.emp, puestosPorKey),
         f.diasLaborados,
         f.descPorTipo.incapacidad || 0,
         f.descPorTipo.permiso_sin_goce || 0,
@@ -5807,6 +5822,7 @@ async function generarReporteHorarioPlanilla(){
         f.descPorTipo.ausencia || 0,
         `${f.diasLibresMes}/${DIAS_LIBRES_POR_MES}`,
         Math.round(f.horasExtra * 100) / 100,
+        montoHorasExtra,
       ];
       const fila = ws.getRow(filaActual);
       valores.forEach((v, i) => {
@@ -6256,6 +6272,13 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   }
 
   let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0;
+  // Reimportar un archivo que se traslapa en fechas con uno anterior puede
+  // pisar las horas de un día que seguía "pendiente" sin que nadie lo note
+  // (el registro se sobrescribe abajo — eso es intencional, para poder
+  // corregir con una reimportación). Esto solo junta los casos donde el
+  // valor de verdad cambió, para avisarle a quien importa en vez de dejarlo
+  // pasar en silencio.
+  const cambiosDeHoras = [];
   for (const info of Object.values(acumulado)){
     // La jornada de referencia es la del puesto del empleado (turno diurno,
     // mixto o nocturno) — sin match todavía, se usa la jornada por defecto,
@@ -6283,13 +6306,23 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // reimportación — la decisión ya se tomó, aunque el archivo cambie.
     if (existente && existente.ESTADO !== "pendiente"){ omitidas++; continue; }
 
+    const horasExtraRedondeadas = Math.round(horasExtraFinal * 100) / 100;
+    if (existente && existente.ESTADO === "pendiente" && (existente.HORAS_EXTRA || 0) !== horasExtraRedondeadas){
+      cambiosDeHoras.push({
+        nombre: (info.EMPLEADO && nombreCompletoEmpleado(info.EMPLEADO)) || info.NOMBRE_ARCHIVO || info.IDENT_RAW,
+        fecha: info.FECHA,
+        antes: existente.HORAS_EXTRA || 0,
+        despues: horasExtraRedondeadas,
+      });
+    }
+
     const value = {
       CODIGO_ARCHIVO: info.CODIGO_ARCHIVO,
       NOMBRE_ARCHIVO: info.NOMBRE_ARCHIVO,
       CEDULA: info.CEDULA,
       EMPLEADO_KEY: info.EMPLEADO_KEY,
       FECHA: info.FECHA,
-      HORAS_EXTRA: Math.round(horasExtraFinal * 100) / 100,
+      HORAS_EXTRA: horasExtraRedondeadas,
       MARCAS: info.MARCAS,
       INCOMPLETO: info.INCOMPLETO,
       MARCA_SUELTA: info.MARCA_SUELTA,
@@ -6306,7 +6339,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
 
   const ausenciasDetectadas = await detectarAusenciasDelArchivo(acumulado, nombreArchivo);
 
-  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols };
+  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols, cambiosDeHoras };
 }
 
 async function importarHorasExtraArchivo(inputEl){
@@ -6345,6 +6378,13 @@ async function importarHorasExtraArchivo(inputEl){
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
+    if (r.cambiosDeHoras && r.cambiosDeHoras.length){
+      const detalle = r.cambiosDeHoras.slice(0, 5)
+        .map(c => `${c.nombre} (${fmtFechaSimple(c.fecha)}): ${c.antes}h → ${c.despues}h`)
+        .join("; ");
+      const yMas = r.cambiosDeHoras.length > 5 ? ` y ${r.cambiosDeHoras.length - 5} más` : "";
+      msg += ` ⚠️ ${r.cambiosDeHoras.length} registro(s) pendiente(s) cambiaron de horas respecto al valor que tenían antes de esta importación — revísalos: ${detalle}${yMas}.`;
+    }
     if (turnosSinMarcar) msg += ` ${turnosSinMarcar} turno(s) sin marcar quedaron para que la jefatura los complete o los descarte.`;
     if (sinPar) msg += ` ${sinPar} marca(s) con duración imposible (par negativo o de más de 20h) se ignoraron.`;
     // Para poder revisar rápido si el archivo se leyó como se esperaba —
