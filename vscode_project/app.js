@@ -598,7 +598,7 @@ const CATALOGS = {
       ["grp", "Contacto"],
       ["CELULAR_EMP","text","7. Teléfono personal",""],
       ["CORREO_EMP","text","8. Correo electrónico",""],
-      ["DIRECCION_EMP","text","Dirección (domicilio)","","libre"],
+      ["DIRECCION_EMP","direccion_empleado_cr","Dirección (domicilio)","","libre"],
       ["grp", "Cuenta bancaria"],
       ["BANCO_EMP","select_banco_cr","9. Banco",""],
       ["NUMERO_CUENTA_EMP","cuenta_bancaria_emp","Número de cuenta","Elige el tipo y escribe el número"],
@@ -1926,6 +1926,111 @@ function formatearTextoLibre(s){
 
 // ---------- generic catalog field renderer (used inside the inline add/edit form) ----------
 const PROVINCIAS_CR = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Puntarenas", "Limón"];
+// Fuente: división territorial administrativa oficial de Costa Rica (7
+// provincias, 84 cantones, distritos), tomando como referencia la
+// codificación de código postal de Correos de Costa Rica — incluye los 3
+// cantones más recientes (Río Cuarto en Alajuela desde 2018; Monteverde y
+// Puerto Jiménez en Puntarenas, con gobierno municipal propio desde 2024).
+const DISTRITOS_CR = {
+  "San José": {
+    "Acosta": ["San Ignacio", "Guaitil", "Palmichal", "Cangrejal", "Sabanillas"],
+    "Alajuelita": ["Alajuelita", "San Josecito", "San Antonio", "Concepción", "San Felipe"],
+    "Aserrí": ["Aserrí", "Tarbaca", "Vuelta de Jorco", "San Gabriel", "Legua", "Monterrey", "Salitrillos"],
+    "Curridabat": ["Curridabat", "Granadilla", "Sánchez", "Tirrases"],
+    "Desamparados": ["Desamparados", "San Miguel", "San Juan de Dios", "San Rafael Arriba", "San Antonio", "Frailes", "Patarrá", "San Cristóbal", "Rosario", "Damas", "San Rafael Abajo", "Gravilias", "Los Guido"],
+    "Dota": ["Santa María", "Jardín", "Copey"],
+    "Escazú": ["Escazú", "San Antonio", "San Rafael"],
+    "Goicoechea": ["Guadalupe", "San Francisco", "Calle Blancos", "Mata de Plátano", "Ipís", "Rancho Redondo", "Purral"],
+    "León Cortés Castro": ["San Pablo", "San Andrés", "Llano Bonito", "San Isidro", "Santa Cruz", "San Antonio"],
+    "Montes de Oca": ["San Pedro", "Sabanilla", "Mercedes", "San Rafael"],
+    "Mora": ["Colón", "Guayabo", "Tabarcia", "Piedras Negras", "Picagres", "Jaris", "Quitirrisí"],
+    "Moravia": ["San Vicente", "San Jerónimo", "La Trinidad"],
+    "Pérez Zeledón": ["San Isidro de El General", "El General", "Daniel Flores", "Rivas", "San Pedro", "Platanares", "Pejibaye", "Cajón", "Barú", "Río Nuevo", "Páramo", "La Amistad"],
+    "Puriscal": ["Santiago", "Mercedes Sur", "Barbacoas", "Grifo Alto", "San Rafael", "Candelarita", "Desamparaditos", "San Antonio", "Chires"],
+    "San José": ["Carmen", "Merced", "Hospital", "Catedral", "Zapote", "San Francisco de Dos Ríos", "Uruca", "Mata Redonda", "Pavas", "Hatillo", "San Sebastián"],
+    "Santa Ana": ["Santa Ana", "Salitral", "Pozos", "Uruca", "Piedades", "Brasil"],
+    "Tarrazú": ["San Marcos", "San Lorenzo", "San Carlos"],
+    "Tibás": ["San Juan", "Cinco Esquinas", "Anselmo Llorente", "León XIII", "Colima"],
+    "Turrubares": ["San Pablo", "San Pedro", "San Juan de Mata", "San Luis", "Carara"],
+    "Vázquez de Coronado": ["San Isidro", "San Rafael", "Dulce Nombre de Jesús", "Patalillo", "Cascajal"],
+  },
+  "Alajuela": {
+    "Alajuela": ["Alajuela", "San José", "Carrizal", "San Antonio", "Guácima", "San Isidro", "Sabanilla", "San Rafael", "Río Segundo", "Desamparados", "Turrúcares", "Tambor", "Garita", "Sarapiquí"],
+    "Atenas": ["Atenas", "Jesús", "Mercedes", "San Isidro", "Concepción", "San José", "Santa Eulalia", "Escobal"],
+    "Grecia": ["Grecia", "San Isidro", "San José", "San Roque", "Tacares", "Puente de Piedra", "Bolívar"],
+    "Guatuso": ["San Rafael", "Buenavista", "Cote", "Katira"],
+    "Los Chiles": ["Los Chiles", "Caño Negro", "El Amparo", "San Jorge"],
+    "Naranjo": ["Naranjo", "San Miguel", "San José", "Cirrí Sur", "San Jerónimo", "San Juan", "El Rosario", "Palmitos"],
+    "Orotina": ["Orotina", "El Mastate", "Hacienda Vieja", "Coyolar", "La Ceiba"],
+    "Palmares": ["Palmares", "Zaragoza", "Buenos Aires", "Santiago", "Candelaria", "Esquipulas", "La Granja"],
+    "Poás": ["San Pedro", "San Juan", "San Rafael", "Carrillos", "Sabana Redonda"],
+    "Río Cuarto": ["Río Cuarto", "Santa Rita", "Santa Isabel"],
+    "San Carlos": ["Quesada", "Florencia", "Buenavista", "Aguas Zarcas", "Venecia", "Pital", "La Fortuna", "La Tigra", "La Palmera", "Venado", "Cutris", "Monterrey", "Pocosol"],
+    "San Mateo": ["San Mateo", "Desmonte", "Jesús María", "Labrador"],
+    "San Ramón": ["San Ramón", "Santiago", "San Juan", "Piedades Norte", "Piedades Sur", "San Rafael", "San Isidro", "Ángeles", "Alfaro", "Volio", "Concepción", "Zapotal", "Peñas Blancas", "San Lorenzo"],
+    "Sarchí": ["Sarchí Norte", "Sarchí Sur", "Toro Amarillo", "San Pedro", "Rodríguez"],
+    "Upala": ["Upala", "Aguas Claras", "San José", "Bijagua", "Delicias", "Dos Ríos", "Yolillal", "Canalete"],
+    "Zarcero": ["Zarcero", "Laguna", "Tapesco", "Guadalupe", "Palmira", "Zapote", "Brisas"],
+  },
+  "Cartago": {
+    "Alvarado": ["Pacayas", "Cervantes", "Capellades"],
+    "Cartago": ["Oriental", "Occidental", "Carmen", "San Nicolás", "Aguacaliente", "Guadalupe", "Corralillo", "Tierra Blanca", "Dulce Nombre", "Llano Grande", "Quebradilla"],
+    "El Guarco": ["El Tejar", "San Isidro", "Tobosi", "Patio de Agua"],
+    "Jiménez": ["Juan Viñas", "Tucurrique", "Pejibaye", "La Victoria"],
+    "La Unión": ["Tres Ríos", "San Diego", "San Juan", "San Rafael", "Concepción", "Dulce Nombre", "San Ramón", "Río Azul"],
+    "Oreamuno": ["San Rafael", "Cot", "Potrero Cerrado", "Cipreses", "Santa Rosa"],
+    "Paraíso": ["Paraíso", "Santiago", "Orosi", "Cachí", "Llanos de Santa Lucía", "Birrisito"],
+    "Turrialba": ["Turrialba", "La Suiza", "Peralta", "Santa Cruz", "Santa Teresita", "Pavones", "Tuis", "Tayutic", "Santa Rosa", "Tres Equis", "La Isabel", "Chirripó"],
+  },
+  "Heredia": {
+    "Barva": ["Barva", "San Pedro", "San Pablo", "San Roque", "Santa Lucía", "San José de la Montaña"],
+    "Belén": ["San Antonio", "La Ribera", "La Asunción"],
+    "Flores": ["San Joaquín", "Barrantes", "Llorente"],
+    "Heredia": ["Heredia", "Mercedes", "San Francisco", "Ulloa", "Varablanca"],
+    "San Isidro": ["San Isidro", "San José", "Concepción", "San Francisco"],
+    "San Pablo": ["San Pablo", "Rincón de Sabanilla"],
+    "San Rafael": ["San Rafael", "San Josecito", "Santiago", "Ángeles", "Concepción"],
+    "Santa Bárbara": ["Santa Bárbara", "San Pedro", "San Juan", "Jesús", "Santo Domingo", "Purabá"],
+    "Santo Domingo": ["Santo Domingo", "San Vicente", "San Miguel", "Paracito", "Santo Tomás", "Santa Rosa", "Tures", "Pará"],
+    "Sarapiquí": ["Puerto Viejo", "La Virgen", "Las Horquetas", "Llanuras del Gaspar", "Cureña"],
+  },
+  "Guanacaste": {
+    "Abangares": ["Las Juntas", "Sierra", "San Juan", "Colorado"],
+    "Bagaces": ["Bagaces", "La Fortuna", "Mogote", "Río Naranjo"],
+    "Cañas": ["Cañas", "Palmira", "San Miguel", "Bebedero", "Porozal"],
+    "Carrillo": ["Filadelfia", "Palmira", "Sardinal", "Belén"],
+    "Hojancha": ["Hojancha", "Monte Romo", "Puerto Carrillo", "Huacas", "Matambú"],
+    "La Cruz": ["La Cruz", "Santa Cecilia", "La Garita", "Santa Elena"],
+    "Liberia": ["Liberia", "Cañas Dulces", "Mayorga", "Nacascolo", "Curubandé"],
+    "Nandayure": ["Carmona", "Santa Rita", "Zapotal", "San Pablo", "Porvenir", "Bejuco"],
+    "Nicoya": ["Nicoya", "Mansión", "San Antonio", "Quebrada Honda", "Sámara", "Nosara", "Belén de Nosarita"],
+    "Santa Cruz": ["Santa Cruz", "Bolsón", "Veintisiete de Abril", "Tempate", "Cartagena", "Cuajiniquil", "Diriá", "Cabo Velas", "Tamarindo"],
+    "Tilarán": ["Tilarán", "Quebrada Grande", "Tronadora", "Santa Rosa", "Líbano", "Tierras Morenas", "Arenal", "Cabeceras"],
+  },
+  "Puntarenas": {
+    "Buenos Aires": ["Buenos Aires", "Volcán", "Potrero Grande", "Boruca", "Pilas", "Colinas", "Chánguena", "Biolley", "Brunka"],
+    "Corredores": ["Corredor", "La Cuesta", "Canoas", "Laurel"],
+    "Coto Brus": ["San Vito", "Sabalito", "Aguabuena", "Limoncito", "Pittier", "Gutiérrez Braun"],
+    "Esparza": ["Espíritu Santo", "San Juan Grande", "Macacona", "San Rafael", "San Jerónimo", "Caldera"],
+    "Garabito": ["Jacó", "Tárcoles", "Lagunillas"],
+    "Golfito": ["Golfito", "Guaycará", "Pavón"],
+    "Montes de Oro": ["Miramar", "La Unión", "San Isidro"],
+    "Monteverde": ["Monteverde"],
+    "Osa": ["Puerto Cortés", "Palmar", "Sierpe", "Bahía Ballena", "Piedras Blancas", "Bahía Drake"],
+    "Parrita": ["Parrita"],
+    "Puerto Jiménez": ["Puerto Jiménez"],
+    "Puntarenas": ["Puntarenas", "Pitahaya", "Chomes", "Lepanto", "Paquera", "Manzanillo", "Guacimal", "Barranca", "Isla del Coco", "Cóbano", "Chacarita", "Chira", "Acapulco", "El Roble", "Arancibia"],
+    "Quepos": ["Quepos", "Savegre", "Naranjito"],
+  },
+  "Limón": {
+    "Guácimo": ["Guácimo", "Mercedes", "Pocora", "Río Jiménez", "Duacarí"],
+    "Limón": ["Limón", "Valle La Estrella", "Río Blanco", "Matama"],
+    "Matina": ["Matina", "Batán", "Carrandi"],
+    "Pococí": ["Guápiles", "Jiménez", "Rita", "Roxana", "Cariari", "Colorado", "La Colonia"],
+    "Siquirres": ["Siquirres", "Pacuarito", "Florida", "Germania", "El Cairo", "Alegría", "Reventazón"],
+    "Talamanca": ["Bratsi", "Sixaola", "Cahuita", "Telire"],
+  },
+};
 const BANCOS_CR = [
   "Banco Nacional de Costa Rica (BNCR)",
   "Banco de Costa Rica (BCR)",
@@ -2125,6 +2230,42 @@ function catalogFieldHtml(meta){
       <input type="text" value="${escapeHtml(canton)}" placeholder="Cantón" style="margin-bottom:8px;" oninput="catalogEditing.values.CANTON_EMPRESA=this.value; ${recomponer}">
       <input type="text" value="${escapeHtml(distrito)}" placeholder="Distrito" style="margin-bottom:8px;" oninput="catalogEditing.values.DISTRITO_EMPRESA=this.value; ${recomponer}">
       <textarea placeholder="Otras señas (ej. 100 metros norte del Banco Nacional)" oninput="catalogEditing.values.SENAS_EMPRESA=this.value; ${recomponer}">${escapeHtml(senas)}</textarea>`;
+  } else if (type === "direccion_empleado_cr"){
+    // Provincia → cantón → distrito de selección única (lista oficial,
+    // DISTRITOS_CR) + un campo libre para las señas exactas — igual que
+    // DIRECCION_EMPRESA arriba, pero con cantón/distrito de catálogo en vez
+    // de texto libre, a pedido explícito (antes el domicilio del empleado
+    // era un solo texto libre donde provincia/cantón/distrito y señas
+    // quedaban todos mezclados a mano).
+    //
+    // Migración perezosa: un domicilio viejo (texto libre) se preserva
+    // completo como "Otras señas" en vez de perderse — la persona solo tiene
+    // que elegir ahora provincia/cantón/distrito de la lista y recortar de
+    // las señas lo que ya quedó representado ahí.
+    if (catalogEditing.values.PROVINCIA_EMP === undefined){
+      catalogEditing.values.PROVINCIA_EMP = "";
+      catalogEditing.values.CANTON_EMP = "";
+      catalogEditing.values.DISTRITO_EMP = "";
+      catalogEditing.values.SENAS_EMP = val || "";
+    }
+    const provinciaEmp = catalogEditing.values.PROVINCIA_EMP || "";
+    const cantonEmp = catalogEditing.values.CANTON_EMP || "";
+    const distritoEmp = catalogEditing.values.DISTRITO_EMP || "";
+    const senasEmp = catalogEditing.values.SENAS_EMP || "";
+    const cantonesDeProvincia = provinciaEmp ? Object.keys(DISTRITOS_CR[provinciaEmp] || {}).sort((a,b) => a.localeCompare(b,"es")) : [];
+    const distritosDeCanton = (provinciaEmp && cantonEmp && DISTRITOS_CR[provinciaEmp] && DISTRITOS_CR[provinciaEmp][cantonEmp]) || [];
+    const recomponerDom = `catalogEditing.values['${id}'] = [catalogEditing.values.SENAS_EMP, catalogEditing.values.DISTRITO_EMP, catalogEditing.values.CANTON_EMP, catalogEditing.values.PROVINCIA_EMP].filter(Boolean).join(', ');`;
+    let optsProvEmp = `<option value="">Seleccionar provincia…</option>` + PROVINCIAS_CR.map(p =>
+      `<option value="${escapeHtml(p)}" ${provinciaEmp===p?"selected":""}>${escapeHtml(p)}</option>`).join("");
+    let optsCantonEmp = `<option value="">${provinciaEmp ? "Seleccionar cantón…" : "Elegí primero la provincia"}</option>` + cantonesDeProvincia.map(c =>
+      `<option value="${escapeHtml(c)}" ${cantonEmp===c?"selected":""}>${escapeHtml(c)}</option>`).join("");
+    let optsDistritoEmp = `<option value="">${cantonEmp ? "Seleccionar distrito…" : "Elegí primero el cantón"}</option>` + distritosDeCanton.map(d =>
+      `<option value="${escapeHtml(d)}" ${distritoEmp===d?"selected":""}>${escapeHtml(d)}</option>`).join("");
+    control = `
+      <select onchange="catalogEditing.values.PROVINCIA_EMP=this.value; catalogEditing.values.CANTON_EMP=''; catalogEditing.values.DISTRITO_EMP=''; ${recomponerDom} renderCatalogTab('${catalogEditing.type}');" style="margin-bottom:8px;">${optsProvEmp}</select>
+      <select ${cantonesDeProvincia.length ? "" : "disabled"} onchange="catalogEditing.values.CANTON_EMP=this.value; catalogEditing.values.DISTRITO_EMP=''; ${recomponerDom} renderCatalogTab('${catalogEditing.type}');" style="margin-bottom:8px;">${optsCantonEmp}</select>
+      <select ${distritosDeCanton.length ? "" : "disabled"} onchange="catalogEditing.values.DISTRITO_EMP=this.value; ${recomponerDom} renderCatalogTab('${catalogEditing.type}');" style="margin-bottom:8px;">${optsDistritoEmp}</select>
+      <textarea placeholder="Otras señas (ej. 100 metros norte de la escuela, casa portón verde)" oninput="catalogEditing.values.SENAS_EMP=this.value; ${recomponerDom}">${escapeHtml(senasEmp)}</textarea>`;
   } else if (type === "select_modalidad"){
     let opts = `<option value="">Seleccionar modalidad…</option>` + Object.keys(MODALIDADES_JORNADA).map(k =>
       `<option value="${k}" ${val===k?"selected":""}>${escapeHtml(MODALIDADES_JORNADA[k].label)}</option>`).join("");
