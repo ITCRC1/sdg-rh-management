@@ -5844,8 +5844,6 @@ async function renderPlanillaPanel(){
     </div>`;
     })();
 
-    html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el generador de colillas de arriba ya arma Ordinario + Horas extra − CCSS Obrero = Neto con datos reales del sistema, pero todavía no incluye recargo de feriado trabajado, CCSS patronal, renta ni INS — eso queda para el futuro módulo de reportería pensado para agentes de RRHH. El aguinaldo/cesantía/preaviso ya se estiman en el Expediente de cada empleado, pero todavía no se imprimen dentro de la colilla misma.</div>`;
-
     panel.innerHTML = html;
     if (esCorcovado) await renderColillasImporter();
   }catch(e){
