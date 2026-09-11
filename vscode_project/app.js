@@ -5471,17 +5471,17 @@ async function mostrarModalColillasFaltantes(){
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista: ${escapeHtml(e.message)}</div>`; }
 }
 
-// Acceso directo desde "Colillas de pago faltantes" hasta donde se suben de
-// verdad — el módulo de Planilla (la subida es por lote de PDFs que el
-// sistema reparte solo por número de empleado/cédula/nombre, así que no hay
-// un destino "de este empleado en particular" al que saltar; lo que sí se
-// puede hacer es llevar de una vez a ese uploader, en vez de dejar que la
-// persona tenga que acordarse dónde queda dentro de Planilla).
+// Acceso directo desde "Colillas de pago faltantes" hasta donde se resuelve
+// de verdad — el módulo de Planilla. Corcovado sube colillas externas por
+// lote (no hay un destino "de este empleado en particular" al que saltar,
+// así que lleva al uploader completo); cualquier otra propiedad no tiene esa
+// sección (ver esCorcovado en renderPlanillaPanel) y usa el generador
+// propio, así que ahí lleva al selector de quincena del generador.
 function irASubirColilla(){
   cerrarModalIncompletos();
   showTab("planilla");
   setTimeout(() => {
-    const boton = document.querySelector('#colillas-panel button[onclick*="colillas-pdf-input"]');
+    const boton = document.querySelector('#colillas-panel button[onclick*="colillas-pdf-input"]') || document.getElementById("colilla-gen-mes");
     if (!boton) return;
     boton.scrollIntoView({ behavior: "smooth", block: "center" });
     boton.classList.add("resaltado-temporal");
@@ -5751,11 +5751,19 @@ async function renderPlanillaPanel(){
       <div class="kpi-card c-gold" style="cursor:pointer;" onclick="mostrarModalColillasArchivadas();"><div class="ic">👥</div><div class="val">${totalEmpleados}</div><div class="lbl">Trabajadores con colilla</div></div>
     </div>`;
 
-    html += `<div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;" id="colillas-importar-seccion"><div class="section-body">
+    // La subida de colillas EXTERNAS queda exclusiva de Corcovado — es la
+    // única propiedad que viene migrando desde un proveedor externo de
+    // planillas. Cualquier propiedad nueva empieza de cero y usa desde el
+    // día uno el generador propio de colillas (ver más abajo), nunca la
+    // subida de PDFs de otro sistema.
+    const esCorcovado = currentPropiedadId === "corcovado";
+    html += esCorcovado
+      ? `<div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;" id="colillas-importar-seccion"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🧾 Importar y Actualizar Salarios</div>
       <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Sube las colillas de pago (PDF) de cada quincena, en colones y/o en dólares — actualiza el salario real de cada empleado y archiva su colilla individual.</p>
       <div id="colillas-panel"></div>
-    </div></div>`;
+    </div></div>`
+      : `<div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body" style="font-size:12px; color:var(--ink-soft);">🧾 Esta propiedad no sube colillas de un proveedor externo — usá el generador de colillas de abajo para crearlas directo en el sistema.</div></div>`;
 
     html += `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">Acciones</div>
@@ -5839,7 +5847,7 @@ async function renderPlanillaPanel(){
     html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el generador de colillas de arriba ya arma Ordinario + Horas extra − CCSS Obrero = Neto con datos reales del sistema, pero todavía no incluye recargo de feriado trabajado, CCSS patronal, renta ni INS — eso queda para el futuro módulo de reportería pensado para agentes de RRHH. El aguinaldo/cesantía/preaviso ya se estiman en el Expediente de cada empleado, pero todavía no se imprimen dentro de la colilla misma.</div>`;
 
     panel.innerHTML = html;
-    await renderColillasImporter();
+    if (esCorcovado) await renderColillasImporter();
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
   }
