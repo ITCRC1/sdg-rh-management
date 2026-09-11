@@ -6820,6 +6820,20 @@ function calcularResumenQuincena(registros, empleados, rango){
   }).filter(f => f.activo);
 }
 
+// Se acuerda mientras dura la sesión (no una preferencia guardada) — el
+// panel de Horas Extras se vuelve a dibujar entero en cada acción (aprobar,
+// rechazar, importar…), así que sin esto la tabla se volvería a abrir sola
+// cada vez que se plegó a propósito por ser muy larga con muchos empleados.
+let resumenQuincenaColapsado = false;
+
+function toggleResumenQuincena(){
+  resumenQuincenaColapsado = !resumenQuincenaColapsado;
+  const cuerpo = document.getElementById("resumen-quincena-cuerpo");
+  const btn = document.getElementById("resumen-quincena-toggle");
+  if (cuerpo) cuerpo.style.display = resumenQuincenaColapsado ? "none" : "";
+  if (btn) btn.textContent = resumenQuincenaColapsado ? "➕" : "➖";
+}
+
 function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado){
   const rango = rangoQuincenaActual();
   let visibles = empleados.filter(e => !e.ARCHIVADO);
@@ -6835,8 +6849,12 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
   const cols = Object.keys(TIPOS_DIA_DESCUENTA_QUINCENA);
 
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">📋 Resumen de quincena para planilla — ${etiquetaRango}</div>
-    <p style="font-size:11.5px; color:var(--ink-soft); margin:0 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Días libres = TIPO_DIA "vacaciones" del módulo de Días Libres y Vacaciones, no resta de los días laborados. Horas extra = lo ya aprobado en definitiva en todo el rango.${notaDia31}</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+      <div style="font-weight:700; color:var(--navy-deep);">📋 Resumen de quincena para planilla — ${etiquetaRango}</div>
+      <button id="resumen-quincena-toggle" class="btn" style="padding:2px 10px; font-size:14px; line-height:1.4; flex-shrink:0;" onclick="toggleResumenQuincena()" title="${resumenQuincenaColapsado ? "Mostrar" : "Ocultar"} la tabla">${resumenQuincenaColapsado ? "➕" : "➖"}</button>
+    </div>
+    <div id="resumen-quincena-cuerpo" style="${resumenQuincenaColapsado ? "display:none;" : ""}">
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Días libres = TIPO_DIA "vacaciones" del módulo de Días Libres y Vacaciones, no resta de los días laborados. Horas extra = lo ya aprobado en definitiva en todo el rango.${notaDia31}</p>
     <div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
       <thead><tr style="border-bottom:2px solid #ccc; text-align:left;">
@@ -6864,6 +6882,7 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
         }).join("")}
       </tbody>
     </table>
+    </div>
     </div>
   </div></div>`;
 }
