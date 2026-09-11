@@ -522,9 +522,6 @@ async function exportarContratos(){
 async function exportarEmpleados(){
   await exportarPorPrefijos([CATALOGS.empleados.prefix], "empleados_sdg", "Lista de empleados exportada.");
 }
-async function exportarDocumentos(){
-  await exportarPorPrefijos(["contrato:"], "documentos_sdg", "Datos base de documentos (contratos) exportados. Recuerda que los PDF generados se descargan por separado desde cada uno.");
-}
 
 // ---------- catalogs: empresas, puestos, propiedades ----------
 const CATALOGS = {
@@ -3379,12 +3376,6 @@ async function buildContratosPorCedulaIndex(){
   contratosPorCedulaCache = index;
   return index;
 }
-async function buscarContratosPorCedula(cedula){
-  if (!cedula) return [];
-  if (!contratosPorCedulaCache) await buildContratosPorCedulaIndex();
-  return contratosPorCedulaCache[cedula.trim()] || [];
-}
-
 async function renderCatalogTab(type){
   const cfg = CATALOGS[type];
   const panel = document.getElementById(type + "-panel");
@@ -3468,6 +3459,14 @@ async function renderCatalogTab(type){
             <option value="todos" ${empleadosFiltroTipoContrato==="todos"?"selected":""}>Todos</option>
             <option value="indeterminado" ${empleadosFiltroTipoContrato==="indeterminado"?"selected":""}>Indeterminado</option>
             <option value="determinado" ${empleadosFiltroTipoContrato==="determinado"?"selected":""}>Determinado (plazo fijo)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1 1 160px; margin-bottom:0;">
+          <label style="font-size:10.5px;">Contrato registrado</label>
+          <select onchange="filtrarEmpleadosPorContrato(this.value)">
+            <option value="todos" ${empleadosFiltroContrato==="todos"?"selected":""}>Todos</option>
+            <option value="con" ${empleadosFiltroContrato==="con"?"selected":""}>Con contrato</option>
+            <option value="sin" ${empleadosFiltroContrato==="sin"?"selected":""}>Sin contrato</option>
           </select>
         </div>
         <div class="field" style="flex:1 1 160px; margin-bottom:0;">
@@ -3614,16 +3613,7 @@ async function renderCatalogTab(type){
               </div>
             </div>
             <div class="emp-acciones-menu" id="emp-acciones-${escapeHtml(it.key)}">
-              <button onclick="generarDespidoDeEmpleado('${k2}')">1. ⚖️ Carta de despido</button>
-              <button onclick="generarAmonestacionDeEmpleado('${k2}')">2. ⚠️ Amonestación</button>
-              <button onclick="actualizarContratoDeEmpleado('${k2}')">3. 📄 ${contratosVinculados.length ? "Actualizar" : "Crear"} contrato</button>
-              <button onclick="generarPermisoDeEmpleado('${k2}')">4. 🗓️ Permiso sin goce salarial</button>
-              <button onclick="generarVacacionesDeEmpleado('${k2}')">5. 🏖️ Vacaciones</button>
-              <button onclick="openCatalogForm('empleados','${k2}')">6. ✏️ Editar datos (puesto, salario, contacto...)</button>
-              <button onclick="confirmarFirmaHandbook('${k2}')">7. ✍️ Confirmar handbook</button>
-              <button onclick="subirContratoFirmado('${k2}')">8. 📎 Subir contrato firmado (PDF)</button>
-              <button onclick="descargarDatosCCSS('${k2}')">9. 📊 Descargar datos para planilla CCSS (Excel)</button>
-              <button onclick="archivarEmpleado('${k2}')">10. 🗄️ Archivar</button>
+              ${renderBotonesAccionesEmpleado(k2, { archivado: false, contratosVinculados, numerado: true })}
             </div>
           </div>`;
         }).join("");
@@ -7024,13 +7014,17 @@ function diasBaseParaEmpleadoEnQuincena(empleado, rango){
 // Por empleado, dentro de la quincena dada: horas extra aprobadas en todo el
 // rango en que estuvo activo (incluido el día 31 si lo hay), cuántos de los
 // días base se pierden por incapacidad/PSG/cita médica/ausencia, cuántos
-// días libres (TIPO_DIA "vacaciones", el mismo que usa el módulo de Días
-// Libres y Vacaciones) cayeron en esta quincena, y cuántos lleva ya en el
-// mes calendario completo (los 4 mensuales pueden repartirse en cualquier
-// proporción entre las dos quincenas — 2 y 2 es lo típico, pero no una
-// regla fija). Solo cuenta lo ya aprobado en definitiva (ESTADO
-// "aprobada"), igual que el resto de reportes de planilla, para no restar
-// ni sumar nada que todavía esté en revisión.
+// días libres (TIPO_DIA "vacaciones" o "dia_libre" — el mismo que usa el
+// módulo de Días Libres y Vacaciones —, o "libre" cuando se reclasificó a
+// mano desde el panel de Horas Extra con el selector de TIPOS_DIA_HORARIO;
+// las tres representan el mismo concepto de "día libre" y antes solo las
+// dos primeras se contaban, dejando la reclasificación manual fuera del
+// conteo) cayeron en esta quincena, y cuántos lleva ya en el mes calendario
+// completo (los 4 mensuales pueden repartirse en cualquier proporción entre
+// las dos quincenas — 2 y 2 es lo típico, pero no una regla fija). Solo
+// cuenta lo ya aprobado en definitiva (ESTADO "aprobada"), igual que el
+// resto de reportes de planilla, para no restar ni sumar nada que todavía
+// esté en revisión.
 function calcularResumenQuincena(registros, empleados, rango){
   const anioMes = `${rango.inicio.getFullYear()}-${String(rango.inicio.getMonth() + 1).padStart(2, "0")}`;
   return empleados.map(emp => {
@@ -7046,14 +7040,14 @@ function calcularResumenQuincena(registros, empleados, rango){
     let diasLibresQuincena = 0;
     delEmpleadoEnRango.forEach(r => {
       if (!esDiaBaseDePago(r.FECHA)) return; // día 31 "extra": no resta ni suma días base
-      if (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre"){ diasLibresQuincena++; return; } // día libre programado: no resta, se muestra aparte
+      if (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"){ diasLibresQuincena++; return; } // día libre (programado por solicitud, o reclasificado a mano desde Horas Extra): no resta, se muestra aparte
       if (!TIPOS_DIA_DESCUENTA_QUINCENA[r.TIPO_DIA]) return;
       descPorTipo[r.TIPO_DIA] = (descPorTipo[r.TIPO_DIA] || 0) + 1;
       totalDescuento++;
     });
     const diasLaborados = Math.max(0, activo.diasBase - totalDescuento);
 
-    const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre") && r.FECHA.startsWith(anioMes)).length;
+    const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre") && r.FECHA.startsWith(anioMes)).length;
 
     return { emp, activo: true, horasExtra, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
   }).filter(f => f.activo);
@@ -8845,7 +8839,7 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","format-panel"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","format-panel","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
 const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar","vacacionesform-toolbar"];
 
 function mostrarSoloRecomendacion(){
@@ -11446,6 +11440,33 @@ async function guardarBorradorRecomendacion(){
   }
 }
 
+// Menú de "Acciones" de un empleado — usado tanto en la lista de Empleados
+// (numerado, siempre para empleados activos) como en el Expediente/Perfil
+// (sin numerar, puede ser un empleado archivado). Antes eran dos copias del
+// mismo menú mantenidas a mano por separado; agregar una acción nueva
+// implicaba acordarse de tocar los dos lugares. `archivado` oculta las
+// acciones que no aplican a alguien que ya salió (permiso, vacaciones,
+// designar jefatura, archivar de nuevo) y habilita la recomendación
+// laboral, que solo tiene sentido después de la salida.
+function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado }){
+  const esMaster = !!(window.sdgApi && window.sdgApi.esMaster());
+  const n = i => numerado ? `${i}. ` : "";
+  const botones = [];
+  botones.push(`<button onclick="generarDespidoDeEmpleado('${empKey}')">${n(1)}⚖️ Carta de despido</button>`);
+  botones.push(`<button onclick="generarAmonestacionDeEmpleado('${empKey}')">${n(2)}⚠️ Amonestación</button>`);
+  if (archivado) botones.push(`<button onclick="generarRecomendacionDeEmpleado('${empKey}')">📝 Recomendación laboral</button>`);
+  botones.push(`<button onclick="actualizarContratoDeEmpleado('${empKey}')">${n(3)}📄 ${(contratosVinculados && contratosVinculados.length) ? "Actualizar" : "Crear"} contrato</button>`);
+  if (!archivado) botones.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">${n(4)}🗓️ Permiso sin goce salarial</button>`);
+  if (!archivado) botones.push(`<button onclick="generarVacacionesDeEmpleado('${empKey}')">${n(5)}🏖️ Vacaciones</button>`);
+  botones.push(`<button onclick="openCatalogForm('empleados','${empKey}')">${n(6)}✏️ Editar datos (puesto, salario, contacto...)</button>`);
+  botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(7)}✍️ Confirmar handbook</button>`);
+  botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(8)}📎 Subir contrato firmado (PDF)</button>`);
+  botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(9)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
+  if (esMaster && !archivado) botones.push(`<button onclick="mostrarModalDesignarJefatura('${empKey}')">👑 Designar como jefatura</button>`);
+  if (!archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(10)}🗄️ Archivar</button>`);
+  return botones.join("");
+}
+
 async function generarDespidoDeEmpleado(key){
   try{
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
@@ -12189,18 +12210,7 @@ async function renderPerfilEmpleado(){
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:8px;">Acciones</div>
         <div class="emp-acciones-menu open" style="border:none; margin:0; padding:0;">
-          <button onclick="generarDespidoDeEmpleado('${perfilActualKey}')">⚖️ Carta de despido</button>
-          <button onclick="generarAmonestacionDeEmpleado('${perfilActualKey}')">⚠️ Amonestación</button>
-          ${emp.ARCHIVADO ? `<button onclick="generarRecomendacionDeEmpleado('${perfilActualKey}')">📝 Recomendación laboral</button>` : ""}
-          <button onclick="actualizarContratoDeEmpleado('${perfilActualKey}')">📄 Actualizar contrato</button>
-          ${!emp.ARCHIVADO ? `<button onclick="generarPermisoDeEmpleado('${perfilActualKey}')">🗓️ Permiso sin goce salarial</button>` : ""}
-          ${!emp.ARCHIVADO ? `<button onclick="generarVacacionesDeEmpleado('${perfilActualKey}')">🏖️ Vacaciones</button>` : ""}
-          <button onclick="openCatalogForm('empleados','${perfilActualKey}')">✏️ Editar datos</button>
-          <button onclick="confirmarFirmaHandbook('${perfilActualKey}')">✍️ Confirmar handbook</button>
-          <button onclick="subirContratoFirmado('${perfilActualKey}')">📎 Subir contrato firmado (PDF)</button>
-          <button onclick="descargarDatosCCSS('${perfilActualKey}')">📊 Descargar datos para planilla CCSS (Excel)</button>
-          ${(window.sdgApi && window.sdgApi.esMaster() && !emp.ARCHIVADO) ? `<button onclick="mostrarModalDesignarJefatura('${perfilActualKey}')">👑 Designar como jefatura</button>` : ""}
-          ${!emp.ARCHIVADO ? `<button onclick="archivarEmpleado('${perfilActualKey}')">🗄️ Archivar</button>` : ""}
+          ${renderBotonesAccionesEmpleado(perfilActualKey, { archivado: !!emp.ARCHIVADO, contratosVinculados: contratos, numerado: false })}
         </div>
         ${!emp.ARCHIVADO ? `<div class="hint" style="margin-top:6px;">📝 La recomendación laboral se habilita cuando el empleado pasa a Archivo (salida de la empresa).</div>` : ""}
         ${contratos.length > 0 ? `<button class="btn" style="width:100%; margin-top:8px;" onclick="openContract('${contratos[0].key.replace(/'/g,"\\'")}')">📄 Abrir contrato vinculado</button>` : ""}
