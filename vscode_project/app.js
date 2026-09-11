@@ -5732,6 +5732,7 @@ async function renderPlanillaPanel(){
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const docs = window.sdgApi ? await window.sdgApi.documentos({ tipo: "colilla_pago", limite: 500 }) : [];
+    const tipoCambioActual = await cargarTipoCambio();
     const porEmpleado = {};
     docs.forEach(d => {
       const clave = d.empleado_cedula || d.empleado_nombre || d.id;
@@ -5754,6 +5755,19 @@ async function renderPlanillaPanel(){
       <button class="btn primary" style="width:100%; margin-bottom:8px;" onclick="mostrarModalColillasArchivadas();">📋 Ver todas las colillas archivadas</button>
       <button class="btn" style="width:100%; margin-bottom:8px;" onclick="mostrarModalColillasFaltantes();">🧾 Ver quién falta del período actual</button>
       <button class="btn" style="width:100%;" onclick="showTab('datos');">📥 Subir / actualizar colillas (menú Datos)</button>
+    </div>`;
+
+    html += `<div class="dash-panel" style="margin-bottom:14px;">
+      <div class="dash-panel-title">💵 Tipo de cambio de referencia (USD → ₡)</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;">Se usa para convertir a colones el salario de quienes ganan en dólares al descargar sus datos para planilla CCSS — la CCSS se presenta siempre en colones. Se guarda a mano (no se consulta ningún servicio externo) para que elijas vos qué tipo de cambio corresponde al reporte que estás llenando.</div>
+      ${tipoCambioActual ? `<div style="font-size:12.5px; margin-bottom:8px;">Actual: <b>₡${tipoCambioActual.valor}</b> por US$1 — actualizado el ${fmtFecha(tipoCambioActual.actualizadoEn)}${tipoCambioActual.actualizadoPorEmail ? " por " + escapeHtml(tipoCambioActual.actualizadoPorEmail) : ""}.</div>` : `<div style="font-size:12.5px; color:#B3261E; margin-bottom:8px;">⚠️ Todavía no se ha configurado — el Excel de CCSS de empleados en dólares no podrá convertir a colones hasta que lo pongas.</div>`}
+      <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nuevo tipo de cambio (₡ por US$1)
+          <input type="number" id="tipo-cambio-input" min="0" step="0.01" placeholder="Ej. 520.50" value="${tipoCambioActual ? tipoCambioActual.valor : ""}">
+        </label>
+        <button class="btn primary" onclick="guardarTipoCambioDesdeInput();">💾 Guardar</button>
+      </div>
+      <div id="tipo-cambio-status" style="font-size:12px; margin-top:6px;"></div>
     </div>`;
 
     html += `<div class="dash-panel" style="margin-bottom:14px;">
@@ -9071,6 +9085,122 @@ function salarioDiarioDeEmpleado(emp){
   return { monto: (n && !isNaN(n)) ? n / 30 : null, moneda };
 }
 
+// ---------- Estimados de prestaciones (aguinaldo, cesantía, preaviso,
+// vacaciones en dinero) ----------
+// Todo esto se calcula sobre el SALARIO ACTUAL de la ficha — el sistema no
+// guarda un historial mes a mes de lo que cada quien ganó (solo el salario
+// vigente y las horas extra ya aprobadas, que sí tienen fecha real). Por
+// eso son ESTIMADOS: sirven para presupuestar, no reemplazan el cálculo
+// oficial de planilla ni el criterio de un contador — igual que ya pasa con
+// el "neto aproximado" en dólares o el export de CCSS.
+
+// Años, meses y días completos entre dos fechas (resta calendario, no solo
+// división de días entre 30/365) — la usan cesantía, preaviso y aguinaldo
+// para saber cuántos años/meses completos ya se cumplieron.
+function calcularAntiguedad(fechaIngreso, fechaCorte){
+  if (!fechaIngreso || fechaIngreso > fechaCorte) return { años: 0, meses: 0, dias: 0, mesesCompletosTotales: 0 };
+  let años = fechaCorte.getFullYear() - fechaIngreso.getFullYear();
+  let meses = fechaCorte.getMonth() - fechaIngreso.getMonth();
+  let dias = fechaCorte.getDate() - fechaIngreso.getDate();
+  if (dias < 0){
+    meses--;
+    const diasMesAnterior = new Date(fechaCorte.getFullYear(), fechaCorte.getMonth(), 0).getDate();
+    dias += diasMesAnterior;
+  }
+  if (meses < 0){ años--; meses += 12; }
+  return { años, meses, dias, mesesCompletosTotales: años * 12 + meses };
+}
+
+// Tabla del Art. 29 del Código de Trabajo (auxilio de cesantía): días de
+// salario por cada año COMPLETO de servicio, del año 1 al 8 — verificada
+// contra dos fuentes independientes que coinciden entre sí y con el tope
+// legal de 8 años (suman 167.74 días, cifra ampliamente citada en
+// contaduría de planillas en Costa Rica). Índice 0 = año 1, índice 7 = año 8.
+//
+// Simplificación deliberada: para alguien con MÁS de 8 años de antigüedad,
+// se usa el tope plano de 167.74 días. Las fuentes públicas disponibles no
+// coincidían entre sí sobre una tabla exacta más allá de los 8 años, así
+// que se prefirió no inventar cifras dudosas — el tope de 8 años sí está
+// firmemente establecido en la ley (no así el detalle fino después de eso).
+const TABLA_CESANTIA_CT29 = [19.5, 20, 20.5, 21, 21.24, 21.5, 22, 22];
+
+// Menos de 3 meses: sin derecho (todavía en período de prueba). 3 a 6
+// meses: 7 días fijos. 6 meses a 1 año: 14 días fijos. 1 año o más: se suma
+// la tabla año por año, y el año en curso (todavía sin completar) se
+// prorratea con la tarifa del año que está corriendo, según los meses ya
+// transcurridos de ese año.
+function calcularCesantiaEstimada(fechaIngreso, fechaCorte, salarioDiario){
+  const mesesTotales = calcularAntiguedad(fechaIngreso, fechaCorte).mesesCompletosTotales;
+  let dias = 0;
+  if (mesesTotales < 3) dias = 0;
+  else if (mesesTotales < 6) dias = 7;
+  else if (mesesTotales < 12) dias = 14;
+  else {
+    const añosCompletos = Math.min(Math.floor(mesesTotales / 12), 8);
+    for (let i = 0; i < añosCompletos; i++) dias += TABLA_CESANTIA_CT29[i];
+    if (añosCompletos < 8){
+      const mesesAñoEnCurso = mesesTotales - añosCompletos * 12;
+      dias += TABLA_CESANTIA_CT29[añosCompletos] * (mesesAñoEnCurso / 12);
+    }
+  }
+  return { dias: Math.round(dias * 100) / 100, monto: (salarioDiario || 0) * dias };
+}
+
+// Preaviso, Art. 28 CT: mismo calendario que ya explica el FAQ del sistema
+// (3-6 meses → 1 semana; 6 meses-1 año → 2 semanas; 1 año o más → 1 mes).
+function calcularPreavisoEstimado(fechaIngreso, fechaCorte, salarioDiario){
+  const mesesTotales = calcularAntiguedad(fechaIngreso, fechaCorte).mesesCompletosTotales;
+  let dias = 0;
+  if (mesesTotales < 3) dias = 0;
+  else if (mesesTotales < 6) dias = 7;
+  else if (mesesTotales < 12) dias = 14;
+  else dias = 30;
+  return { dias, monto: (salarioDiario || 0) * dias };
+}
+
+function calcularVacacionesEnDinero(saldoDias, salarioDiario){
+  return (saldoDias || 0) * (salarioDiario || 0);
+}
+
+function fmtMonedaEmpleado(monto, moneda){
+  const n = Number(monto) || 0;
+  return moneda === "USD"
+    ? "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : "₡" + Math.round(n).toLocaleString("es-CR");
+}
+
+// Aguinaldo: la ley lo define como lo devengado entre el 1° de diciembre y
+// el 30 de noviembre siguiente, entre 12. Como no hay un historial real mes
+// a mes, se aproxima con el salario mensual VIGENTE por los meses (y
+// fracción) que caen dentro de ese rango — respetando la fecha de ingreso
+// si entró después del 1° de diciembre — más las horas extra que ya estén
+// aprobadas con fecha dentro de ese mismo rango (esas sí son reales).
+// `montoPorHoraExtra` ya viene calculado por quien llama (salario/30/jornada
+// × 1.5, la misma fórmula del panel de Horas Extras) porque la jornada del
+// puesto no es un dato que esta función deba resolver por su cuenta.
+function calcularAguinaldoEstimado(emp, registrosHorasExtraDelEmpleado, fechaCorte, montoPorHoraExtra){
+  const enDiciembre = fechaCorte.getMonth() === 11;
+  const periodoInicio = new Date(fechaCorte.getFullYear() - (enDiciembre ? 0 : 1), 11, 1);
+  const periodoFin = new Date(fechaCorte.getFullYear() + (enDiciembre ? 1 : 0), 10, 30);
+  const moneda = emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC";
+  const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+  const inicioEfectivo = (fechaIngreso && fechaIngreso > periodoInicio) ? fechaIngreso : periodoInicio;
+  const finEfectivo = fechaCorte < periodoFin ? fechaCorte : periodoFin;
+  if (finEfectivo < inicioEfectivo){
+    return { periodoInicio, periodoFin, montoBase: 0, montoHorasExtra: 0, total: 0, moneda };
+  }
+  const ant = calcularAntiguedad(inicioEfectivo, finEfectivo);
+  const mesesProporcionales = ant.mesesCompletosTotales + (ant.dias / 30);
+  const salarioMensual = Number(String((moneda === "USD" ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP) || "").replace(/[^0-9.]/g, "")) || 0;
+  const montoBase = salarioMensual * (Math.min(mesesProporcionales, 12) / 12);
+  const inicioISO = isoDeFechaLocal(inicioEfectivo);
+  const finISO = isoDeFechaLocal(finEfectivo);
+  const montoHorasExtra = (registrosHorasExtraDelEmpleado || [])
+    .filter(r => r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO)
+    .reduce((suma, r) => suma + (r.HORAS_EXTRA || 0) * (montoPorHoraExtra || 0), 0);
+  return { periodoInicio, periodoFin, montoBase, montoHorasExtra, total: montoBase + montoHorasExtra, moneda };
+}
+
 async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, comprobanteDataUrl, comprobanteNombre }){
   if (!TIPOS_INCAPACIDAD[tipo]) throw new Error("Tipo de incapacidad inválido.");
   if (!empKey) throw new Error("Elegí un empleado.");
@@ -10563,6 +10693,40 @@ async function buscarFirmanteAccionesPropiedad(){
 // columnas típicas que pide una inclusión de trabajador (cédula, nombre,
 // fechas, puesto, salario). Si el formato exacto que pide el portal de la
 // CCSS es distinto, hay que ajustar las columnas de acá.
+// Tipo de cambio de referencia USD→CRC, para convertir el salario de los
+// empleados que ganan en dólares al exportar datos de CCSS (la planilla de
+// CCSS se presenta en colones). Se guarda a mano — no se consulta un
+// servicio externo — porque el reporte a veces se llena días después de la
+// fecha real, y quien lo hace necesita poder elegir qué tipo de cambio usó,
+// no que la app se lo imponga con el del momento en que hace clic.
+const CLAVE_TIPO_CAMBIO = "config:tipo_cambio_usd_crc";
+
+async function cargarTipoCambio(){
+  try{
+    const r = await window.storage.get(CLAVE_TIPO_CAMBIO, false);
+    return r && r.value ? JSON.parse(r.value) : null;
+  }catch(e){ return null; }
+}
+
+async function guardarTipoCambio(valor){
+  const n = Number(valor);
+  if (!n || n <= 0) throw new Error("El tipo de cambio debe ser un número mayor que cero.");
+  const email = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+  await window.storage.set(CLAVE_TIPO_CAMBIO, JSON.stringify({ valor: n, actualizadoEn: new Date().toISOString(), actualizadoPorEmail: email }), false);
+}
+
+async function guardarTipoCambioDesdeInput(){
+  const input = document.getElementById("tipo-cambio-input");
+  const status = document.getElementById("tipo-cambio-status");
+  try{
+    await guardarTipoCambio(input ? input.value : "");
+    statusMsg("Tipo de cambio guardado.");
+    renderPlanillaPanel();
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#B3261E;">${escapeHtml(e.message)}</span>`;
+  }
+}
+
 async function descargarDatosCCSS(key){
   try{
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
@@ -10572,6 +10736,20 @@ async function descargarDatosCCSS(key){
       statusMsg("No se pudo cargar el lector de Excel. Recarga la página e intenta de nuevo.", false);
       return;
     }
+    const esUSD = emp.MONEDA_SALARIO_EMP === "USD";
+    let salarioTexto = "";
+    if (esUSD){
+      const bruto = Number(String(emp.SALARIO_USD_EMP || "").replace(/[^0-9.]/g,""));
+      if (bruto){
+        const tipoCambio = await cargarTipoCambio();
+        salarioTexto = tipoCambio
+          ? `₡${Math.round(bruto * tipoCambio.valor).toLocaleString("es-CR")} (convertido de $${bruto.toLocaleString("en-US")} al tipo de cambio de referencia ₡${tipoCambio.valor} del ${fmtFecha(tipoCambio.actualizadoEn)} — configúralo en Planilla)`
+          : `$${bruto.toLocaleString("en-US")} (sin tipo de cambio de referencia configurado — anda a Planilla para ponerlo y que este Excel convierta a colones solo)`;
+      }
+    } else {
+      const bruto = Number(String(emp.SALARIO_EMP || "").replace(/[^0-9.]/g,""));
+      salarioTexto = bruto || "";
+    }
     const fila = {
       "Cédula": emp.IDENTIFICACION_EMP || "",
       "Tipo de identificación": emp.TIPO_IDENTIFICACION_EMP || "",
@@ -10579,9 +10757,7 @@ async function descargarDatosCCSS(key){
       "Fecha de nacimiento": emp.FECHA_NACIMIENTO_EMP || "",
       "Fecha de ingreso": emp.FECHA_INGRESO_EMP || "",
       "Puesto / Ocupación": emp.DEPARTAMENTO_EMP || "",
-      "Salario bruto mensual": emp.MONEDA_SALARIO_EMP === "USD"
-        ? (emp.SALARIO_USD_EMP ? "$" + Number(String(emp.SALARIO_USD_EMP).replace(/[^0-9.]/g,"")).toLocaleString("en-US") + " (verificar tipo de cambio para CCSS)" : "")
-        : (emp.SALARIO_EMP ? Number(String(emp.SALARIO_EMP).replace(/[^0-9.]/g,"")) : ""),
+      "Salario bruto mensual": salarioTexto,
       "Estado civil": emp.ESTADO_CIVIL_EMP || "",
       "Teléfono": emp.CELULAR_EMP || "",
       "Correo electrónico": emp.CORREO_EMP || "",
@@ -11252,13 +11428,13 @@ async function renderPerfilEmpleado(){
     // acá se filtran a este único empleado. Sale de horas_extra:/
     // solicitud_ausencia: (no de campos guardados en el propio empleado),
     // así que siempre refleja lo mismo que verían esos módulos.
-    let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 }, diasIncapacidad = [];
+    let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 }, diasIncapacidad = [], registrosDeEsteEmpleado = [];
     try{
       const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
       const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
       diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, perfilActualKey);
       saldoVacaciones = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidad, new Date());
-      const registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === perfilActualKey);
+      registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === perfilActualKey);
       resumenHorasExtra = {
         pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
         aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
@@ -11283,6 +11459,28 @@ async function renderPerfilEmpleado(){
     }
     if (!emp.HANDBOOK_FIRMADO_FECHA) alertas.push(`📋 Handbook pendiente de firma.`);
     if (contratos.length === 0) alertas.push(`📄 No hay un contrato registrado con esta cédula.`);
+
+    // Estimados de prestaciones — reutiliza el saldo de vacaciones y las
+    // horas extra ya cargadas arriba, solo les pone precio (ver
+    // calcularAguinaldoEstimado / calcularCesantiaEstimada / etc., cerca de
+    // salarioDiarioDeEmpleado). Cesantía/preaviso se muestran SIEMPRE, no
+    // solo al despedir a alguien — sirven para presupuestar la provisión
+    // durante el año, dejando bien claro que son hipotéticos.
+    let prestaciones = null;
+    try{
+      const hoy = new Date();
+      const { monto: salarioDiario } = salarioDiarioDeEmpleado(emp);
+      const jornadaEmp = await jornadaDiariaDeEmpleado(emp, {});
+      const montoPorHoraExtra = salarioDiario ? (salarioDiario / jornadaEmp) * TARIFA_HORAS_EXTRA : 0;
+      prestaciones = {
+        moneda: emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC",
+        antiguedad: calcularAntiguedad(fechaIngreso, hoy),
+        vacacionesMonto: calcularVacacionesEnDinero(saldoVacaciones, salarioDiario),
+        aguinaldo: calcularAguinaldoEstimado(emp, registrosDeEsteEmpleado, hoy, montoPorHoraExtra),
+        cesantia: calcularCesantiaEstimada(fechaIngreso, hoy, salarioDiario),
+        preaviso: calcularPreavisoEstimado(fechaIngreso, hoy, salarioDiario),
+      };
+    }catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
 
     const checklistItem = (label, checked) => `<div style="display:flex; align-items:center; gap:8px; padding:4px 0;">
       <span style="font-size:16px;">${checked ? "✅" : "⬜"}</span><span style="font-size:13px;">${label}</span>
@@ -11311,6 +11509,17 @@ async function renderPerfilEmpleado(){
         <div style="font-weight:700; color:#8a6d1f; margin-bottom:4px;">Alertas de cumplimiento</div>
         ${alertas.map(a => `<div style="font-size:12.5px; margin-bottom:3px;">${a}</div>`).join("")}
       </div></div>` : `<div class="section-card" style="border-color:var(--leaf); margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:var(--leaf);">✅ Sin alertas de cumplimiento pendientes.</div></div>`}
+
+      ${prestaciones ? `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:4px;">💰 Estimados de prestaciones</div>
+        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antigüedad: ${prestaciones.antiguedad.años} año(s), ${prestaciones.antiguedad.meses} mes(es). Calculado sobre el salario actual de la ficha — es un estimado para presupuestar, no reemplaza el cálculo oficial de planilla ni el criterio de un contador.</div>
+        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🏖️ Vacaciones pendientes (${saldoVacaciones} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.vacacionesMonto, prestaciones.moneda)}</b></div>
+        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🎁 Aguinaldo proporcional (${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoFin)}, prorrateado a hoy)</span><b>${fmtMonedaEmpleado(prestaciones.aguinaldo.total, prestaciones.moneda)}</b></div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-top:8px; margin-bottom:2px;">⚖️ Si se le despidiera HOY con responsabilidad patronal (hipotético):</div>
+        <div style="font-size:12.5px; padding:4px 0 4px 14px; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>Cesantía (${prestaciones.cesantia.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.cesantia.monto, prestaciones.moneda)}</b></div>
+        <div style="font-size:12.5px; padding:4px 0 4px 14px; display:flex; justify-content:space-between;"><span>Preaviso (${prestaciones.preaviso.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.preaviso.monto, prestaciones.moneda)}</b></div>
+        <div style="font-size:13px; padding:8px 0 0; font-weight:700; color:var(--navy-deep); display:flex; justify-content:space-between;"><span>Total estimado si saliera hoy</span><span>${fmtMonedaEmpleado(prestaciones.vacacionesMonto + prestaciones.aguinaldo.total + prestaciones.cesantia.monto + prestaciones.preaviso.monto, prestaciones.moneda)}</span></div>
+      </div></div>` : ""}
 
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:6px;">Checklist de ingreso</div>
