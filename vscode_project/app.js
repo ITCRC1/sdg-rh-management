@@ -5891,17 +5891,29 @@ async function calcularVistaPreviaColillasGeneradas(){
     const periodoTxt = `${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`;
     colillasGeneradasCache = filas.map(fila => {
       const jornadaEmp = jornadaDiariaDePuesto(puestosPorKey[fila.emp.PUESTO_KEY]);
-      return {
-        fila, jornadaEmp, empresa, periodoInicio, periodoTxt,
-        deduccionesExtra: [],
-        colilla: calcularColillaEmpleado(fila.emp, fila, jornadaEmp, []),
-      };
+      // Deducciones recurrentes (plan dental, cuota de préstamo) de esta
+      // persona, ya con el monto de este período calculado — vienen
+      // pre-cargadas e incluidas por defecto, pero se pueden destildar para
+      // saltarlas puntualmente sin desactivarlas del todo.
+      const deduccionesRecurrentes = deduccionesActivasDeEmpleado(fila.emp).map(d => ({ ...d, incluida: true }));
+      const item = { fila, jornadaEmp, empresa, periodoInicio, periodoTxt, deduccionesRecurrentes, deduccionManual: null, colilla: null };
+      item.colilla = calcularColillaEmpleado(fila.emp, fila, jornadaEmp, deduccionesParaColillaItem(item));
+      return item;
     });
     if (status) status.innerHTML = "";
     renderVistaPreviaColillasGeneradas();
   }catch(e){
     if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
   }
+}
+
+// Junta las deducciones recurrentes marcadas como "incluida" más la
+// deducción manual puntual (si hay una escrita) en el arreglo que espera
+// calcularColillaEmpleado.
+function deduccionesParaColillaItem(item){
+  const lista = item.deduccionesRecurrentes.filter(d => d.incluida).map(d => ({ label: d.label, monto: d.monto }));
+  if (item.deduccionManual) lista.push(item.deduccionManual);
+  return lista;
 }
 
 function renderVistaPreviaColillasGeneradas(){
@@ -5911,14 +5923,20 @@ function renderVistaPreviaColillasGeneradas(){
     <button class="btn primary" style="width:100%; margin-bottom:10px;" onclick="generarColillasGeneradasColectivo();">⚡ Generar y archivar TODAS (${colillasGeneradasCache.length})</button>
     ${colillasGeneradasCache.map((item, idx) => {
       const horasExtraTxt = item.fila.horasExtra ? ` · Horas extra: ${fmtMontoColilla(item.colilla.devengados[1] ? item.colilla.devengados[1].monto : 0, item.colilla.moneda)}` : "";
+      const recurrentesHtml = item.deduccionesRecurrentes.map((d, dIdx) => `
+        <label style="display:flex; align-items:center; gap:6px; font-size:11.5px; margin-top:3px;">
+          <input type="checkbox" ${d.incluida ? "checked" : ""} onchange="toggleDeduccionRecurrenteColilla(${idx}, ${dIdx})">
+          ${escapeHtml(d.label)} — ${fmtMontoColilla(d.monto, item.colilla.moneda)}
+        </label>`).join("");
       return `<div id="colilla-gen-fila-${idx}" style="padding:8px 0; border-bottom:1px solid var(--paper-line); font-size:12px;">
         <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
           <b>${escapeHtml(nombreCompletoEmpleado(item.fila.emp))}</b>
           <button class="btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="generarColillaGeneradaIndividual(${idx})">🧾 Generar esta colilla</button>
         </div>
         <div style="color:var(--ink-soft); margin-top:2px;">Ordinario: ${fmtMontoColilla(item.colilla.devengados[0].monto, item.colilla.moneda)}${horasExtraTxt} · CCSS: -${fmtMontoColilla(item.colilla.deducciones[0].monto, item.colilla.moneda)}</div>
+        ${recurrentesHtml}
         <div style="display:flex; gap:6px; margin-top:4px; align-items:center; flex-wrap:wrap;">
-          <input type="text" placeholder="Otra deducción (ej. Plan dental)" style="flex:1; min-width:140px;" id="colilla-gen-ded-label-${idx}" oninput="actualizarDeduccionExtraColilla(${idx})">
+          <input type="text" placeholder="Otra deducción puntual (ej. multa)" style="flex:1; min-width:140px;" id="colilla-gen-ded-label-${idx}" oninput="actualizarDeduccionExtraColilla(${idx})">
           <input type="number" placeholder="Monto" style="width:110px;" id="colilla-gen-ded-monto-${idx}" oninput="actualizarDeduccionExtraColilla(${idx})">
         </div>
         <div style="font-weight:700; margin-top:4px;" id="colilla-gen-neto-${idx}">Neto: ${fmtMontoColilla(item.colilla.neto, item.colilla.moneda)}</div>
@@ -5926,15 +5944,28 @@ function renderVistaPreviaColillasGeneradas(){
     }).join("")}`;
 }
 
+function recalcularColillaGenerada(idx){
+  const item = colillasGeneradasCache[idx];
+  if (!item) return;
+  item.colilla = calcularColillaEmpleado(item.fila.emp, item.fila, item.jornadaEmp, deduccionesParaColillaItem(item));
+  const netoEl = document.getElementById(`colilla-gen-neto-${idx}`);
+  if (netoEl) netoEl.textContent = `Neto: ${fmtMontoColilla(item.colilla.neto, item.colilla.moneda)}`;
+}
+
+function toggleDeduccionRecurrenteColilla(idx, dedIdx){
+  const item = colillasGeneradasCache[idx];
+  if (!item || !item.deduccionesRecurrentes[dedIdx]) return;
+  item.deduccionesRecurrentes[dedIdx].incluida = !item.deduccionesRecurrentes[dedIdx].incluida;
+  recalcularColillaGenerada(idx);
+}
+
 function actualizarDeduccionExtraColilla(idx){
   const item = colillasGeneradasCache[idx];
   if (!item) return;
   const label = (document.getElementById(`colilla-gen-ded-label-${idx}`)||{}).value || "";
   const monto = (document.getElementById(`colilla-gen-ded-monto-${idx}`)||{}).value || "";
-  item.deduccionesExtra = (label.trim() && monto) ? [{ label: label.trim(), monto }] : [];
-  item.colilla = calcularColillaEmpleado(item.fila.emp, item.fila, item.jornadaEmp, item.deduccionesExtra);
-  const netoEl = document.getElementById(`colilla-gen-neto-${idx}`);
-  if (netoEl) netoEl.textContent = `Neto: ${fmtMontoColilla(item.colilla.neto, item.colilla.moneda)}`;
+  item.deduccionManual = (label.trim() && monto) ? { label: label.trim(), monto } : null;
+  recalcularColillaGenerada(idx);
 }
 
 // Genera el PDF y lo archiva — comparte el mismo set de claves ya archivadas
@@ -5956,6 +5987,12 @@ async function archivarColillaGenerada(item, clavesYaArchivadas){
     empleadoNombre: nombreCompletoEmpleado(emp) || null,
   });
   clavesYaArchivadas.add(clave);
+  // El saldo de un préstamo solo baja cuando la colilla quedó realmente
+  // archivada — nunca solo por calcular la vista previa. Si una cuota
+  // puntual falla, no debe tumbar el archivado (que ya se guardó bien).
+  for (const d of item.deduccionesRecurrentes.filter(d => d.incluida)){
+    try{ await aplicarDeduccionRecurrente(emp.key, d.id, d.monto); }catch(e){ /* no bloquea el archivado ya hecho */ }
+  }
   return { estado: "archivada" };
 }
 
@@ -9886,6 +9923,163 @@ async function agregarAjusteVacaciones(empKey, dias, motivo){
   await agregarBitacora(empKey, `Ajuste manual de vacaciones: ${dias > 0 ? "+" : ""}${dias} día(s)${motivo ? " — " + motivo : ""}.`);
 }
 
+// ---------- Deducciones recurrentes (plan dental, préstamos/adelantos) ----------
+// Mismo patrón que AJUSTES_VACACIONES arriba: un arreglo guardado directo en
+// el registro del empleado, nunca una tabla aparte — así viaja con la ficha
+// y queda visible en el mismo lugar donde ya se revisa a esa persona.
+//
+// tipo "plan_dental"/"otro": monto fijo indefinido, se aplica cada período
+// hasta que alguien lo desactive a mano. tipo "prestamo": tiene un
+// montoTotal y un saldoPendiente que se va descontando solo cada vez que se
+// archiva de verdad una colilla (ver aplicarDeduccionRecurrente) — al llegar
+// a cero se desactiva sola, sin que nadie tenga que acordarse de quitarla.
+async function agregarDeduccionRecurrente(empKey, { tipo, label, montoPorPeriodo, montoTotal }){
+  if (!["plan_dental","prestamo","otro"].includes(tipo)) throw new Error("Tipo de deducción inválido.");
+  const monto = Number(montoPorPeriodo);
+  if (!monto || monto <= 0) throw new Error("El monto por período debe ser mayor que cero.");
+  if (tipo === "prestamo" && (!Number(montoTotal) || Number(montoTotal) <= 0)){
+    throw new Error("Un préstamo necesita un monto total mayor que cero.");
+  }
+  const fullKey = CATALOGS.empleados.prefix + empKey;
+  const res = await window.storage.get(fullKey, false);
+  if (!res || !res.value) throw new Error("No se encontró ese empleado.");
+  const emp = JSON.parse(res.value);
+  if (!Array.isArray(emp.DEDUCCIONES_RECURRENTES)) emp.DEDUCCIONES_RECURRENTES = [];
+  const montoTotalNum = tipo === "prestamo" ? Number(montoTotal) : null;
+  const nueva = {
+    id: "ded-" + Date.now(),
+    tipo,
+    label: (label || "").trim() || (tipo === "plan_dental" ? "Plan dental" : tipo === "prestamo" ? "Préstamo" : "Otra deducción"),
+    montoPorPeriodo: monto,
+    montoTotal: montoTotalNum,
+    saldoPendiente: montoTotalNum,
+    activo: true,
+    creadoEn: new Date().toISOString(),
+    creadoPorEmail: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
+  };
+  emp.DEDUCCIONES_RECURRENTES.push(nueva);
+  await window.storage.set(fullKey, JSON.stringify(emp), false);
+  await agregarBitacora(empKey, `Deducción recurrente agregada: "${nueva.label}" — ${fmtMontoColilla(monto, "CRC")} por período` + (montoTotalNum ? ` (monto total ${fmtMontoColilla(montoTotalNum, "CRC")}).` : "."));
+  return nueva;
+}
+
+async function desactivarDeduccionRecurrente(empKey, deduccionId){
+  const fullKey = CATALOGS.empleados.prefix + empKey;
+  const res = await window.storage.get(fullKey, false);
+  if (!res || !res.value) throw new Error("No se encontró ese empleado.");
+  const emp = JSON.parse(res.value);
+  const ded = (emp.DEDUCCIONES_RECURRENTES || []).find(d => d.id === deduccionId);
+  if (!ded) throw new Error("No se encontró esa deducción.");
+  ded.activo = false;
+  await window.storage.set(fullKey, JSON.stringify(emp), false);
+  await agregarBitacora(empKey, `Deducción recurrente desactivada: "${ded.label}".`);
+}
+
+// ---------- Modal "Agregar deducción recurrente" (desde el Expediente) ----------
+// Reutiliza el modal genérico #modal-incompletos, mismo patrón que "Colillas
+// duplicadas" y "Nombre/Apellidos invertidos". El estado se guarda aparte
+// (no en el DOM) para poder re-dibujar el formulario completo cuando cambia
+// el tipo (el campo "monto total" solo aplica a préstamos) sin perder lo
+// que ya se había escrito en los demás campos.
+let nuevaDeduccionCtx = null;
+
+function mostrarModalAgregarDeduccionRecurrente(empKey){
+  nuevaDeduccionCtx = { empKey, tipo: "plan_dental", label: "", montoPorPeriodo: "", montoTotal: "" };
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "➕ Agregar deducción recurrente";
+  renderModalAgregarDeduccionRecurrente();
+  document.getElementById("modal-incompletos").classList.add("open");
+}
+
+function renderModalAgregarDeduccionRecurrente(){
+  const body = document.getElementById("modal-incompletos-body");
+  if (!body || !nuevaDeduccionCtx) return;
+  const ctx = nuevaDeduccionCtx;
+  const opciones = [
+    { value: "plan_dental", label: "Plan dental" },
+    { value: "prestamo", label: "Préstamo o adelanto" },
+    { value: "otro", label: "Otro" },
+  ];
+  const placeholderLabel = ctx.tipo === "plan_dental" ? "Plan dental" : ctx.tipo === "prestamo" ? "Préstamo" : "Otra deducción";
+  body.innerHTML = `
+    <div class="field" style="margin-bottom:8px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;">Tipo</label>
+      <select onchange="nuevaDeduccionCtx.tipo=this.value; renderModalAgregarDeduccionRecurrente();">
+        ${opciones.map(o => `<option value="${o.value}" ${ctx.tipo===o.value?"selected":""}>${o.label}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:8px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;">Descripción (opcional)</label>
+      <input type="text" value="${escapeHtml(ctx.label)}" placeholder="${placeholderLabel}" oninput="nuevaDeduccionCtx.label=this.value;">
+    </div>
+    <div class="field" style="margin-bottom:8px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;">Monto por período (cada colilla)</label>
+      <input type="number" min="0" value="${escapeHtml(ctx.montoPorPeriodo)}" oninput="nuevaDeduccionCtx.montoPorPeriodo=this.value;">
+    </div>
+    ${ctx.tipo === "prestamo" ? `<div class="field" style="margin-bottom:8px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;">Monto total del préstamo</label>
+      <input type="number" min="0" value="${escapeHtml(ctx.montoTotal)}" oninput="nuevaDeduccionCtx.montoTotal=this.value;">
+    </div>` : ""}
+    <div id="nueva-deduccion-status" style="font-size:12px; margin-bottom:8px;"></div>
+    <button class="btn primary" style="width:100%;" onclick="confirmarAgregarDeduccionRecurrente();">💾 Guardar</button>
+  `;
+}
+
+async function confirmarAgregarDeduccionRecurrente(){
+  const ctx = nuevaDeduccionCtx;
+  if (!ctx) return;
+  const status = document.getElementById("nueva-deduccion-status");
+  try{
+    await agregarDeduccionRecurrente(ctx.empKey, { tipo: ctx.tipo, label: ctx.label, montoPorPeriodo: ctx.montoPorPeriodo, montoTotal: ctx.montoTotal });
+    nuevaDeduccionCtx = null;
+    cerrarModalIncompletos();
+    statusMsg("Deducción recurrente agregada.");
+    await renderPerfilEmpleado();
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#B3261E;">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+async function confirmarDesactivarDeduccionRecurrente(empKey, deduccionId){
+  if (!confirm("¿Desactivar esta deducción recurrente? Ya no se va a aplicar en las próximas colillas que se generen.")) return;
+  try{
+    await desactivarDeduccionRecurrente(empKey, deduccionId);
+    statusMsg("Deducción desactivada.");
+    await renderPerfilEmpleado();
+  }catch(e){ statusMsg("No se pudo desactivar: " + e.message, false); }
+}
+
+// Deducciones que le corresponde cobrar a este empleado EN ESTE momento —
+// ya con el monto real de este período calculado (la última cuota de un
+// préstamo puede salir más chica que montoPorPeriodo, para no cobrar de más
+// cuando ya casi está saldado).
+function deduccionesActivasDeEmpleado(emp){
+  return (emp && emp.DEDUCCIONES_RECURRENTES || [])
+    .filter(d => d.activo !== false && (d.tipo !== "prestamo" || (d.saldoPendiente || 0) > 0))
+    .map(d => ({
+      id: d.id,
+      label: d.label,
+      monto: d.tipo === "prestamo" ? Math.min(d.montoPorPeriodo, d.saldoPendiente) : d.montoPorPeriodo,
+    }));
+}
+
+// Se llama SOLO cuando una colilla ya se archivó de verdad (nunca al solo
+// calcular la vista previa) — resta la cuota del saldo de un préstamo y lo
+// apaga solo si con esta cuota queda saldado.
+async function aplicarDeduccionRecurrente(empKey, deduccionId, montoAplicado){
+  const fullKey = CATALOGS.empleados.prefix + empKey;
+  const res = await window.storage.get(fullKey, false);
+  if (!res || !res.value) return;
+  const emp = JSON.parse(res.value);
+  const ded = (emp.DEDUCCIONES_RECURRENTES || []).find(d => d.id === deduccionId);
+  if (!ded || ded.tipo !== "prestamo") return; // plan_dental/otro no tienen saldo que descontar
+  ded.saldoPendiente = Math.max(0, (ded.saldoPendiente || 0) - montoAplicado);
+  if (ded.saldoPendiente <= 0){ ded.saldoPendiente = 0; ded.activo = false; }
+  await window.storage.set(fullKey, JSON.stringify(emp), false);
+  await agregarBitacora(empKey, ded.saldoPendiente <= 0
+    ? `Préstamo "${ded.label}" saldado (última cuota ${fmtMontoColilla(montoAplicado, "CRC")}).`
+    : `Cuota de "${ded.label}" aplicada: -${fmtMontoColilla(montoAplicado, "CRC")}, saldo restante ${fmtMontoColilla(ded.saldoPendiente, "CRC")}.`);
+}
+
 // Estado del modal de ajuste de saldo — se abre por fechas (calcula los
 // días automático, para no tener que contarlos a mano) o por número directo
 // (se deja como opción B para ajustes que no corresponden a un rango de
@@ -11825,6 +12019,14 @@ async function renderPerfilEmpleado(){
       const { monto: salarioDiario } = salarioDiarioDeEmpleado(emp);
       const jornadaEmp = await jornadaDiariaDeEmpleado(emp, {});
       const montoPorHoraExtra = salarioDiario ? (salarioDiario / jornadaEmp) * TARIFA_HORAS_EXTRA : 0;
+      // Saldo de préstamos/adelantos que todavía debe la persona — se
+      // descuenta del total de la liquidación (incluye los ya desactivados
+      // por archivado, ver confirmarArchivarEmpleado: ese saldo no se borra
+      // ni se pone en cero solo porque se archivó, sigue pendiente hasta
+      // que de verdad se cobre).
+      const saldoPrestamosPendientes = (emp.DEDUCCIONES_RECURRENTES || [])
+        .filter(d => d.tipo === "prestamo")
+        .reduce((s, d) => s + (d.saldoPendiente || 0), 0);
       prestaciones = {
         moneda: emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC",
         antiguedad: calcularAntiguedad(fechaIngreso, hoy),
@@ -11832,6 +12034,7 @@ async function renderPerfilEmpleado(){
         aguinaldo: calcularAguinaldoEstimado(emp, registrosDeEsteEmpleado, hoy, montoPorHoraExtra),
         cesantia: calcularCesantiaEstimada(fechaIngreso, hoy, salarioDiario),
         preaviso: calcularPreavisoEstimado(fechaIngreso, hoy, salarioDiario),
+        saldoPrestamosPendientes,
       };
     }catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
 
@@ -11869,10 +12072,31 @@ async function renderPerfilEmpleado(){
         <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🏖️ Vacaciones pendientes (${saldoVacaciones} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.vacacionesMonto, prestaciones.moneda)}</b></div>
         <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🎁 Aguinaldo proporcional (${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoFin)}, prorrateado a hoy)</span><b>${fmtMonedaEmpleado(prestaciones.aguinaldo.total, prestaciones.moneda)}</b></div>
         <div style="font-size:11px; color:var(--ink-soft); margin-top:8px; margin-bottom:2px;">⚖️ Si se le despidiera HOY con responsabilidad patronal (hipotético):</div>
-        <div style="font-size:12.5px; padding:4px 0 4px 14px; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>Cesantía (${prestaciones.cesantia.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.cesantia.monto, prestaciones.moneda)}</b></div>
-        <div style="font-size:12.5px; padding:4px 0 4px 14px; display:flex; justify-content:space-between;"><span>Preaviso (${prestaciones.preaviso.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.preaviso.monto, prestaciones.moneda)}</b></div>
-        <div style="font-size:13px; padding:8px 0 0; font-weight:700; color:var(--navy-deep); display:flex; justify-content:space-between;"><span>Total estimado si saliera hoy</span><span>${fmtMonedaEmpleado(prestaciones.vacacionesMonto + prestaciones.aguinaldo.total + prestaciones.cesantia.monto + prestaciones.preaviso.monto, prestaciones.moneda)}</span></div>
+        <div style="font-size:12.5px; padding:4px 0 4px 14px; ${prestaciones.saldoPrestamosPendientes > 0 ? "border-bottom:1px solid var(--paper-line);" : ""}display:flex; justify-content:space-between;"><span>Cesantía (${prestaciones.cesantia.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.cesantia.monto, prestaciones.moneda)}</b></div>
+        <div style="font-size:12.5px; padding:4px 0 4px 14px; ${prestaciones.saldoPrestamosPendientes > 0 ? "border-bottom:1px solid var(--paper-line);" : ""}display:flex; justify-content:space-between;"><span>Preaviso (${prestaciones.preaviso.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.preaviso.monto, prestaciones.moneda)}</b></div>
+        ${prestaciones.saldoPrestamosPendientes > 0 ? `<div style="font-size:12.5px; padding:4px 0; color:#B3261E; display:flex; justify-content:space-between;"><span>➖ Saldo de préstamo/adelanto pendiente${emp.ARCHIVADO ? "" : " (si saliera hoy)"}</span><b>-${fmtMonedaEmpleado(prestaciones.saldoPrestamosPendientes, prestaciones.moneda)}</b></div>` : ""}
+        <div style="font-size:13px; padding:8px 0 0; font-weight:700; color:var(--navy-deep); display:flex; justify-content:space-between;"><span>Total estimado ${emp.ARCHIVADO ? "de liquidación" : "si saliera hoy"}</span><span>${fmtMonedaEmpleado(prestaciones.vacacionesMonto + prestaciones.aguinaldo.total + prestaciones.cesantia.monto + prestaciones.preaviso.monto - prestaciones.saldoPrestamosPendientes, prestaciones.moneda)}</span></div>
       </div></div>` : ""}
+
+      ${(() => {
+        const monedaDed = emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC";
+        const deduccionesActivas = (emp.DEDUCCIONES_RECURRENTES || []).filter(d => d.activo !== false);
+        return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;">
+            <div style="font-weight:700;">💳 Deducciones recurrentes</div>
+            <button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="mostrarModalAgregarDeduccionRecurrente('${perfilActualKey}')">➕ Agregar</button>
+          </div>
+          <div style="font-size:11px; color:var(--ink-soft); margin-bottom:6px;">Se aplican solas cada vez que se genera una colilla de pago para este empleado (ver "Generar colillas de pago" en Planilla) — se pueden saltar puntualmente ahí sin desactivarlas acá.</div>
+          ${deduccionesActivas.length ? deduccionesActivas.map(d => `
+            <div style="font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <div>
+                <b>${escapeHtml(d.label)}</b> — ${fmtMonedaEmpleado(d.montoPorPeriodo, monedaDed)} por período
+                ${d.tipo === "prestamo" ? `<div style="color:var(--ink-soft); font-size:11px;">Saldo pendiente: ${fmtMonedaEmpleado(d.saldoPendiente, monedaDed)} de ${fmtMonedaEmpleado(d.montoTotal, monedaDed)}</div>` : ""}
+              </div>
+              <button class="btn" style="padding:4px 9px; font-size:10.5px; flex-shrink:0;" onclick="confirmarDesactivarDeduccionRecurrente('${perfilActualKey}', '${d.id}')">Desactivar</button>
+            </div>`).join("") : `<div style="font-size:12px; color:var(--ink-soft);">Sin deducciones recurrentes activas.</div>`}
+        </div></div>`;
+      })()}
 
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:6px;">Checklist de ingreso</div>
@@ -12299,10 +12523,27 @@ async function confirmarArchivarEmpleado(){
       emp.SALIDA_PDF_FIRMADO = archivarPendingPdfDataUrl;
       emp.SALIDA_PDF_NOMBRE = archivarPendingPdfNombre;
     }
+    // Las deducciones recurrentes (plan dental, cuota de préstamo) se
+    // archivan junto con el empleado — ya no va a haber más colillas donde
+    // aplicarlas. Se marcan con desactivadaPorArchivado para que, si el
+    // archivado se deshace con el "undo" del toast, reactivarEmpleado sepa
+    // cuáles reactivar y no toque una que ya estaba desactivada por otro
+    // motivo de antes. El saldoPendiente de un préstamo NO se borra ni se
+    // pone en cero acá — sigue disponible para descontarse del último pago
+    // pendiente (ver "Estimados de prestaciones" en este mismo Expediente).
+    let saldoPrestamosPendientes = 0;
+    (emp.DEDUCCIONES_RECURRENTES || []).forEach(d => {
+      if (d.activo !== false){
+        d.activo = false;
+        d.desactivadaPorArchivado = true;
+      }
+      if (d.tipo === "prestamo") saldoPrestamosPendientes += (d.saldoPendiente || 0);
+    });
     if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
     emp.HISTORIAL.unshift({
       fecha: emp.FECHA_ARCHIVADO,
-      texto: `Archivado — ${tipoSalida}.` + (archivarPendingPdfDataUrl ? ` Carta firmada adjuntada ("${archivarPendingPdfNombre}").` : ""),
+      texto: `Archivado — ${tipoSalida}.` + (archivarPendingPdfDataUrl ? ` Carta firmada adjuntada ("${archivarPendingPdfNombre}").` : "") +
+        (saldoPrestamosPendientes > 0 ? ` Queda un saldo de préstamo/adelanto pendiente de ${fmtMontoColilla(saldoPrestamosPendientes, emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC")} por descontar de la liquidación.` : ""),
     });
     await window.storage.set(fullKey, JSON.stringify(emp), false);
     cerrarModalArchivar();
@@ -12321,6 +12562,12 @@ async function reactivarEmpleado(key){
     const emp = JSON.parse(res.value);
     emp.ARCHIVADO = false;
     emp.ESTADO_EMP = "Activo";
+    // Reactiva SOLO las deducciones recurrentes que este mismo archivado
+    // había apagado (ver confirmarArchivarEmpleado) — una que ya estaba
+    // desactivada de antes por otro motivo se queda como estaba.
+    (emp.DEDUCCIONES_RECURRENTES || []).forEach(d => {
+      if (d.desactivadaPorArchivado){ d.activo = true; delete d.desactivadaPorArchivado; }
+    });
     await window.storage.set(fullKey, JSON.stringify(emp), false);
     const empleadosVisible = document.getElementById("empleados-panel").style.display !== "none";
     if (empleadosVisible) renderCatalogTab("empleados"); else renderArchivoList();
