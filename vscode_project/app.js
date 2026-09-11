@@ -2069,17 +2069,39 @@ function catalogFieldHtml(meta){
         catalogEditing.values['${id}'] = this.value;
       ">`;
   } else if (type === "text_cedula_emp"){
-    const cedulaOk = /^\d-\d{4}-\d{4}$/.test(val);
-    control = `<input type="text" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="
-        let v = this.value.replace(/[^0-9]/g,'').slice(0,9);
-        let f = v;
-        if (v.length > 5) f = v.slice(0,1) + '-' + v.slice(1,5) + '-' + v.slice(5);
-        else if (v.length > 1) f = v.slice(0,1) + '-' + v.slice(1);
-        this.value = f;
-        catalogEditing.values['${id}'] = f;
-        document.getElementById('hint-${id}').textContent = /^\\d-\\d{4}-\\d{4}$/.test(f) ? '' : (f ? 'Formato incompleto — debe ser 1-1112-1111 (9 dígitos).' : '');
-      ">
-      <div class="hint-error" id="hint-${id}">${val && !cedulaOk ? "Formato incompleto — debe ser 1-1112-1111 (9 dígitos)." : ""}</div>`;
+    // El formato depende del tipo de identidad elegido arriba: cédula
+    // nacional lleva guiones (1-1112-1111, 9 dígitos); DIMEX/cédula de
+    // residencia son solo números sin guiones (11-12 dígitos); pasaporte no
+    // tiene un formato fijo (varía por país), así que no se valida.
+    const tipoId = catalogEditing.values.TIPO_IDENTIFICACION_EMP || "";
+    if (tipoId === "DIMEX" || tipoId === "Cédula de residencia"){
+      const dimexOk = /^\d{11,12}$/.test(val);
+      control = `<input type="text" value="${escapeHtml(val)}" placeholder="Solo números, sin guiones (Ej. 155832591614)" oninput="
+          let v = this.value.replace(/[^0-9]/g,'').slice(0,12);
+          this.value = v;
+          catalogEditing.values['${id}'] = v;
+          document.getElementById('hint-${id}').textContent = /^\\d{11,12}$/.test(v) ? '' : (v ? 'Formato incompleto — debe tener 11 o 12 dígitos, sin guiones.' : '');
+        ">
+        <div class="hint-error" id="hint-${id}">${val && !dimexOk ? "Formato incompleto — debe tener 11 o 12 dígitos, sin guiones." : ""}</div>`;
+    } else if (tipoId === "Pasaporte"){
+      control = `<input type="text" value="${escapeHtml(val)}" placeholder="Número de pasaporte" oninput="
+          this.value = this.value.toUpperCase();
+          catalogEditing.values['${id}'] = this.value;
+        ">
+        <div class="hint-error" id="hint-${id}"></div>`;
+    } else {
+      const cedulaOk = /^\d-\d{4}-\d{4}$/.test(val);
+      control = `<input type="text" value="${escapeHtml(val)}" placeholder="${escapeHtml(hint||'')}" oninput="
+          let v = this.value.replace(/[^0-9]/g,'').slice(0,9);
+          let f = v;
+          if (v.length > 5) f = v.slice(0,1) + '-' + v.slice(1,5) + '-' + v.slice(5);
+          else if (v.length > 1) f = v.slice(0,1) + '-' + v.slice(1);
+          this.value = f;
+          catalogEditing.values['${id}'] = f;
+          document.getElementById('hint-${id}').textContent = /^\\d-\\d{4}-\\d{4}$/.test(f) ? '' : (f ? 'Formato incompleto — debe ser 1-1112-1111 (9 dígitos).' : '');
+        ">
+        <div class="hint-error" id="hint-${id}">${val && !cedulaOk ? "Formato incompleto — debe ser 1-1112-1111 (9 dígitos)." : ""}</div>`;
+    }
   } else if (type === "date_ingreso_emp"){
     let isoVal = "";
     if (catalogEditing.values.FECHA_INGRESO_EMP){
@@ -2203,8 +2225,9 @@ function catalogFieldHtml(meta){
       `<option value="${escapeHtml(o)}" ${val===o?"selected":""}>${escapeHtml(o)}</option>`).join("");
     opts += `<option value="__custom__">✏️ Otro</option>`;
     control = `<select onchange="
-        if(this.value==='__custom__'){ const v = prompt('Escribe el tipo de identidad:',''); catalogEditing.values['${id}'] = v || ''; renderCatalogTab('empleados'); }
+        if(this.value==='__custom__'){ const v = prompt('Escribe el tipo de identidad:',''); catalogEditing.values['${id}'] = v || ''; }
         else { catalogEditing.values['${id}']=this.value; }
+        renderCatalogTab('empleados');
       ">${opts}</select>`;
   } else if (type === "select_estado_civil"){
     let opts = `<option value="">Seleccionar…</option>` + ["Soltero(a)","Casado(a)","Divorciado(a)","Viudo(a)","Unión de hecho"].map(o =>
@@ -5464,7 +5487,17 @@ function evaluarCamposFaltantes(e){
   const faltan = [];
   if (!e.NOMBRE_EMP) faltan.push("Nombre");
   if (!e.APELLIDOS_EMP) faltan.push("Apellidos");
-  if (!e.IDENTIFICACION_EMP || !/^\d-\d{4}-\d{4}$/.test(e.IDENTIFICACION_EMP)) faltan.push("Cédula (formato completo)");
+  // El formato exigido depende del tipo de identidad: cédula nacional lleva
+  // guiones (1-1112-1111); DIMEX/cédula de residencia son solo números
+  // (11-12 dígitos); pasaporte no tiene un formato fijo, solo se exige que
+  // no esté vacío (ver text_cedula_emp, mismo criterio por tipo).
+  const tipoIdEmp = e.TIPO_IDENTIFICACION_EMP || "";
+  const identificacionOk = tipoIdEmp === "DIMEX" || tipoIdEmp === "Cédula de residencia"
+    ? /^\d{11,12}$/.test(e.IDENTIFICACION_EMP)
+    : tipoIdEmp === "Pasaporte"
+      ? !!e.IDENTIFICACION_EMP
+      : /^\d-\d{4}-\d{4}$/.test(e.IDENTIFICACION_EMP);
+  if (!identificacionOk) faltan.push("Cédula (formato completo)");
   if (!e.PUESTO_KEY && !e.DEPARTAMENTO_EMP) faltan.push("Puesto");
   if (!e.FECHA_INGRESO_EMP) faltan.push("Fecha de ingreso");
   if (e.MONEDA_SALARIO_EMP === "USD" ? !e.SALARIO_USD_EMP : !e.SALARIO_EMP) faltan.push("Salario");
