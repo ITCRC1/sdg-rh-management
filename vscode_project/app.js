@@ -3309,9 +3309,12 @@ function renderMtssImportSection(){
 // ---------- 📤 Datos: menú único con TODAS las importaciones de la app ----------
 // Antes cada importación (empleados, colillas, salarios MTSS) vivía dispersa en
 // su propia pestaña, disparada por atajos del menú Datos. Ahora el menú Datos
-// ES la pestaña, con las 4 importaciones separadas por lo que cada una puede
-// tocar: crear empleado nuevo, actualizar solo contacto, actualizar solo
-// salario real, o actualizar solo el mínimo legal de referencia del puesto.
+// ES la pestaña, con las importaciones separadas por lo que cada una puede
+// tocar: crear empleado nuevo, actualizar solo contacto, o actualizar solo
+// el mínimo legal de referencia del puesto. La subida de colillas de pago
+// (que sí actualiza el salario real) se movió a la pestaña Planilla, junto
+// con el resto de herramientas de colillas — acá queda solo un aviso que
+// redirige para allá.
 async function renderDatosTab(){
   const panel = document.getElementById("datos-panel");
   panel.innerHTML = `
@@ -3334,9 +3337,8 @@ async function renderDatosTab(){
     </div></div>
 
     <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
-      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🧾 Importar y Actualizar Salarios</div>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Sube las colillas de pago (PDF) de cada quincena, en colones y/o en dólares — actualiza el salario real de cada empleado y archiva su colilla individual.</p>
-      <div id="colillas-panel"></div>
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🧾 Colillas de pago</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0;">La subida de colillas de pago (PDF) se movió a la pestaña <b>Planilla</b> — ahí también está el generador propio de colillas y el resto de herramientas de planilla. <button class="btn" style="margin-top:6px;" onclick="showTab('planilla');">💰 Ir a Planilla</button></p>
     </div></div>
 
     <div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body">
@@ -3355,7 +3357,6 @@ async function renderDatosTab(){
       <p style="font-size:11px;color:var(--ink-soft);margin:8px 0 0;">La importación solo actualiza o agrega puestos/funciones — no borra ni cambia el texto legal del contrato ni tus contratos guardados.</p>
     </div></div>
   `;
-  await renderColillasImporter();
 }
 
 // ---------- cross-data linking (Empleados <-> Contratos, by cédula) ----------
@@ -5471,14 +5472,14 @@ async function mostrarModalColillasFaltantes(){
 }
 
 // Acceso directo desde "Colillas de pago faltantes" hasta donde se suben de
-// verdad — el módulo de Datos (la subida es por lote de PDFs que el sistema
-// reparte solo por número de empleado/cédula/nombre, así que no hay un
-// destino "de este empleado en particular" al que saltar; lo que sí se
+// verdad — el módulo de Planilla (la subida es por lote de PDFs que el
+// sistema reparte solo por número de empleado/cédula/nombre, así que no hay
+// un destino "de este empleado en particular" al que saltar; lo que sí se
 // puede hacer es llevar de una vez a ese uploader, en vez de dejar que la
-// persona tenga que acordarse dónde queda dentro del menú Datos).
+// persona tenga que acordarse dónde queda dentro de Planilla).
 function irASubirColilla(){
   cerrarModalIncompletos();
-  showTab("datos");
+  showTab("planilla");
   setTimeout(() => {
     const boton = document.querySelector('#colillas-panel button[onclick*="colillas-pdf-input"]');
     if (!boton) return;
@@ -5750,11 +5751,16 @@ async function renderPlanillaPanel(){
       <div class="kpi-card c-gold" style="cursor:pointer;" onclick="mostrarModalColillasArchivadas();"><div class="ic">👥</div><div class="val">${totalEmpleados}</div><div class="lbl">Trabajadores con colilla</div></div>
     </div>`;
 
+    html += `<div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;" id="colillas-importar-seccion"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🧾 Importar y Actualizar Salarios</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 10px;">Sube las colillas de pago (PDF) de cada quincena, en colones y/o en dólares — actualiza el salario real de cada empleado y archiva su colilla individual.</p>
+      <div id="colillas-panel"></div>
+    </div></div>`;
+
     html += `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">Acciones</div>
       <button class="btn primary" style="width:100%; margin-bottom:8px;" onclick="mostrarModalColillasArchivadas();">📋 Ver todas las colillas archivadas</button>
-      <button class="btn" style="width:100%; margin-bottom:8px;" onclick="mostrarModalColillasFaltantes();">🧾 Ver quién falta del período actual</button>
-      <button class="btn" style="width:100%;" onclick="showTab('datos');">📥 Subir / actualizar colillas (menú Datos)</button>
+      <button class="btn" style="width:100%;" onclick="mostrarModalColillasFaltantes();">🧾 Ver quién falta del período actual</button>
     </div>`;
 
     html += `<div class="dash-panel" style="margin-bottom:14px;">
@@ -5807,12 +5813,194 @@ async function renderPlanillaPanel(){
     </div>`;
     })();
 
-    html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el cálculo de planilla completo (salario base +/− ajustes por incapacidad/vacaciones − deducciones = neto, y los acumulados de aguinaldo/cesantía/preaviso). El reporte de horarios de arriba ya incluye el monto de horas extra (salario/30/jornada × 1.5), pero el neto final todavía se arma con la colilla que ya viene calculada de afuera — este módulo no reemplaza ese cálculo.</div>`;
+    html += (() => {
+      const rangoHoy = rangoQuincenaActual();
+      const mesInputHoy = `${rangoHoy.inicio.getFullYear()}-${String(rangoHoy.inicio.getMonth() + 1).padStart(2, "0")}`;
+      return `<div class="dash-panel" style="margin-bottom:14px; border-color:var(--leaf);">
+      <div class="dash-panel-title">🧾 Generar colillas de pago (nuevo)</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Arma la colilla acá mismo (Ordinario + Horas extra − CCSS Obrero 10.83% = Neto) en vez de subir el PDF de un proveedor externo — pensado para migrar poco a poco; "Subir / actualizar colillas" arriba sigue funcionando igual mientras tanto. No incluye recargo de feriado trabajado ni ninguna deducción aparte de CCSS — esas se agregan a mano por persona antes de generar.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Mes
+          <input type="month" id="colilla-gen-mes" value="${mesInputHoy}">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Quincena
+          <select id="colilla-gen-quincena">
+            <option value="1"${rangoHoy.esPrimeraQuincena ? " selected" : ""}>1ª (día 1 al 15)</option>
+            <option value="2"${!rangoHoy.esPrimeraQuincena ? " selected" : ""}>2ª (día 16 al fin de mes)</option>
+          </select>
+        </label>
+        <button class="btn primary" onclick="calcularVistaPreviaColillasGeneradas();">🔍 Calcular vista previa</button>
+      </div>
+      <div id="colilla-gen-status" style="font-size:12px; margin-bottom:6px;"></div>
+      <div id="colillas-generadas-preview"></div>
+    </div>`;
+    })();
+
+    html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el generador de colillas de arriba ya arma Ordinario + Horas extra − CCSS Obrero = Neto con datos reales del sistema, pero todavía no incluye recargo de feriado trabajado, CCSS patronal, renta ni INS — eso queda para el futuro módulo de reportería pensado para agentes de RRHH. El aguinaldo/cesantía/preaviso ya se estiman en el Expediente de cada empleado, pero todavía no se imprimen dentro de la colilla misma.</div>`;
 
     panel.innerHTML = html;
+    await renderColillasImporter();
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
   }
+}
+
+// ---------- Generar colillas de pago (vista previa + archivado) ----------
+// Cache en memoria de la última vista previa calculada — cada fila trae el
+// empleado, el resumen de la quincena, la jornada de su puesto (ya resuelta,
+// para no tener que volver a buscarla por cada intercambio de deducción), la
+// colilla calculada (calcularColillaEmpleado) y las deducciones extra que se
+// hayan cargado a mano. Se recalcula solo la colilla de esa fila cuando se
+// edita una deducción — no hace falta volver a pedir nada al servidor.
+let colillasGeneradasCache = [];
+
+async function calcularVistaPreviaColillasGeneradas(){
+  const status = document.getElementById("colilla-gen-status");
+  const mesStr = (document.getElementById("colilla-gen-mes") || {}).value;
+  const quincenaStr = (document.getElementById("colilla-gen-quincena") || {}).value;
+  if (!mesStr){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el mes.</span>`; return; }
+  if (typeof PDFLib === "undefined"){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de PDF. Recargá la página e intentá de nuevo.</span>`;
+    return;
+  }
+  if (status) status.innerHTML = "Calculando…";
+  document.getElementById("colillas-generadas-preview").innerHTML = "";
+  try{
+    const [anio, mes1] = mesStr.split("-").map(Number);
+    const rango = rangoQuincena(anio, mes1 - 1, quincenaStr !== "2");
+
+    const [registros, empleados, puestosDB, empresasKeys] = await Promise.all([
+      listarRegistrosHorasExtra(),
+      cargarEmpleadosDB(),
+      cargarPuestosDB(),
+      window.storage.list(CATALOGS.empresas.prefix, false),
+    ]);
+    const puestosPorKey = {};
+    puestosDB.forEach(p => { puestosPorKey[p.key] = p; });
+    // La empresa que sale de la cabecera de la colilla es la primera del
+    // catálogo (mismo criterio de respaldo ya usado para amonestaciones sin
+    // contrato vinculado) — casi todas las propiedades solo tienen una.
+    const keysEmpresas = (empresasKeys && empresasKeys.keys) || [];
+    let empresa = null;
+    if (keysEmpresas.length){
+      const r = await window.storage.get(keysEmpresas[0], false);
+      empresa = r && r.value ? JSON.parse(r.value) : null;
+    }
+
+    const filas = calcularResumenQuincena(registros, empleados, rango).sort((a,b) => compararPorApellido(a.emp, b.emp));
+    if (!filas.length){
+      if (status) status.innerHTML = "No hay ningún empleado activo dentro de esa quincena.";
+      return;
+    }
+
+    const periodoInicio = `${String(rango.inicio.getDate()).padStart(2,"0")}/${String(rango.inicio.getMonth()+1).padStart(2,"0")}/${rango.inicio.getFullYear()}`;
+    const periodoTxt = `${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`;
+    colillasGeneradasCache = filas.map(fila => {
+      const jornadaEmp = jornadaDiariaDePuesto(puestosPorKey[fila.emp.PUESTO_KEY]);
+      return {
+        fila, jornadaEmp, empresa, periodoInicio, periodoTxt,
+        deduccionesExtra: [],
+        colilla: calcularColillaEmpleado(fila.emp, fila, jornadaEmp, []),
+      };
+    });
+    if (status) status.innerHTML = "";
+    renderVistaPreviaColillasGeneradas();
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function renderVistaPreviaColillasGeneradas(){
+  const cont = document.getElementById("colillas-generadas-preview");
+  if (!cont || !colillasGeneradasCache.length) return;
+  cont.innerHTML = `<div style="font-size:12px; color:var(--ink-soft); margin:4px 0 8px;">${colillasGeneradasCache.length} empleado(s) — período ${escapeHtml(colillasGeneradasCache[0].periodoTxt)}.</div>
+    <button class="btn primary" style="width:100%; margin-bottom:10px;" onclick="generarColillasGeneradasColectivo();">⚡ Generar y archivar TODAS (${colillasGeneradasCache.length})</button>
+    ${colillasGeneradasCache.map((item, idx) => {
+      const horasExtraTxt = item.fila.horasExtra ? ` · Horas extra: ${fmtMontoColilla(item.colilla.devengados[1] ? item.colilla.devengados[1].monto : 0, item.colilla.moneda)}` : "";
+      return `<div id="colilla-gen-fila-${idx}" style="padding:8px 0; border-bottom:1px solid var(--paper-line); font-size:12px;">
+        <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+          <b>${escapeHtml(nombreCompletoEmpleado(item.fila.emp))}</b>
+          <button class="btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="generarColillaGeneradaIndividual(${idx})">🧾 Generar esta colilla</button>
+        </div>
+        <div style="color:var(--ink-soft); margin-top:2px;">Ordinario: ${fmtMontoColilla(item.colilla.devengados[0].monto, item.colilla.moneda)}${horasExtraTxt} · CCSS: -${fmtMontoColilla(item.colilla.deducciones[0].monto, item.colilla.moneda)}</div>
+        <div style="display:flex; gap:6px; margin-top:4px; align-items:center; flex-wrap:wrap;">
+          <input type="text" placeholder="Otra deducción (ej. Plan dental)" style="flex:1; min-width:140px;" id="colilla-gen-ded-label-${idx}" oninput="actualizarDeduccionExtraColilla(${idx})">
+          <input type="number" placeholder="Monto" style="width:110px;" id="colilla-gen-ded-monto-${idx}" oninput="actualizarDeduccionExtraColilla(${idx})">
+        </div>
+        <div style="font-weight:700; margin-top:4px;" id="colilla-gen-neto-${idx}">Neto: ${fmtMontoColilla(item.colilla.neto, item.colilla.moneda)}</div>
+      </div>`;
+    }).join("")}`;
+}
+
+function actualizarDeduccionExtraColilla(idx){
+  const item = colillasGeneradasCache[idx];
+  if (!item) return;
+  const label = (document.getElementById(`colilla-gen-ded-label-${idx}`)||{}).value || "";
+  const monto = (document.getElementById(`colilla-gen-ded-monto-${idx}`)||{}).value || "";
+  item.deduccionesExtra = (label.trim() && monto) ? [{ label: label.trim(), monto }] : [];
+  item.colilla = calcularColillaEmpleado(item.fila.emp, item.fila, item.jornadaEmp, item.deduccionesExtra);
+  const netoEl = document.getElementById(`colilla-gen-neto-${idx}`);
+  if (netoEl) netoEl.textContent = `Neto: ${fmtMontoColilla(item.colilla.neto, item.colilla.moneda)}`;
+}
+
+// Genera el PDF y lo archiva — comparte el mismo set de claves ya archivadas
+// (importadas O generadas, ver claveColillaArchivada/cargarClavesColillasArchivadas)
+// que ya usa la subida de colillas externas, así nunca se duplica una
+// quincena de la misma persona sin importar de cuál de los dos caminos vino.
+async function archivarColillaGenerada(item, clavesYaArchivadas){
+  const emp = item.fila.emp;
+  const clave = claveColillaArchivada(emp.IDENTIFICACION_EMP, nombreCompletoEmpleado(emp), item.periodoInicio);
+  if (clavesYaArchivadas.has(clave)) return { estado: "duplicada" };
+  const blob = await generarPdfColilla(item.empresa, emp, item.periodoTxt, item.colilla);
+  const nombreArchivo = "Colilla_" + nombreCompletoEmpleado(emp).replace(/[^a-zA-Z0-9]+/g,"_") + "_" + item.periodoInicio.replace(/\//g,"-") + ".pdf";
+  await window.sdgApi.congelarDocumento(blob, {
+    tipo: "colilla_pago",
+    titulo: "Colilla de pago — " + item.periodoTxt + " — " + nombreCompletoEmpleado(emp),
+    nombreArchivo,
+    claveOrigen: CATALOGS.empleados.prefix + emp.key,
+    empleadoCedula: emp.IDENTIFICACION_EMP || null,
+    empleadoNombre: nombreCompletoEmpleado(emp) || null,
+  });
+  clavesYaArchivadas.add(clave);
+  return { estado: "archivada" };
+}
+
+async function generarColillaGeneradaIndividual(idx){
+  const item = colillasGeneradasCache[idx];
+  if (!item) return;
+  try{
+    const claves = await cargarClavesColillasArchivadas();
+    const r = await archivarColillaGenerada(item, claves);
+    if (r.estado === "duplicada"){
+      statusMsg(`Ya existe una colilla archivada para ${nombreCompletoEmpleado(item.fila.emp)} en ese período — no se generó de nuevo.`, false);
+    } else {
+      statusMsg(`Colilla de ${nombreCompletoEmpleado(item.fila.emp)} generada y archivada.`);
+      const fila = document.getElementById(`colilla-gen-fila-${idx}`);
+      if (fila) fila.style.opacity = "0.5";
+    }
+  }catch(e){ statusMsg("No se pudo generar la colilla: " + e.message, false); }
+}
+
+async function generarColillasGeneradasColectivo(){
+  const status = document.getElementById("colilla-gen-status");
+  if (status) status.innerHTML = "Generando y archivando…";
+  let archivadas = 0, duplicadas = 0, fallidas = 0;
+  try{
+    const claves = await cargarClavesColillasArchivadas();
+    for (let idx = 0; idx < colillasGeneradasCache.length; idx++){
+      try{
+        const r = await archivarColillaGenerada(colillasGeneradasCache[idx], claves);
+        if (r.estado === "duplicada") duplicadas++; else archivadas++;
+      }catch(e){ fallidas++; }
+    }
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
+    return;
+  }
+  if (status) status.innerHTML = `✅ ${archivadas} colilla(s) generada(s) y archivada(s)` +
+    (duplicadas ? ` — ${duplicadas} ya existían, no se repitieron` : "") +
+    (fallidas ? ` — ${fallidas} fallaron` : "") + ".";
+  statusMsg(`${archivadas} colilla(s) generada(s) desde el sistema.`);
 }
 
 function descargarBlobComoArchivo(blob, nombre){
@@ -6832,6 +7020,113 @@ function calcularResumenQuincena(registros, empleados, rango){
 
     return { emp, activo: true, horasExtra, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
   }).filter(f => f.activo);
+}
+
+// ---------- Generador propio de colillas de pago ----------
+// Calcula el desglose (devengados, deducciones, neto) de la colilla de UN
+// empleado para una quincena — reutiliza exactamente los mismos números que
+// ya calcula calcularResumenQuincena (días laborados, horas extra ya
+// aprobadas) y salarioDiarioDeEmpleado. La fórmula de "Ordinario" (días
+// laborados × salario diario) se verificó contra una colilla real del
+// proveedor externo: 15 días × ₡12,466.67/día = ₡187,000 — coincide exacto.
+//
+// A propósito NO incluye "día feriado/libre laborado" (aparece en las
+// colillas del proveedor externo pero no hay forma de reconstruir esa
+// fórmula con los datos que este sistema guarda hoy) ni ninguna otra
+// deducción más allá de CCSS obrero — cualquier otra (plan dental,
+// préstamos, etc.) se agrega a mano por persona y por corrida, vía
+// `deduccionesExtra` ([{label, monto}, ...]), porque no hay ningún dato
+// guardado de eso en ningún catálogo.
+function calcularColillaEmpleado(emp, filaResumenQuincena, jornadaEmp, deduccionesExtra){
+  const { monto: salarioDiario, moneda } = salarioDiarioDeEmpleado(emp);
+  const diasLaborados = filaResumenQuincena.diasLaborados || 0;
+  const horasExtra = filaResumenQuincena.horasExtra || 0;
+  const montoOrdinario = diasLaborados * (salarioDiario || 0);
+  const salarioHora = jornadaEmp ? (salarioDiario || 0) / jornadaEmp : 0;
+  const montoHorasExtra = horasExtra * salarioHora * TARIFA_HORAS_EXTRA;
+
+  const devengados = [{ label: "Ordinario", cantidad: diasLaborados, unidad: "Días", monto: montoOrdinario }];
+  if (horasExtra > 0) devengados.push({ label: "Horas extra", cantidad: horasExtra, unidad: "Horas", monto: montoHorasExtra });
+  const totalDevengado = devengados.reduce((s,d) => s + d.monto, 0);
+
+  const ccssObrero = totalDevengado * DEDUCCION_CCSS;
+  const deducciones = [
+    { label: `C.C.S.S. Obrero ${(DEDUCCION_CCSS*100).toFixed(2)}%`, monto: ccssObrero },
+    ...(deduccionesExtra || []).filter(d => d.label && d.monto).map(d => ({ label: d.label, monto: Number(d.monto) || 0 })),
+  ];
+  const totalDeducciones = deducciones.reduce((s,d) => s + d.monto, 0);
+
+  return { devengados, deducciones, totalDevengado, totalDeducciones, neto: totalDevengado - totalDeducciones, moneda };
+}
+
+const SIMBOLO_MONEDA_COLILLA = { CRC: "₡", USD: "$" };
+function fmtMontoColilla(monto, moneda){
+  return (SIMBOLO_MONEDA_COLILLA[moneda] || "₡") + (Number(monto) || 0).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Dibuja el PDF de una colilla desde cero (PDFDocument.create(), no a partir
+// de un archivo subido — a diferencia de archivarColillasPDF, que recorta
+// páginas de un PDF ya existente del proveedor externo). Diseño propio,
+// inspirado en el formato de las colillas del proveedor externo, pero no
+// pixel-perfecto a esas — se puede afinar más adelante con el primer
+// resultado real en mano.
+async function generarPdfColilla(empresa, emp, periodoTxt, colilla){
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([612, 792]); // carta
+  const fuente = await doc.embedFont(StandardFonts.Helvetica);
+  const fuenteNegrita = await doc.embedFont(StandardFonts.HelveticaBold);
+  const negro = rgb(0, 0, 0);
+  const gris = rgb(0.45, 0.45, 0.45);
+  const anchoUtil = 612 - 2 * 54;
+  let y = 792 - 54;
+
+  const centrado = (texto, tamaño, fuenteUsar, color) => {
+    const ancho = fuenteUsar.widthOfTextAtSize(texto, tamaño);
+    page.drawText(texto, { x: (612 - ancho) / 2, y, size: tamaño, font: fuenteUsar, color: color || negro });
+  };
+  const filaTexto = (izq, der, tamaño, fuenteUsar, color) => {
+    page.drawText(izq, { x: 54, y, size: tamaño, font: fuenteUsar, color: color || negro });
+    if (der){
+      const ancho = fuenteUsar.widthOfTextAtSize(der, tamaño);
+      page.drawText(der, { x: 612 - 54 - ancho, y, size: tamaño, font: fuenteUsar, color: color || negro });
+    }
+  };
+  const linea = () => { page.drawLine({ start: { x: 54, y }, end: { x: 612 - 54, y }, thickness: 0.75, color: rgb(0.7,0.7,0.7) }); };
+
+  centrado("COMPROBANTE DE PAGO", 16, fuenteNegrita); y -= 20;
+  centrado(empresa?.EMPRESA || "", 11, fuenteNegrita); y -= 14;
+  if (empresa?.CEDULA_JURIDICA_EMPRESA) { centrado(`Cédula Jurídica No. ${empresa.CEDULA_JURIDICA_EMPRESA}`, 9.5, fuente, gris); y -= 14; }
+  y -= 10; linea(); y -= 20;
+
+  filaTexto("Empleado:", null, 9, fuente, gris); y -= 13;
+  filaTexto(`${emp.NUMERO_EMPLEADO || "—"}   ${nombreCompletoEmpleado(emp)}`, periodoTxt, 10.5, fuenteNegrita); y -= 15;
+  filaTexto(`${emp.DEPARTAMENTO_EMP || ""}  ·  Cédula: ${emp.IDENTIFICACION_EMP || "—"}`, `Salario mensual: ${fmtMontoColilla(colilla.moneda === "USD" ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP, colilla.moneda)}`, 9.5, fuente, gris);
+  y -= 24; linea(); y -= 20;
+
+  filaTexto("1 · DEVENGADOS", null, 10.5, fuenteNegrita); y -= 16;
+  colilla.devengados.forEach(d => {
+    filaTexto(`${d.label} (${d.cantidad} ${d.unidad})`, fmtMontoColilla(d.monto, colilla.moneda), 10, fuente);
+    y -= 15;
+  });
+  linea(); y -= 15;
+  filaTexto("Total Devengado", fmtMontoColilla(colilla.totalDevengado, colilla.moneda), 10.5, fuenteNegrita); y -= 26;
+
+  filaTexto("2 · DEDUCCIONES", null, 10.5, fuenteNegrita); y -= 16;
+  colilla.deducciones.forEach(d => {
+    filaTexto(d.label, "-" + fmtMontoColilla(d.monto, colilla.moneda), 10, fuente);
+    y -= 15;
+  });
+  linea(); y -= 15;
+  filaTexto("Total Deducciones", "-" + fmtMontoColilla(colilla.totalDeducciones, colilla.moneda), 10.5, fuenteNegrita); y -= 30;
+
+  page.drawRectangle({ x: 54, y: y - 8, width: anchoUtil, height: 26, borderColor: negro, borderWidth: 1 });
+  filaTexto("NETO A PAGAR", fmtMontoColilla(colilla.neto, colilla.moneda), 12, fuenteNegrita); y -= 55;
+
+  filaTexto("Recibido: ______________________________", null, 10, fuente); y -= 30;
+  page.drawText(`Comprobante generado internamente el ${fmtFecha(new Date().toISOString())} — es un estimado y no reemplaza el cálculo oficial de planilla.`, { x: 54, y, size: 7.5, font: fuente, color: gris, maxWidth: anchoUtil });
+
+  return new Blob([await doc.save()], { type: "application/pdf" });
 }
 
 // Se acuerda mientras dura la sesión (no una preferencia guardada) — el
