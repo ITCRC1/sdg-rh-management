@@ -5732,23 +5732,11 @@ async function renderPlanillaPanel(){
   const panel = document.getElementById("planilla-panel");
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
-    const docs = window.sdgApi ? await window.sdgApi.documentos({ tipo: "colilla_pago", limite: 500 }) : [];
     const tipoCambioActual = await cargarTipoCambio();
-    const porEmpleado = {};
-    docs.forEach(d => {
-      const clave = d.empleado_cedula || d.empleado_nombre || d.id;
-      porEmpleado[clave] = (porEmpleado[clave] || 0) + 1;
-    });
-    const totalEmpleados = Object.keys(porEmpleado).length;
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">💰 Planilla</div>
       <div style="font-size:12px; color:var(--ink-soft);">Colillas de pago archivadas por trabajador.</div>
-    </div>`;
-
-    html += `<div class="kpi-grid" style="grid-template-columns:1fr 1fr;">
-      <div class="kpi-card c-navy" style="cursor:pointer;" onclick="mostrarModalColillasArchivadas();"><div class="ic">🧾</div><div class="val">${docs.length}</div><div class="lbl">Colillas archivadas</div></div>
-      <div class="kpi-card c-gold" style="cursor:pointer;" onclick="mostrarModalColillasArchivadas();"><div class="ic">👥</div><div class="val">${totalEmpleados}</div><div class="lbl">Trabajadores con colilla</div></div>
     </div>`;
 
     // La subida de colillas EXTERNAS queda exclusiva de Corcovado — es la
