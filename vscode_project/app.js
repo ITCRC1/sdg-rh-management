@@ -5495,7 +5495,7 @@ async function renderPlanillaPanel(){
     </div>`;
     })();
 
-    html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el cálculo de planilla en sí (salario base + horas extra automáticas +/− ajustes por incapacidad/vacaciones − deducciones = neto, y los acumulados de aguinaldo/cesantía/preaviso). Hoy este módulo archiva e identifica colillas que ya vienen calculadas de afuera; no calcula montos.</div>`;
+    html += `<div class="portfolio-box" style="border-color:var(--gold); background:#FBF6E8;">⏳ <b>Pendiente de definir lógica/configuración:</b> el cálculo de planilla completo (salario base +/− ajustes por incapacidad/vacaciones − deducciones = neto, y los acumulados de aguinaldo/cesantía/preaviso). El reporte de horarios de arriba ya incluye el monto de horas extra (salario/30/jornada × 1.5), pero el neto final todavía se arma con la colilla que ya viene calculada de afuera — este módulo no reemplaza ese cálculo.</div>`;
 
     panel.innerHTML = html;
   }catch(e){
