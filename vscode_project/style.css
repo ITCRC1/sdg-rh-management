@@ -54,15 +54,6 @@
   }
   .brand-tag::before{content:"🌴"; font-size:12px;}
 
-  .progress-track{
-    margin-top:14px; height:6px; border-radius:6px; background:rgba(255,255,255,0.18); overflow:hidden;
-  }
-  .progress-fill{
-    height:100%; background:linear-gradient(90deg,var(--leaf),var(--gold));
-    border-radius:6px; transition:width .4s ease;
-  }
-  .progress-label{ font-size:10.5px; color:#D9E3D6; margin-top:5px; }
-
   .tabs{
     display:flex; gap:0; background:#fff; border-bottom:1px solid var(--paper-line);
     position:sticky; top:0; z-index:20; overflow-x:auto;
