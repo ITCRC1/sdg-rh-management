@@ -11551,7 +11551,14 @@ const TIPOS_DOCUMENTO_EXPEDIENTE = {
 // /api/documentos?cedula=...). Un documento anulado se muestra igual —
 // atenuado y marcado — en vez de desaparecer, para que el expediente no
 // oculte que algo se generó y después se anuló.
-function renderSeccionDocumentosEmpleado(documentos){
+function renderSeccionDocumentosEmpleado(documentosSinFiltrar){
+  // Los anulados (duplicados eliminados vía "Buscar y eliminar duplicados",
+  // correcciones, etc.) nunca se borran de la base — documentos_emitidos es
+  // de solo-inserción — pero ya no deben aparecer en el expediente como si
+  // siguieran vigentes. Mismo criterio que ya usa la sección de Colillas de
+  // pago de más abajo: si alguna vez hace falta auditar qué se anuló y por
+  // qué, eso se consulta directo en la base, no mezclado en este listado.
+  const documentos = documentosSinFiltrar.filter(d => !d.anulado_en);
   if (!documentos.length){
     return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
       <div style="font-weight:700; margin-bottom:6px;">📁 Todos los documentos</div>
@@ -11562,10 +11569,9 @@ function renderSeccionDocumentosEmpleado(documentos){
     <div style="font-weight:700; margin-bottom:8px;">📁 Todos los documentos (${documentos.length})</div>
     ${documentos.map(d => {
       const info = TIPOS_DOCUMENTO_EXPEDIENTE[d.tipo] || { emoji: "📄", label: d.tipo || "Documento" };
-      const anulado = !!d.anulado_en;
-      return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;${anulado ? " opacity:0.6;" : ""}">
+      return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
         <div>
-          <b>${info.emoji} ${escapeHtml(info.label)}</b>${anulado ? ` <span style="color:#B3261E; font-weight:700;">(anulado${d.anulado_motivo ? ": " + escapeHtml(d.anulado_motivo) : ""})</span>` : ""}
+          <b>${info.emoji} ${escapeHtml(info.label)}</b>
           <div style="color:var(--ink-soft);">${escapeHtml(d.titulo || "")}</div>
           <div style="color:var(--ink-soft); font-size:11px;">${d.emitido_en ? fmtFecha(d.emitido_en) : ""}</div>
         </div>
