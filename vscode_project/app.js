@@ -7081,64 +7081,111 @@ function fmtMontoColillaPDF(monto, moneda){
   return (moneda === "USD" ? "$" : "C") + numero;
 }
 
+// data:image/png;base64,... -> Uint8Array, para doc.embedPng (pdf-lib no
+// acepta el data URL tal cual, solo bytes).
+function bytesDeImagenBase64(dataUrl){
+  const base64 = String(dataUrl || "").split(",")[1] || "";
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return bytes;
+}
+
+// Paleta de marca del sistema (ver style.css: --navy-deep, --gold, --leaf,
+// --paper-line) convertida a RGB 0-1 para pdf-lib — así la colilla generada
+// se ve de la casa, igual que el resto de documentos que arma el sistema
+// (contratos, cartas), en vez de un PDF genérico blanco y negro.
+const COLOR_COLILLA_NAVY = [0.235, 0.169, 0.137];
+const COLOR_COLILLA_GOLD = [0.761, 0.631, 0.353];
+const COLOR_COLILLA_LEAF = [0.298, 0.365, 0.224];
+const COLOR_COLILLA_LINEA = [0.894, 0.859, 0.784];
+const COLOR_COLILLA_GRIS = [0.549, 0.518, 0.471];
+
 // Dibuja el PDF de una colilla desde cero (PDFDocument.create(), no a partir
 // de un archivo subido — a diferencia de archivarColillasPDF, que recorta
-// páginas de un PDF ya existente del proveedor externo). Diseño propio,
-// inspirado en el formato de las colillas del proveedor externo, pero no
-// pixel-perfecto a esas — se puede afinar más adelante con el primer
-// resultado real en mano.
+// páginas de un PDF ya existente del proveedor externo). Usa el logo y los
+// colores de marca de la propiedad activa (mismos que logoHeaderHtml() usa
+// en contratos/cartas), aunque el diseño en sí es propio de esta colilla —
+// se puede afinar más adelante con el primer resultado real en mano.
 async function generarPdfColilla(empresa, emp, periodoTxt, colilla){
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const color = (arr) => rgb(arr[0], arr[1], arr[2]);
+  const navy = color(COLOR_COLILLA_NAVY), gold = color(COLOR_COLILLA_GOLD), leaf = color(COLOR_COLILLA_LEAF);
+  const lineaColor = color(COLOR_COLILLA_LINEA), gris = color(COLOR_COLILLA_GRIS);
+  const blanco = rgb(1, 1, 1);
+
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]); // carta
   const fuente = await doc.embedFont(StandardFonts.Helvetica);
   const fuenteNegrita = await doc.embedFont(StandardFonts.HelveticaBold);
-  const negro = rgb(0, 0, 0);
-  const gris = rgb(0.45, 0.45, 0.45);
   const anchoUtil = 612 - 2 * 54;
-  let y = 792 - 54;
 
-  const centrado = (texto, tamaño, fuenteUsar, color) => {
+  // Franja superior de marca — mismo tono navy que la barra del sistema,
+  // con el logo de la propiedad activa a la izquierda si hay uno cargado.
+  const ALTO_FRANJA = 72;
+  page.drawRectangle({ x: 0, y: 792 - ALTO_FRANJA, width: 612, height: ALTO_FRANJA, color: navy });
+  const propiedad = (typeof getPropiedadActual === "function") ? getPropiedadActual() : null;
+  if (propiedad && propiedad.logo){
+    try{
+      const logoImg = await doc.embedPng(bytesDeImagenBase64(propiedad.logo));
+      const altoLogo = 46;
+      const anchoLogo = (logoImg.width / logoImg.height) * altoLogo;
+      page.drawImage(logoImg, { x: 54, y: 792 - ALTO_FRANJA/2 - altoLogo/2, width: anchoLogo, height: altoLogo });
+    }catch(e){ /* si el logo no se puede leer, la franja de color igual queda */ }
+  }
+  const tituloTxt = "COMPROBANTE DE PAGO";
+  const tituloAncho = fuenteNegrita.widthOfTextAtSize(tituloTxt, 17);
+  page.drawText(tituloTxt, { x: 612 - 54 - tituloAncho, y: 792 - ALTO_FRANJA/2 - 6, size: 17, font: fuenteNegrita, color: gold });
+
+  let y = 792 - ALTO_FRANJA - 26;
+
+  const centrado = (texto, tamaño, fuenteUsar, colorTexto) => {
     const ancho = fuenteUsar.widthOfTextAtSize(texto, tamaño);
-    page.drawText(texto, { x: (612 - ancho) / 2, y, size: tamaño, font: fuenteUsar, color: color || negro });
+    page.drawText(texto, { x: (612 - ancho) / 2, y, size: tamaño, font: fuenteUsar, color: colorTexto || navy });
   };
-  const filaTexto = (izq, der, tamaño, fuenteUsar, color) => {
-    page.drawText(izq, { x: 54, y, size: tamaño, font: fuenteUsar, color: color || negro });
+  const filaTexto = (izq, der, tamaño, fuenteUsar, colorTexto) => {
+    page.drawText(izq, { x: 54, y, size: tamaño, font: fuenteUsar, color: colorTexto || navy });
     if (der){
       const ancho = fuenteUsar.widthOfTextAtSize(der, tamaño);
-      page.drawText(der, { x: 612 - 54 - ancho, y, size: tamaño, font: fuenteUsar, color: color || negro });
+      page.drawText(der, { x: 612 - 54 - ancho, y, size: tamaño, font: fuenteUsar, color: colorTexto || navy });
     }
   };
-  const linea = () => { page.drawLine({ start: { x: 54, y }, end: { x: 612 - 54, y }, thickness: 0.75, color: rgb(0.7,0.7,0.7) }); };
+  const linea = (colorLinea, grosor) => { page.drawLine({ start: { x: 54, y }, end: { x: 612 - 54, y }, thickness: grosor || 0.75, color: colorLinea || lineaColor }); };
+  // Encabezado de sección con una barrita de color a la izquierda ("1",
+  // "2") en vez de solo texto — mismo acento visual que usan las tarjetas
+  // de la app (borde de color a la izquierda de section-card).
+  const seccionTitulo = (texto) => {
+    page.drawRectangle({ x: 54, y: y - 3, width: 4, height: 13, color: leaf });
+    page.drawText(texto, { x: 62, y, size: 10.5, font: fuenteNegrita, color: navy });
+  };
 
-  centrado("COMPROBANTE DE PAGO", 16, fuenteNegrita); y -= 20;
-  centrado(empresa?.EMPRESA || "", 11, fuenteNegrita); y -= 14;
+  centrado(empresa?.EMPRESA || (propiedad ? propiedad.nombre : ""), 11, fuenteNegrita); y -= 14;
   if (empresa?.CEDULA_JURIDICA_EMPRESA) { centrado(`Cédula Jurídica No. ${empresa.CEDULA_JURIDICA_EMPRESA}`, 9.5, fuente, gris); y -= 14; }
-  y -= 10; linea(); y -= 20;
+  y -= 8; linea(gold, 1.5); y -= 20;
 
   filaTexto("Empleado:", null, 9, fuente, gris); y -= 13;
   filaTexto(`${emp.NUMERO_EMPLEADO || "—"}   ${nombreCompletoEmpleado(emp)}`, periodoTxt, 10.5, fuenteNegrita); y -= 15;
   filaTexto(`${emp.DEPARTAMENTO_EMP || ""}  ·  Cédula: ${emp.IDENTIFICACION_EMP || "—"}`, `Salario mensual: ${fmtMontoColillaPDF(colilla.moneda === "USD" ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP, colilla.moneda)}`, 9.5, fuente, gris);
   y -= 24; linea(); y -= 20;
 
-  filaTexto("1 · DEVENGADOS", null, 10.5, fuenteNegrita); y -= 16;
+  seccionTitulo("1 · DEVENGADOS"); y -= 16;
   colilla.devengados.forEach(d => {
     filaTexto(`${d.label} (${d.cantidad} ${d.unidad})`, fmtMontoColillaPDF(d.monto, colilla.moneda), 10, fuente);
     y -= 15;
   });
   linea(); y -= 15;
-  filaTexto("Total Devengado", fmtMontoColillaPDF(colilla.totalDevengado, colilla.moneda), 10.5, fuenteNegrita); y -= 26;
+  filaTexto("Total Devengado", fmtMontoColillaPDF(colilla.totalDevengado, colilla.moneda), 10.5, fuenteNegrita, leaf); y -= 26;
 
-  filaTexto("2 · DEDUCCIONES", null, 10.5, fuenteNegrita); y -= 16;
+  seccionTitulo("2 · DEDUCCIONES"); y -= 16;
   colilla.deducciones.forEach(d => {
     filaTexto(d.label, "-" + fmtMontoColillaPDF(d.monto, colilla.moneda), 10, fuente);
     y -= 15;
   });
   linea(); y -= 15;
-  filaTexto("Total Deducciones", "-" + fmtMontoColillaPDF(colilla.totalDeducciones, colilla.moneda), 10.5, fuenteNegrita); y -= 30;
+  filaTexto("Total Deducciones", "-" + fmtMontoColillaPDF(colilla.totalDeducciones, colilla.moneda), 10.5, fuenteNegrita, gris); y -= 30;
 
-  page.drawRectangle({ x: 54, y: y - 8, width: anchoUtil, height: 26, borderColor: negro, borderWidth: 1 });
-  filaTexto("NETO A PAGAR", fmtMontoColillaPDF(colilla.neto, colilla.moneda), 12, fuenteNegrita); y -= 55;
+  page.drawRectangle({ x: 54, y: y - 10, width: anchoUtil, height: 30, color: navy });
+  filaTexto("NETO A PAGAR", fmtMontoColillaPDF(colilla.neto, colilla.moneda), 12.5, fuenteNegrita, blanco); y -= 57;
 
   filaTexto("Recibido: ______________________________", null, 10, fuente); y -= 30;
   page.drawText(`Comprobante generado internamente el ${fmtFecha(new Date().toISOString())} — es un estimado y no reemplaza el cálculo oficial de planilla.`, { x: 54, y, size: 7.5, font: fuente, color: gris, maxWidth: anchoUtil });
