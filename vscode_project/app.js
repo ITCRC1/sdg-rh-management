@@ -1482,7 +1482,7 @@ async function actualizarSaldoVacacionesInfo(){
     }
     const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
     const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === empKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
-    const diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, empKey);
+    const diasIncapacidad = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, empKey);
     const saldo = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidad, new Date());
     if (document.getElementById("vacaciones-saldo-info") !== box || currentEmpKeyForLetter !== empKey) return; // el panel cambió mientras cargaba
     box.innerHTML = `<div class="section-body" style="font-size:12px; color:var(--ink-soft);">
@@ -9301,11 +9301,18 @@ const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
 // simplificada que se usa acá del derecho a vacaciones del Art. 153 CT (2
 // semanas por cada 50 semanas laboradas).
 const ACUMULACION_MENSUAL_VACACIONES = 1; // días por mes trabajado
-// La ley no fija un tope de acumulación (Art. 159 CT solo limita cuándo se
-// puede APLAZAR tomarlas, no cuánto se puede juntar); 24 = dos años
-// completos sin tomar ni un día, como margen interno razonable antes de
-// obligar a que se usen — es un valor de configuración, ajustable.
-const TOPE_SALDO_VACACIONES = 24;
+// La ley no fija un número exacto de tope de acumulación (Art. 159 CT solo
+// limita cuándo se puede APLAZAR tomarlas más allá de las 15 semanas
+// siguientes a que se ganan, no cuánto se puede juntar en abstracto) — pero
+// permitir que se acumulen dos años completos (24 días) sin tomar ni uno
+// contradice ese espíritu de "hay que disfrutarlas con relativa prontitud,
+// no dejarlas guardadas indefinidamente". Por eso el tope interno de esta
+// empresa es de 12 días — exactamente UN año completo sin tomar ninguno
+// (12 = ACUMULACION_MENSUAL_VACACIONES × 12 meses): en cuanto alguien llega
+// ahí, ya lleva un año entero sin vacacionar y no se le acredita más hasta
+// que baje ese saldo. Es un valor de configuración de negocio, no una cifra
+// que exija la ley — pero pensado para forzar que se tomen a tiempo.
+const TOPE_SALDO_VACACIONES = 12;
 
 // El ciclo fijo compartido (1° de diciembre a 30 de noviembre) es una
 // política nueva que arranca este 1° de diciembre de 2026 — no aplica hacia
@@ -9390,12 +9397,14 @@ const TIPOS_INCAPACIDAD = {
 // salarioDiarioDeEmpleado) — nunca se captura a mano. montoAPagarPlanilla es
 // null solo si a ese empleado no se le había guardado un salario en su ficha.
 //
-// ⚠️ Los "días válidos para vacaciones" que exige este motor (todos los días
-// de enfermedad_comun/riesgo_trabajo/maternidad SÍ acumulan) contradicen a
-// calcularSaldoVacaciones, que hoy hace lo contrario por diseño (Art. 160
-// CT tal como se implementó ahí: un período con incapacidad NO acredita —
-// "pausa" en vez de "acumula"). Este motor se dejó aparte, sin tocar esa
-// función, hasta confirmar cuál de las dos reglas debe regir el saldo real.
+// diasValidosVacaciones ya coincide con la pausa real de
+// calcularSaldoVacaciones (ver diasIncapacidadQuePausanVacaciones): 0 para
+// enfermedad_comun/riesgo_trabajo (Art. 156/160 CT — no cuentan como tiempo
+// servido) y todos los días para maternidad (excepción expresa del Art. 95
+// CT, reformado 1995/1996 — el subsidio se equipara a salario para todos
+// los efectos). Antes este motor asumía que las tres acumulaban completo,
+// lo cual contradecía la pausa ya implementada en calcularSaldoVacaciones —
+// corregido para que ambas reglas coincidan.
 function calcularPagoIncapacidad(incapacidad){
   const dias = incapacidad.DIAS || 0;
   const salarioDiario = (incapacidad.SALARIO_DIARIO_PROMEDIO || incapacidad.SALARIO_DIARIO_PROMEDIO === 0) ? incapacidad.SALARIO_DIARIO_PROMEDIO : null;
@@ -9405,8 +9414,8 @@ function calcularPagoIncapacidad(incapacidad){
 
   switch (incapacidad.TIPO_INCAPACIDAD){
     case "enfermedad_comun": {
-      // Las vacaciones sí acumulan siempre por ley; el aguinaldo no.
-      diasValidosVacaciones = dias;
+      // No acumula vacaciones (pausa, Art. 160 CT); el aguinaldo tampoco.
+      diasValidosVacaciones = 0;
       diasValidosAguinaldo = 0;
       if (incapacidad.ES_PRORROGA){
         // Prórroga: todo asumido al 60% por la CCSS, el patrono paga 0.
@@ -9423,7 +9432,8 @@ function calcularPagoIncapacidad(incapacidad){
     }
     case "riesgo_trabajo": {
       // Todo lo asume el INS — el patrono no completa nada, en ninguna propiedad.
-      diasValidosVacaciones = dias;
+      // Tampoco acumula vacaciones (misma pausa que enfermedad_comun) ni aguinaldo.
+      diasValidosVacaciones = 0;
       diasValidosAguinaldo = 0;
       montoAPagarPlanilla = 0;
       break;
@@ -9623,6 +9633,7 @@ async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBol
     APROBADO_POR: email,
     FECHA_DECISION: new Date().toISOString(),
     INCAPACIDAD_KEY: key,
+    TIPO_INCAPACIDAD: tipo,
   });
   const tipoLabel = TIPOS_INCAPACIDAD[tipo].label;
   await agregarBitacora(empKey, `Incapacidad registrada (${tipoLabel}${esProrroga ? ", prórroga" : ""}): del ${fmtFecha(fechaInicio + "T00:00:00")} al ${fmtFecha(fechaFin + "T00:00:00")} (${dias} día(s))${numeroBoleta ? " — boleta " + numeroBoleta : ""}.`);
@@ -9804,6 +9815,24 @@ function diasIncapacidadAprobados(registrosHorasExtra, empKey){
     .map(r => r.FECHA);
 }
 
+// Subconjunto de lo anterior que sí pausa la acumulación de vacaciones
+// (para calcularSaldoVacaciones) — NO todas las incapacidades pausan por
+// igual:
+// - enfermedad_comun / riesgo_trabajo: Art. 156/160 CT — el período de
+//   incapacidad no cuenta como tiempo servido para vacaciones, se pausa.
+// - maternidad: excepción expresa del Art. 95 CT (reformado en 1995/1996)
+//   — el subsidio se equipara a salario para TODOS los efectos (vacaciones,
+//   aguinaldo, cesantía, preaviso); la trabajadora sigue acumulando como si
+//   estuviera trabajando, así que estos días NO pausan.
+// (Un registro histórico sin TIPO_INCAPACIDAD guardado, de antes de este
+// campo, cae en el default "pausa" — es el comportamiento que ya tenía el
+// sistema, no se le cambia nada a lo ya calculado.)
+function diasIncapacidadQuePausanVacaciones(registrosHorasExtra, empKey){
+  return registrosHorasExtra
+    .filter(r => r.EMPLEADO_KEY === empKey && r.TIPO_DIA === "incapacidad" && r.ESTADO === "aprobada" && r.TIPO_INCAPACIDAD !== "maternidad")
+    .map(r => r.FECHA);
+}
+
 // 1° de diciembre en o después de la fecha dada — el corte anual fijo que
 // comparten TODOS los empleados con más de 1 año de antigüedad (no cada
 // quien por su propio aniversario), tal como se definió el módulo.
@@ -9816,7 +9845,9 @@ function proximoPrimeroDeDiciembre(d){
 // acredita 1 día por cada mes completo trabajado (12 días/año); un período
 // con al menos un día de incapacidad aprobada NO acredita — Art. 160 CT: la
 // incapacidad pausa el cómputo del tiempo de servicio, no descuenta lo ya
-// ganado.
+// ganado. "diasIncapacidad" debe venir filtrado con
+// diasIncapacidadQuePausanVacaciones (no con diasIncapacidadAprobados a
+// secas) — la maternidad NO pausa por excepción expresa del Art. 95 CT.
 //
 // El PASO de los meses cambia según la antigüedad:
 // - Primer año: por aniversario personal (mismo día del mes que el
@@ -9887,9 +9918,10 @@ function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasI
   // Ajustes manuales (ver agregarAjusteVacaciones) — master/gerente corrige
   // el saldo a mano (típicamente para quitar un excedente que ya se sabe que
   // el empleado disfrutó fuera de este sistema, o para una corrección de
-  // arrastre). dias puede ser negativo (quitar) o positivo (otorgar) y se
-  // aplica directo, sin el tope de la acumulación automática — es una
-  // corrección deliberada, no una acreditación más.
+  // arrastre). dias puede ser negativo (quitar) o positivo (otorgar).
+  // Respeta el mismo tope que la acumulación automática (a pedido explícito
+  // — antes un ajuste positivo podía dejar el saldo por encima de
+  // TOPE_SALDO_VACACIONES a propósito; ya no).
   (empleado && empleado.AJUSTES_VACACIONES || []).forEach(a => {
     const fecha = new Date(a.fecha + "T00:00:00");
     if (fecha <= fechaCorte) eventos.push({ fecha, tipo: "ajuste", dias: a.dias || 0 });
@@ -9899,8 +9931,15 @@ function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasI
   let saldo = 0;
   eventos.forEach(ev => {
     if (ev.tipo === "acredita") saldo = Math.min(saldo + ev.dias, TOPE_SALDO_VACACIONES);
-    else if (ev.tipo === "ajuste") saldo = Math.max(0, saldo + ev.dias);
-    else saldo = Math.max(0, saldo - ev.dias);
+    else if (ev.tipo === "ajuste") saldo = Math.min(Math.max(0, saldo + ev.dias), TOPE_SALDO_VACACIONES);
+    // "usa" (una solicitud de vacaciones aprobada) NO tiene piso en 0 a
+    // propósito: si se aprueba más de lo acumulado, el saldo queda negativo
+    // (un adelanto) — jefatura/gerencia mantiene la libertad de otorgar más
+    // días de los acumulados (ver aprobarSolicitudAusencia/
+    // confirmarAsignacionDirecta, que avisan pero no bloquean), y ese
+    // negativo se va recuperando solo con la acumulación mensual de ahí en
+    // adelante, hasta volver a 0.
+    else saldo = saldo - ev.dias;
   });
   return saldo;
 }
@@ -10290,6 +10329,28 @@ async function asignarAusenciaDirecta({ empKey, tipo, fechaInicio, fechaFin, com
   return key;
 }
 
+// Antes de aprobar/asignar vacaciones, avisa si esto va a dejar el saldo en
+// negativo — NO bloquea (jefatura/gerencia mantiene la libertad de otorgar
+// más días de los que la persona lleva acumulados), solo informa antes de
+// confirmar. Ese negativo queda como un adelanto que se recupera solo con
+// la acumulación mensual de ahí en adelante (ver calcularSaldoVacaciones,
+// evento "usa"). Devuelve null si no hace falta avisar nada.
+async function advertenciaSaldoNegativoVacaciones(empKey, tipo, dias){
+  if (tipo !== "vacaciones") return null;
+  try{
+    const empRes = await window.storage.get(CATALOGS.empleados.prefix + empKey, false);
+    const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+    if (!emp) return null;
+    const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
+    const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === empKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+    const diasIncapacidad = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, empKey);
+    const saldoActual = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidad, new Date());
+    const saldoResultante = saldoActual - (dias || 0);
+    if (saldoResultante >= 0) return null;
+    return `${nombreCompletoEmpleado(emp)} tiene ${saldoActual} día(s) acumulados — esto la/lo deja en ${saldoResultante} día(s) (un adelanto). Ese saldo negativo se recupera solo con la acumulación mensual hasta volver a 0.\n\n¿Continuar de todas formas?`;
+  }catch(e){ return null; } // si algo falla revisando el saldo, no bloquea nada — solo no se pudo avisar
+}
+
 // Aprobación — exclusiva de gerencia/master (el servidor lo exige para
 // jefatura). Al aprobar se justifican los días en horas_extra: para que
 // cuenten en el reporte de planilla. Para SCP Corcovado Wilderness Lodge la
@@ -10301,6 +10362,10 @@ async function aprobarSolicitudAusencia(key){
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) return;
+    if (v.TIPO === "vacaciones"){
+      const aviso = await advertenciaSaldoNegativoVacaciones(v.EMPLEADO_KEY, v.TIPO, v.DIAS);
+      if (aviso && !confirm(aviso)) return;
+    }
     v.ESTADO = "aprobada";
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
@@ -10736,6 +10801,10 @@ async function confirmarAsignacionDirecta(){
   const inputComprobante = document.getElementById("asignacion-directa-comprobante");
   const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
   try{
+    if (tipo === "vacaciones" && fechaInicio && fechaFin && fechaFin >= fechaInicio){
+      const aviso = await advertenciaSaldoNegativoVacaciones(empKey, tipo, diasEntreFechasISO(fechaInicio, fechaFin));
+      if (aviso && !confirm(aviso)) return;
+    }
     let comprobanteDataUrl = null, comprobanteNombre = null;
     if (archivo){
       if (archivo.size > 3.5*1024*1024) throw new Error("El comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
@@ -10788,7 +10857,7 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
   const filas = empleados
     .map(e => {
       const solicitudesVacacionesAprobadas = todasLasSolicitudes.filter(s => s.EMPLEADO_KEY === e.key && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
-      const incap = diasIncapacidadAprobados(registrosHorasExtra, e.key);
+      const incap = diasIncapacidadQuePausanVacaciones(registrosHorasExtra, e.key);
       const saldo = calcularSaldoVacaciones(e, solicitudesVacacionesAprobadas, incap, hoy);
       return { emp: e, saldo };
     })
@@ -10800,7 +10869,9 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
       ${filas.map(f => {
         const nombreEsc = (nombreCompletoEmpleado(f.emp) || f.emp.key).replace(/'/g, "\\'");
         const bordeFila = "padding:5px 0; border-bottom:1px solid var(--paper-line);";
-        return `<div style="${bordeFila}">${escapeHtml(nombreCompletoEmpleado(f.emp)||f.emp.key)}</div><div style="${bordeFila} text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>${puedeAjustar ? `<div style="${bordeFila}"><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
+        const color = f.saldo < 0 ? "#b2703b" : (f.saldo >= TOPE_SALDO_VACACIONES ? "#b23b3b" : "var(--navy-deep)");
+        const etiqueta = f.saldo < 0 ? `${Math.abs(f.saldo)} día(s) 🔻 adelanto` : `${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}`;
+        return `<div style="${bordeFila}">${escapeHtml(nombreCompletoEmpleado(f.emp)||f.emp.key)}</div><div style="${bordeFila} text-align:right; font-weight:700; color:${color};" title="${f.saldo < 0 ? 'Saldo negativo: se le aprobaron/asignaron más días de los que tenía acumulados. Se recupera solo con la acumulación mensual hasta volver a 0.' : ''}">${etiqueta}</div>${puedeAjustar ? `<div style="${bordeFila}"><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
       }).join("")}
     </div>
   </div></div>`;
@@ -11025,7 +11096,7 @@ async function exportarReportePendientesNoTomados(){
     const hoy = new Date();
     const filas = empleados.filter(e => !e.ARCHIVADO).map(e => {
       const solicitudesVacacionesAprobadas = solicitudes.filter(s => s.EMPLEADO_KEY === e.key && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
-      const incap = diasIncapacidadAprobados(registrosHorasExtra, e.key);
+      const incap = diasIncapacidadQuePausanVacaciones(registrosHorasExtra, e.key);
       const saldo = calcularSaldoVacaciones(e, solicitudesVacacionesAprobadas, incap, hoy);
       return { emp: e, saldo };
     }).filter(f => f.saldo > 0).sort((a,b) => b.saldo - a.saldo);
@@ -11985,7 +12056,8 @@ async function renderPerfilEmpleado(){
       const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
       const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
       diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, perfilActualKey);
-      saldoVacaciones = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidad, new Date());
+      const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, perfilActualKey);
+      saldoVacaciones = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidadPausan, new Date());
       registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === perfilActualKey);
       resumenHorasExtra = {
         pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
@@ -12061,7 +12133,7 @@ async function renderPerfilEmpleado(){
       </div>
 
       <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr); margin-top:10px;">
-        <div class="kpi-card c-gold" style="cursor:pointer;" onclick="showTab('vacaciones')"><div class="ic">🏖️</div><div class="val">${saldoVacaciones}</div><div class="lbl">Día(s) de vacaciones disponibles</div></div>
+        <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}" style="cursor:pointer;" onclick="showTab('vacaciones')"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
         <div class="kpi-card c-warn" style="cursor:pointer;" onclick="showTab('horasextras')"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
         <div class="kpi-card c-navy" style="cursor:pointer;" onclick="showTab('horasextras')"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (histórico)</div></div>
       </div>
@@ -12074,7 +12146,7 @@ async function renderPerfilEmpleado(){
       ${prestaciones ? `<div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:4px;">💰 Estimados de prestaciones</div>
         <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antigüedad: ${prestaciones.antiguedad.años} año(s), ${prestaciones.antiguedad.meses} mes(es). Calculado sobre el salario actual de la ficha — es un estimado para presupuestar, no reemplaza el cálculo oficial de planilla ni el criterio de un contador.</div>
-        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🏖️ Vacaciones pendientes (${saldoVacaciones} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.vacacionesMonto, prestaciones.moneda)}</b></div>
+        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; ${saldoVacaciones < 0 ? "color:#B3261E;" : ""}"><span>${saldoVacaciones < 0 ? `🔻 Vacaciones en adelanto (${Math.abs(saldoVacaciones)} día(s) — se recupera solo con la acumulación mensual)` : `🏖️ Vacaciones pendientes (${saldoVacaciones} día(s))`}</span><b>${fmtMonedaEmpleado(prestaciones.vacacionesMonto, prestaciones.moneda)}</b></div>
         <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🎁 Aguinaldo proporcional (${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoFin)}, prorrateado a hoy)</span><b>${fmtMonedaEmpleado(prestaciones.aguinaldo.total, prestaciones.moneda)}</b></div>
         <div style="font-size:11px; color:var(--ink-soft); margin-top:8px; margin-bottom:2px;">⚖️ Si se le despidiera HOY con responsabilidad patronal (hipotético):</div>
         <div style="font-size:12.5px; padding:4px 0 4px 14px; ${prestaciones.saldoPrestamosPendientes > 0 ? "border-bottom:1px solid var(--paper-line);" : ""}display:flex; justify-content:space-between;"><span>Cesantía (${prestaciones.cesantia.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.cesantia.monto, prestaciones.moneda)}</b></div>
