@@ -4456,21 +4456,24 @@ function nombreCompletoEmpleado(emp){
   return apellidos ? `${nombre} ${apellidos}`.trim() : nombre;
 }
 
-// Heurística para partir un nombre completo en texto libre (ej. el que
-// trae una colilla de pago externa) en nombre de pila + apellidos: se
-// asume el formato más común en Costa Rica, "Nombre(s) Apellido1
-// Apellido2" — las últimas 2 palabras son los apellidos, el resto es el
-// nombre. Con exactamente 2 palabras se parte 1 y 1; con 1 sola palabra,
-// todo queda como nombre (no hay nada que partir). Es una heurística, no
-// una certeza — puede fallar con apellidos de una sola palabra o nombres
-// compuestos; por eso solo se usa para la corrección automática de un
-// typo ya detectado por coincidencia difusa contra un empleado existente
-// (ver emparejarRegistroColilla), nunca para adivinar de cero.
+// Heurística para partir un nombre completo en texto libre (ej. el que trae
+// una colilla de pago externa, o la columna "NOMBRE" de un CSV de carga
+// masiva) en apellidos + nombre de pila: se asume el formato oficial
+// costarricense — el que de hecho traen las colillas y cédulas — "Apellido1
+// Apellido2 Nombre(s)": las PRIMERAS 2 palabras son los apellidos, el resto
+// es el nombre (que sí puede tener varias palabras, ej. "Ivannia de los
+// Ángeles"). Con exactamente 2 palabras se parte 1 y 1 (apellido, nombre);
+// con 1 sola palabra, todo queda como nombre (no hay nada que partir). Es
+// una heurística, no una certeza — puede fallar con un solo apellido; por
+// eso solo se usa para la corrección automática de un typo ya detectado por
+// coincidencia difusa contra un empleado existente (ver
+// emparejarRegistroColilla), o para partir el nombre completo de una carga
+// masiva nueva, nunca para adivinar de cero sobre datos ya separados a mano.
 function dividirNombreCompleto(nombreCompleto){
   const palabras = String(nombreCompleto || "").trim().split(/\s+/).filter(Boolean);
   if (palabras.length <= 1) return { nombre: palabras.join(" "), apellidos: "" };
-  if (palabras.length === 2) return { nombre: palabras[0], apellidos: palabras[1] };
-  return { nombre: palabras.slice(0, -2).join(" "), apellidos: palabras.slice(-2).join(" ") };
+  if (palabras.length === 2) return { apellidos: palabras[0], nombre: palabras[1] };
+  return { apellidos: palabras.slice(0, 2).join(" "), nombre: palabras.slice(2).join(" ") };
 }
 
 // Filtro de búsqueda para un <select> largo de empleados: oculta (no
