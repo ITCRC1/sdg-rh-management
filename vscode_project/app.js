@@ -11087,6 +11087,43 @@ function renderSeccionDocumentosEmpleado(documentos){
   </div></div>`;
 }
 
+// Colillas de pago de ESTE empleado en particular, directo en su expediente
+// — mismo criterio de descarga individual/en bloque que ya usa "Ver
+// colillas archivadas" (mostrarModalColillasArchivadas), pero sin tener que
+// ir a buscarlo ahí entre todos los trabajadores. Las anuladas no cuentan
+// (ver "eliminar duplicados"), pero si un empleado no tiene ninguna vigente
+// igual se avisa en vez de desaparecer la sección sin explicación.
+function renderSeccionColillasEmpleado(documentos, empKey){
+  const colillas = documentos.filter(d => d.tipo === "colilla_pago" && !d.anulado_en)
+    .slice().sort((a,b) => (b.emitido_en||"").localeCompare(a.emitido_en||""));
+  if (!colillas.length){
+    return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:6px;">💰 Colillas de pago</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Sin colillas archivadas todavía para este empleado — se archivan solas al subir el PDF de planilla en el menú Datos.</div>
+    </div></div>`;
+  }
+  window._colillasPerfilCache = window._colillasPerfilCache || {};
+  window._colillasPerfilCache[empKey] = colillas;
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+      <div style="font-weight:700;">💰 Colillas de pago (${colillas.length})</div>
+      <button class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0;" onclick="descargarColillasDePerfil('${empKey.replace(/'/g,"\\'")}')">⬇️ Descargar todas</button>
+    </div>
+    ${colillas.map(d => `<div style="font-size:12px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+      <div>
+        <div>${d.emitido_en ? fmtFecha(d.emitido_en) : "—"}</div>
+        <div style="color:var(--ink-soft);">${escapeHtml(d.titulo || "")}</div>
+      </div>
+      <a class="btn" style="padding:4px 9px; font-size:10.5px; flex-shrink:0; text-decoration:none;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">⬇️</a>
+    </div>`).join("")}
+  </div></div>`;
+}
+
+async function descargarColillasDePerfil(empKey){
+  const colillas = (window._colillasPerfilCache && window._colillasPerfilCache[empKey]) || [];
+  await descargarVariasColillas(colillas);
+}
+
 // Agrupa fechas ISO ("AAAA-MM-DD") consecutivas en rangos — un empleado
 // incapacitado 5 días seguidos queda como un solo período, no 5 filas
 // sueltas. Más reciente primero.
@@ -11308,6 +11345,8 @@ async function renderPerfilEmpleado(){
         ${emp.ARCHIVADO && emp.SALIDA_PDF_FIRMADO ? `<button class="btn" style="width:100%; margin-top:6px;" onclick="descargarSalidaFirmada('${perfilActualKey}')">📎 Ver carta de salida firmada (${escapeHtml(emp.SALIDA_PDF_NOMBRE||'PDF')})</button>` : ""}
         ${emp.ARCHIVADO && emp.TIPO_SALIDA ? `<div class="hint" style="margin-top:6px;">Tipo de salida: <b>${escapeHtml(emp.TIPO_SALIDA)}</b>${!emp.SALIDA_PDF_FIRMADO ? " — sin carta firmada adjunta todavía." : ""}</div>` : ""}
       </div></div>
+
+      ${renderSeccionColillasEmpleado(documentosEmpleado, perfilActualKey)}
 
       ${renderSeccionDocumentosEmpleado(documentosEmpleado)}
 
