@@ -6291,8 +6291,12 @@ async function generarReporteHorarioPlanilla(){
     const puestosPorKey = {};
     puestosDB.forEach(p => { puestosPorKey[p.key] = p; });
 
+    // Orden alfabético por apellido — mismo criterio que usa el resto de
+    // listas de empleados del sistema (compararPorApellido). Antes ordenaba
+    // primero por departamento y el apellido solo desempataba dentro de
+    // cada uno, así que de un vistazo no se veía alfabético.
     const filas = calcularResumenQuincena(registros, empleados, rango)
-      .sort((a, b) => departamentoDeEmpleadoGenerico(a.emp, puestosPorKey).localeCompare(departamentoDeEmpleadoGenerico(b.emp, puestosPorKey), "es") || compararPorApellido(a.emp, b.emp));
+      .sort((a, b) => compararPorApellido(a.emp, b.emp));
 
     if (!filas.length){
       if (status) status.innerHTML = `No hay ningún empleado activo dentro de esa quincena.`;
@@ -10795,7 +10799,8 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
     <div style="display:grid; grid-template-columns:1fr auto${puedeAjustar ? " auto" : ""}; gap:4px 10px; align-items:center; font-size:12.5px;">
       ${filas.map(f => {
         const nombreEsc = (nombreCompletoEmpleado(f.emp) || f.emp.key).replace(/'/g, "\\'");
-        return `<div>${escapeHtml(nombreCompletoEmpleado(f.emp)||f.emp.key)}</div><div style="text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>${puedeAjustar ? `<div><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
+        const bordeFila = "padding:5px 0; border-bottom:1px solid var(--paper-line);";
+        return `<div style="${bordeFila}">${escapeHtml(nombreCompletoEmpleado(f.emp)||f.emp.key)}</div><div style="${bordeFila} text-align:right; font-weight:700; color:${f.saldo >= TOPE_SALDO_VACACIONES ? '#b23b3b' : 'var(--navy-deep)'};">${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}</div>${puedeAjustar ? `<div style="${bordeFila}"><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
       }).join("")}
     </div>
   </div></div>`;
