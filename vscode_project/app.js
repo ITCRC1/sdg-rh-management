@@ -5990,14 +5990,16 @@ async function generarColillaGeneradaIndividual(idx){
 async function generarColillasGeneradasColectivo(){
   const status = document.getElementById("colilla-gen-status");
   if (status) status.innerHTML = "Generando y archivando…";
-  let archivadas = 0, duplicadas = 0, fallidas = 0;
+  let archivadas = 0, duplicadas = 0;
+  const fallidas = []; // {nombre, mensaje} — para poder mostrar POR QUÉ falló, no solo cuántas
   try{
     const claves = await cargarClavesColillasArchivadas();
     for (let idx = 0; idx < colillasGeneradasCache.length; idx++){
+      const item = colillasGeneradasCache[idx];
       try{
-        const r = await archivarColillaGenerada(colillasGeneradasCache[idx], claves);
+        const r = await archivarColillaGenerada(item, claves);
         if (r.estado === "duplicada") duplicadas++; else archivadas++;
-      }catch(e){ fallidas++; }
+      }catch(e){ fallidas.push({ nombre: nombreCompletoEmpleado(item.fila.emp), mensaje: e.message }); }
     }
   }catch(e){
     if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
@@ -6005,8 +6007,8 @@ async function generarColillasGeneradasColectivo(){
   }
   if (status) status.innerHTML = `✅ ${archivadas} colilla(s) generada(s) y archivada(s)` +
     (duplicadas ? ` — ${duplicadas} ya existían, no se repitieron` : "") +
-    (fallidas ? ` — ${fallidas} fallaron` : "") + ".";
-  statusMsg(`${archivadas} colilla(s) generada(s) desde el sistema.`);
+    (fallidas.length ? ` — ⚠️ ${fallidas.length} fallaron: ${fallidas.map(f => `${escapeHtml(f.nombre)} (${escapeHtml(f.mensaje)})`).join("; ")}` : "") + ".";
+  statusMsg(`${archivadas} colilla(s) generada(s) desde el sistema.`, fallidas.length === 0);
 }
 
 function descargarBlobComoArchivo(blob, nombre){
@@ -7069,6 +7071,15 @@ const SIMBOLO_MONEDA_COLILLA = { CRC: "₡", USD: "$" };
 function fmtMontoColilla(monto, moneda){
   return (SIMBOLO_MONEDA_COLILLA[moneda] || "₡") + (Number(monto) || 0).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Igual que fmtMontoColilla, pero SOLO para texto que se dibuja dentro del
+// PDF con pdf-lib: la fuente estándar Helvetica (WinAnsiEncoding /
+// Windows-1252) no tiene el símbolo ₡ — intentar dibujarlo revienta con un
+// error de codificación. En pantalla (HTML) sí se puede usar ₡ sin problema,
+// por eso son dos funciones separadas en vez de una sola.
+function fmtMontoColillaPDF(monto, moneda){
+  const numero = (Number(monto) || 0).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (moneda === "USD" ? "$" : "C") + numero;
+}
 
 // Dibuja el PDF de una colilla desde cero (PDFDocument.create(), no a partir
 // de un archivo subido — a diferencia de archivarColillasPDF, que recorta
@@ -7107,27 +7118,27 @@ async function generarPdfColilla(empresa, emp, periodoTxt, colilla){
 
   filaTexto("Empleado:", null, 9, fuente, gris); y -= 13;
   filaTexto(`${emp.NUMERO_EMPLEADO || "—"}   ${nombreCompletoEmpleado(emp)}`, periodoTxt, 10.5, fuenteNegrita); y -= 15;
-  filaTexto(`${emp.DEPARTAMENTO_EMP || ""}  ·  Cédula: ${emp.IDENTIFICACION_EMP || "—"}`, `Salario mensual: ${fmtMontoColilla(colilla.moneda === "USD" ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP, colilla.moneda)}`, 9.5, fuente, gris);
+  filaTexto(`${emp.DEPARTAMENTO_EMP || ""}  ·  Cédula: ${emp.IDENTIFICACION_EMP || "—"}`, `Salario mensual: ${fmtMontoColillaPDF(colilla.moneda === "USD" ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP, colilla.moneda)}`, 9.5, fuente, gris);
   y -= 24; linea(); y -= 20;
 
   filaTexto("1 · DEVENGADOS", null, 10.5, fuenteNegrita); y -= 16;
   colilla.devengados.forEach(d => {
-    filaTexto(`${d.label} (${d.cantidad} ${d.unidad})`, fmtMontoColilla(d.monto, colilla.moneda), 10, fuente);
+    filaTexto(`${d.label} (${d.cantidad} ${d.unidad})`, fmtMontoColillaPDF(d.monto, colilla.moneda), 10, fuente);
     y -= 15;
   });
   linea(); y -= 15;
-  filaTexto("Total Devengado", fmtMontoColilla(colilla.totalDevengado, colilla.moneda), 10.5, fuenteNegrita); y -= 26;
+  filaTexto("Total Devengado", fmtMontoColillaPDF(colilla.totalDevengado, colilla.moneda), 10.5, fuenteNegrita); y -= 26;
 
   filaTexto("2 · DEDUCCIONES", null, 10.5, fuenteNegrita); y -= 16;
   colilla.deducciones.forEach(d => {
-    filaTexto(d.label, "-" + fmtMontoColilla(d.monto, colilla.moneda), 10, fuente);
+    filaTexto(d.label, "-" + fmtMontoColillaPDF(d.monto, colilla.moneda), 10, fuente);
     y -= 15;
   });
   linea(); y -= 15;
-  filaTexto("Total Deducciones", "-" + fmtMontoColilla(colilla.totalDeducciones, colilla.moneda), 10.5, fuenteNegrita); y -= 30;
+  filaTexto("Total Deducciones", "-" + fmtMontoColillaPDF(colilla.totalDeducciones, colilla.moneda), 10.5, fuenteNegrita); y -= 30;
 
   page.drawRectangle({ x: 54, y: y - 8, width: anchoUtil, height: 26, borderColor: negro, borderWidth: 1 });
-  filaTexto("NETO A PAGAR", fmtMontoColilla(colilla.neto, colilla.moneda), 12, fuenteNegrita); y -= 55;
+  filaTexto("NETO A PAGAR", fmtMontoColillaPDF(colilla.neto, colilla.moneda), 12, fuenteNegrita); y -= 55;
 
   filaTexto("Recibido: ______________________________", null, 10, fuente); y -= 30;
   page.drawText(`Comprobante generado internamente el ${fmtFecha(new Date().toISOString())} — es un estimado y no reemplaza el cálculo oficial de planilla.`, { x: 54, y, size: 7.5, font: fuente, color: gris, maxWidth: anchoUtil });
