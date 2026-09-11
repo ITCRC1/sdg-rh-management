@@ -5804,7 +5804,7 @@ async function renderPlanillaPanel(){
       const mesInputHoy = `${rangoHoy.inicio.getFullYear()}-${String(rangoHoy.inicio.getMonth() + 1).padStart(2, "0")}`;
       return `<div class="dash-panel" style="margin-bottom:14px; border-color:var(--leaf);">
       <div class="dash-panel-title">🧾 Generar colillas de pago (nuevo)</div>
-      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Arma la colilla acá mismo (Ordinario + Horas extra − CCSS Obrero 10.83% = Neto) en vez de subir el PDF de un proveedor externo — pensado para migrar poco a poco; "Subir / actualizar colillas" arriba sigue funcionando igual mientras tanto. No incluye recargo de feriado trabajado ni ninguna deducción aparte de CCSS — esas se agregan a mano por persona antes de generar.</div>
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Arma la colilla acá mismo (Ordinario + Feriado trabajado (doble) + Horas extra (normal 1.5x / triple en feriado) − CCSS Obrero 10.83% = Neto) en vez de subir el PDF de un proveedor externo — pensado para migrar poco a poco; "Subir / actualizar colillas" arriba sigue funcionando igual mientras tanto. No incluye ninguna deducción aparte de CCSS — esas se agregan a mano por persona antes de generar.</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Mes
           <input type="month" id="colilla-gen-mes" value="${mesInputHoy}">
@@ -5912,7 +5912,12 @@ function renderVistaPreviaColillasGeneradas(){
   cont.innerHTML = `<div style="font-size:12px; color:var(--ink-soft); margin:4px 0 8px;">${colillasGeneradasCache.length} empleado(s) — período ${escapeHtml(colillasGeneradasCache[0].periodoTxt)}.</div>
     <button class="btn primary" style="width:100%; margin-bottom:10px;" onclick="generarColillasGeneradasColectivo();">⚡ Generar y archivar TODAS (${colillasGeneradasCache.length})</button>
     ${colillasGeneradasCache.map((item, idx) => {
-      const horasExtraTxt = item.fila.horasExtra ? ` · Horas extra: ${fmtMontoColilla(item.colilla.devengados[1] ? item.colilla.devengados[1].monto : 0, item.colilla.moneda)}` : "";
+      // Los devengados extra (horas extra normales/en feriado, recargo de
+      // feriado trabajado) solo aparecen cuando aplican, así que el orden del
+      // arreglo varía — se buscan por label en vez de por índice fijo (antes
+      // asumía que "Horas extra" siempre era devengados[1], lo cual ya no es
+      // cierto desde que el recargo de feriado se intercala ahí).
+      const extrasTxt = item.colilla.devengados.slice(1).map(d => ` · ${d.label.replace(" (día doble)","").replace(" (triple)","")}: ${fmtMontoColilla(d.monto, item.colilla.moneda)}`).join("");
       const recurrentesHtml = item.deduccionesRecurrentes.map((d, dIdx) => `
         <label style="display:flex; align-items:center; gap:6px; font-size:11.5px; margin-top:3px;">
           <input type="checkbox" ${d.incluida ? "checked" : ""} onchange="toggleDeduccionRecurrenteColilla(${idx}, ${dIdx})">
@@ -5923,7 +5928,7 @@ function renderVistaPreviaColillasGeneradas(){
           <b>${escapeHtml(nombreCompletoEmpleado(item.fila.emp))}</b>
           <button class="btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="generarColillaGeneradaIndividual(${idx})">🧾 Generar esta colilla</button>
         </div>
-        <div style="color:var(--ink-soft); margin-top:2px;">Ordinario: ${fmtMontoColilla(item.colilla.devengados[0].monto, item.colilla.moneda)}${horasExtraTxt} · CCSS: -${fmtMontoColilla(item.colilla.deducciones[0].monto, item.colilla.moneda)}</div>
+        <div style="color:var(--ink-soft); margin-top:2px;">Ordinario: ${fmtMontoColilla(item.colilla.devengados[0].monto, item.colilla.moneda)}${extrasTxt} · CCSS: -${fmtMontoColilla(item.colilla.deducciones[0].monto, item.colilla.moneda)}</div>
         ${recurrentesHtml}
         <div style="display:flex; gap:6px; margin-top:4px; align-items:center; flex-wrap:wrap;">
           <input type="text" placeholder="Otra deducción puntual (ej. multa)" style="flex:1; min-width:140px;" id="colilla-gen-ded-label-${idx}" oninput="actualizarDeduccionExtraColilla(${idx})">
@@ -6295,7 +6300,7 @@ async function generarReporteHorarioPlanilla(){
 
     const prop = getPropiedadActual();
     const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
-    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Horas extra","Monto horas extra (₡)"];
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra","Monto horas extra (₡)","Monto feriado — doble + horas triples (₡)"];
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
@@ -6337,7 +6342,13 @@ async function generarReporteHorarioPlanilla(){
       // ese estimado: si el empleado gana en dólares, queda en blanco.
       const jornadaEmpleado = jornadaDiariaDePuesto(puestosPorKey[f.emp.PUESTO_KEY]);
       const salarioHora = f.emp.SALARIO_EMP ? (parseFloat(f.emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
-      const montoHorasExtra = (salarioHora && !isNaN(salarioHora)) ? Math.round(salarioHora * TARIFA_HORAS_EXTRA * f.horasExtra * 100) / 100 : "";
+      const salarioDiario = f.emp.SALARIO_EMP ? (parseFloat(f.emp.SALARIO_EMP) / 30) : null;
+      const horasExtraFeriado = f.horasExtraFeriado || 0;
+      const horasExtraNormal = Math.max(0, (f.horasExtra || 0) - horasExtraFeriado);
+      const montoHorasExtra = (salarioHora && !isNaN(salarioHora)) ? Math.round(salarioHora * TARIFA_HORAS_EXTRA * horasExtraNormal * 100) / 100 : "";
+      const montoFeriado = (salarioHora && salarioDiario && !isNaN(salarioHora))
+        ? Math.round(((f.diasFeriadosTrabajados || 0) * salarioDiario + horasExtraFeriado * salarioHora * TARIFA_HORAS_EXTRA_FERIADO) * 100) / 100
+        : "";
       const valores = [
         nombreCompletoEmpleado(f.emp),
         f.emp.NUMERO_EMPLEADO || "",
@@ -6348,8 +6359,10 @@ async function generarReporteHorarioPlanilla(){
         f.descPorTipo.ausencia_medica || 0,
         f.descPorTipo.ausencia || 0,
         `${f.diasLibresMes}/${DIAS_LIBRES_POR_MES}`,
-        Math.round(f.horasExtra * 100) / 100,
+        f.diasFeriadosTrabajados || 0,
+        Math.round(horasExtraNormal * 100) / 100,
         montoHorasExtra,
+        montoFeriado,
       ];
       const fila = ws.getRow(filaActual);
       valores.forEach((v, i) => {
@@ -6408,6 +6421,73 @@ const TIPOS_DIA_HORARIO = {
 // medio) — no es un dato por-empleado como la jornada, así que no hace
 // falta configurarla aparte.
 const TARIFA_HORAS_EXTRA = 1.5;
+
+// ---------- Feriados de ley de Costa Rica (pago obligatorio) ----------
+// Arts. 147-148 CT: estos feriados se pagan SIEMPRE, se trabajen o no; si se
+// trabajan, el día se paga doble y las horas extra de ese día se pagan
+// triple (1.5x normal × 2, el mismo recargo que el día). A propósito NO se
+// incluyen los feriados facultativos/no obligatorios (2 de agosto, y los
+// que la Ley 9875 trasladó a lunes por fomento turístico, ej. 31 de
+// agosto/1 de diciembre) — esos no llevan pago ni recargo garantizado por
+// ley; cada empresa decide aparte si los reconoce, así que mezclarlos acá
+// pagaría de más sin que la ley lo exija.
+const FERIADOS_LEY_CR_FIJOS = [
+  { mes: 1, dia: 1, label: "Año Nuevo" },
+  { mes: 4, dia: 11, label: "Día de Juan Santamaría" },
+  { mes: 5, dia: 1, label: "Día Internacional del Trabajador" },
+  { mes: 7, dia: 25, label: "Anexión del Partido de Nicoya" },
+  { mes: 8, dia: 15, label: "Día de la Madre" },
+  { mes: 9, dia: 15, label: "Día de la Independencia" },
+  { mes: 12, dia: 25, label: "Navidad" },
+];
+const TARIFA_HORAS_EXTRA_FERIADO = 3; // hora extra trabajada en feriado de pago obligatorio: pago triple
+
+// Domingo de Pascua para un año dado (algoritmo de Meeus/Jones/Butcher,
+// calendario gregoriano) — de ahí salen Jueves y Viernes Santo, los únicos
+// feriados de pago obligatorio que no caen en fecha fija cada año.
+function domingoDePascua(anio){
+  const a = anio % 19;
+  const b = Math.floor(anio / 100);
+  const c = anio % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(anio, mes - 1, dia);
+}
+
+// Todos los feriados de pago obligatorio de un año dado, como fecha ISO +
+// etiqueta. Se recalcula cada vez en vez de guardarse en algún catálogo,
+// para que nunca quede desactualizado ni haya que mantenerlo a mano año a
+// año (los fijos no cambian, y Jueves/Viernes Santo salen de la Pascua).
+function feriadosDeLeyDelAnio(anio){
+  const pascua = domingoDePascua(anio);
+  const juevesSanto = new Date(pascua); juevesSanto.setDate(pascua.getDate() - 3);
+  const viernesSanto = new Date(pascua); viernesSanto.setDate(pascua.getDate() - 2);
+  const feriados = FERIADOS_LEY_CR_FIJOS.map(f => ({
+    fecha: `${anio}-${String(f.mes).padStart(2, "0")}-${String(f.dia).padStart(2, "0")}`,
+    label: f.label,
+  }));
+  feriados.push({ fecha: isoDeFechaLocal(juevesSanto), label: "Jueves Santo" });
+  feriados.push({ fecha: isoDeFechaLocal(viernesSanto), label: "Viernes Santo" });
+  return feriados;
+}
+
+// Etiqueta del feriado de ley si fechaISO ("AAAA-MM-DD") cae en uno, o null.
+function feriadoLeyEnFecha(fechaISO){
+  if (!fechaISO) return null;
+  const anio = parseInt(fechaISO.slice(0, 4), 10);
+  if (!anio) return null;
+  const feriado = feriadosDeLeyDelAnio(anio).find(f => f.fecha === fechaISO);
+  return feriado ? feriado.label : null;
+}
 
 // La jornada diaria de referencia ya no es un solo número global: cada
 // puesto define su MODALIDAD_JORNADA al crearse (turno diurno 8h, mixto 7h,
@@ -7025,22 +7105,39 @@ function diasBaseParaEmpleadoEnQuincena(empleado, rango){
 // cuenta lo ya aprobado en definitiva (ESTADO "aprobada"), igual que el
 // resto de reportes de planilla, para no restar ni sumar nada que todavía
 // esté en revisión.
+//
+// Feriados de ley (ver feriadoLeyEnFecha): un día "laboral" que cae en uno
+// se cuenta en diasFeriadosTrabajados (para el recargo de día doble en
+// calcularColillaEmpleado) y sus horas extra van aparte en horasExtraFeriado
+// (pago triple) — SIN restarse de horasExtra, que sigue siendo el total
+// general para no romper los reportes que ya lo usan así. Un día en
+// "ausencia" (el default automático de un hueco sin marcar) que cae en un
+// feriado tampoco se descuenta: por ley el feriado se paga aunque no se
+// trabaje, así que no es una ausencia injustificada.
 function calcularResumenQuincena(registros, empleados, rango){
   const anioMes = `${rango.inicio.getFullYear()}-${String(rango.inicio.getMonth() + 1).padStart(2, "0")}`;
   return empleados.map(emp => {
     const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
-    if (!activo) return { emp, activo: false, horasExtra: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0 };
+    if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0 };
     const inicioISO = isoDeFechaLocal(activo.inicioEfectivo);
     const finISO = isoDeFechaLocal(activo.finEfectivo);
 
     const delEmpleadoEnRango = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
     const horasExtra = delEmpleadoEnRango.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+    const horasExtraFeriado = delEmpleadoEnRango
+      .filter(r => r.TIPO_DIA === "laboral" && feriadoLeyEnFecha(r.FECHA))
+      .reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+    let diasFeriadosTrabajados = 0;
     const descPorTipo = {};
     let totalDescuento = 0;
     let diasLibresQuincena = 0;
     delEmpleadoEnRango.forEach(r => {
       if (!esDiaBaseDePago(r.FECHA)) return; // día 31 "extra": no resta ni suma días base
       if (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"){ diasLibresQuincena++; return; } // día libre (programado por solicitud, o reclasificado a mano desde Horas Extra): no resta, se muestra aparte
+      if (feriadoLeyEnFecha(r.FECHA)){
+        if (r.TIPO_DIA === "laboral") diasFeriadosTrabajados++; // se paga doble, no se descuenta (ver calcularColillaEmpleado)
+        if (r.TIPO_DIA === "laboral" || r.TIPO_DIA === "ausencia") return; // trabajado o simplemente no marcado: ninguno de los dos se descuenta — el feriado se paga se trabaje o no
+      }
       if (!TIPOS_DIA_DESCUENTA_QUINCENA[r.TIPO_DIA]) return;
       descPorTipo[r.TIPO_DIA] = (descPorTipo[r.TIPO_DIA] || 0) + 1;
       totalDescuento++;
@@ -7049,7 +7146,7 @@ function calcularResumenQuincena(registros, empleados, rango){
 
     const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre") && r.FECHA.startsWith(anioMes)).length;
 
-    return { emp, activo: true, horasExtra, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
+    return { emp, activo: true, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
   }).filter(f => f.activo);
 }
 
@@ -7061,23 +7158,29 @@ function calcularResumenQuincena(registros, empleados, rango){
 // laborados × salario diario) se verificó contra una colilla real del
 // proveedor externo: 15 días × ₡12,466.67/día = ₡187,000 — coincide exacto.
 //
-// A propósito NO incluye "día feriado/libre laborado" (aparece en las
-// colillas del proveedor externo pero no hay forma de reconstruir esa
-// fórmula con los datos que este sistema guarda hoy) ni ninguna otra
-// deducción más allá de CCSS obrero — cualquier otra (plan dental,
-// préstamos, etc.) se agrega a mano por persona y por corrida, vía
-// `deduccionesExtra` ([{label, monto}, ...]), porque no hay ningún dato
-// guardado de eso en ningún catálogo.
+// Sí incluye el recargo de feriado trabajado (Art. 147-148 CT: día doble +
+// horas extra triples ese día — ver feriadoLeyEnFecha/diasFeriadosTrabajados
+// en calcularResumenQuincena) — antes no había forma de reconstruir esa
+// fórmula porque el sistema no sabía qué días eran feriados de ley. El resto
+// sigue igual: ninguna deducción más allá de CCSS obrero — cualquier otra
+// (plan dental, préstamos, etc.) se agrega a mano por persona y por corrida,
+// vía `deduccionesExtra` ([{label, monto}, ...]).
 function calcularColillaEmpleado(emp, filaResumenQuincena, jornadaEmp, deduccionesExtra){
   const { monto: salarioDiario, moneda } = salarioDiarioDeEmpleado(emp);
   const diasLaborados = filaResumenQuincena.diasLaborados || 0;
-  const horasExtra = filaResumenQuincena.horasExtra || 0;
+  const diasFeriadosTrabajados = filaResumenQuincena.diasFeriadosTrabajados || 0;
+  const horasExtraFeriado = filaResumenQuincena.horasExtraFeriado || 0;
+  const horasExtra = Math.max(0, (filaResumenQuincena.horasExtra || 0) - horasExtraFeriado);
   const montoOrdinario = diasLaborados * (salarioDiario || 0);
+  const montoRecargoFeriado = diasFeriadosTrabajados * (salarioDiario || 0);
   const salarioHora = jornadaEmp ? (salarioDiario || 0) / jornadaEmp : 0;
   const montoHorasExtra = horasExtra * salarioHora * TARIFA_HORAS_EXTRA;
+  const montoHorasExtraFeriado = horasExtraFeriado * salarioHora * TARIFA_HORAS_EXTRA_FERIADO;
 
   const devengados = [{ label: "Ordinario", cantidad: diasLaborados, unidad: "Días", monto: montoOrdinario }];
+  if (diasFeriadosTrabajados > 0) devengados.push({ label: "Recargo por feriado trabajado (día doble)", cantidad: diasFeriadosTrabajados, unidad: "Días", monto: montoRecargoFeriado });
   if (horasExtra > 0) devengados.push({ label: "Horas extra", cantidad: horasExtra, unidad: "Horas", monto: montoHorasExtra });
+  if (horasExtraFeriado > 0) devengados.push({ label: "Horas extra en feriado (triple)", cantidad: horasExtraFeriado, unidad: "Horas", monto: montoHorasExtraFeriado });
   const totalDevengado = devengados.reduce((s,d) => s + d.monto, 0);
 
   const ccssObrero = totalDevengado * DEDUCCION_CCSS;
@@ -7250,7 +7353,7 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
       <button id="resumen-quincena-toggle" class="btn" style="padding:2px 10px; font-size:14px; line-height:1.4; flex-shrink:0;" onclick="toggleResumenQuincena()" title="${resumenQuincenaColapsado ? "Mostrar" : "Ocultar"} la tabla">${resumenQuincenaColapsado ? "➕" : "➖"}</button>
     </div>
     <div id="resumen-quincena-cuerpo" style="${resumenQuincenaColapsado ? "display:none;" : ""}">
-    <p style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Días libres = TIPO_DIA "vacaciones" del módulo de Días Libres y Vacaciones, no resta de los días laborados. Horas extra = lo ya aprobado en definitiva en todo el rango.${notaDia31}</p>
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Días libres = TIPO_DIA "vacaciones" del módulo de Días Libres y Vacaciones, no resta de los días laborados. Horas extra = lo ya aprobado en definitiva en todo el rango. Feriados trabajados = feriados de ley (Art. 147-148 CT) con marca real ese día — se pagan doble (y sus horas extra, triple); si el feriado cae y NO se trabajó, tampoco se descuenta, se paga sencillo igual.${notaDia31}</p>
     <div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
       <thead><tr style="border-bottom:2px solid #ccc; text-align:left;">
@@ -7260,6 +7363,7 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
         <th style="padding:4px 8px; text-align:center;">Días libres (quincena)</th>
         <th style="padding:4px 8px; text-align:center;">Días libres (mes)</th>
         <th style="padding:4px 8px; text-align:center;">Horas extra</th>
+        <th style="padding:4px 8px; text-align:center;">🎉 Feriados trabajados</th>
       </tr></thead>
       <tbody>
         ${filas.map(f => {
@@ -7274,6 +7378,7 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
           <td style="padding:4px 8px; text-align:center;">${f.diasLibresQuincena || ""}</td>
           <td style="padding:4px 8px; text-align:center; font-size:11px;">${f.diasLibresMes}/${DIAS_LIBRES_POR_MES} ${notaMes}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700;">${f.horasExtra ? f.horasExtra.toFixed(1) : ""}</td>
+          <td style="padding:4px 8px; text-align:center; font-weight:700; ${f.diasFeriadosTrabajados ? 'color:#b2703b;' : ''}">${f.diasFeriadosTrabajados || ""}</td>
         </tr>`;
         }).join("")}
       </tbody>
@@ -7401,7 +7506,9 @@ async function renderHorasExtrasPanel(){
       const puesto = emp ? (emp.DEPARTAMENTO_EMP || "") : "";
       const jornadaEmpleado = jornadaDiariaDePuesto(emp && emp.PUESTO_KEY ? puestosPorKey[emp.PUESTO_KEY] : null);
       const salarioHora = (emp && emp.SALARIO_EMP) ? (parseFloat(emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
-      const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * TARIFA_HORAS_EXTRA * r.HORAS_EXTRA) : null;
+      const nombreFeriado = feriadoLeyEnFecha(r.FECHA);
+      const tarifaAplicable = nombreFeriado ? TARIFA_HORAS_EXTRA_FERIADO : TARIFA_HORAS_EXTRA;
+      const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * tarifaAplicable * r.HORAS_EXTRA) : null;
       const keyEsc = String(r.key).replace(/'/g, "\\'");
       const tipoDia = r.TIPO_DIA || "laboral";
       let acciones = "";
@@ -7444,7 +7551,7 @@ async function renderHorasExtrasPanel(){
       const infoLinea = (r.ESTADO === "pendiente" && r.INCOMPLETO)
         ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
         : (tipoDia === "laboral"
-          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}`
+          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}`
           : `${etiquetaTipo}${puesto ? " · " + escapeHtml(puesto) : ""}${r.ORIGEN === "permiso_sin_goce" ? " · generado desde la acción de personal" : ""}`);
       return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">
