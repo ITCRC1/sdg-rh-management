@@ -2530,6 +2530,12 @@ async function openCatalogForm(type, key){
     puestoSelectorBusqueda = "";
   }
   renderCatalogTab(type);
+  // El formulario se dibuja dentro del panel de su propio catálogo
+  // (#empleados-panel, #puestos-panel, etc.) — si esto se llama desde otra
+  // pestaña (ej. "Editar datos" desde el Expediente de un empleado), sin
+  // este showTab el formulario queda armado pero invisible, en una pestaña
+  // que nunca se muestra. El id de tab coincide siempre con el "type".
+  showTab(type);
 }
 
 function closeCatalogForm(type){
