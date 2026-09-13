@@ -5700,6 +5700,8 @@ async function mostrarModalEstadoCuentas(){
     body.innerHTML = `
       <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${conCuenta.length} de ${activos.length} empleados activos ya tienen su cuenta de acceso ("Mi Perfil").</div>
       ${sinCuenta.length ? `
+        <button class="btn primary" style="width:100%; margin-bottom:10px;" onclick="confirmarBackfillCuentasEmpleado()">🔑 Crear cuentas faltantes ahora</button>
+        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px;">Solo crea cuenta a quien ya tenga nombre, apellidos, cédula y número de empleado completos — normalmente empleados que ya existían de antes de que esto se automatizara y nunca se volvieron a guardar.</div>
         <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">⚠️ Sin cuenta (${sinCuenta.length})</div>
         ${sinCuenta.map(e => `
           <div style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--paper-line);">
@@ -5709,6 +5711,18 @@ async function mostrarModalEstadoCuentas(){
       ` : `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados activos con datos completos ya tienen cuenta.</div>`}
     `;
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista.</div>`; }
+}
+
+async function confirmarBackfillCuentasEmpleado(){
+  const body = document.getElementById("modal-incompletos-body");
+  body.innerHTML = `<div class="empty-state">Creando cuentas…</div>`;
+  try{
+    const r = await window.sdgApi.backfillCuentasEmpleado();
+    statusMsg(`Se crearon ${r.creadas} cuenta(s) nueva(s) de ${r.revisadas} expediente(s) revisado(s).`, true);
+  }catch(e){
+    statusMsg(e.message || "No se pudo crear las cuentas.", false);
+  }
+  await mostrarModalEstadoCuentas();
 }
 
 // "Ver/regenerar credenciales de acceso" desde el expediente de un empleado:

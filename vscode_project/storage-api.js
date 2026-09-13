@@ -273,6 +273,13 @@
       return sesion ? sesion.rol : null;
     },
 
+    // Crea de una vez las cuentas de los empleados que ya tenían sus datos
+    // completos desde antes de que existiera el alta automática (ver
+    // "Estado de cuentas de acceso" en app.js).
+    async backfillCuentasEmpleado() {
+      return pedir("/datos/_backfill-cuentas-empleado", { method: "POST" });
+    },
+
     async cambiarPassword(actual, nueva) {
       return pedir("/auth/password", {
         method: "POST",

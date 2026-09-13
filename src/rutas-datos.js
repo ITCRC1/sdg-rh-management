@@ -535,6 +535,51 @@ router.put("/:clave(*)", async (req, res, next) => {
 });
 
 // --------------------------------------------------------------------------
+// POST /api/datos/_backfill-cuentas-empleado — crea de una vez las cuentas
+// de todos los empleados activos que YA tenían nombre/apellidos/cédula/
+// número de empleado completos desde ANTES de que existiera el alta
+// automática (sincronizarCuentaEmpleado solo se dispara al GUARDAR el
+// expediente — un empleado que nunca se volvió a guardar después de este
+// cambio, nunca la disparó). Sin esto, RRHH tendría que abrir y volver a
+// guardar cada expediente uno por uno para que le aparezca la cuenta.
+// --------------------------------------------------------------------------
+router.post("/_backfill-cuentas-empleado", A.requiereEscritura, async (req, res, next) => {
+  try {
+    const propiedad = propiedadDe(req);
+    if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
+
+    const { rows } = await query(
+      `SELECT clave, valor FROM documentos
+        WHERE propiedad_id = $1 AND tipo = 'cat_empleado' AND eliminado_en IS NULL
+          AND valor_json->>'ARCHIVADO' IS DISTINCT FROM 'true'`,
+      [propiedad]
+    );
+
+    const vinculadasAntes = new Set(
+      (await query(
+        "SELECT empleado_clave FROM usuarios WHERE propiedad_id = $1 AND empleado_clave IS NOT NULL",
+        [propiedad]
+      )).rows.map((r) => r.empleado_clave)
+    );
+
+    for (const fila of rows) {
+      if (vinculadasAntes.has(fila.clave)) continue;
+      await sincronizarCuentaEmpleado(propiedad, fila.clave, fila.valor, null, req.usuario.id);
+    }
+
+    const vinculadasDespues = (await query(
+      "SELECT empleado_clave FROM usuarios WHERE propiedad_id = $1 AND empleado_clave IS NOT NULL",
+      [propiedad]
+    )).rows.map((r) => r.empleado_clave);
+    const creadas = vinculadasDespues.filter((c) => !vinculadasAntes.has(c)).length;
+
+    res.json({ revisadas: rows.length, creadas });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --------------------------------------------------------------------------
 // DELETE /api/datos/:clave — borrado LÓGICO
 //
 // Nunca se borra la fila: se marca eliminado_en. El histórico conserva todas
