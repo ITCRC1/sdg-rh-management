@@ -543,8 +543,10 @@ function mesEnIdioma(mesVal, lang){
 let currentKey = null; // key of the contract currently loaded (for "Actualizar")
 
 // ---------- PDF format config ----------
+// Ya no es configurable por la interfaz (se quitó el panel "Formato de la
+// hoja final") — queda fijo en estos valores para todos los documentos.
 const PDF_CONFIG_DEFAULT = { font: "Georgia, 'Times New Roman', serif", fontSize: "13.5", lineHeight: "1.15", margin: "0.75in", pageSize: "letter", cleanMode: false };
-let pdfConfig = Object.assign({}, PDF_CONFIG_DEFAULT);
+const pdfConfig = PDF_CONFIG_DEFAULT;
 
 function applyPdfConfigToDom(){
   document.documentElement.style.setProperty("--doc-font", pdfConfig.font);
@@ -554,40 +556,6 @@ function applyPdfConfigToDom(){
   document.body.classList.toggle("clean-mode", !!pdfConfig.cleanMode);
   const pageStyle = document.getElementById("dynamic-page-style");
   pageStyle.textContent = `@media print { @page { size: ${pdfConfig.pageSize}; margin: ${pdfConfig.margin}; } .doc{ padding: 0 !important; } }`;
-
-  const sel = (id) => document.getElementById(id);
-  if (sel("cfg-font")) sel("cfg-font").value = pdfConfig.font;
-  if (sel("cfg-fontsize")) sel("cfg-fontsize").value = pdfConfig.fontSize;
-  if (sel("cfg-lineheight")) sel("cfg-lineheight").value = pdfConfig.lineHeight;
-  if (sel("cfg-margin")) sel("cfg-margin").value = pdfConfig.margin;
-  if (sel("cfg-pagesize")) sel("cfg-pagesize").value = pdfConfig.pageSize;
-  if (sel("cfg-clean-off")) sel("cfg-clean-off").classList.toggle("active", !pdfConfig.cleanMode);
-  if (sel("cfg-clean-on")) sel("cfg-clean-on").classList.toggle("active", !!pdfConfig.cleanMode);
-}
-
-async function setPdfConfig(key, value){
-  pdfConfig[key] = value;
-  applyPdfConfigToDom();
-  try{
-    await window.storage.set("pdf-config", JSON.stringify(pdfConfig), false);
-  }catch(e){ /* best effort */ }
-}
-
-async function resetPdfConfig(){
-  pdfConfig = Object.assign({}, PDF_CONFIG_DEFAULT);
-  applyPdfConfigToDom();
-  try{ await window.storage.set("pdf-config", JSON.stringify(pdfConfig), false); }catch(e){}
-  statusMsg("Formato restaurado a los valores por defecto.");
-}
-
-async function loadPdfConfig(){
-  try{
-    const res = await window.storage.get("pdf-config", false);
-    if (res && res.value){
-      pdfConfig = Object.assign({}, PDF_CONFIG_DEFAULT, JSON.parse(res.value));
-    }
-  }catch(e){ /* no saved config yet, use defaults */ }
-  applyPdfConfigToDom();
 }
 
 // --------------------------------------------------------------------------
@@ -4236,7 +4204,7 @@ async function seleccionarPropiedad(id){
   data.EXCLUSIVIDAD_SI_NO = "NO";
   data.TIPO_CONTRATO = "indeterminado";
   await loadContentOverrides();
-  await loadPdfConfig();
+  applyPdfConfigToDom();
   renderForm();
   renderPreview();
   updateUpdateBtn();
@@ -4325,7 +4293,6 @@ function showTab(which){
   document.getElementById("vacaciones-wrap").style.display = "none";
   document.getElementById("despido-wrap").style.display = "none";
   document.getElementById("amonestacion-wrap").style.display = "none";
-  document.getElementById("format-panel").style.display = which === "format" ? "block" : "none";
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
@@ -4349,7 +4316,7 @@ function showTab(which){
     reporte:"reportes",
     estadisticas:"estadisticas",
     asistente:"asistente",
-    faq:"configuracion", format:"configuracion",
+    faq:"configuracion",
   };
   ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","horasextras","reportes","estadisticas","asistente","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
@@ -4359,7 +4326,6 @@ function showTab(which){
   if (which === "preview") renderPreview();
   if (which === "constancia") renderConstancia();
   if (which === "recomendacion") renderRecomendacion();
-  if (which === "format") applyPdfConfigToDom();
   if (which === "inicio") renderInicio();
   if (which === "contracts"){ renderSolicitudesList(); renderContractsList(); }
   if (which === "empresas") renderCatalogTab("empresas");
@@ -9149,7 +9115,7 @@ function cargarDatosDeContrato(loaded){
 }
 
 function mostrarSoloConstancia(){
-  ["inicio-panel","contracts-panel","form-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","format-panel"].forEach(id => {
+  ["inicio-panel","contracts-panel","form-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
   });
@@ -9380,7 +9346,7 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","format-panel","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
 const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar","vacacionesform-toolbar"];
 
 function mostrarSoloRecomendacion(){
@@ -13818,7 +13784,7 @@ async function continuarInicioApp(){
     return;
   }
   await loadContentOverrides();
-  await loadPdfConfig();
+  applyPdfConfigToDom();
   renderForm();
   renderPreview();
   updateUpdateBtn();

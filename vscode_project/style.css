@@ -72,7 +72,7 @@
     width:100%; padding:11px 2px; text-align:center; font-size:11px; font-weight:700;
     color:var(--ink-soft); background:none; border:none; cursor:pointer;
     border-bottom:3px solid transparent; transition:color .2s, border-color .2s;
-    line-height:1.25;
+    line-height:1.25; text-transform:uppercase;
   }
   .nav-dd-btn.active{ color:var(--navy); border-bottom-color:var(--gold); }
   .nav-caret{ font-size:10px; opacity:.7; }

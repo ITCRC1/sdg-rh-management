@@ -57,33 +57,16 @@
 <div class="app-header">
   <div onclick="showTab('inicio')" style="cursor:pointer;" title="Ir al Inicio">
     <div class="brand-tag" id="brand-tag">🏠 SDG RH Management · Osa Peninsula</div>
-    <h1>Generador de Contratos de Trabajo</h1>
+    <h1>Portal de RRHH Interinstitucional</h1>
   </div>
   <div id="propiedad-actual-badge-wrap"></div>
 </div>
 
 <div class="tabs navbar-dropdowns" id="main-navbar">
-  <button class="nav-dd-btn active" id="navbtn-inicio" onclick="navCloseAndRun(function(){ showTab('inicio'); })">🏠 1. Dashboard</button>
-
-  <button class="nav-dd-btn" id="navbtn-empleados" onclick="navCloseAndRun(function(){ showTab('empleados'); })">👥 2. Empleados</button>
-
-  <button class="nav-dd-btn" id="navbtn-expedientes" onclick="navCloseAndRun(function(){ showTab('perfil'); })">📁 3. Expedientes</button>
+  <button class="nav-dd-btn active" id="navbtn-inicio" onclick="navCloseAndRun(function(){ showTab('inicio'); })">🏠 Dashboard</button>
 
   <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-planilla" onclick="toggleNavMenu('planilla')">💰 4. Planilla <span class="nav-caret">▾</span></button>
-    <div class="nav-dd-menu" id="navmenu-planilla">
-      <button onclick="navCloseAndRun(function(){ showTab('planilla'); })">💰 Ver planilla y colillas</button>
-      <div class="nav-dd-sep">Importar / actualizar</div>
-      <button onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Ir al menú Datos</button>
-    </div>
-  </div>
-
-  <button class="nav-dd-btn" id="navbtn-vacaciones" onclick="navCloseAndRun(function(){ showTab('vacaciones'); })">🏖️ 5. Días libres y Vacaciones</button>
-  <button class="nav-dd-btn" id="navbtn-incapacidades" onclick="navCloseAndRun(function(){ showTab('incapacidades'); })">🤒 6. Incapacidades</button>
-  <button class="nav-dd-btn" id="navbtn-horasextras" onclick="navCloseAndRun(function(){ showTab('horasextras'); })">⏱️ 7. Horas extras</button>
-
-  <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-contratos" onclick="toggleNavMenu('contratos')">🗂️ 8. Contratos <span class="nav-caret">▾</span></button>
+    <button class="nav-dd-btn" id="navbtn-contratos" onclick="toggleNavMenu('contratos')">🗂️ Contratos <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-contratos">
       <button onclick="navCloseAndRun(function(){ showTab('contracts'); })">🗂️ Ver contratos guardados</button>
       <button onclick="navCloseAndRun(function(){ showTab('form'); })">📝 Formulario</button>
@@ -95,8 +78,25 @@
     </div>
   </div>
 
+  <button class="nav-dd-btn" id="navbtn-empleados" onclick="navCloseAndRun(function(){ showTab('empleados'); })">👥 Empleados</button>
+
+  <button class="nav-dd-btn" id="navbtn-expedientes" onclick="navCloseAndRun(function(){ showTab('perfil'); })">📁 Expedientes</button>
+
   <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-documentos" onclick="toggleNavMenu('documentos')">📑 9. Documentos <span class="nav-caret">▾</span></button>
+    <button class="nav-dd-btn" id="navbtn-planilla" onclick="toggleNavMenu('planilla')">💰 Planilla <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-planilla">
+      <button onclick="navCloseAndRun(function(){ showTab('planilla'); })">💰 Ver planilla y colillas</button>
+      <div class="nav-dd-sep">Importar / actualizar</div>
+      <button onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Ir al menú Datos</button>
+    </div>
+  </div>
+
+  <button class="nav-dd-btn" id="navbtn-vacaciones" onclick="navCloseAndRun(function(){ showTab('vacaciones'); })">🏖️ Días libres y Vacaciones</button>
+  <button class="nav-dd-btn" id="navbtn-incapacidades" onclick="navCloseAndRun(function(){ showTab('incapacidades'); })">🤒 Incapacidades</button>
+  <button class="nav-dd-btn" id="navbtn-horasextras" onclick="navCloseAndRun(function(){ showTab('horasextras'); })">⏱️ Horas extras</button>
+
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-documentos" onclick="toggleNavMenu('documentos')">📑 Documentos <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-documentos">
       <div class="nav-dd-sep">Despidos</div>
       <button onclick="navCloseAndRun(function(){ prepararDespidoTipo('con_responsabilidad'); })">⚖️ Despido — Con responsabilidad</button>
@@ -114,11 +114,11 @@
     </div>
   </div>
 
-  <button class="nav-dd-btn" id="navbtn-reportes" onclick="navCloseAndRun(function(){ showTab('reporte'); })">📊 10. Reportes</button>
-  <button class="nav-dd-btn" id="navbtn-estadisticas" onclick="navCloseAndRun(function(){ showTab('estadisticas'); })">📈 11. Estadísticas</button>
-  <button class="nav-dd-btn" id="navbtn-asistente" onclick="navCloseAndRun(function(){ showTab('asistente'); })">🤖 12. Asistente IA</button>
+  <button class="nav-dd-btn" id="navbtn-reportes" onclick="navCloseAndRun(function(){ showTab('reporte'); })">📊 Reportes</button>
+  <button class="nav-dd-btn" id="navbtn-estadisticas" onclick="navCloseAndRun(function(){ showTab('estadisticas'); })">📈 Estadísticas</button>
+  <button class="nav-dd-btn" id="navbtn-asistente" onclick="navCloseAndRun(function(){ showTab('asistente'); })">🤖 Asistente IA</button>
 
-  <div class="nav-dd-divider" title="No estaba en la numeración pedida — se deja aquí porque Planilla y Empleados dependen de poder importar datos."></div>
+  <div class="nav-dd-divider" title="Se deja aquí porque Planilla y Empleados dependen de poder importar datos."></div>
   <div class="nav-dd">
     <button class="nav-dd-btn" id="navbtn-datos" onclick="toggleNavMenu('datos')">📥 Datos <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-datos">
@@ -129,9 +129,8 @@
   </div>
 
   <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-configuracion" onclick="toggleNavMenu('configuracion')">🔧 13. Configuración <span class="nav-caret">▾</span></button>
+    <button class="nav-dd-btn" id="navbtn-configuracion" onclick="toggleNavMenu('configuracion')">🔧 Configuración <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-configuracion">
-      <button onclick="navCloseAndRun(function(){ showTab('format'); })">🎨 Formato de la hoja (PDF)</button>
       <button onclick="navCloseAndRun(function(){ showTab('faq'); })">❓ Preguntas de ley laboral</button>
       <div class="nav-dd-sep">Propiedad</div>
       <button id="nav-btn-cambiar-propiedad" onclick="navCloseAndRun(function(){ abrirPropiedadGate(); })">🏨 Cambiar de propiedad</button>
@@ -353,65 +352,6 @@
     <div class="doc-scroll"><div id="vacaciones-root"></div></div>
   </div>
 
-  <div id="format-panel" style="display:none;">
-    <div class="section-card">
-      <div class="section-head">Formato de la hoja final (PDF)</div>
-      <div class="section-body">
-        <p style="font-size:12px;color:var(--ink-soft);margin:0 0 4px;">Estos ajustes cambian cómo se ve la Vista previa y, por lo tanto, el PDF que descargas (el botón usa la impresión del navegador, así que lo que ves aquí es lo que se imprime).</p>
-        <div class="field">
-          <label>Tipografía del documento</label>
-          <select id="cfg-font" onchange="setPdfConfig('font', this.value)">
-            <option value="Georgia, 'Times New Roman', serif">Georgia (clásica)</option>
-            <option value="'Times New Roman', Times, serif">Times New Roman</option>
-            <option value="Cambria, Georgia, serif">Cambria</option>
-            <option value="Arial, Helvetica, sans-serif">Arial (sin serifa)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Tamaño de letra</label>
-          <select id="cfg-fontsize" onchange="setPdfConfig('fontSize', this.value)">
-            <option value="12">Pequeño (12px)</option>
-            <option value="13.5">Normal (13.5px)</option>
-            <option value="15">Grande (15px)</option>
-            <option value="16.5">Extra grande (16.5px)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Interlineado</label>
-          <select id="cfg-lineheight" onchange="setPdfConfig('lineHeight', this.value)">
-            <option value="1.15">Compacto (espaciado sencillo)</option>
-            <option value="1.3">Normal</option>
-            <option value="1.5">Amplio</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Márgenes de página</label>
-          <select id="cfg-margin" onchange="setPdfConfig('margin', this.value)">
-            <option value="0.4in">Angostos</option>
-            <option value="0.75in">Normales</option>
-            <option value="1.1in">Amplios</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Tamaño de papel</label>
-          <select id="cfg-pagesize" onchange="setPdfConfig('pageSize', this.value)">
-            <option value="letter">Carta</option>
-            <option value="a4">A4</option>
-            <option value="legal">Legal / Oficio</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Colores de revisión (rojo = falta, azul = completado)</label>
-          <div class="sino-toggle">
-            <button type="button" id="cfg-clean-off" onclick="setPdfConfig('cleanMode', false)">Mostrar (para revisar)</button>
-            <button type="button" id="cfg-clean-on" onclick="setPdfConfig('cleanMode', true)">Ocultar (documento final)</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <button class="btn" onclick="resetPdfConfig()" style="margin-bottom:20px;">↩️ Restaurar valores por defecto</button>
-    <p style="font-size:11.5px;color:var(--ink-soft); padding:0 4px 12px;">El PDF se genera exactamente igual a como se ve en la Vista previa (mismas columnas, colores y saltos de página). Si necesitas números de página automáticos, actívalos con la casilla "Encabezados y pies de página" del propio diálogo de impresión del navegador.</p>
-  </div>
 </main>
 
 </div><!-- /app-main -->
