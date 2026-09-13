@@ -304,7 +304,7 @@ async function abrirMiInformacion(){
     const propiedadOverride = (info.propiedadId && info.propiedadId !== currentPropiedadId)
       ? info.propiedadId
       : undefined;
-    body.innerHTML = await construirHtmlMiInformacion(empKey, propiedadOverride);
+    body.innerHTML = await construirHtmlMiInformacion(empKey, propiedadOverride, "modal-incompletos-body");
   }catch(e){
     body.innerHTML = `<div class="empty-state">No se pudo cargar tu información.</div>`;
   }
@@ -6642,6 +6642,39 @@ const HORAS_EXTRA_PREFIX = "horas_extra:";
 let horasExtraFiltro = "pendiente"; // pendiente | sinmatch | aprobada | rechazada
 let horasExtraEmpleadoSeleccionado = null; // key del empleado abierto en el detalle de "Pendientes" (vista lista → detalle)
 
+// Rango de fechas LIBRE (no una quincena fija) para los reportes/totales del
+// panel de Horas Extra — null,null hasta que se toque por primera vez, en
+// cuyo caso se arranca con la quincena actual como punto de partida cómodo,
+// pero queda 100% editable. Se aplica SOLO a lo que ya está resuelto
+// (aprobadas/rechazadas) — la cola de pendientes/por aprobar nunca se filtra
+// por fecha, para no perder de vista algo viejo que sigue sin resolverse.
+let horasExtraRangoDesde = null;
+let horasExtraRangoHasta = null;
+
+function asegurarRangoHorasExtraPorDefecto(){
+  if (horasExtraRangoDesde && horasExtraRangoHasta) return;
+  const q = rangoQuincenaActual();
+  horasExtraRangoDesde = isoDeFechaLocal(q.inicio);
+  horasExtraRangoHasta = isoDeFechaLocal(q.fin);
+}
+
+function enRangoHorasExtra(fechaISO){
+  if (!horasExtraRangoDesde || !horasExtraRangoHasta || !fechaISO) return true;
+  return fechaISO >= horasExtraRangoDesde && fechaISO <= horasExtraRangoHasta;
+}
+
+function cambiarRangoHorasExtra(campo, valor){
+  if (campo === "desde") horasExtraRangoDesde = valor || null;
+  else horasExtraRangoHasta = valor || null;
+  renderHorasExtrasPanel();
+}
+
+function limpiarRangoHorasExtra(){
+  horasExtraRangoDesde = null;
+  horasExtraRangoHasta = null;
+  renderHorasExtrasPanel();
+}
+
 // Cada registro de horas_extra: es un "día" (con o sin marca) al que
 // jefatura/gerencia le asigna un tipo antes de aprobarlo. "laboral" es el
 // valor por defecto de cualquier día importado con marcas; "ausencia" se
@@ -7676,11 +7709,18 @@ async function renderHorasExtrasPanel(){
       return (p && p.DEPARTAMENTO_MINISTERIO) || "Sin departamento";
     };
 
+    // La cola de trabajo (pendientes / esperando aprobación de gerencia /
+    // sin identificar) NUNCA se filtra por fecha — ahí es donde importa no
+    // perder de vista algo viejo que sigue sin resolverse. El rango de
+    // fechas (libre, no una quincena fija) solo acota lo que YA se resolvió
+    // (aprobadas/rechazadas), que es lo que hoy se veía como un total
+    // histórico de toda la vida en vez de por período.
+    asegurarRangoHorasExtraPorDefecto();
     const pendientes = registros.filter(r => r.ESTADO === "pendiente" && r.EMPLEADO_KEY);
     const sinMatch = registros.filter(r => r.ESTADO === "pendiente" && !r.EMPLEADO_KEY);
     const aprobadasJefatura = registros.filter(r => r.ESTADO === "aprobada_jefatura");
-    const aprobadas = registros.filter(r => r.ESTADO === "aprobada");
-    const rechazadas = registros.filter(r => r.ESTADO === "rechazada");
+    const aprobadas = registros.filter(r => r.ESTADO === "aprobada" && enRangoHorasExtra(r.FECHA));
+    const rechazadas = registros.filter(r => r.ESTADO === "rechazada" && enRangoHorasExtra(r.FECHA));
     const horasAprobadasTotal = aprobadas.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
 
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
@@ -7696,20 +7736,49 @@ async function renderHorasExtrasPanel(){
       <div style="font-size:12px; color:var(--ink-soft);">${esJefatura ? "Horas de tu equipo desde la máquina de marcación — apruébalas, corrígelas o recházalas. La aprobación final para planilla la hace gerencia." : "Importadas desde la máquina de marcación. Jefatura aprueba primero; gerencia da la aprobación final antes de que cuenten para el reporte de planilla."}</div>
     </div>`;
 
+    html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Rango — desde
+        <input type="date" value="${horasExtraRangoDesde || ""}" onchange="cambiarRangoHorasExtra('desde', this.value)">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+        <input type="date" value="${horasExtraRangoHasta || ""}" onchange="cambiarRangoHorasExtra('hasta', this.value)">
+      </label>
+      <button class="btn" onclick="limpiarRangoHorasExtra()">Ver todo (sin filtro)</button>
+      <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">Acota solo lo ya <b>aprobado</b> y <b>rechazado</b> de abajo — lo pendiente/por aprobar siempre se ve completo, sin importar cuándo pasó.</div>
+    </div></div>`;
+
+    // Empleados activos (del equipo, si es jefatura) sin NINGÚN registro —
+    // de ningún estado — dentro del rango elegido: señal de que a esa
+    // persona no se le importó/marcó nada en ese período, antes de que
+    // alguien note la ausencia hasta la hora de armar la planilla.
+    if (horasExtraRangoDesde && horasExtraRangoHasta){
+      let visiblesParaAviso = empleados.filter(e => !e.ARCHIVADO);
+      if (esJefatura) visiblesParaAviso = visiblesParaAviso.filter(e => departamentoDeEmpleado(e) === deptoJefatura);
+      const sinNingunRegistro = visiblesParaAviso.filter(e =>
+        !registros.some(r => r.EMPLEADO_KEY === e.key && enRangoHorasExtra(r.FECHA))
+      );
+      if (sinNingunRegistro.length){
+        html += `<div class="section-card" style="border-color:#D9A54A; margin-bottom:14px;"><div class="section-body">
+          <div style="font-weight:700; color:#8a6d1f; margin-bottom:4px;">⚠️ Sin ningún día registrado en el rango elegido (${sinNingunRegistro.length})</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${sinNingunRegistro.map(e => escapeHtml(nombreCompletoEmpleado(e) || e.key)).sort().join(", ")}</div>
+        </div></div>`;
+      }
+    }
+
     html += renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado);
 
     html += esJefatura
       ? `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">Esperando aprobación de gerencia</div></div>
-          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
+          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
         </div>`
       : `<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">${esGerente ? "Por aprobar (tuyo)" : "Por aprobar (gerencia)"}</div></div>
-          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (total)</div></div>
+          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
         </div>`;
 
@@ -12503,6 +12572,48 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
   </div></div>`;
 }
 
+// Rango de fechas LIBRE para "las horas extra aprobadas" en Mi información —
+// mismo criterio que el panel de aprobación (horasExtraRangoDesde/Hasta):
+// arranca en la quincena actual pero queda 100% editable, y solo acota lo ya
+// resuelto, nunca lo pendiente.
+let miInfoRangoDesde = null;
+let miInfoRangoHasta = null;
+// Contexto de la última "Mi información" renderizada, para poder
+// recalcularla sola cuando cambia el rango sin tener que reabrir el modal o
+// re-navegar a la pestaña.
+let miInfoContexto = null;
+
+function asegurarRangoMiInfoPorDefecto(){
+  if (miInfoRangoDesde && miInfoRangoHasta) return;
+  const q = rangoQuincenaActual();
+  miInfoRangoDesde = isoDeFechaLocal(q.inicio);
+  miInfoRangoHasta = isoDeFechaLocal(q.fin);
+}
+
+function enRangoMiInfo(fechaISO){
+  if (!miInfoRangoDesde || !miInfoRangoHasta || !fechaISO) return true;
+  return fechaISO >= miInfoRangoDesde && fechaISO <= miInfoRangoHasta;
+}
+
+async function reconstruirMiInformacion(){
+  if (!miInfoContexto) return;
+  const cont = document.getElementById(miInfoContexto.contenedorId);
+  if (!cont) return;
+  cont.innerHTML = await construirHtmlMiInformacion(miInfoContexto.empKey, miInfoContexto.propiedadOverride, miInfoContexto.contenedorId);
+}
+
+function cambiarRangoMiInformacion(campo, valor){
+  if (campo === "desde") miInfoRangoDesde = valor || null;
+  else miInfoRangoHasta = valor || null;
+  reconstruirMiInformacion();
+}
+
+function limpiarRangoMiInformacion(){
+  miInfoRangoDesde = null;
+  miInfoRangoHasta = null;
+  reconstruirMiInformacion();
+}
+
 // Arma el HTML de "mi información" (vacaciones, horas extra, días libres,
 // estimado de liquidación, documentos, incapacidades) para CUALQUIER rol —
 // es el mismo contenido de solo lectura que ya ve un empleado sobre sí
@@ -12510,7 +12621,12 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
 // "Mi información" (ver abrirMiInformacion). `propiedadOverride` solo lo usa
 // un master cuya propia ficha vive en una propiedad distinta a la que tiene
 // activa ahora mismo — para los demás roles llega undefined y no cambia nada.
-async function construirHtmlMiInformacion(empKey, propiedadOverride){
+// `contenedorId` es el id del elemento donde se está pintando esto — se
+// guarda en miInfoContexto para poder recalcular solo esto cuando cambia el
+// rango de fechas, sin perder el resto del estado de la pantalla.
+async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorId){
+  miInfoContexto = { empKey, propiedadOverride, contenedorId: contenedorId || "miperfil-panel" };
+  asegurarRangoMiInfoPorDefecto();
   if (!empKey){
     return `<div class="empty-state">No se pudo identificar tu expediente. Contacta a Recursos Humanos.</div>`;
   }
@@ -12536,7 +12652,8 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride){
     }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
     let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 },
-        diasIncapacidad = [], registrosDeEsteEmpleado = [], solicitudesPendientes = [];
+        diasIncapacidad = [], registrosDeEsteEmpleado = [], solicitudesPendientes = [],
+        registrosEnRangoMiInfo = [], pendientesEnRangoMiInfo = 0;
     try{
       const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([
         listarSolicitudesAusencia(propiedadOverride),
@@ -12551,8 +12668,18 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride){
       resumenHorasExtra = {
         pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
         aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
-        horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada").reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
+        // Solo lo pendiente queda sin filtrar (arriba) — las horas ya
+        // aprobadas se acotan al rango elegido (ver enRangoMiInfo), en vez
+        // de mostrar un total histórico de toda la vida.
+        horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada" && enRangoMiInfo(r.FECHA)).reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
       };
+      // Advertencias sobre el rango elegido: si hay horas todavía sin
+      // aprobar QUE CAEN en ese rango (aunque la cola general no se filtre
+      // por fecha, acá sí importa avisar que ese período en concreto tiene
+      // algo pendiente), o si no hay NINGÚN registro — señal de que la
+      // marcación de ese período quizás ni se ha importado todavía.
+      registrosEnRangoMiInfo = registrosDeEsteEmpleado.filter(r => enRangoMiInfo(r.FECHA));
+      pendientesEnRangoMiInfo = registrosEnRangoMiInfo.filter(r => r.ESTADO === "pendiente" || r.ESTADO === "aprobada_jefatura").length;
     }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
     const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
@@ -12594,13 +12721,26 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride){
       <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr); margin-top:10px;">
         <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
         <div class="kpi-card c-warn"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
-        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (histórico)</div></div>
+        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (rango elegido)</div></div>
       </div>
+
+      <div class="section-card" style="margin-top:10px;"><div class="section-body" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Rango de horas extra — desde
+          <input type="date" value="${miInfoRangoDesde || ""}" onchange="cambiarRangoMiInformacion('desde', this.value)">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+          <input type="date" value="${miInfoRangoHasta || ""}" onchange="cambiarRangoMiInformacion('hasta', this.value)">
+        </label>
+        <button class="btn" onclick="limpiarRangoMiInformacion()">Ver todo (sin filtro)</button>
+      </div></div>
+
+      ${(miInfoRangoDesde && miInfoRangoHasta && pendientesEnRangoMiInfo > 0) ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ ${pendientesEnRangoMiInfo} día(s) de horas extra de este rango todavía están pendientes de aprobación.</div></div>` : ""}
+      ${(miInfoRangoDesde && miInfoRangoHasta && registrosEnRangoMiInfo.length === 0) ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ No hay ningún día registrado en este rango — puede que la marcación de ese período todavía no se haya importado, o que no hayas tenido marca en esas fechas.</div></div>` : ""}
 
       ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesPendientes)}
 
       ${prestaciones ? `<div class="section-card" style="margin-top:10px;"><div class="section-body">
-        <div style="font-weight:700; margin-bottom:4px;">💰 Estimado de liquidación</div>
+        <div style="font-weight:700; margin-bottom:4px;">💰 Datos Monetarios</div>
         <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antigüedad: ${prestaciones.antiguedad.años} año(s), ${prestaciones.antiguedad.meses} mes(es). <b>Estimado informativo, no vinculante</b> — el monto final depende de la causa y fecha real de salida, y no reemplaza el cálculo oficial de planilla.</div>
         <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; ${saldoVacaciones < 0 ? "color:#B3261E;" : ""}"><span>${saldoVacaciones < 0 ? `🔻 Vacaciones en adelanto (${Math.abs(saldoVacaciones)} día(s))` : `🏖️ Vacaciones pendientes (${saldoVacaciones} día(s))`}</span><b>${fmtMonedaEmpleado(prestaciones.vacacionesMonto, prestaciones.moneda)}</b></div>
         <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🎁 Aguinaldo proporcional (${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoFin)})</span><b>${fmtMonedaEmpleado(prestaciones.aguinaldo.total, prestaciones.moneda)}</b></div>
