@@ -590,38 +590,153 @@ async function loadPdfConfig(){
   applyPdfConfigToDom();
 }
 
-// ---------- export / import all stored data ----------
-async function exportarPorPrefijos(prefijos, nombreArchivo, mensajeExtra){
-  const bundle = { _app: "generador_contratos_sdg", _version: 1, _exportedAt: new Date().toISOString() };
-  for (const prefix of prefijos){
-    try{
-      const res = await window.storage.list(prefix, false);
-      const keys = (res && res.keys) ? res.keys : [];
-      for (const k of keys){
-        try{
-          const r = await window.storage.get(k, false);
-          if (r && r.value !== undefined) bundle[k] = r.value;
-        }catch(e){ /* skip unreadable key */ }
-      }
-    }catch(e){ /* no items under this prefix yet */ }
-  }
-  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nombreArchivo + "_" + new Date().toISOString().slice(0,10) + ".json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  statusMsg(mensajeExtra || "Datos exportados.");
+// --------------------------------------------------------------------------
+// Extraer datos de Empleados a Excel, con casillas para elegir columnas
+// (reemplazó al volcado JSON crudo de antes — nadie podía hacer nada útil
+// con ese archivo). "Extraer Contratos" se quitó del todo: los contratos son
+// individuales, se descargan uno por uno desde su propio expediente, así que
+// no hacía falta un export masivo para ellos. Campos agrupados igual que el
+// formulario de edición de CATALOGS.empleados, pero con la clave REAL con la
+// que se guarda cada dato
+// (ej. FECHA_INGRESO_EMP, no FECHA_INGRESO_DATE, que es solo la clave del
+// control de fecha en el formulario) y sin los adjuntos (fotos en base64:
+// no tiene sentido meterlos en una celda de Excel).
+// --------------------------------------------------------------------------
+const CAMPOS_EXPORTAR_EMPLEADOS = [
+  { grupo: "Datos del puesto", campos: [
+    ["APELLIDOS_EMP", "Apellidos"],
+    ["NOMBRE_EMP", "Nombre"],
+    ["TIPO_IDENTIFICACION_EMP", "Tipo de identificación"],
+    ["IDENTIFICACION_EMP", "Cédula"],
+    ["DEPARTAMENTO_EMP", "Puesto / Departamento"],
+    ["NUMERO_EMPLEADO", "Número de empleado"],
+    ["FECHA_INGRESO_EMP", "Fecha de ingreso"],
+  ]},
+  { grupo: "Salario", campos: [
+    ["MONEDA_SALARIO_EMP", "Moneda del salario"],
+    ["SALARIO_EMP", "Salario (₡)"],
+    ["SALARIO_USD_EMP", "Salario (USD)"],
+  ]},
+  { grupo: "Contacto", campos: [
+    ["CELULAR_EMP", "Teléfono personal"],
+    ["CORREO_EMP", "Correo electrónico"],
+    ["DIRECCION_EMP", "Dirección"],
+  ]},
+  { grupo: "Cuenta bancaria", campos: [
+    ["BANCO_EMP", "Banco"],
+    ["NUMERO_CUENTA_EMP", "Número de cuenta"],
+  ]},
+  { grupo: "Datos personales", campos: [
+    ["ESTADO_CIVIL_EMP", "Estado civil"],
+    ["HIJOS_EMP", "Hijos"],
+    ["ENFERMEDAD_CRONICA_EMP", "Enfermedad crónica"],
+    ["MEDICAMENTOS_CRONICOS_EMP", "Medicamentos crónicos"],
+    ["FECHA_NACIMIENTO_EMP", "Fecha de nacimiento"],
+  ]},
+  { grupo: "Contacto de emergencia", campos: [
+    ["CONTACTO_EMERGENCIA_NOMBRE", "Nombre"],
+    ["CONTACTO_EMERGENCIA_ID", "Cédula"],
+    ["CONTACTO_EMERGENCIA_TEL", "Teléfono"],
+    ["CONTACTO_EMERGENCIA_PARENTESCO", "Parentesco"],
+  ]},
+  { grupo: "Estado", campos: [
+    ["FECHA_SALIDA_EMP", "Fecha de salida"],
+    ["ESTADO_EMP", "Estado"],
+    ["COMENTARIOS_EMP", "Comentarios"],
+  ]},
+];
+
+// Casillas marcadas por defecto — lo mínimo para identificar a alguien en
+// la hoja, el resto lo agrega quien lo necesite.
+const CAMPOS_EXPORTAR_EMPLEADOS_POR_DEFECTO = new Set(["APELLIDOS_EMP", "NOMBRE_EMP", "IDENTIFICACION_EMP", "NUMERO_EMPLEADO"]);
+
+function abrirModalExtraerEmpleadosExcel(){
+  const modal = document.getElementById("modal-incompletos");
+  const body = document.getElementById("modal-incompletos-body");
+  modal.querySelector(".modal-head span").textContent = "📊 Extraer datos de Empleados";
+  body.innerHTML = `
+    <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Elegí qué columnas incluir — una fila por empleado en el Excel.</div>
+    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Empleados a incluir
+        <select id="extraer-emp-estado">
+          <option value="activos" selected>Solo activos</option>
+          <option value="archivados">Solo archivados</option>
+          <option value="todos">Todos</option>
+        </select>
+      </label>
+      <button class="btn" onclick="marcarTodosCamposExtraer(true)">Seleccionar todo</button>
+      <button class="btn" onclick="marcarTodosCamposExtraer(false)">Ninguno</button>
+    </div>
+    ${CAMPOS_EXPORTAR_EMPLEADOS.map(g => `
+      <div style="margin-bottom:10px;">
+        <div style="font-weight:700; font-size:12.5px; margin-bottom:4px; color:var(--navy-deep);">${escapeHtml(g.grupo)}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px 16px;">
+          ${g.campos.map(([campo, label]) => `
+            <label style="font-size:12px; display:flex; align-items:center; gap:5px;">
+              <input type="checkbox" data-campo-extraer="${campo}"${CAMPOS_EXPORTAR_EMPLEADOS_POR_DEFECTO.has(campo) ? " checked" : ""}>
+              ${escapeHtml(label)}
+            </label>`).join("")}
+        </div>
+      </div>`).join("")}
+    <button class="btn primary" style="width:100%; margin-top:8px;" onclick="descargarExcelEmpleadosSeleccionado()">⬇️ Descargar Excel</button>
+    <div id="extraer-emp-status" style="font-size:12px; margin-top:8px;"></div>
+  `;
+  modal.classList.add("open");
 }
 
-async function exportarContratos(){
-  await exportarPorPrefijos(["contrato:", CATALOGS.empresas.prefix, CATALOGS.puestos.prefix, CATALOGS.propiedades.prefix], "contratos_sdg", "Contratos, empresas, puestos y propiedades exportados.");
+function marcarTodosCamposExtraer(marcar){
+  document.querySelectorAll('#modal-incompletos-body input[data-campo-extraer]').forEach(cb => { cb.checked = marcar; });
 }
-async function exportarEmpleados(){
-  await exportarPorPrefijos([CATALOGS.empleados.prefix], "empleados_sdg", "Lista de empleados exportada.");
+
+async function descargarExcelEmpleadosSeleccionado(){
+  const status = document.getElementById("extraer-emp-status");
+  const seleccionados = Array.from(document.querySelectorAll('#modal-incompletos-body input[data-campo-extraer]:checked'))
+    .map(cb => cb.dataset.campoExtraer);
+  if (!seleccionados.length){
+    if (status) status.textContent = "Elegí al menos una columna.";
+    return;
+  }
+  if (typeof ExcelJS === "undefined"){
+    if (status) status.textContent = "No se pudo cargar el generador de Excel. Recargá la página e intentá de nuevo.";
+    return;
+  }
+  if (status) status.textContent = "Generando…";
+  try{
+    const estadoFiltro = (document.getElementById("extraer-emp-estado") || {}).value || "activos";
+    const empleados = await cargarEmpleadosDB();
+    const filtrados = empleados
+      .filter(e => estadoFiltro === "activos" ? !e.ARCHIVADO : estadoFiltro === "archivados" ? !!e.ARCHIVADO : true)
+      .sort(compararPorApellido);
+
+    if (!filtrados.length){
+      status.textContent = "No hay ningún empleado que coincida con ese filtro.";
+      return;
+    }
+
+    const etiquetasPorCampo = {};
+    CAMPOS_EXPORTAR_EMPLEADOS.forEach(g => g.campos.forEach(([campo, label]) => { etiquetasPorCampo[campo] = label; }));
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "SDG RH Management";
+    const ws = wb.addWorksheet("EMPLEADOS");
+    ws.columns = seleccionados.map(campo => ({ header: etiquetasPorCampo[campo] || campo, key: campo, width: 22 }));
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9D9D9" } };
+
+    filtrados.forEach(emp => {
+      const fila = {};
+      seleccionados.forEach(campo => { fila[campo] = emp[campo] || ""; });
+      ws.addRow(fila);
+    });
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    descargarBlobComoArchivo(blob, `empleados_${estadoFiltro}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    status.textContent = `Descargado: ${filtrados.length} empleado(s), ${seleccionados.length} columna(s).`;
+  }catch(e){
+    if (status) status.textContent = "No se pudo generar el Excel: " + (e.message || "");
+  }
 }
 
 // ---------- catalogs: empresas, puestos, propiedades ----------
