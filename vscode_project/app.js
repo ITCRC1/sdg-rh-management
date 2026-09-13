@@ -6129,12 +6129,15 @@ async function renderPlanillaPanel(){
             <option value="2"${!rangoHoy.esPrimeraQuincena ? " selected" : ""}>2ª (día 16 al fin de mes)</option>
           </select>
         </label>
-        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Corte de datos (opcional)
-          <input type="date" id="horario-corte-datos">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Datos — desde (opcional)
+          <input type="date" id="horario-datos-desde">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Datos — hasta (opcional)
+          <input type="date" id="horario-datos-hasta">
         </label>
         <button class="btn primary" onclick="generarReporteHorarioPlanilla();">⬇️ Generar y descargar Excel</button>
       </div>
-      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px;">Si armás el reporte antes de que cierre el período, poné aquí hasta qué fecha ya está aprobado lo que se debe contar (incapacidad, permiso, cita médica, vacaciones, días libres) — vacío usa el período completo, igual que hoy. Los días base a pagar (15, o menos si entró/salió a mitad) nunca cambian por esto.</div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px;">Si armás el reporte antes de que cierre el período, o si el archivo real de marcación no calza con el calendario de la quincena (ej. corre del 27 al 12), poné aquí el rango real del que se debe tomar lo ya aprobado (incapacidad, permiso, cita médica, vacaciones, días libres) — vacío en ambos usa el período completo, igual que hoy. Los días base a pagar (15, o menos si entró/salió a mitad) nunca cambian por esto.</div>
       <div id="horario-status" style="font-size:12px;"></div>
     </div>`;
     })();
@@ -6155,12 +6158,15 @@ async function renderPlanillaPanel(){
             <option value="2"${!rangoHoy.esPrimeraQuincena ? " selected" : ""}>2ª (día 16 al fin de mes)</option>
           </select>
         </label>
-        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Corte de datos (opcional)
-          <input type="date" id="colilla-gen-corte-datos">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Datos — desde (opcional)
+          <input type="date" id="colilla-gen-datos-desde">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Datos — hasta (opcional)
+          <input type="date" id="colilla-gen-datos-hasta">
         </label>
         <button class="btn primary" onclick="calcularVistaPreviaColillasGeneradas();">🔍 Calcular vista previa</button>
       </div>
-      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px;">Si armás la colilla antes de que cierre el período, poné aquí hasta qué fecha ya está aprobado lo que se debe contar (incapacidad, permiso, cita médica, vacaciones, días libres) — vacío usa el período completo, igual que hoy. Los días base a pagar (15, o menos si entró/salió a mitad) nunca cambian por esto.</div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px;">Si armás la colilla antes de que cierre el período, o si el archivo real de marcación no calza con el calendario de la quincena (ej. corre del 27 al 12), poné aquí el rango real del que se debe tomar lo ya aprobado (incapacidad, permiso, cita médica, vacaciones, días libres) — vacío en ambos usa el período completo, igual que hoy. Los días base a pagar (15, o menos si entró/salió a mitad) nunca cambian por esto.</div>
       <div id="colilla-gen-status" style="font-size:12px; margin-bottom:6px;"></div>
       <div id="colillas-generadas-preview"></div>
     </div>`;
@@ -6197,12 +6203,15 @@ async function calcularVistaPreviaColillasGeneradas(){
     const [anio, mes1] = mesStr.split("-").map(Number);
     const rango = rangoQuincena(anio, mes1 - 1, quincenaStr !== "2");
 
-    // Corte de datos (opcional): para armar la colilla antes de que cierre
-    // el período — ver calcularResumenQuincena. No cambia cuántos días se
-    // pagan, solo hasta qué fecha ya cuenta lo aprobado.
-    const corteDatosStr = (document.getElementById("colilla-gen-corte-datos") || {}).value || "";
-    if (corteDatosStr && (corteDatosStr < isoDeFechaLocal(rango.inicio) || corteDatosStr > isoDeFechaLocal(rango.fin))){
-      if (status) status.innerHTML = `<span style="color:#b23b3b;">El corte de datos debe estar dentro de la quincena elegida.</span>`;
+    // Rango de datos (opcional, Desde/Hasta independientes): para armar la
+    // colilla antes de que cierre el período, o cuando el archivo real de
+    // marcación no calza con el calendario de la quincena — ver
+    // calcularResumenQuincena. No cambia cuántos días se pagan, solo qué
+    // registros aprobados ya cuentan.
+    const datosDesdeStr = (document.getElementById("colilla-gen-datos-desde") || {}).value || "";
+    const datosHastaStr = (document.getElementById("colilla-gen-datos-hasta") || {}).value || "";
+    if (datosDesdeStr && datosHastaStr && datosDesdeStr > datosHastaStr){
+      if (status) status.innerHTML = `<span style="color:#b23b3b;">"Desde" no puede ser posterior a "Hasta".</span>`;
       return;
     }
 
@@ -6224,15 +6233,14 @@ async function calcularVistaPreviaColillasGeneradas(){
       empresa = r && r.value ? JSON.parse(r.value) : null;
     }
 
-    const filas = calcularResumenQuincena(registros, empleados, rango, corteDatosStr || null).sort((a,b) => compararPorApellido(a.emp, b.emp));
+    const filas = calcularResumenQuincena(registros, empleados, rango, datosDesdeStr || null, datosHastaStr || null).sort((a,b) => compararPorApellido(a.emp, b.emp));
     if (!filas.length){
       if (status) status.innerHTML = "No hay ningún empleado activo dentro de esa quincena.";
       return;
     }
 
     const periodoInicio = `${String(rango.inicio.getDate()).padStart(2,"0")}/${String(rango.inicio.getMonth()+1).padStart(2,"0")}/${rango.inicio.getFullYear()}`;
-    const periodoTxt = `${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`
-      + (corteDatosStr ? ` — datos tomados hasta el ${fmtFechaDesdeDate(new Date(corteDatosStr + "T00:00:00"))}` : "");
+    const periodoTxt = `${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}` + textoRangoDatos(datosDesdeStr, datosHastaStr);
     colillasGeneradasCache = filas.map(fila => {
       const jornadaEmp = jornadaDiariaDePuesto(puestosPorKey[fila.emp.PUESTO_KEY]);
       // Deducciones recurrentes (plan dental, cuota de préstamo) de esta
@@ -6629,12 +6637,15 @@ async function generarReporteHorarioPlanilla(){
     const [anio, mes1] = mesStr.split("-").map(Number);
     const rango = rangoQuincena(anio, mes1 - 1, quincenaStr !== "2");
 
-    // Corte de datos (opcional): para armar el reporte antes de que cierre
-    // el período — ver calcularResumenQuincena. No cambia cuántos días se
-    // pagan, solo hasta qué fecha ya cuenta lo aprobado.
-    const corteDatosStr = (document.getElementById("horario-corte-datos") || {}).value || "";
-    if (corteDatosStr && (corteDatosStr < isoDeFechaLocal(rango.inicio) || corteDatosStr > isoDeFechaLocal(rango.fin))){
-      if (status) status.innerHTML = `<span style="color:#b23b3b;">El corte de datos debe estar dentro de la quincena elegida.</span>`;
+    // Rango de datos (opcional, Desde/Hasta independientes): para armar el
+    // reporte antes de que cierre el período, o cuando el archivo real de
+    // marcación no calza con el calendario de la quincena — ver
+    // calcularResumenQuincena. No cambia cuántos días se pagan, solo qué
+    // registros aprobados ya cuentan.
+    const datosDesdeStr = (document.getElementById("horario-datos-desde") || {}).value || "";
+    const datosHastaStr = (document.getElementById("horario-datos-hasta") || {}).value || "";
+    if (datosDesdeStr && datosHastaStr && datosDesdeStr > datosHastaStr){
+      if (status) status.innerHTML = `<span style="color:#b23b3b;">"Desde" no puede ser posterior a "Hasta".</span>`;
       return;
     }
 
@@ -6653,7 +6664,7 @@ async function generarReporteHorarioPlanilla(){
     // listas de empleados del sistema (compararPorApellido). Antes ordenaba
     // primero por departamento y el apellido solo desempataba dentro de
     // cada uno, así que de un vistazo no se veía alfabético.
-    const filas = calcularResumenQuincena(registros, empleados, rango, corteDatosStr || null)
+    const filas = calcularResumenQuincena(registros, empleados, rango, datosDesdeStr || null, datosHastaStr || null)
       .sort((a, b) => compararPorApellido(a.emp, b.emp));
 
     if (!filas.length){
@@ -6684,7 +6695,7 @@ async function generarReporteHorarioPlanilla(){
     ws.mergeCells(2, 1, 2, COLUMNAS.length);
     const subtituloCelda = ws.getCell(2, 1);
     subtituloCelda.value = `Horarios para planilla — ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena, del ${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`
-      + (corteDatosStr ? ` — datos tomados hasta el ${fmtFechaDesdeDate(new Date(corteDatosStr + "T00:00:00"))}` : "");
+      + textoRangoDatos(datosDesdeStr, datosHastaStr);
     subtituloCelda.font = { italic: true, size: 10 };
     subtituloCelda.alignment = { horizontal: "center", vertical: "middle" };
 
@@ -6745,7 +6756,7 @@ async function generarReporteHorarioPlanilla(){
     const nombreArchivo = `horarios_planilla_${mesStr}_q${rango.esPrimeraQuincena ? 1 : 2}.xlsx`;
     descargarBlobComoArchivo(blob, nombreArchivo);
     if (status) status.innerHTML = `Descargado: ${filas.length} empleado(s) de la ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena (${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)})`
-      + (corteDatosStr ? ` — datos hasta el ${fmtFechaDesdeDate(new Date(corteDatosStr + "T00:00:00"))}.` : ".");
+      + textoRangoDatos(datosDesdeStr, datosHastaStr) + ".";
   }catch(e){
     if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar el reporte: ${escapeHtml(e.message)}</span>`;
   }
@@ -7549,23 +7560,35 @@ function diasBaseParaEmpleadoEnQuincena(empleado, rango){
 // "ausencia" (el default automático de un hueco sin marcar) que cae en un
 // feriado tampoco se descuenta: por ley el feriado se paga aunque no se
 // trabaje, así que no es una ausencia injustificada.
-// `corteDatosISO` (opcional): para armar la planilla ANTES de que cierre el
-// período — acota hasta qué fecha ya cuentan los registros aprobados de
-// horas extra/incapacidad/permiso/cita médica/días libres. NUNCA toca
-// diasBaseParaEmpleadoEnQuincena (días base sigue siendo siempre el período
-// oficial completo, prorrateado solo por entrada/salida del empleado) — un
-// día dentro del período pero después del corte simplemente no se recoge
-// acá, así que ni resta (no entra a descPorTipo) ni se cuenta aparte (no
-// entra a diasLibresQuincena) — la misma regla que ya aplica hoy a un día
-// sin marca real: no se descuenta si nada lo justifica todavía.
-function calcularResumenQuincena(registros, empleados, rango, corteDatosISO){
+// `datosDesdeISO`/`datosHastaISO` (opcionales, independientes entre sí): para
+// armar la planilla ANTES de que cierre el período, o cuando el archivo de
+// marcación real no calza con el calendario de la quincena (el típico lee
+// del 27 al 12/13, no del 1 al 15) — reemplazan el rango en el que se buscan
+// los registros APROBADOS de horas extra/incapacidad/permiso/cita médica/
+// días libres. NUNCA tocan diasBaseParaEmpleadoEnQuincena (días base sigue
+// siendo siempre el período oficial completo, prorrateado solo por entrada/
+// salida del empleado) — un día que quede fuera de este rango de datos
+// simplemente no se recoge acá, así que ni resta (no entra a descPorTipo) ni
+// se cuenta aparte (no entra a diasLibresQuincena) — la misma regla que ya
+// aplica hoy a un día sin marca real: no se descuenta si nada lo justifica
+// todavía.
+// Frase corta para dejar constancia, en el propio Excel/vista previa, de que
+// esta corrida no tomó todo el período — ver calcularResumenQuincena.
+function textoRangoDatos(desdeStr, hastaStr){
+  if (!desdeStr && !hastaStr) return "";
+  const f = (s) => fmtFechaDesdeDate(new Date(s + "T00:00:00"));
+  if (desdeStr && hastaStr) return ` — datos del ${f(desdeStr)} al ${f(hastaStr)}`;
+  if (hastaStr) return ` — datos tomados hasta el ${f(hastaStr)}`;
+  return ` — datos tomados desde el ${f(desdeStr)}`;
+}
+
+function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, datosHastaISO){
   const anioMes = `${rango.inicio.getFullYear()}-${String(rango.inicio.getMonth() + 1).padStart(2, "0")}`;
   return empleados.map(emp => {
     const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
     if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0 };
-    const inicioISO = isoDeFechaLocal(activo.inicioEfectivo);
-    let finISO = isoDeFechaLocal(activo.finEfectivo);
-    if (corteDatosISO && corteDatosISO < finISO) finISO = corteDatosISO;
+    const inicioISO = datosDesdeISO || isoDeFechaLocal(activo.inicioEfectivo);
+    const finISO = datosHastaISO || isoDeFechaLocal(activo.finEfectivo);
 
     const delEmpleadoEnRango = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
     const horasExtra = delEmpleadoEnRango.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
@@ -7589,10 +7612,15 @@ function calcularResumenQuincena(registros, empleados, rango, corteDatosISO){
     });
     const diasLaborados = Math.max(0, activo.diasBase - totalDescuento);
 
+    // diasLibresMes cuenta el MES calendario completo (las dos quincenas),
+    // no solo este rango de datos — por eso solo respeta el tope superior
+    // (datosHastaISO), nunca el inferior (datosDesdeISO), que es específico
+    // de esta quincena y recortaría por error días libres de días anteriores
+    // del mismo mes.
     const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada"
       && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
       && r.FECHA.startsWith(anioMes)
-      && (!corteDatosISO || r.FECHA <= corteDatosISO)
+      && (!datosHastaISO || r.FECHA <= datosHastaISO)
     ).length;
 
     return { emp, activo: true, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
