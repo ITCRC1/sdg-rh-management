@@ -85,15 +85,15 @@
   <div class="nav-dd">
     <button class="nav-dd-btn" id="navbtn-planilla" onclick="toggleNavMenu('planilla')">💰 Planilla <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-planilla">
-      <button onclick="navCloseAndRun(function(){ showTab('planilla'); })">💰 Ver planilla y colillas</button>
-      <div class="nav-dd-sep">Importar / actualizar</div>
-      <button onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Ir al menú Datos</button>
+      <button id="navlink-planilla-ver" onclick="navCloseAndRun(function(){ showTab('planilla'); })">💰 Ver planilla y colillas</button>
+      <button onclick="navCloseAndRun(function(){ showTab('horasextras'); })">⏱️ Horas extras</button>
+      <div class="nav-dd-sep" id="navsep-planilla-datos">Importar / actualizar</div>
+      <button id="navlink-planilla-datos" onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Ir al menú Datos</button>
     </div>
   </div>
 
   <button class="nav-dd-btn" id="navbtn-vacaciones" onclick="navCloseAndRun(function(){ showTab('vacaciones'); })">🏖️ Días libres y Vacaciones</button>
   <button class="nav-dd-btn" id="navbtn-incapacidades" onclick="navCloseAndRun(function(){ showTab('incapacidades'); })">🤒 Incapacidades</button>
-  <button class="nav-dd-btn" id="navbtn-horasextras" onclick="navCloseAndRun(function(){ showTab('horasextras'); })">⏱️ Horas extras</button>
 
   <div class="nav-dd">
     <button class="nav-dd-btn" id="navbtn-documentos" onclick="toggleNavMenu('documentos')">📑 Documentos <span class="nav-caret">▾</span></button>

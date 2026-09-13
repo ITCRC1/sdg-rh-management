@@ -338,11 +338,20 @@ function aplicarModoSegunRol(rol){
   // servidor ya bloquea esos datos aparte; esto es para que la navegación
   // no ofrezca puertas cerradas).
   if (rol === "jefatura"){
-    ["navbtn-inicio","navbtn-empleados","navbtn-expedientes","navbtn-planilla",
+    ["navbtn-inicio","navbtn-empleados","navbtn-expedientes",
      "navbtn-contratos","navbtn-documentos","navbtn-reportes",
      "navbtn-estadisticas","navbtn-asistente","navbtn-datos"].forEach(id => {
       const el = document.getElementById(id);
       if (el) (el.closest(".nav-dd") || el).style.display = "none";
+    });
+    // "Horas extras" vive DENTRO del desplegable de Planilla — a diferencia
+    // del resto de arriba, ese desplegable no se esconde completo (jefatura
+    // sí necesita llegar a Horas extras desde ahí); se esconden nada más
+    // "Ver planilla y colillas" e "Ir al menú Datos", que sí siguen siendo
+    // exclusivos de master/gerente.
+    ["navlink-planilla-ver","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
     });
   }
 
@@ -4312,13 +4321,13 @@ function showTab(which){
     despidoform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos",
     datos:"datos",
     planilla:"planilla",
-    vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"horasextras",
+    vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla",
     reporte:"reportes",
     estadisticas:"estadisticas",
     asistente:"asistente",
     faq:"configuracion",
   };
-  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","horasextras","reportes","estadisticas","asistente","configuracion"].forEach(g => {
+  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","reportes","estadisticas","asistente","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
