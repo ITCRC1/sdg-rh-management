@@ -166,6 +166,24 @@ async function registrarAcceso({ email, usuarioId, evento, exito, detalle, ip, u
   }
 }
 
+const BITACORA_DIAS_RETENCION = 30;
+
+// El panel de Empleador solo muestra los últimos 5 eventos (ver
+// GET /api/auth/bitacora) — el resto se guarda igual, pero solo por un mes:
+// pasado ese tiempo se borra sola. No hace falta consultarla más atrás de
+// eso, y no tiene sentido acumular un historial de accesos indefinido.
+async function limpiarBitacoraVieja() {
+  try {
+    const { rowCount } = await query(
+      `DELETE FROM bitacora_accesos WHERE creado_en < now() - ($1 || ' days')::interval`,
+      [String(BITACORA_DIAS_RETENCION)]
+    );
+    if (rowCount) console.log(`Bitácora: se borraron ${rowCount} evento(s) de más de ${BITACORA_DIAS_RETENCION} días.`);
+  } catch (e) {
+    console.error("No se pudo limpiar la bitácora vieja:", e.message);
+  }
+}
+
 async function marcarIntentoFallido(usuarioId) {
   const { rows } = await query(
     `UPDATE usuarios
@@ -340,6 +358,7 @@ module.exports = {
   revocarSesion,
   revocarSesionesDe,
   registrarAcceso,
+  limpiarBitacoraVieja,
   marcarIntentoFallido,
   limpiarIntentos,
   leerCookie,

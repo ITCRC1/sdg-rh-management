@@ -251,7 +251,7 @@
       <h2>👤 Sesión activa</h2>
       <div id="sesion-info" class="hint"></div>
       <div style="display:flex; gap:8px; margin-top:12px;">
-        <button class="btn btn-mini" style="flex:1; margin:0;" onclick="location.href='/'">← Volver a contratos</button>
+        <button class="btn btn-mini" style="flex:1; margin:0;" onclick="location.href='/'">← Volver a propiedad</button>
         <button class="btn btn-mini" style="flex:1; margin:0;" onclick="hacerLogout()">Cerrar sesión</button>
       </div>
     </div>
@@ -306,7 +306,7 @@
 
     <div class="card">
       <h2>📋 Bitácora de accesos</h2>
-      <div class="hint">Últimos ingresos, salidas e intentos fallidos.</div>
+      <div class="hint">Los últimos 5 ingresos, salidas e intentos fallidos. El registro completo se guarda igual, pero solo por 30 días — pasado ese tiempo se borra solo.</div>
       <div id="lista-bitacora"><div class="hint">Cargando…</div></div>
     </div>
   </div>
@@ -620,7 +620,7 @@ async function resetearPassword(id, email){
 async function cargarBitacora(){
   const cont = document.getElementById("lista-bitacora");
   try{
-    const eventos = await api.usuarios.bitacora(40);
+    const eventos = await api.usuarios.bitacora(5);
     if (!eventos.length){ cont.innerHTML = `<div class="hint">Sin registros.</div>`; return; }
     cont.innerHTML = eventos.map(ev => `
       <div class="user-row">

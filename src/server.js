@@ -100,9 +100,18 @@ app.use((err, req, res, _next) => {
 // ---------------------------------------------------------------------------
 // Arranque
 // ---------------------------------------------------------------------------
+const BITACORA_LIMPIEZA_MS = 24 * 60 * 60 * 1000; // una vez al día basta
+
 async function arrancar() {
   await migrar();
   await crearAdminInicial();
+
+  // Purga los eventos de bitácora de más de 30 días (ver
+  // A.limpiarBitacoraVieja) — una vez al arrancar y luego una vez al día,
+  // mientras el proceso siga vivo.
+  A.limpiarBitacoraVieja();
+  const limpiezaBitacora = setInterval(() => A.limpiarBitacoraVieja(), BITACORA_LIMPIEZA_MS);
+  limpiezaBitacora.unref();
 
   const servidor = app.listen(PORT, HOST, () => {
     console.log("SDG Generador de Contratos escuchando en http://" + HOST + ":" + PORT);
@@ -110,6 +119,7 @@ async function arrancar() {
 
   const cerrar = async () => {
     console.log("Cerrando…");
+    clearInterval(limpiezaBitacora);
     servidor.close(async () => {
       try {
         await pool.end();
