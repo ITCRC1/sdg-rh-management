@@ -22,7 +22,7 @@
   // La propiedad activa de un usuario master vive en localStorage (la
   // fija app.js vía setPropiedadActual, clave "gcw:propiedad-actual") — el
   // servidor solo la respeta si el rol es master (rutas-datos.js: propiedadDe),
-  // así que mandarla de más para gerente/colaborador es inofensivo. Sin esto
+  // así que mandarla de más para los demás roles es inofensivo. Sin esto
   // ningún master podía guardar nada: el servidor siempre respondía "Sin
   // propiedad asignada" porque el parámetro nunca viajaba.
   function propiedadActivaParaApi() {
@@ -230,8 +230,10 @@
       return sesion;
     },
 
-    // Los colaboradores son de solo lectura. Esto solo sirve para ajustar la
-    // interfaz: el permiso real lo aplica el servidor en cada petición.
+    // jefatura y empleado son de solo lectura (jefatura con una excepción
+    // puntual en horas extra, que el servidor resuelve aparte). Esto solo
+    // sirve para ajustar la interfaz: el permiso real lo aplica el servidor
+    // en cada petición.
     puedeEditar() {
       return sesion ? sesion.rol === "master" || sesion.rol === "gerente" : false;
     },

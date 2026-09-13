@@ -48,7 +48,7 @@
   .badge-master{ background:#e6ddf0; color:#5b3f7a; }
   .badge-gerente{ background:#e7f0e2; color:#4C5D39; }
   .badge-jefatura{ background:#dcebf0; color:#2c5f70; }
-  .badge-colaborador{ background:#f0ece0; color:#8a7a52; }
+  .badge-empleado{ background:#f0ece0; color:#8a7a52; }
   .select-rol{ font-size:11.5px; padding:4px 6px; border-radius:7px; width:auto; }
   .hint{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
   #app{ display:none; }
@@ -268,7 +268,7 @@
       <input type="text" id="new-pass" placeholder="Mínimo 10 caracteres, letras y números">
       <label>Rol</label>
       <select id="new-rol" onchange="alCambiarRol()">
-        <option value="colaborador">Colaborador — solo lectura</option>
+        <option value="empleado">Colaborador (autoservicio) — solo su propio expediente</option>
         <option value="gerente">Gerente — lee, edita y sube archivos</option>
         <option value="jefatura">Jefatura — solo lectura + aprueba horas extra de su equipo</option>
         <option value="master">Master — todo lo anterior + gestiona usuarios + todas las propiedades</option>
@@ -283,6 +283,13 @@
         Debe coincidir con el departamento que tienen marcado los puestos de su equipo en el
         catálogo de Puestos (ej. "COCINA") — si no coincide, esta cuenta no verá las horas
         extra de nadie.
+      </div>
+      <div class="hint" id="new-empleado-hint" style="display:none;">
+        Esta cuenta normalmente se crea sola al guardar el empleado (con nombre, apellidos,
+        cédula y número de empleado completos) — usa este formulario solo si necesitas crearla
+        a mano. La cédula de arriba debe ser exactamente la misma que tiene el expediente; aun
+        así, esta cuenta no verá su expediente hasta que RRHH la vincule por API
+        (campo empleadoClave) — este panel todavía no tiene esa opción.
       </div>
       <button class="btn btn-gold" onclick="crearTrabajador()">Crear usuario</button>
       <div id="crear-msg"></div>
@@ -408,10 +415,10 @@ async function guardarPasswordNueva(){
 // Usuarios
 // ---------------------------------------------------------------------
 const ROLES = {
-  master:      { nombre: "Master",        desc: "Lee, edita, sube archivos, administra usuarios y ve todas las propiedades." },
-  gerente:     { nombre: "Gerente",       desc: "Lee, edita y sube archivos. No puede crear ni modificar usuarios." },
-  jefatura:    { nombre: "Jefatura",      desc: "Solo lectura, más aprobar, corregir o rechazar horas extra — pero solo las de su propio equipo." },
-  colaborador: { nombre: "Colaborador",   desc: "Solo lectura: puede consultar y descargar, pero no modificar nada." },
+  master:   { nombre: "Master",                     desc: "Lee, edita, sube archivos, administra usuarios y ve todas las propiedades." },
+  gerente:  { nombre: "Gerente",                     desc: "Lee, edita y sube archivos. No puede crear ni modificar usuarios." },
+  jefatura: { nombre: "Jefatura",                    desc: "Solo lectura, más aprobar, corregir o rechazar horas extra — pero solo las de su propio equipo." },
+  empleado: { nombre: "Colaborador (autoservicio)",  desc: "Solo lectura de su PROPIO expediente — vacaciones, horas extra, colillas y documentos. No ve el de nadie más." },
 };
 
 // Mismos departamentos que DEPARTAMENTOS_MINISTERIO en app.js (derivados del
@@ -445,6 +452,8 @@ function alCambiarRol(){
   if (esJefatura && !document.getElementById("new-puesto-jefatura").options.length){
     llenarSelectDepartamentos(document.getElementById("new-puesto-jefatura"));
   }
+
+  document.getElementById("new-empleado-hint").style.display = rol === "empleado" ? "" : "none";
 }
 
 async function cargarPropiedades(){
@@ -480,6 +489,10 @@ async function crearTrabajador(){
   }
   if (rol === "jefatura" && !datos.puesto){
     mostrarMsg("crear-msg", "Elige qué departamento lidera esta jefatura.", false);
+    return;
+  }
+  if (rol === "empleado" && !datos.cedula){
+    mostrarMsg("crear-msg", "La cédula es obligatoria para una cuenta de autoservicio — debe coincidir con la del expediente.", false);
     return;
   }
   mostrarMsg("crear-msg", "Creando…", true);

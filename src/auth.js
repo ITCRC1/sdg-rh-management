@@ -56,6 +56,33 @@ function validarPassword(password) {
 }
 
 // --------------------------------------------------------------------------
+// Credenciales autogeneradas para el alta automática del rol "empleado"
+//
+// Usuario = primera letra del nombre (mayúscula) + primer apellido completo.
+// Clave temporal = número de empleado (planilla), con ceros a la izquierda.
+// La clave resultante (solo dígitos) a propósito NO pasa por validarPassword
+// — es de un solo uso, forzada a cambiar en el primer ingreso
+// (debe_cambiar_password = true), no una clave elegida por una persona.
+// --------------------------------------------------------------------------
+function limpiarParaUsuario(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z]/g, "");
+}
+
+function generarUsuarioEmpleado(nombre, apellidos) {
+  const inicial = limpiarParaUsuario(nombre).slice(0, 1).toUpperCase();
+  const primerApellido = limpiarParaUsuario(String(apellidos || "").trim().split(/\s+/)[0]);
+  if (!inicial || !primerApellido) return "";
+  return inicial + primerApellido.charAt(0).toUpperCase() + primerApellido.slice(1).toLowerCase();
+}
+
+function generarClaveTemporalEmpleado(numeroEmpleado) {
+  return String(numeroEmpleado || "").replace(/\D/g, "").padStart(8, "0");
+}
+
+// --------------------------------------------------------------------------
 // Sesiones
 // --------------------------------------------------------------------------
 // En la BD se guarda solo el hash del token. Si alguien lograra leer la tabla
@@ -80,7 +107,7 @@ async function buscarSesion(token) {
   const { rows } = await query(
     `SELECT s.token_hash, s.expira_en,
             u.id, u.email, u.nombre, u.cedula, u.puesto,
-            u.propiedad_id, u.rol, u.activo, u.debe_cambiar_password
+            u.propiedad_id, u.rol, u.activo, u.debe_cambiar_password, u.empleado_clave
        FROM sesiones s
        JOIN usuarios u ON u.id = s.usuario_id
       WHERE s.token_hash = $1
@@ -224,6 +251,7 @@ async function requiereSesion(req, res, next) {
       propiedadId: sesion.propiedad_id,
       rol: sesion.rol,
       debeCambiarPassword: sesion.debe_cambiar_password,
+      empleadoClave: sesion.empleado_clave,
       ip: ipDe(req),
     };
     req.sesionToken = token;
@@ -239,18 +267,27 @@ async function requiereSesion(req, res, next) {
 //   master       lee, edita, sube archivos Y administra usuarios (ve todas
 //                las propiedades — antes se llamaba 'admin')
 //   gerente      lee, edita, sube archivos, solo su propiedad
-//   jefatura     como colaborador (solo lectura), MÁS puede aprobar/editar/
-//                rechazar horas extra — pero SOLO las de su propio equipo
-//                (los empleados cuyo puesto tiene como Jefatura inmediata el
-//                puesto que ocupa esta cuenta, en usuarios.puesto). Ese
-//                alcance no lo decide este archivo: lo aplica rutas-datos.js
-//                clave por clave, porque requiere resolver empleado→puesto.
-//   colaborador  solo lectura, solo su propiedad
+//   jefatura     solo lectura, MÁS puede aprobar/editar/rechazar horas extra
+//                — pero SOLO las de su propio equipo (los empleados cuyo
+//                puesto tiene como Jefatura inmediata el puesto que ocupa
+//                esta cuenta, en usuarios.puesto). Ese alcance no lo decide
+//                este archivo: lo aplica rutas-datos.js clave por clave,
+//                porque requiere resolver empleado→puesto.
+//   empleado     solo lectura de su PROPIO expediente (no el de los demás,
+//                ni el resto de "la página de RH"). La cuenta se crea sola
+//                al guardar el empleado en RRHH (ver rutas-datos.js);
+//                usuarios.empleado_clave guarda a cuál expediente queda
+//                amarrada. Ese alcance tampoco lo decide este archivo: lo
+//                aplica rutas-datos.js clave por clave. Es el único rol para
+//                trabajadores fuera de RRHH — no existe un rol de solo
+//                lectura de TODOS los empleados (se quitó "colaborador" a
+//                propósito: nadie ajeno a RRHH/gerencia debía ver el
+//                expediente de otros).
 //
 // Estas comprobaciones son las que de verdad mandan. Que el front esconda
 // botones es comodidad visual: quien manipule la petición choca aquí.
 // --------------------------------------------------------------------------
-const ROLES = ["master", "gerente", "jefatura", "colaborador"];
+const ROLES = ["master", "gerente", "jefatura", "empleado"];
 const PUEDEN_ESCRIBIR = new Set(["master", "gerente"]);
 
 function rolValido(rol) {
@@ -267,7 +304,9 @@ function requiereAdmin(req, res, next) {
   next();
 }
 
-// Bloquea a los colaboradores en todo lo que modifique o suba algo.
+// Bloquea a las cuentas de solo lectura (jefatura, empleado) en todo lo que
+// modifique o suba algo — salvo las excepciones puntuales que rutas-datos.js
+// resuelve clave por clave (ej. jefatura aprobando horas extra de su equipo).
 function requiereEscritura(req, res, next) {
   if (!PUEDEN_ESCRIBIR.has(req.usuario?.rol)) {
     return res.status(403).json({
@@ -294,6 +333,8 @@ module.exports = {
   hashPassword,
   verificarPassword,
   validarPassword,
+  generarUsuarioEmpleado,
+  generarClaveTemporalEmpleado,
   crearSesion,
   buscarSesion,
   revocarSesion,

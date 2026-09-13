@@ -68,16 +68,24 @@ servidor esté arriba, igual que el resto de la app.
 
 ## Roles
 
-| Rol | Leer | Editar y subir | Administrar usuarios | Propiedades |
+| Rol | Leer | Editar y subir | Administrar usuarios | Alcance |
 |---|---|---|---|---|
-| **Master** | sí | sí | sí | todas (fija con cuál trabaja en Ajustes) |
-| **Gerente** | sí | sí | no | solo la suya |
-| **Colaborador** | sí | no | no | solo la suya |
+| **Master** | sí | sí | sí | todas las propiedades (fija con cuál trabaja en Ajustes) |
+| **Gerente** | sí | sí | no | solo su propiedad |
+| **Jefatura** | sí | solo horas extra de su equipo | no | solo su propiedad, solo su departamento |
+| **Empleado** | solo su propio expediente | no | no | solo su propiedad, solo su propio registro |
 
-Los tres permisos los aplica el **servidor** en cada petición. La interfaz
-esconde botones y marca la app en modo solo lectura para los colaboradores,
-pero eso es comodidad visual: quien manipule la petición choca igual contra el
-permiso del backend.
+Ya no existe un rol de solo lectura de TODOS los empleados de la propiedad
+(el antiguo "Colaborador") — se retiró a propósito: nadie fuera de
+RRHH/gerencia debía ver el expediente de otra persona. Quien necesite
+autoservicio (ver su propio perfil, vacaciones, colillas, documentos) usa el
+rol **Empleado**, cuya cuenta se crea sola al guardarse su ficha en RRHH
+(usuario = primera letra del nombre + primer apellido, clave temporal = su
+número de empleado).
+
+Todos estos permisos los aplica el **servidor** en cada petición. La interfaz
+esconde botones y ajusta la navegación según el rol, pero eso es comodidad
+visual: quien manipule la petición choca igual contra el permiso del backend.
 
 Los roles se asignan desde `empleador.html`. Un cambio de rol surte efecto de
 inmediato, sin que la persona tenga que volver a entrar.

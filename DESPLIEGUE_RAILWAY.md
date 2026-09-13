@@ -143,12 +143,17 @@ las credenciales de la base de datos.
 |---|---|---|---|---|
 | **Master** | sí | sí | sí | todas |
 | **Gerente** | sí | sí | no | solo la suya |
-| **Colaborador** | sí | no | no | solo la suya |
+| **Jefatura** | sí | solo horas extra de su equipo | no | solo la suya, solo su departamento |
+| **Empleado** | solo su propio expediente | no | no | solo la suya, solo su propio registro |
 
 El master además puede consultar cualquier propiedad — pero tiene que fijar
 con cuál está trabajando en cada momento (menú Ajustes → Cambiar de
-propiedad); esa elección viaja en cada llamada a la API. Gerentes y
-colaboradores no eligen nada: su propiedad es la que tiene fija su cuenta.
+propiedad); esa elección viaja en cada llamada a la API. Gerentes, jefaturas
+y empleados no eligen nada: su propiedad es la que tiene fija su cuenta.
+
+Ya no existe un rol de solo lectura de todos los empleados de la propiedad
+(el antiguo "Colaborador") — quien necesita autoservicio usa "Empleado", cuya
+cuenta se crea sola al guardarse su ficha en RRHH.
 
 Los permisos los aplica el servidor en cada petición (`requiereEscritura`,
 `requiereAdmin`). El front esconde botones y marca la app en modo solo lectura,

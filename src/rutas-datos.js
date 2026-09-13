@@ -109,7 +109,7 @@ async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departam
 // siempre. jefatura: solo horas_extra: de su propio departamento (guardado
 // en usuarios.puesto — pese al nombre de la columna, para una cuenta de
 // jefatura ese campo guarda el departamento que lidera, no un puesto
-// puntual). Cualquier otro caso (incluido colaborador) queda fuera.
+// puntual). Cualquier otro caso (incluido empleado) queda fuera.
 //
 // Excepción por encima de todo lo anterior: el paso a ESTADO "aprobada" en
 // horas_extra: (la aprobación FINAL, la que hace que un día cuente para el
@@ -194,13 +194,109 @@ async function filtrarFilasPorEquipo(filas, propiedad, puestoLider) {
 // documentos, otros catálogos, etc.).
 const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, COINCIDENCIA_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
 
-// ¿Puede leer esta clave (o este prefijo de listado)? true para todos los
-// roles salvo jefatura, que solo puede si arranca con uno de los prefijos
-// permitidos arriba — así una jefatura no puede pedir prefijo="" (listaría
-// todo) ni un prefijo más corto que además matchee catálogos ajenos.
+// Un "empleado" (portal de autoservicio) no tiene "página de RH" tampoco —
+// solo su propio expediente (cat_empleado:<su clave>, exacta, nunca la lista
+// completa), el catálogo de puestos (para mostrar su puesto/departamento) y
+// sus propias filas de horas_extra:/solicitud_ausencia:/incapacidad: — nunca
+// las de un compañero. Ese último filtro lo hace filtrarFilasPropias/el gate
+// por fila de abajo, comparando contra usuario.empleadoClave (no hay
+// "departamento" que resolver: el alcance ya se fijó al crear la cuenta).
+const PREFIJOS_LECTURA_EMPLEADO = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
+
+// ¿Puede leer esta clave (o este prefijo de listado)? true para master y
+// gerente. jefatura y empleado solo pueden si el prefijo pedido arranca con
+// uno de los permitidos arriba — así ninguno de los dos puede pedir
+// prefijo="" (listaría todo) ni un prefijo más corto que además matchee
+// catálogos ajenos.
 function puedeLeerClaveOPrefijo(usuario, claveOPrefijo) {
-  if (usuario.rol !== "jefatura") return true;
-  return PREFIJOS_LECTURA_JEFATURA.some((permitido) => claveOPrefijo.startsWith(permitido));
+  if (usuario.rol === "jefatura") {
+    return PREFIJOS_LECTURA_JEFATURA.some((permitido) => claveOPrefijo.startsWith(permitido));
+  }
+  if (usuario.rol === "empleado") {
+    return PREFIJOS_LECTURA_EMPLEADO.some((permitido) => claveOPrefijo.startsWith(permitido));
+  }
+  return true;
+}
+
+// ¿Esta clave es del propio empleado dueño de esta cuenta (o un dato general
+// de puesto, que no es privado de nadie)? Se usa tanto para filtrar listados
+// como para el gate de GET /:clave — a diferencia de jefatura, no hace falta
+// resolver nada en la base de datos: el alcance quedó fijo en
+// usuario.empleadoClave desde que se creó la cuenta.
+function esClavePropiaDeEmpleado(clave, empleadoClave) {
+  if (clave.startsWith(PUESTO_PREFIX)) return true;
+  if (!empleadoClave) return false;
+  if (clave === empleadoClave) return true;
+  const empKey = empleadoClave.slice(EMPLEADO_PREFIX.length);
+  if (!empKey) return false;
+  return (
+    clave.startsWith(HORAS_EXTRA_PREFIX + empKey + ":") ||
+    clave.startsWith(SOLICITUD_AUSENCIA_PREFIX + empKey + ":") ||
+    clave.startsWith(INCAPACIDAD_PREFIX + empKey + ":")
+  );
+}
+
+function filtrarFilasPropias(filas, empleadoClave) {
+  return filas.filter((f) => esClavePropiaDeEmpleado(f.clave, empleadoClave));
+}
+
+// --------------------------------------------------------------------------
+// Alta automática de la cuenta "empleado" al guardar un cat_empleado:* que ya
+// trae nombre, apellidos, cédula y número de empleado completos (ese último
+// campo suele llegar vacío al crear el expediente y completarse después, al
+// importar planilla/colillas — por eso esto se revisa en CADA guardado, no
+// solo al crear el registro). Si ya existe una cuenta para esa cédula en esa
+// propiedad (de cualquier rol) no se toca nada — nunca se re-provisiona ni se
+// pisa una cuenta existente. Un fallo aquí nunca debe tumbar el guardado del
+// empleado: se registra en log y RRHH puede crear la cuenta a mano después.
+// --------------------------------------------------------------------------
+async function provisionarUsuarioEmpleadoSiHaceFalta(propiedad, clave, valorJson, actorId) {
+  if (!clave.startsWith(EMPLEADO_PREFIX)) return;
+  let emp;
+  try {
+    emp = JSON.parse(valorJson);
+  } catch (e) {
+    return;
+  }
+  const nombre = String(emp?.NOMBRE_EMP || "").trim();
+  const apellidos = String(emp?.APELLIDOS_EMP || "").trim();
+  const cedula = String(emp?.IDENTIFICACION_EMP || "").trim();
+  const numeroEmpleado = String(emp?.NUMERO_EMPLEADO || "").trim();
+  if (!nombre || !apellidos || !cedula || !numeroEmpleado) return;
+
+  try {
+    const existente = await query(
+      "SELECT id FROM usuarios WHERE propiedad_id = $1 AND cedula = $2",
+      [propiedad, cedula]
+    );
+    if (existente.rows[0]) return;
+
+    const base = A.generarUsuarioEmpleado(nombre, apellidos);
+    if (!base) return;
+
+    // El usuario (reutiliza la columna email) es único en todo el sistema,
+    // no solo por propiedad — resuelve choques sumando un número al final:
+    // MVargas, MVargas2, MVargas3...
+    let email = base;
+    let sufijo = 1;
+    for (;;) {
+      const enUso = await query("SELECT 1 FROM usuarios WHERE lower(email) = lower($1)", [email]);
+      if (!enUso.rows[0]) break;
+      sufijo += 1;
+      email = base + sufijo;
+    }
+
+    const password = A.generarClaveTemporalEmpleado(numeroEmpleado);
+    await query(
+      `INSERT INTO usuarios (email, nombre, cedula, puesto, propiedad_id, rol,
+                             password_hash, creado_por, debe_cambiar_password, empleado_clave)
+       VALUES ($1,$2,$3,$4,$5,'empleado',$6,$7,true,$8)`,
+      [email, `${apellidos} ${nombre}`.trim(), cedula, emp.DEPARTAMENTO_EMP || null, propiedad,
+       A.hashPassword(password), actorId || null, clave]
+    );
+  } catch (e) {
+    console.error("No se pudo crear la cuenta de empleado automáticamente:", e.message);
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -228,6 +324,10 @@ router.get("/", async (req, res, next) => {
     // pidiendo el mismo prefijo que vería un master/gerente.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
       (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX));
+    // Un empleado solo ve sus propias filas — nunca las de un compañero,
+    // aunque pida el mismo prefijo que vería un master/gerente.
+    const filtrarPropias = req.usuario.rol === "empleado" &&
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX));
 
     if (conValores) {
       const { rows } = await query(
@@ -239,6 +339,8 @@ router.get("/", async (req, res, next) => {
       );
       const items = filtrarPorEquipo
         ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario.puesto)
+        : filtrarPropias
+        ? filtrarFilasPropias(rows, req.usuario.empleadoClave)
         : rows;
       return res.json({ propiedad, prefijo, items });
     }
@@ -251,6 +353,8 @@ router.get("/", async (req, res, next) => {
     );
     const filas = filtrarPorEquipo
       ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario.puesto)
+      : filtrarPropias
+      ? filtrarFilasPropias(rows, req.usuario.empleadoClave)
       : rows;
     res.json({ propiedad, prefijo, claves: filas.map((r) => r.clave) });
   } catch (e) {
@@ -290,6 +394,9 @@ router.get("/:clave(*)", async (req, res, next) => {
     if (req.usuario.rol === "jefatura" && clave.startsWith(INCAPACIDAD_PREFIX)) {
       const enSuEquipo = await incapacidadPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "empleado" && !esClavePropiaDeEmpleado(clave, req.usuario.empleadoClave)) {
+      return res.status(403).json({ error: "Ese registro no es tuyo.", codigo: "sin_permiso" });
     }
     res.json(rows[0]);
   } catch (e) {
@@ -364,6 +471,7 @@ router.put("/:clave(*)", async (req, res, next) => {
         versionActual: resultado.versionActual,
       });
     }
+    await provisionarUsuarioEmpleadoSiHaceFalta(propiedad, clave, valor, req.usuario.id);
     res.json(resultado.fila);
   } catch (e) {
     next(e);
@@ -412,6 +520,17 @@ function bloquearJefatura(req, res, next) {
   next();
 }
 
+// Un empleado sí debe poder leer /api/documentos (sus propios contratos,
+// colillas, amonestaciones — ver emitidos.get más abajo, que además fuerza
+// la cédula propia), pero no /api/historial: es la bitácora interna de RRHH,
+// con notas que no son de autoservicio.
+function bloquearEmpleado(req, res, next) {
+  if (req.usuario.rol === "empleado") {
+    return res.status(403).json({ error: "Tu cuenta no tiene acceso a esto.", codigo: "sin_permiso" });
+  }
+  next();
+}
+
 // ==========================================================================
 // Histórico
 //
@@ -419,7 +538,7 @@ function bloquearJefatura(req, res, next) {
 // /:clave(*) de arriba se tragaría cualquier subruta que colgara de /api/datos.
 // ==========================================================================
 const historial = express.Router();
-historial.use(A.requiereSesion, A.exigeCambioPassword, bloquearJefatura);
+historial.use(A.requiereSesion, A.exigeCambioPassword, bloquearJefatura, bloquearEmpleado);
 
 historial.get("/", async (req, res, next) => {
   try {
@@ -525,7 +644,14 @@ emitidos.get("/", async (req, res, next) => {
 
     const filtros = ["propiedad_id = $1"];
     const params = [propiedad];
-    if (req.query.cedula) {
+    // Un empleado solo ve SUS propios documentos: la cédula la pone el
+    // servidor desde la sesión, ignorando lo que mande el cliente — a
+    // diferencia de los demás roles, que sí pueden pedir la de otra persona
+    // (RRHH consultando el expediente de un empleado).
+    if (req.usuario.rol === "empleado") {
+      params.push(String(req.usuario.cedula || ""));
+      filtros.push("empleado_cedula = $" + params.length);
+    } else if (req.query.cedula) {
       params.push(String(req.query.cedula));
       filtros.push("empleado_cedula = $" + params.length);
     }
@@ -556,7 +682,7 @@ emitidos.get("/:id/archivo", async (req, res, next) => {
   try {
     const propiedad = propiedadDe(req);
     const { rows } = await query(
-      `SELECT nombre_archivo, mime, contenido, sha256, propiedad_id
+      `SELECT nombre_archivo, mime, contenido, sha256, propiedad_id, empleado_cedula
          FROM documentos_emitidos WHERE id = $1`,
       [req.params.id]
     );
@@ -564,6 +690,9 @@ emitidos.get("/:id/archivo", async (req, res, next) => {
     if (!d) return res.status(404).json({ error: "Documento no encontrado." });
     if (d.propiedad_id !== propiedad && req.usuario.rol !== "master") {
       return res.status(403).json({ error: "Ese documento pertenece a otra propiedad." });
+    }
+    if (req.usuario.rol === "empleado" && d.empleado_cedula !== req.usuario.cedula) {
+      return res.status(403).json({ error: "Ese documento no es tuyo." });
     }
 
     res.setHeader("Content-Type", d.mime);

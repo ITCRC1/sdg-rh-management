@@ -8,7 +8,7 @@ const A = require("./auth");
 const router = express.Router();
 
 const CAMPOS_PUBLICOS = `id, email, nombre, cedula, puesto, propiedad_id, rol,
-  activo, debe_cambiar_password, creado_en, ultimo_acceso, desactivado_en`;
+  activo, debe_cambiar_password, creado_en, ultimo_acceso, desactivado_en, empleado_clave`;
 
 function aUsuario(r) {
   return {
@@ -24,6 +24,7 @@ function aUsuario(r) {
     creadoEn: r.creado_en,
     ultimoAcceso: r.ultimo_acceso,
     desactivadoEn: r.desactivado_en,
+    empleadoClave: r.empleado_clave,
   };
 }
 
@@ -191,23 +192,33 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
     const b = req.body || {};
     const email = String(b.email || "").trim().toLowerCase();
     const nombre = String(b.nombre || "").trim();
-    const rol = String(b.rol || "colaborador");
+    const rol = String(b.rol || "");
     const propiedadId = b.propiedadId ? String(b.propiedadId) : null;
     const password = String(b.password || "");
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Las cuentas de empleado usan como "correo" el usuario autogenerado
+    // (ej. "MVargas", sin @) — no tiene sentido exigirle forma de correo.
+    if (rol !== "empleado" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Correo inválido." });
+    }
+    if (rol === "empleado" && !email) {
+      return res.status(400).json({ error: "El usuario de acceso es obligatorio." });
     }
     if (!nombre) return res.status(400).json({ error: "El nombre es obligatorio." });
     if (!A.rolValido(rol)) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o colaborador." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o empleado." });
     }
     if (rol !== "master" && !propiedadId) {
-      return res.status(400).json({ error: "Gerentes, jefaturas y colaboradores deben tener una propiedad asignada." });
+      return res.status(400).json({ error: "Gerentes, jefaturas y empleados deben tener una propiedad asignada." });
     }
     if (rol === "jefatura" && !String(b.puesto || "").trim()) {
       return res.status(400).json({
         error: "Las cuentas de jefatura necesitan el departamento que lideran (el mismo departamento que el puesto de sus subalternos en el catálogo de Puestos), para saber a quién le aprueban horas.",
+      });
+    }
+    if (rol === "empleado" && !String(b.cedula || "").trim()) {
+      return res.status(400).json({
+        error: "Las cuentas de empleado necesitan la cédula del trabajador, para saber a cuál expediente pertenecen.",
       });
     }
     const problema = A.validarPassword(password);
@@ -220,11 +231,11 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
 
     const { rows } = await query(
       `INSERT INTO usuarios (email, nombre, cedula, puesto, propiedad_id, rol,
-                             password_hash, creado_por, debe_cambiar_password)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)
+                             password_hash, creado_por, debe_cambiar_password, empleado_clave)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9)
        RETURNING ${CAMPOS_PUBLICOS}`,
       [email, nombre, b.cedula || null, b.puesto || null, propiedadId, rol,
-       A.hashPassword(password), req.usuario.id]
+       A.hashPassword(password), req.usuario.id, b.empleadoClave || null]
     );
 
     await A.registrarAcceso({
@@ -252,7 +263,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
       return res.status(400).json({ error: "No puedes quitarte a ti mismo el rol de master." });
     }
     if (b.rol !== undefined && !A.rolValido(String(b.rol))) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o colaborador." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o empleado." });
     }
     if (b.rol === "jefatura"){
       // El puesto puede venir en este mismo PATCH o ya estar guardado de antes
@@ -282,6 +293,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
     if (b.puesto !== undefined) set("puesto", b.puesto || null);
     if (b.propiedadId !== undefined) set("propiedad_id", b.propiedadId || null);
     if (b.rol !== undefined) set("rol", String(b.rol));
+    if (b.empleadoClave !== undefined) set("empleado_clave", b.empleadoClave || null);
     if (b.activo !== undefined) {
       set("activo", !!b.activo);
       set("desactivado_en", b.activo ? null : new Date());
@@ -314,7 +326,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
   } catch (e) {
     if (e.code === "23514") {
       return res.status(400).json({
-        error: "Datos inválidos: gerentes y colaboradores deben tener una propiedad asignada.",
+        error: "Datos inválidos: gerentes, jefaturas y empleados deben tener una propiedad asignada.",
       });
     }
     next(e);

@@ -227,6 +227,11 @@ async function entrarConSesion(){
 
   if (u.debeCambiarPassword){ mostrarCambioPasswordObligatorio(); return; }
 
+  // Portal del Colaborador: un empleado no ve la app de RRHH — entra directo
+  // a su propio "Mi Perfil", de solo lectura. El servidor ya acota qué puede
+  // leer esta cuenta (ver rutas-datos.js); esto es solo la navegación.
+  if (u.rol === "empleado"){ await iniciarPortalEmpleado(u); return; }
+
   document.getElementById("login-gate").classList.remove("open");
   const logoutBtn = document.getElementById("nav-btn-logout");
   const logoutSep = document.getElementById("nav-sep-cuenta");
@@ -242,10 +247,26 @@ async function entrarConSesion(){
   await continuarInicioApp();
 }
 
+// Portal del Colaborador: arranque para el rol empleado. u.empleadoClave
+// (cat_empleado:<key>) llega del servidor en /api/auth/me — de ahí sale
+// perfilActualKey, la misma variable que usa el expediente administrativo,
+// pero aquí solo la lee renderMiPerfilEmpleado (de solo lectura).
+async function iniciarPortalEmpleado(u){
+  document.getElementById("login-gate").classList.remove("open");
+  if (u.propiedadId) setPropiedadActual(u.propiedadId);
+  const prefix = CATALOGS.empleados.prefix;
+  perfilActualKey = (u.empleadoClave && u.empleadoClave.startsWith(prefix))
+    ? u.empleadoClave.slice(prefix.length)
+    : null;
+  aplicarModoSegunRol(u.rol);
+  renderAppTopbar();
+  showTab("miperfil");
+}
+
 // Ajusta la interfaz al rol. Es comodidad visual: quien manipule la petición
 // igual choca contra el permiso del servidor, que es el que de verdad manda.
 function aplicarModoSegunRol(rol){
-  const soloLectura = rol === "colaborador";
+  const soloLectura = rol === "empleado";
   document.body.classList.toggle("solo-lectura", soloLectura);
 
   // El panel de usuarios vive en otra página y no tenía enlace: había que
@@ -254,10 +275,10 @@ function aplicarModoSegunRol(rol){
   const btnEmpleador = document.getElementById("nav-btn-empleador");
   if (btnEmpleador) btnEmpleador.style.display = rol === "master" ? "block" : "none";
 
-  // Cambiar de propiedad solo tiene sentido para master: gerente/colaborador
-  // tienen la suya fija en la cuenta, y el servidor ignora cualquier otra que
-  // elijan aquí — mostrar el selector solo confundiría (branding de una
-  // propiedad, datos reales de otra).
+  // Cambiar de propiedad solo tiene sentido para master: gerente/jefatura/
+  // empleado tienen la suya fija en la cuenta, y el servidor ignora
+  // cualquier otra que elijan aquí — mostrar el selector solo confundiría
+  // (branding de una propiedad, datos reales de otra).
   const btnCambiarPropiedad = document.getElementById("nav-btn-cambiar-propiedad");
   if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = rol === "master" ? "block" : "none";
 
@@ -278,7 +299,29 @@ function aplicarModoSegunRol(rol){
     });
   }
 
-  const etiquetas = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", colaborador: "Colaborador" };
+  // Empleado (Portal del Colaborador) no tiene ninguna "página de RH" — ni
+  // siquiera Horas extras o Vacaciones como jefatura: solo su propio "Mi
+  // Perfil". Se oculta la barra de navegación completa y se deja un único
+  // botón directo para cerrar sesión (el de Configuración queda enterrado
+  // dentro de un menú que también se ocultó).
+  if (rol === "empleado"){
+    const nav = document.getElementById("main-navbar");
+    if (nav){
+      Array.from(nav.children).forEach(el => { el.style.display = "none"; });
+      let logoutDirecto = document.getElementById("nav-btn-logout-empleado");
+      if (!logoutDirecto){
+        logoutDirecto = document.createElement("button");
+        logoutDirecto.id = "nav-btn-logout-empleado";
+        logoutDirecto.className = "nav-dd-btn";
+        logoutDirecto.textContent = "🔒 Cerrar sesión";
+        logoutDirecto.onclick = function(){ hacerLogoutTrabajador(); };
+        nav.appendChild(logoutDirecto);
+      }
+      logoutDirecto.style.display = "block";
+    }
+  }
+
+  const etiquetas = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", empleado: "Colaborador (autoservicio)" };
   let barra = document.getElementById("barra-rol");
   if (!barra){
     barra = document.createElement("div");
@@ -4035,8 +4078,8 @@ function renderPropiedadBadge(){
     wrap.innerHTML = "";
     return;
   }
-  // Solo master puede cambiar de propiedad: gerente/colaborador tienen la
-  // suya fija en la cuenta, y el servidor ignora cualquier otra que el
+  // Solo master puede cambiar de propiedad: gerente/jefatura/empleado tienen
+  // la suya fija en la cuenta, y el servidor ignora cualquier otra que el
   // badge les deje elegir aquí.
   const esMaster = window.sdgApi && window.sdgApi.rol() === "master";
   const onclick = esMaster ? `onclick="event.stopPropagation(); abrirPropiedadGate();"` : "";
@@ -4075,6 +4118,14 @@ function showTab(which){
   if (!TABS_PERMITIDAS_JEFATURA.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
     which = "horasextras";
   }
+  // Empleado (Portal del Colaborador) solo tiene una pestaña: su propio "Mi
+  // Perfil". Cubre el logo, "atrás" del navegador o cualquier otro camino
+  // que intente llevarlo a otra pestaña — el servidor bloquea el resto de
+  // los datos aparte (ver rutas-datos.js).
+  const TABS_PERMITIDAS_EMPLEADO = ["miperfil"];
+  if (!TABS_PERMITIDAS_EMPLEADO.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "empleado"){
+    which = "miperfil";
+  }
   document.getElementById("inicio-panel").style.display = which === "inicio" ? "block" : "none";
   document.getElementById("contracts-panel").style.display = which === "contracts" ? "block" : "none";
   document.getElementById("form-panel").style.display = which === "form" ? "block" : "none";
@@ -4089,6 +4140,7 @@ function showTab(which){
   document.getElementById("empleados-panel").style.display = which === "empleados" ? "block" : "none";
   document.getElementById("archivo-panel").style.display = which === "archivo" ? "block" : "none";
   document.getElementById("perfil-panel").style.display = which === "perfil" ? "block" : "none";
+  document.getElementById("miperfil-panel").style.display = which === "miperfil" ? "block" : "none";
   document.getElementById("reporte-panel").style.display = which === "reporte" ? "block" : "none";
   document.getElementById("faq-panel").style.display = which === "faq" ? "block" : "none";
   document.getElementById("datos-panel").style.display = which === "datos" ? "block" : "none";
@@ -4142,6 +4194,7 @@ function showTab(which){
   if (which === "empleados") renderCatalogTab("empleados");
   if (which === "archivo") renderArchivoList();
   if (which === "perfil") renderPerfilEmpleado();
+  if (which === "miperfil") renderMiPerfilEmpleado();
   if (which === "reporte") renderReporteMensual();
   if (which === "faq") renderFaqLaboral();
   if (which === "datos") renderDatosTab();
@@ -8068,7 +8121,7 @@ async function renderAppTopbar(){
   const rol = window.sdgApi ? window.sdgApi.rol() : null;
   const nombre = (trabajadorActual && trabajadorActual.nombre) || "";
   const inicial = nombre ? nombre.trim().charAt(0).toUpperCase() : "?";
-  const etiquetasRol = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", colaborador: "Colaborador" };
+  const etiquetasRol = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", empleado: "Colaborador" };
 
   let alertas = 0;
   try{
@@ -12139,6 +12192,215 @@ function renderSelectorPerfilEmpleado(){
     <div id="perfil-busqueda-lista"><div class="empty-state">Cargando…</div></div>
   `;
   renderListaPerfilBusqueda();
+}
+
+// ==========================================================================
+// Portal del Colaborador — "Mi Perfil" para el rol empleado (autoservicio,
+// solo lectura de su propio expediente). Reusa exactamente los mismos
+// cálculos que ya usa renderPerfilEmpleado (arriba) para RRHH — saldo de
+// vacaciones, resumen de horas extra, incapacidades, estimado de
+// prestaciones — pero sin ningún botón administrativo (nada de generar
+// documentos, editar datos, deducciones, ni la bitácora interna). El
+// servidor ya acota qué puede leer una cuenta empleado (ver
+// puedeLeerClaveOPrefijo/esClavePropiaDeEmpleado en rutas-datos.js): esto es
+// solo la presentación.
+// ==========================================================================
+
+// Etiqueta legible para un TIPO_DIA de horas_extra: (vacaciones, día libre,
+// permiso sin goce, ausencia médica ya están en TIPOS_SOLICITUD_AUSENCIA;
+// incapacidad y cumpleaños no pasan por ese catálogo, así que se nombran
+// aparte).
+function etiquetaTipoDia(tipo){
+  if (TIPOS_SOLICITUD_AUSENCIA[tipo]) return `${TIPOS_SOLICITUD_AUSENCIA[tipo].emoji} ${TIPOS_SOLICITUD_AUSENCIA[tipo].label}`;
+  if (tipo === "incapacidad") return "🤒 Incapacidad";
+  if (tipo === "cumpleanos") return "🎂 Cumpleaños";
+  return tipo;
+}
+
+// Días libres por fecha: agrupa las filas horas_extra: YA aprobadas de este
+// empleado por TIPO_DIA (vacaciones, incapacidad, permiso sin goce...) en
+// rangos consecutivos (misma lógica que ya usa Incapacidades, ver
+// agruparFechasConsecutivas), y suma aparte las solicitudes todavía
+// pendientes de aprobación — esas no tienen fila en horas_extra: hasta que
+// se aprueban, así que se muestran desde la propia solicitud.
+function renderSeccionDiasLibresEmpleado(registrosHorasExtra, solicitudesPendientes){
+  const confirmados = registrosHorasExtra.filter(r => r.ESTADO === "aprobada" && r.TIPO_DIA && r.TIPO_DIA !== "laboral");
+  const porTipo = {};
+  confirmados.forEach(r => { (porTipo[r.TIPO_DIA] = porTipo[r.TIPO_DIA] || []).push(r.FECHA); });
+
+  const bloquesConfirmados = Object.keys(porTipo).map(tipo => {
+    const grupos = agruparFechasConsecutivas(porTipo[tipo]);
+    return `<div style="margin-bottom:10px;">
+      <div style="font-weight:600; font-size:12.5px; margin-bottom:4px;">${etiquetaTipoDia(tipo)}</div>
+      ${grupos.map(g => `<div style="font-size:12px; padding:3px 0 3px 14px; border-bottom:1px solid var(--paper-line);">${g.inicio === g.fin ? fmtFechaSimple(g.inicio) : fmtFechaSimple(g.inicio) + " al " + fmtFechaSimple(g.fin)} — ${g.dias} día(s)</div>`).join("")}
+    </div>`;
+  }).join("");
+
+  const bloquePendientes = solicitudesPendientes.length ? `<div style="margin-top:4px;">
+    <div style="font-weight:600; font-size:12.5px; margin-bottom:4px; color:#8a6d1f;">⏳ Pendientes de aprobación</div>
+    ${solicitudesPendientes.map(s => `<div style="font-size:12px; padding:3px 0 3px 14px; border-bottom:1px solid var(--paper-line);">${etiquetaTipoDia(s.TIPO)} — ${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} (${s.DIAS || "?"} día(s))</div>`).join("")}
+  </div>` : "";
+
+  if (!bloquesConfirmados && !bloquePendientes){
+    return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:6px;">🗓️ Días libres por fecha</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Sin días libres registrados todavía.</div>
+    </div></div>`;
+  }
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:8px;">🗓️ Días libres por fecha</div>
+    ${bloquesConfirmados}
+    ${bloquePendientes}
+  </div></div>`;
+}
+
+// Documentos por concepto: mismo listado que ya trae window.sdgApi.documentos
+// (el servidor ya lo acota a la cédula propia — ver emitidos.get en
+// rutas-datos.js), pero agrupado en subsecciones fijas en vez de una sola
+// lista plana, para que "amonestaciones", "constancias" y "contratos
+// firmados" se lean como categorías separadas.
+function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
+  const documentos = documentosSinFiltrar.filter(d => !d.anulado_en && d.tipo !== "colilla_pago");
+  const grupos = [
+    { tipo: "contrato", titulo: "📄 Contratos" },
+    { tipo: "constancia_handbook", titulo: "📋 Constancias" },
+    { tipo: "amonestacion", titulo: "⚠️ Amonestaciones" },
+    { tipo: "carta_despido", titulo: "⚖️ Cartas de despido" },
+    { tipo: "recomendacion", titulo: "📝 Recomendaciones laborales" },
+  ];
+  const tiposConocidos = new Set(grupos.map(g => g.tipo));
+  const otros = documentos.filter(d => !tiposConocidos.has(d.tipo));
+  if (otros.length) grupos.push({ tipo: null, titulo: "🗂️ Otros documentos", filas: otros });
+
+  const bloques = grupos.map(g => {
+    const propios = (g.filas || documentos.filter(d => d.tipo === g.tipo))
+      .slice().sort((a,b) => (b.emitido_en||"").localeCompare(a.emitido_en||""));
+    if (!propios.length) return "";
+    return `<div style="margin-bottom:12px;">
+      <div style="font-weight:600; font-size:12.5px; margin-bottom:4px;">${g.titulo} (${propios.length})</div>
+      ${propios.map(d => `<div style="font-size:12px; padding:4px 0 4px 14px; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div>
+          <div>${escapeHtml(d.titulo || "")}</div>
+          <div style="color:var(--ink-soft); font-size:11px;">${d.emitido_en ? fmtFecha(d.emitido_en) : ""}</div>
+        </div>
+        <a class="btn" style="padding:4px 9px; font-size:10.5px; flex-shrink:0; text-decoration:none;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">👁️ Ver</a>
+      </div>`).join("")}
+    </div>`;
+  }).join("");
+
+  if (!bloques.trim()){
+    return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:6px;">📁 Mis documentos</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Sin documentos archivados todavía.</div>
+    </div></div>`;
+  }
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:8px;">📁 Mis documentos</div>
+    ${bloques}
+  </div></div>`;
+}
+
+async function renderMiPerfilEmpleado(){
+  const panel = document.getElementById("miperfil-panel");
+  if (!panel) return;
+  if (!perfilActualKey){
+    panel.innerHTML = `<div class="empty-state">No se pudo identificar tu expediente. Contacta a Recursos Humanos.</div>`;
+    return;
+  }
+  panel.innerHTML = `<div class="empty-state">Cargando tu perfil…</div>`;
+  try{
+    const fullKey = CATALOGS.empleados.prefix + perfilActualKey;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){
+      panel.innerHTML = `<div class="empty-state">No se encontró tu expediente. Contacta a Recursos Humanos.</div>`;
+      return;
+    }
+    const emp = JSON.parse(res.value);
+
+    let documentosEmpleado = [];
+    try{ documentosEmpleado = await window.sdgApi.documentos({ limite: 200 }); }
+    catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
+
+    let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 },
+        diasIncapacidad = [], registrosDeEsteEmpleado = [], solicitudesPendientes = [];
+    try{
+      const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
+      const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+      solicitudesPendientes = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.ESTADO === "pendiente");
+      diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, perfilActualKey);
+      const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, perfilActualKey);
+      saldoVacaciones = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidadPausan, new Date());
+      registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === perfilActualKey);
+      resumenHorasExtra = {
+        pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
+        aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
+        horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada").reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
+      };
+    }catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
+
+    const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+    const salarioNum = Number(String(emp.SALARIO_EMP||"").replace(/[^0-9.]/g,""));
+
+    // Estimado de liquidación — misma fórmula exacta que ya usa RRHH en el
+    // expediente administrativo (ver renderPerfilEmpleado): antigüedad,
+    // vacaciones en dinero, aguinaldo proporcional, cesantía y preaviso
+    // hipotéticos, menos el saldo de préstamos/adelantos pendientes.
+    let prestaciones = null;
+    try{
+      const hoy = new Date();
+      const { monto: salarioDiario } = salarioDiarioDeEmpleado(emp);
+      const jornadaEmp = await jornadaDiariaDeEmpleado(emp, {});
+      const montoPorHoraExtra = salarioDiario ? (salarioDiario / jornadaEmp) * TARIFA_HORAS_EXTRA : 0;
+      const saldoPrestamosPendientes = (emp.DEDUCCIONES_RECURRENTES || [])
+        .filter(d => d.tipo === "prestamo")
+        .reduce((s, d) => s + (d.saldoPendiente || 0), 0);
+      prestaciones = {
+        moneda: emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC",
+        antiguedad: calcularAntiguedad(fechaIngreso, hoy),
+        vacacionesMonto: calcularVacacionesEnDinero(saldoVacaciones, salarioDiario),
+        aguinaldo: calcularAguinaldoEstimado(emp, registrosDeEsteEmpleado, hoy, montoPorHoraExtra),
+        cesantia: calcularCesantiaEstimada(fechaIngreso, hoy, salarioDiario),
+        preaviso: calcularPreavisoEstimado(fechaIngreso, hoy, salarioDiario),
+        saldoPrestamosPendientes,
+      };
+    }catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
+
+    panel.innerHTML = `
+      <div class="section-card" style="border-color:var(--leaf);">
+        <div class="section-body">
+          <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">${escapeHtml(nombreCompletoEmpleado(emp))}</div>
+          <div style="font-size:12.5px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(emp.DEPARTAMENTO_EMP||"")} · Cédula: ${escapeHtml(emp.IDENTIFICACION_EMP||"")}</div>
+          <div style="font-size:12.5px; color:var(--ink-soft);">Salario: ${salarioNum ? "₡"+salarioNum.toLocaleString("es-CR") : "—"} · Ingreso: ${escapeHtml(emp.FECHA_INGRESO_EMP||"—")}</div>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr); margin-top:10px;">
+        <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
+        <div class="kpi-card c-warn"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
+        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (histórico)</div></div>
+      </div>
+
+      ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesPendientes)}
+
+      ${prestaciones ? `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:4px;">💰 Estimado de liquidación</div>
+        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antigüedad: ${prestaciones.antiguedad.años} año(s), ${prestaciones.antiguedad.meses} mes(es). <b>Estimado informativo, no vinculante</b> — el monto final depende de la causa y fecha real de salida, y no reemplaza el cálculo oficial de planilla.</div>
+        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; ${saldoVacaciones < 0 ? "color:#B3261E;" : ""}"><span>${saldoVacaciones < 0 ? `🔻 Vacaciones en adelanto (${Math.abs(saldoVacaciones)} día(s))` : `🏖️ Vacaciones pendientes (${saldoVacaciones} día(s))`}</span><b>${fmtMonedaEmpleado(prestaciones.vacacionesMonto, prestaciones.moneda)}</b></div>
+        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🎁 Aguinaldo proporcional (${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoFin)})</span><b>${fmtMonedaEmpleado(prestaciones.aguinaldo.total, prestaciones.moneda)}</b></div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-top:8px; margin-bottom:2px;">⚖️ Si la relación terminara HOY con responsabilidad patronal (hipotético):</div>
+        <div style="font-size:12.5px; padding:4px 0 4px 14px; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>Cesantía (${prestaciones.cesantia.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.cesantia.monto, prestaciones.moneda)}</b></div>
+        <div style="font-size:12.5px; padding:4px 0 4px 14px; ${prestaciones.saldoPrestamosPendientes > 0 ? "border-bottom:1px solid var(--paper-line);" : ""}display:flex; justify-content:space-between;"><span>Preaviso (${prestaciones.preaviso.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.preaviso.monto, prestaciones.moneda)}</b></div>
+        ${prestaciones.saldoPrestamosPendientes > 0 ? `<div style="font-size:12.5px; padding:4px 0; color:#B3261E; display:flex; justify-content:space-between;"><span>➖ Saldo de préstamo/adelanto pendiente</span><b>-${fmtMonedaEmpleado(prestaciones.saldoPrestamosPendientes, prestaciones.moneda)}</b></div>` : ""}
+        <div style="font-size:13px; padding:8px 0 0; font-weight:700; color:var(--navy-deep); display:flex; justify-content:space-between;"><span>Total estimado</span><span>${fmtMonedaEmpleado(prestaciones.vacacionesMonto + prestaciones.aguinaldo.total + prestaciones.cesantia.monto + prestaciones.preaviso.monto - prestaciones.saldoPrestamosPendientes, prestaciones.moneda)}</span></div>
+      </div></div>` : ""}
+
+      ${renderSeccionColillasEmpleado(documentosEmpleado, perfilActualKey)}
+
+      ${renderSeccionDocumentosPorConcepto(documentosEmpleado)}
+
+      ${renderSeccionIncapacidades(diasIncapacidad)}
+    `;
+  }catch(e){ panel.innerHTML = `<div class="empty-state">No se pudo cargar tu perfil.</div>`; }
 }
 
 async function renderPerfilEmpleado(){
