@@ -183,6 +183,90 @@ router.get("/mi-informacion", A.requiereSesion, A.exigeCambioPassword, async (re
 });
 
 // --------------------------------------------------------------------------
+// POST /api/auth/regenerar-clave-empleado — "se me olvidó/perdí la clave
+// temporal que le di al empleado".
+//
+// Solo para cuentas rol=empleado (nunca para master/gerente/jefatura — para
+// esas cuentas sigue usándose el "Resetear" normal en el panel de Empleador,
+// que sí exige elegir la clave a mano). Recalcula la MISMA fórmula
+// determinística del alta automática (usuario + número de empleado) — no
+// hace falta leer ni guardar la clave en ningún lado, se recalcula.
+// --------------------------------------------------------------------------
+router.post("/regenerar-clave-empleado", A.requiereSesion, A.requiereEscritura, async (req, res, next) => {
+  try {
+    const propiedad = (req.body?.propiedad && req.usuario.rol === "master")
+      ? String(req.body.propiedad)
+      : req.usuario.propiedadId;
+    if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
+
+    const empleadoClave = String(req.body?.empleadoClave || "");
+    if (!empleadoClave.startsWith("cat_empleado:")) {
+      return res.status(400).json({ error: "Clave de empleado inválida." });
+    }
+
+    const u = await query(
+      "SELECT id, email FROM usuarios WHERE propiedad_id = $1 AND empleado_clave = $2 AND rol = 'empleado'",
+      [propiedad, empleadoClave]
+    );
+    if (!u.rows[0]) {
+      return res.status(404).json({
+        error: "Esta persona todavía no tiene cuenta de acceso — se crea sola cuando el expediente tenga nombre, apellidos, cédula y número de empleado completos.",
+      });
+    }
+
+    const emp = await query(
+      "SELECT valor FROM documentos WHERE propiedad_id = $1 AND clave = $2 AND eliminado_en IS NULL",
+      [propiedad, empleadoClave]
+    );
+    if (!emp.rows[0]) return res.status(404).json({ error: "El expediente ya no existe." });
+    let datos;
+    try {
+      datos = JSON.parse(emp.rows[0].valor);
+    } catch (e) {
+      datos = {};
+    }
+    const numeroEmpleado = String(datos.NUMERO_EMPLEADO || "").trim();
+    if (!numeroEmpleado) {
+      return res.status(400).json({ error: "El expediente no tiene número de empleado — complétalo primero." });
+    }
+
+    const claveTemporal = A.generarClaveTemporalEmpleado(numeroEmpleado);
+    await query(
+      "UPDATE usuarios SET password_hash = $2, debe_cambiar_password = true WHERE id = $1",
+      [u.rows[0].id, A.hashPassword(claveTemporal)]
+    );
+    await A.revocarSesionesDe(u.rows[0].id);
+
+    res.json({ usuario: u.rows[0].email, claveTemporal });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --------------------------------------------------------------------------
+// GET /api/auth/empleados-vinculados — qué expedientes YA tienen cuenta de
+// acceso, para el reporte "Estado de cuentas de acceso" (ver
+// mostrarModalEstadoCuentas en app.js). Solo las claves, nada de correos ni
+// otros datos de la cuenta — es lo mínimo que necesita ese reporte.
+// --------------------------------------------------------------------------
+router.get("/empleados-vinculados", A.requiereSesion, A.requiereEscritura, async (req, res, next) => {
+  try {
+    const propiedad = (req.query.propiedad && req.usuario.rol === "master")
+      ? String(req.query.propiedad)
+      : req.usuario.propiedadId;
+    if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
+
+    const { rows } = await query(
+      "SELECT empleado_clave FROM usuarios WHERE propiedad_id = $1 AND rol = 'empleado' AND empleado_clave IS NOT NULL",
+      [propiedad]
+    );
+    res.json({ claves: rows.map((r) => r.empleado_clave) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --------------------------------------------------------------------------
 // POST /api/auth/password — cambiar la propia contraseña
 // --------------------------------------------------------------------------
 router.post("/password", A.requiereSesion, async (req, res, next) => {

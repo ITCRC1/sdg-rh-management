@@ -336,6 +336,16 @@
         }),
       bitacora: (limite) =>
         pedir("/auth/bitacora?limite=" + (limite || 100)).then((r) => r.eventos),
+      // Master y gerente (no jefatura): regenera la clave temporal de una
+      // cuenta de empleado con la misma fórmula del alta automática.
+      regenerarClaveEmpleado: (empleadoClave, propiedad) =>
+        pedir("/auth/regenerar-clave-empleado", {
+          method: "POST",
+          body: JSON.stringify({ empleadoClave, propiedad }),
+        }),
+      // Qué expedientes ya tienen cuenta de acceso (para el reporte "Estado
+      // de cuentas de acceso" en la pestaña Empleados).
+      empleadosVinculados: () => pedir("/auth/empleados-vinculados").then((r) => r.claves),
     },
   };
 

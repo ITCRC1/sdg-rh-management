@@ -236,6 +236,7 @@ async function entrarConSesion(){
   const logoutBtn = document.getElementById("nav-btn-logout");
   const logoutSep = document.getElementById("nav-sep-cuenta");
   const miInfoBtn = document.getElementById("nav-btn-mi-informacion");
+  const cambiarClaveBtn = document.getElementById("nav-btn-cambiar-clave");
   if (logoutBtn) logoutBtn.style.display = "block";
   if (logoutSep) logoutSep.style.display = "block";
   // master/gerente/jefatura también son personas empleadas — esta ventana
@@ -243,6 +244,7 @@ async function entrarConSesion(){
   // hay expediente que coincida, el modal lo explica al abrirse (ver
   // abrirMiInformacion) en vez de decidirlo aquí.
   if (miInfoBtn) miInfoBtn.style.display = "block";
+  if (cambiarClaveBtn) cambiarClaveBtn.style.display = "block";
 
   // La propiedad la manda el servidor según la cuenta; el cliente solo la
   // refleja en la interfaz. Un master sin propiedad asignada sí la elige,
@@ -353,6 +355,17 @@ function aplicarModoSegunRol(rol){
     const nav = document.getElementById("main-navbar");
     if (nav){
       Array.from(nav.children).forEach(el => { el.style.display = "none"; });
+      let cambiarClaveDirecto = document.getElementById("nav-btn-cambiar-clave-empleado");
+      if (!cambiarClaveDirecto){
+        cambiarClaveDirecto = document.createElement("button");
+        cambiarClaveDirecto.id = "nav-btn-cambiar-clave-empleado";
+        cambiarClaveDirecto.className = "nav-dd-btn";
+        cambiarClaveDirecto.textContent = "🔑 Cambiar mi contraseña";
+        cambiarClaveDirecto.onclick = function(){ abrirCambiarPassword(); };
+        nav.appendChild(cambiarClaveDirecto);
+      }
+      cambiarClaveDirecto.style.display = "block";
+
       let logoutDirecto = document.getElementById("nav-btn-logout-empleado");
       if (!logoutDirecto){
         logoutDirecto = document.createElement("button");
@@ -3516,6 +3529,7 @@ async function renderCatalogTab(type){
       </div></div>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
+      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalEstadoCuentas()">🔑 Ver estado de cuentas de acceso</button>
       <div class="field" style="margin-bottom:10px;">
         <input type="text" id="empleados-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
       </div>
@@ -5645,6 +5659,131 @@ async function mostrarModalIncompletos(){
 
 function cerrarModalIncompletos(){
   document.getElementById("modal-incompletos").classList.remove("open");
+}
+
+// Reporte "Estado de cuentas de acceso": de los empleados activos, cuáles ya
+// tienen cuenta ("Mi Perfil") y cuáles no — y por qué, cuando se sabe (datos
+// incompletos para el alta automática). No se puede consultar la base de
+// datos real desde acá; esta es la forma de verlo en vivo dentro de la app.
+async function mostrarModalEstadoCuentas(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔑 Estado de cuentas de acceso";
+  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const [res, claves] = await Promise.all([
+      window.storage.list(CATALOGS.empleados.prefix, false),
+      window.sdgApi.usuarios.empleadosVinculados(),
+    ]);
+    const keys = (res && res.keys) || [];
+    const vinculadas = new Set(claves);
+    const empleados = await Promise.all(keys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v }; // key completa (cat_empleado:...), igual que empleadosVinculados()
+    }));
+    const activos = empleados.filter(e => !e.ARCHIVADO);
+    const conCuenta = activos.filter(e => vinculadas.has(e.key));
+    const sinCuenta = activos.filter(e => !vinculadas.has(e.key));
+
+    const razonSinCuenta = (e) => {
+      const faltan = [];
+      if (!e.NOMBRE_EMP) faltan.push("nombre");
+      if (!e.APELLIDOS_EMP) faltan.push("apellidos");
+      if (!e.IDENTIFICACION_EMP) faltan.push("cédula");
+      if (!e.NUMERO_EMPLEADO) faltan.push("número de empleado");
+      return faltan.length
+        ? `Faltan datos para el alta automática: ${faltan.join(", ")}.`
+        : "Tiene todos los datos, pero sigue sin cuenta — revisa que su cédula no esté repetida en otra cuenta ya existente, o guarda el expediente de nuevo para reintentar.";
+    };
+
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${conCuenta.length} de ${activos.length} empleados activos ya tienen su cuenta de acceso ("Mi Perfil").</div>
+      ${sinCuenta.length ? `
+        <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">⚠️ Sin cuenta (${sinCuenta.length})</div>
+        ${sinCuenta.map(e => `
+          <div style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--paper-line);">
+            <div style="font-weight:700;">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</div>
+            <div style="font-size:11.5px; color:var(--ink-soft);">${escapeHtml(razonSinCuenta(e))}</div>
+          </div>`).join("")}
+      ` : `<div style="color:var(--leaf); font-weight:700;">✅ Todos los empleados activos con datos completos ya tienen cuenta.</div>`}
+    `;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista.</div>`; }
+}
+
+// "Ver/regenerar credenciales de acceso" desde el expediente de un empleado:
+// recalcula la clave temporal con la misma fórmula del alta automática (no
+// se guarda ni se puede leer la clave real en ningún lado, así que esto
+// FIJA una nueva y la muestra una sola vez) — útil si RRHH perdió de vista
+// la que se generó al crear la cuenta, o si el empleado la olvidó.
+async function mostrarCredencialesEmpleado(key){
+  const modal = document.getElementById("modal-incompletos");
+  const body = document.getElementById("modal-incompletos-body");
+  modal.querySelector(".modal-head span").textContent = "🔑 Credenciales de acceso";
+  body.innerHTML = `<div class="empty-state">Generando…</div>`;
+  modal.classList.add("open");
+  try{
+    const prop = getPropiedadActual();
+    const r = await window.sdgApi.usuarios.regenerarClaveEmpleado(CATALOGS.empleados.prefix + key, prop ? prop.id : undefined);
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Se generó una clave temporal nueva — la anterior deja de funcionar y se cerró cualquier sesión que tuviera abierta esa cuenta. Compártesela por un canal seguro (no por este mismo panel); deberá cambiarla al entrar.</div>
+      <div style="display:flex; border:1px dashed var(--paper-line); border-radius:8px; overflow:hidden;">
+        <div style="flex:1; padding:10px 12px; border-right:1px dashed var(--paper-line);">
+          <div style="font-size:10.5px; text-transform:uppercase; color:var(--ink-soft);">Usuario</div>
+          <div style="font-family:monospace; font-size:15px; font-weight:700;">${escapeHtml(r.usuario)}</div>
+        </div>
+        <div style="flex:1; padding:10px 12px;">
+          <div style="font-size:10.5px; text-transform:uppercase; color:var(--ink-soft);">Clave temporal</div>
+          <div style="font-family:monospace; font-size:15px; font-weight:700;">${escapeHtml(r.claveTemporal)}</div>
+        </div>
+      </div>
+    `;
+  }catch(e){
+    body.innerHTML = `<div class="empty-state">${escapeHtml(e.message || "No se pudo generar la clave.")}</div>`;
+  }
+}
+
+// Cambio de clave voluntario (a diferencia del cambio OBLIGADO de la clave
+// temporal del primer ingreso, que ya existía): cualquier sesión puede
+// rotarla cuando quiera, reusando el mismo endpoint /api/auth/password.
+async function abrirCambiarPassword(){
+  const modal = document.getElementById("modal-incompletos");
+  const body = document.getElementById("modal-incompletos-body");
+  modal.querySelector(".modal-head span").textContent = "🔑 Cambiar mi contraseña";
+  body.innerHTML = `
+    <div class="field">
+      <label>Contraseña actual</label>
+      <input type="password" id="cp-propia-actual">
+    </div>
+    <div class="field">
+      <label>Nueva contraseña</label>
+      <input type="password" id="cp-propia-nueva" placeholder="Mínimo 10 caracteres, letras y números">
+    </div>
+    <div class="field">
+      <label>Repite la nueva contraseña</label>
+      <input type="password" id="cp-propia-repetir">
+    </div>
+    <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarCambiarPasswordPropia()">Guardar</button>
+    <div id="cp-propia-msg" style="margin-top:8px;"></div>
+  `;
+  modal.classList.add("open");
+}
+
+async function confirmarCambiarPasswordPropia(){
+  const actual = document.getElementById("cp-propia-actual").value;
+  const nueva = document.getElementById("cp-propia-nueva").value;
+  const repetir = document.getElementById("cp-propia-repetir").value;
+  const msg = document.getElementById("cp-propia-msg");
+  if (!actual || !nueva){ msg.innerHTML = `<div class="empty-state">Completa todos los campos.</div>`; return; }
+  if (nueva !== repetir){ msg.innerHTML = `<div class="empty-state">Las dos contraseñas nuevas no coinciden.</div>`; return; }
+  msg.innerHTML = `<div class="empty-state">Guardando…</div>`;
+  try{
+    await window.sdgApi.cambiarPassword(actual, nueva);
+    cerrarModalIncompletos();
+    statusMsg("Contraseña actualizada.", true);
+  }catch(e){
+    msg.innerHTML = `<div class="empty-state">${escapeHtml(e.message || "No se pudo cambiar la contraseña.")}</div>`;
+  }
 }
 
 // ---------- duplicate detection & merge ----------
@@ -11667,6 +11806,7 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(8)}📎 Subir contrato firmado (PDF)</button>`);
   botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(9)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
   if (esMaster && !archivado) botones.push(`<button onclick="mostrarModalDesignarJefatura('${empKey}')">👑 Designar como jefatura</button>`);
+  if (!archivado) botones.push(`<button onclick="mostrarCredencialesEmpleado('${empKey}')">🔑 Ver/generar credenciales de acceso</button>`);
   if (!archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(10)}🗄️ Archivar</button>`);
   return botones.join("");
 }

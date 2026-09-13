@@ -256,30 +256,57 @@ function filtrarFilasPropias(filas, empleadoClave) {
 }
 
 // --------------------------------------------------------------------------
-// Alta automática de la cuenta "empleado" al guardar un cat_empleado:* que ya
-// trae nombre, apellidos, cédula y número de empleado completos (ese último
-// campo suele llegar vacío al crear el expediente y completarse después, al
-// importar planilla/colillas — por eso esto se revisa en CADA guardado, no
-// solo al crear el registro). Si ya existe una cuenta para esa cédula en esa
-// propiedad (de cualquier rol) no se toca nada — nunca se re-provisiona ni se
-// pisa una cuenta existente. Un fallo aquí nunca debe tumbar el guardado del
-// empleado: se registra en log y RRHH puede crear la cuenta a mano después.
+// Alta automática (y reactivación) de la cuenta "empleado" al guardar un
+// cat_empleado:*.
+//
+// ALTA: se dispara cuando el expediente ya trae nombre, apellidos, cédula y
+// número de empleado completos (ese último campo suele llegar vacío al crear
+// el expediente y completarse después, al importar planilla/colillas — por
+// eso esto se revisa en CADA guardado, no solo al crear el registro). Si ya
+// existe una cuenta para esa cédula en esa propiedad (de cualquier rol) no se
+// toca nada — nunca se re-provisiona ni se pisa una cuenta existente.
+//
+// REACTIVACIÓN: si el expediente pasa de ARCHIVADO=true a ARCHIVADO=false
+// (RRHH deshizo el archivado — reactivarEmpleado en app.js) y su cuenta de
+// empleado quedó desactivada (por el cierre automático a los 90 días de
+// archivado, ver A.archivarUsuariosDeEmpleadosVencidos, o a mano), se
+// reactiva sola: la decisión de traer de vuelta al empleado ya la tomó RRHH
+// al desarchivarlo, así que su acceso vuelve con él.
+//
+// Un fallo aquí nunca debe tumbar el guardado del empleado: se registra en
+// log y RRHH puede resolverlo a mano después (crear/reactivar la cuenta
+// desde el panel de Empleador).
 // --------------------------------------------------------------------------
-async function provisionarUsuarioEmpleadoSiHaceFalta(propiedad, clave, valorJson, actorId) {
+async function sincronizarCuentaEmpleado(propiedad, clave, valorNuevoJson, valorAnteriorJson, actorId) {
   if (!clave.startsWith(EMPLEADO_PREFIX)) return;
   let emp;
   try {
-    emp = JSON.parse(valorJson);
+    emp = JSON.parse(valorNuevoJson);
   } catch (e) {
     return;
   }
-  const nombre = String(emp?.NOMBRE_EMP || "").trim();
-  const apellidos = String(emp?.APELLIDOS_EMP || "").trim();
-  const cedula = String(emp?.IDENTIFICACION_EMP || "").trim();
-  const numeroEmpleado = String(emp?.NUMERO_EMPLEADO || "").trim();
-  if (!nombre || !apellidos || !cedula || !numeroEmpleado) return;
 
   try {
+    // Reactivación: el expediente estaba archivado y deja de estarlo.
+    let anterior = null;
+    if (valorAnteriorJson) {
+      try { anterior = JSON.parse(valorAnteriorJson); } catch (e) { anterior = null; }
+    }
+    if (anterior && anterior.ARCHIVADO === true && emp.ARCHIVADO !== true) {
+      await query(
+        `UPDATE usuarios SET activo = true, desactivado_en = NULL
+          WHERE propiedad_id = $1 AND empleado_clave = $2 AND rol = 'empleado' AND activo = false`,
+        [propiedad, clave]
+      );
+    }
+
+    // Alta automática.
+    const nombre = String(emp?.NOMBRE_EMP || "").trim();
+    const apellidos = String(emp?.APELLIDOS_EMP || "").trim();
+    const cedula = String(emp?.IDENTIFICACION_EMP || "").trim();
+    const numeroEmpleado = String(emp?.NUMERO_EMPLEADO || "").trim();
+    if (!nombre || !apellidos || !cedula || !numeroEmpleado) return;
+
     const existente = await query(
       "SELECT id FROM usuarios WHERE propiedad_id = $1 AND cedula = $2",
       [propiedad, cedula]
@@ -310,7 +337,7 @@ async function provisionarUsuarioEmpleadoSiHaceFalta(propiedad, clave, valorJson
        A.hashPassword(password), actorId || null, clave]
     );
   } catch (e) {
-    console.error("No se pudo crear la cuenta de empleado automáticamente:", e.message);
+    console.error("No se pudo sincronizar la cuenta de empleado automáticamente:", e.message);
   }
 }
 
@@ -463,6 +490,20 @@ router.put("/:clave(*)", async (req, res, next) => {
           return { conflicto: true, versionActual: actual.rows[0].version };
         }
       }
+
+      // Se guarda el valor ANTERIOR solo para cat_empleado:* — es lo único
+      // que necesita sincronizarCuentaEmpleado (detectar que ARCHIVADO pasó
+      // de true a false, para reactivar la cuenta) y así se evita el costo
+      // en cualquier otro tipo de escritura.
+      let valorAnterior = null;
+      if (clave.startsWith(EMPLEADO_PREFIX)) {
+        const previo = await c.query(
+          "SELECT valor FROM documentos WHERE propiedad_id = $1 AND clave = $2",
+          [propiedad, clave]
+        );
+        valorAnterior = previo.rows[0] ? previo.rows[0].valor : null;
+      }
+
       const { rows } = await c.query(
         `INSERT INTO documentos (propiedad_id, clave, valor, creado_por, actualizado_por)
          VALUES ($1, $2, $3, $4, $4)
@@ -476,7 +517,7 @@ router.put("/:clave(*)", async (req, res, next) => {
          RETURNING clave, version, actualizado_en`,
         [propiedad, clave, valor, req.usuario.id]
       );
-      return { fila: rows[0] };
+      return { fila: rows[0], valorAnterior };
     });
 
     if (resultado.conflicto) {
@@ -486,7 +527,7 @@ router.put("/:clave(*)", async (req, res, next) => {
         versionActual: resultado.versionActual,
       });
     }
-    await provisionarUsuarioEmpleadoSiHaceFalta(propiedad, clave, valor, req.usuario.id);
+    await sincronizarCuentaEmpleado(propiedad, clave, valor, resultado.valorAnterior, req.usuario.id);
     res.json(resultado.fila);
   } catch (e) {
     next(e);

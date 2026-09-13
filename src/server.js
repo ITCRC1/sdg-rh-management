@@ -100,18 +100,24 @@ app.use((err, req, res, _next) => {
 // ---------------------------------------------------------------------------
 // Arranque
 // ---------------------------------------------------------------------------
-const BITACORA_LIMPIEZA_MS = 24 * 60 * 60 * 1000; // una vez al día basta
+const TAREAS_DIARIAS_MS = 24 * 60 * 60 * 1000; // una vez al día basta
+
+function tareasDiarias() {
+  A.limpiarBitacoraVieja();
+  A.archivarUsuariosDeEmpleadosVencidos();
+}
 
 async function arrancar() {
   await migrar();
   await crearAdminInicial();
 
-  // Purga los eventos de bitácora de más de 30 días (ver
-  // A.limpiarBitacoraVieja) — una vez al arrancar y luego una vez al día,
-  // mientras el proceso siga vivo.
-  A.limpiarBitacoraVieja();
-  const limpiezaBitacora = setInterval(() => A.limpiarBitacoraVieja(), BITACORA_LIMPIEZA_MS);
-  limpiezaBitacora.unref();
+  // Mantenimiento periódico: purga la bitácora de más de 30 días y desactiva
+  // las cuentas de empleado cuyo expediente lleva más de 90 días archivado
+  // (ver A.limpiarBitacoraVieja / A.archivarUsuariosDeEmpleadosVencidos) —
+  // una vez al arrancar y luego una vez al día, mientras el proceso siga vivo.
+  tareasDiarias();
+  const tareasProgramadas = setInterval(tareasDiarias, TAREAS_DIARIAS_MS);
+  tareasProgramadas.unref();
 
   const servidor = app.listen(PORT, HOST, () => {
     console.log("SDG Generador de Contratos escuchando en http://" + HOST + ":" + PORT);
@@ -119,7 +125,7 @@ async function arrancar() {
 
   const cerrar = async () => {
     console.log("Cerrando…");
-    clearInterval(limpiezaBitacora);
+    clearInterval(tareasProgramadas);
     servidor.close(async () => {
       try {
         await pool.end();

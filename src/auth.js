@@ -184,6 +184,54 @@ async function limpiarBitacoraVieja() {
   }
 }
 
+const DIAS_GRACIA_ARCHIVADO = 90;
+
+// Cuando RRHH archiva a alguien (salida de la empresa), su cuenta de acceso
+// (rol "empleado") sigue activa 3 meses — por si necesita bajar alguna
+// colilla o documento propio antes de irse del todo — y pasado ese tiempo se
+// desactiva sola (nunca se borra: sigue siendo reactivable a mano desde el
+// panel de Empleador, igual que cualquier otra cuenta desactivada). Si
+// alguien vuelve a activar el expediente antes de esos 3 meses
+// (reactivarEmpleado en el front), la cuenta se reactiva sola en el mismo
+// guardado — ver sincronizarCuentaEmpleado en rutas-datos.js.
+async function archivarUsuariosDeEmpleadosVencidos() {
+  try {
+    const { rows } = await query(
+      `SELECT propiedad_id, clave, valor_json->>'FECHA_ARCHIVADO' AS fecha_archivado
+         FROM documentos
+        WHERE tipo = 'cat_empleado' AND eliminado_en IS NULL
+          AND valor_json->>'ARCHIVADO' = 'true'`
+    );
+    const ahora = Date.now();
+    let desactivadas = 0;
+    for (const fila of rows) {
+      // FECHA_ARCHIVADO se guarda como texto "DD/MM/AAAA" (ver
+      // confirmarArchivarEmpleado en app.js, fmtFecha), no ISO.
+      const partes = String(fila.fecha_archivado || "").split("/");
+      if (partes.length !== 3) continue;
+      const fechaArchivado = new Date(Number(partes[2]), Number(partes[1]) - 1, Number(partes[0]));
+      if (Number.isNaN(fechaArchivado.getTime())) continue;
+
+      const diasTranscurridos = (ahora - fechaArchivado.getTime()) / 86400000;
+      if (diasTranscurridos < DIAS_GRACIA_ARCHIVADO) continue;
+
+      const actualizado = await query(
+        `UPDATE usuarios SET activo = false, desactivado_en = now()
+          WHERE propiedad_id = $1 AND empleado_clave = $2 AND rol = 'empleado' AND activo = true
+          RETURNING id`,
+        [fila.propiedad_id, fila.clave]
+      );
+      if (actualizado.rows[0]) {
+        await revocarSesionesDe(actualizado.rows[0].id);
+        desactivadas++;
+      }
+    }
+    if (desactivadas) console.log(`Cuentas de empleado: se desactivaron ${desactivadas} por llevar más de ${DIAS_GRACIA_ARCHIVADO} días archivadas.`);
+  } catch (e) {
+    console.error("No se pudo revisar las cuentas de empleados archivados:", e.message);
+  }
+}
+
 async function marcarIntentoFallido(usuarioId) {
   const { rows } = await query(
     `UPDATE usuarios
@@ -359,6 +407,7 @@ module.exports = {
   revocarSesionesDe,
   registrarAcceso,
   limpiarBitacoraVieja,
+  archivarUsuariosDeEmpleadosVencidos,
   marcarIntentoFallido,
   limpiarIntentos,
   leerCookie,
