@@ -6119,7 +6119,7 @@ async function renderPlanillaPanel(){
       return `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">🗓️ Reporte de horarios para pago de planilla</div>
       <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Por empleado: días laborados (15 días base — o menos si entró/salió a mitad de quincena — menos incapacidad/PSG/cita médica/ausencia ya aprobados; un día con marca real cuenta solo, sin depender de que la marcación cubra toda la quincena), horas extra aprobadas, y días libres/vacaciones, para la quincena elegida.</div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:6px;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Mes
           <input type="month" id="horario-mes" value="${mesInputHoy}">
         </label>
@@ -6129,8 +6129,12 @@ async function renderPlanillaPanel(){
             <option value="2"${!rangoHoy.esPrimeraQuincena ? " selected" : ""}>2ª (día 16 al fin de mes)</option>
           </select>
         </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Corte de datos (opcional)
+          <input type="date" id="horario-corte-datos">
+        </label>
         <button class="btn primary" onclick="generarReporteHorarioPlanilla();">⬇️ Generar y descargar Excel</button>
       </div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px;">Si armás el reporte antes de que cierre el período, poné aquí hasta qué fecha ya está aprobado lo que se debe contar (incapacidad, permiso, cita médica, vacaciones, días libres) — vacío usa el período completo, igual que hoy. Los días base a pagar (15, o menos si entró/salió a mitad) nunca cambian por esto.</div>
       <div id="horario-status" style="font-size:12px;"></div>
     </div>`;
     })();
@@ -6141,7 +6145,7 @@ async function renderPlanillaPanel(){
       return `<div class="dash-panel" style="margin-bottom:14px; border-color:var(--leaf);">
       <div class="dash-panel-title">🧾 Generar colillas de pago (nuevo)</div>
       <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Arma la colilla acá mismo (Ordinario + Feriado trabajado (doble) + Horas extra (normal 1.5x / triple en feriado) − CCSS Obrero 10.83% = Neto) en vez de subir el PDF de un proveedor externo — pensado para migrar poco a poco; "Subir / actualizar colillas" arriba sigue funcionando igual mientras tanto. No incluye ninguna deducción aparte de CCSS — esas se agregan a mano por persona antes de generar.</div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:6px;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Mes
           <input type="month" id="colilla-gen-mes" value="${mesInputHoy}">
         </label>
@@ -6151,8 +6155,12 @@ async function renderPlanillaPanel(){
             <option value="2"${!rangoHoy.esPrimeraQuincena ? " selected" : ""}>2ª (día 16 al fin de mes)</option>
           </select>
         </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Corte de datos (opcional)
+          <input type="date" id="colilla-gen-corte-datos">
+        </label>
         <button class="btn primary" onclick="calcularVistaPreviaColillasGeneradas();">🔍 Calcular vista previa</button>
       </div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px;">Si armás la colilla antes de que cierre el período, poné aquí hasta qué fecha ya está aprobado lo que se debe contar (incapacidad, permiso, cita médica, vacaciones, días libres) — vacío usa el período completo, igual que hoy. Los días base a pagar (15, o menos si entró/salió a mitad) nunca cambian por esto.</div>
       <div id="colilla-gen-status" style="font-size:12px; margin-bottom:6px;"></div>
       <div id="colillas-generadas-preview"></div>
     </div>`;
@@ -6189,6 +6197,15 @@ async function calcularVistaPreviaColillasGeneradas(){
     const [anio, mes1] = mesStr.split("-").map(Number);
     const rango = rangoQuincena(anio, mes1 - 1, quincenaStr !== "2");
 
+    // Corte de datos (opcional): para armar la colilla antes de que cierre
+    // el período — ver calcularResumenQuincena. No cambia cuántos días se
+    // pagan, solo hasta qué fecha ya cuenta lo aprobado.
+    const corteDatosStr = (document.getElementById("colilla-gen-corte-datos") || {}).value || "";
+    if (corteDatosStr && (corteDatosStr < isoDeFechaLocal(rango.inicio) || corteDatosStr > isoDeFechaLocal(rango.fin))){
+      if (status) status.innerHTML = `<span style="color:#b23b3b;">El corte de datos debe estar dentro de la quincena elegida.</span>`;
+      return;
+    }
+
     const [registros, empleados, puestosDB, empresasKeys] = await Promise.all([
       listarRegistrosHorasExtra(),
       cargarEmpleadosDB(),
@@ -6207,14 +6224,15 @@ async function calcularVistaPreviaColillasGeneradas(){
       empresa = r && r.value ? JSON.parse(r.value) : null;
     }
 
-    const filas = calcularResumenQuincena(registros, empleados, rango).sort((a,b) => compararPorApellido(a.emp, b.emp));
+    const filas = calcularResumenQuincena(registros, empleados, rango, corteDatosStr || null).sort((a,b) => compararPorApellido(a.emp, b.emp));
     if (!filas.length){
       if (status) status.innerHTML = "No hay ningún empleado activo dentro de esa quincena.";
       return;
     }
 
     const periodoInicio = `${String(rango.inicio.getDate()).padStart(2,"0")}/${String(rango.inicio.getMonth()+1).padStart(2,"0")}/${rango.inicio.getFullYear()}`;
-    const periodoTxt = `${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`;
+    const periodoTxt = `${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`
+      + (corteDatosStr ? ` — datos tomados hasta el ${fmtFechaDesdeDate(new Date(corteDatosStr + "T00:00:00"))}` : "");
     colillasGeneradasCache = filas.map(fila => {
       const jornadaEmp = jornadaDiariaDePuesto(puestosPorKey[fila.emp.PUESTO_KEY]);
       // Deducciones recurrentes (plan dental, cuota de préstamo) de esta
@@ -6611,6 +6629,15 @@ async function generarReporteHorarioPlanilla(){
     const [anio, mes1] = mesStr.split("-").map(Number);
     const rango = rangoQuincena(anio, mes1 - 1, quincenaStr !== "2");
 
+    // Corte de datos (opcional): para armar el reporte antes de que cierre
+    // el período — ver calcularResumenQuincena. No cambia cuántos días se
+    // pagan, solo hasta qué fecha ya cuenta lo aprobado.
+    const corteDatosStr = (document.getElementById("horario-corte-datos") || {}).value || "";
+    if (corteDatosStr && (corteDatosStr < isoDeFechaLocal(rango.inicio) || corteDatosStr > isoDeFechaLocal(rango.fin))){
+      if (status) status.innerHTML = `<span style="color:#b23b3b;">El corte de datos debe estar dentro de la quincena elegida.</span>`;
+      return;
+    }
+
     const registros = await listarRegistrosHorasExtra();
     const empleados = await cargarEmpleadosDB();
     // DEPARTAMENTO_EMP es texto libre autocompletado con el NOMBRE DEL PUESTO
@@ -6626,7 +6653,7 @@ async function generarReporteHorarioPlanilla(){
     // listas de empleados del sistema (compararPorApellido). Antes ordenaba
     // primero por departamento y el apellido solo desempataba dentro de
     // cada uno, así que de un vistazo no se veía alfabético.
-    const filas = calcularResumenQuincena(registros, empleados, rango)
+    const filas = calcularResumenQuincena(registros, empleados, rango, corteDatosStr || null)
       .sort((a, b) => compararPorApellido(a.emp, b.emp));
 
     if (!filas.length){
@@ -6656,7 +6683,8 @@ async function generarReporteHorarioPlanilla(){
 
     ws.mergeCells(2, 1, 2, COLUMNAS.length);
     const subtituloCelda = ws.getCell(2, 1);
-    subtituloCelda.value = `Horarios para planilla — ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena, del ${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`;
+    subtituloCelda.value = `Horarios para planilla — ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena, del ${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}`
+      + (corteDatosStr ? ` — datos tomados hasta el ${fmtFechaDesdeDate(new Date(corteDatosStr + "T00:00:00"))}` : "");
     subtituloCelda.font = { italic: true, size: 10 };
     subtituloCelda.alignment = { horizontal: "center", vertical: "middle" };
 
@@ -6716,7 +6744,8 @@ async function generarReporteHorarioPlanilla(){
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const nombreArchivo = `horarios_planilla_${mesStr}_q${rango.esPrimeraQuincena ? 1 : 2}.xlsx`;
     descargarBlobComoArchivo(blob, nombreArchivo);
-    if (status) status.innerHTML = `Descargado: ${filas.length} empleado(s) de la ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena (${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)}).`;
+    if (status) status.innerHTML = `Descargado: ${filas.length} empleado(s) de la ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena (${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)})`
+      + (corteDatosStr ? ` — datos hasta el ${fmtFechaDesdeDate(new Date(corteDatosStr + "T00:00:00"))}.` : ".");
   }catch(e){
     if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar el reporte: ${escapeHtml(e.message)}</span>`;
   }
@@ -6763,6 +6792,39 @@ function limpiarRangoHorasExtra(){
   horasExtraRangoDesde = null;
   horasExtraRangoHasta = null;
   renderHorasExtrasPanel();
+}
+
+// Último cálculo de "empleados sin ningún registro en el rango" — lo llena
+// renderHorasExtrasPanel cada vez que pinta el banner; el modal de abajo lo
+// lee de acá en vez de recibirlo como parámetro, para no tener que meter un
+// array entero (con nombres que pueden traer comillas) dentro de un onclick.
+let horasExtraSinRegistroCache = [];
+
+// Banner "N empleado(s) sin ningún día registrado" (solo master/gerente,
+// mismo trato visual que "colillas pendientes" en Inicio): abre el detalle
+// de a quién le falta, y desde ahí "Ver →" lleva derecho a la aprobación de
+// horas extra de esa persona (Pendientes, con ella ya seleccionada) — como
+// no tiene ningún registro, ahí se confirma que en efecto no hay nada que
+// aprobar y que de verdad falta importar su marcación.
+function mostrarModalHorasExtraSinRegistro(){
+  const modal = document.getElementById("modal-incompletos");
+  const body = document.getElementById("modal-incompletos-body");
+  modal.querySelector(".modal-head span").textContent = "⏱️ Sin horas extra registradas en el rango";
+  const lista = horasExtraSinRegistroCache.slice().sort(compararPorApellido);
+  body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${lista.length} empleado(s) sin ningún día registrado (de ningún tipo) en el rango de fechas elegido en Horas Extras.</div>` +
+    lista.map(e => `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</b></div>
+        <button class="btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="irAAprobacionHorasExtraDe('${String(e.key).replace(/'/g,"\\'")}')">Ver →</button>
+      </div>`).join("");
+  modal.classList.add("open");
+}
+
+function irAAprobacionHorasExtraDe(empKey){
+  cerrarModalIncompletos();
+  horasExtraFiltro = "pendiente";
+  horasExtraEmpleadoSeleccionado = empKey;
+  showTab("horasextras");
 }
 
 // Cada registro de horas_extra: es un "día" (con o sin marca) al que
@@ -7487,13 +7549,23 @@ function diasBaseParaEmpleadoEnQuincena(empleado, rango){
 // "ausencia" (el default automático de un hueco sin marcar) que cae en un
 // feriado tampoco se descuenta: por ley el feriado se paga aunque no se
 // trabaje, así que no es una ausencia injustificada.
-function calcularResumenQuincena(registros, empleados, rango){
+// `corteDatosISO` (opcional): para armar la planilla ANTES de que cierre el
+// período — acota hasta qué fecha ya cuentan los registros aprobados de
+// horas extra/incapacidad/permiso/cita médica/días libres. NUNCA toca
+// diasBaseParaEmpleadoEnQuincena (días base sigue siendo siempre el período
+// oficial completo, prorrateado solo por entrada/salida del empleado) — un
+// día dentro del período pero después del corte simplemente no se recoge
+// acá, así que ni resta (no entra a descPorTipo) ni se cuenta aparte (no
+// entra a diasLibresQuincena) — la misma regla que ya aplica hoy a un día
+// sin marca real: no se descuenta si nada lo justifica todavía.
+function calcularResumenQuincena(registros, empleados, rango, corteDatosISO){
   const anioMes = `${rango.inicio.getFullYear()}-${String(rango.inicio.getMonth() + 1).padStart(2, "0")}`;
   return empleados.map(emp => {
     const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
     if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0 };
     const inicioISO = isoDeFechaLocal(activo.inicioEfectivo);
-    const finISO = isoDeFechaLocal(activo.finEfectivo);
+    let finISO = isoDeFechaLocal(activo.finEfectivo);
+    if (corteDatosISO && corteDatosISO < finISO) finISO = corteDatosISO;
 
     const delEmpleadoEnRango = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
     const horasExtra = delEmpleadoEnRango.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
@@ -7517,7 +7589,11 @@ function calcularResumenQuincena(registros, empleados, rango){
     });
     const diasLaborados = Math.max(0, activo.diasBase - totalDescuento);
 
-    const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre") && r.FECHA.startsWith(anioMes)).length;
+    const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada"
+      && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
+      && r.FECHA.startsWith(anioMes)
+      && (!corteDatosISO || r.FECHA <= corteDatosISO)
+    ).length;
 
     return { emp, activo: true, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
   }).filter(f => f.activo);
@@ -7837,21 +7913,26 @@ async function renderHorasExtrasPanel(){
       <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">Acota solo lo ya <b>aprobado</b> y <b>rechazado</b> de abajo — lo pendiente/por aprobar siempre se ve completo, sin importar cuándo pasó.</div>
     </div></div>`;
 
-    // Empleados activos (del equipo, si es jefatura) sin NINGÚN registro —
-    // de ningún estado — dentro del rango elegido: señal de que a esa
-    // persona no se le importó/marcó nada en ese período, antes de que
-    // alguien note la ausencia hasta la hora de armar la planilla.
-    if (horasExtraRangoDesde && horasExtraRangoHasta){
-      let visiblesParaAviso = empleados.filter(e => !e.ARCHIVADO);
-      if (esJefatura) visiblesParaAviso = visiblesParaAviso.filter(e => departamentoDeEmpleado(e) === deptoJefatura);
-      const sinNingunRegistro = visiblesParaAviso.filter(e =>
+    // Empleados activos sin NINGÚN registro — de ningún estado — dentro del
+    // rango elegido: señal de que a esa persona no se le importó/marcó nada
+    // en ese período, antes de que alguien note la ausencia hasta la hora de
+    // armar la planilla. Solo master/gerente (igual que "colillas
+    // pendientes" en Inicio) — jefatura no administra planilla ni marcación.
+    if (puedeEditar && horasExtraRangoDesde && horasExtraRangoHasta){
+      const sinNingunRegistro = empleados.filter(e => !e.ARCHIVADO).filter(e =>
         !registros.some(r => r.EMPLEADO_KEY === e.key && enRangoHorasExtra(r.FECHA))
       );
+      horasExtraSinRegistroCache = sinNingunRegistro;
       if (sinNingunRegistro.length){
-        html += `<div class="section-card" style="border-color:#D9A54A; margin-bottom:14px;"><div class="section-body">
-          <div style="font-weight:700; color:#8a6d1f; margin-bottom:4px;">⚠️ Sin ningún día registrado en el rango elegido (${sinNingunRegistro.length})</div>
-          <div style="font-size:12px; color:var(--ink-soft);">${sinNingunRegistro.map(e => escapeHtml(nombreCompletoEmpleado(e) || e.key)).sort().join(", ")}</div>
-        </div></div>`;
+        html += `<div class="section-card" style="border-color:#B3261E; margin-bottom:14px; cursor:pointer;" onclick="mostrarModalHorasExtraSinRegistro();">
+          <div class="section-body" style="padding:14px; display:flex; align-items:center; gap:12px;">
+            <div style="font-size:26px;">⏱️</div>
+            <div>
+              <div style="font-weight:800; color:#B3261E;">${sinNingunRegistro.length} empleado(s) sin ningún día registrado en este rango</div>
+              <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">Puede que la marcación de ese período todavía no se les haya importado. Toca para ver quién falta.</div>
+            </div>
+          </div>
+        </div>`;
       }
     }
 
