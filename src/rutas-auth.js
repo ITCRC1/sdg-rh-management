@@ -133,6 +133,56 @@ router.get("/me", A.requiereSesion, async (req, res, next) => {
 });
 
 // --------------------------------------------------------------------------
+// GET /api/auth/mi-informacion — "¿cuál es MI PROPIO expediente?"
+//
+// Master, gerente y jefatura también son personas empleadas — esto resuelve
+// automáticamente, por cédula, a cuál cat_empleado:<key> corresponde la
+// cuenta que llama, para que "Mi información" (ver app.js) pueda mostrárselo
+// de solo lectura sin tener que buscarse a sí mismos en Expedientes. No hace
+// falta vincular nada a mano: en cuanto la cédula de la cuenta coincida con
+// la de un expediente, esto empieza a funcionar solo.
+// --------------------------------------------------------------------------
+router.get("/mi-informacion", A.requiereSesion, A.exigeCambioPassword, async (req, res, next) => {
+  try {
+    if (req.usuario.rol === "empleado") {
+      // Ya lo tiene resuelto desde el alta automática (rutas-datos.js) —
+      // sin necesidad de buscar nada.
+      return res.json({ clave: req.usuario.empleadoClave || null, propiedadId: req.usuario.propiedadId });
+    }
+
+    const cedula = String(req.usuario.cedula || "").trim();
+    if (!cedula) return res.json({ clave: null, propiedadId: null, motivo: "sin_cedula" });
+
+    const cedulaLimpia = cedula.replace(/\D/g, "");
+    const params = [cedulaLimpia];
+    let filtroPropiedad = "";
+    // gerente/jefatura: su propia propiedad fija. master (normalmente sin
+    // propiedad fija): busca en cualquiera, puede trabajar con todas.
+    if (req.usuario.rol !== "master") {
+      params.push(req.usuario.propiedadId);
+      filtroPropiedad = "AND propiedad_id = $2";
+    }
+
+    const { rows } = await query(
+      `SELECT clave, propiedad_id FROM documentos
+        WHERE tipo = 'cat_empleado' AND eliminado_en IS NULL
+          AND regexp_replace(valor_json->>'IDENTIFICACION_EMP', '\\D', '', 'g') = $1
+          ${filtroPropiedad}
+        LIMIT 1`,
+      params
+    );
+    const fila = rows[0];
+    res.json({
+      clave: fila ? fila.clave : null,
+      propiedadId: fila ? fila.propiedad_id : null,
+      motivo: fila ? null : "sin_expediente",
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --------------------------------------------------------------------------
 // POST /api/auth/password — cambiar la propia contraseña
 // --------------------------------------------------------------------------
 router.post("/password", A.requiereSesion, async (req, res, next) => {

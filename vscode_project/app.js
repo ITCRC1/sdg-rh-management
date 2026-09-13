@@ -235,8 +235,14 @@ async function entrarConSesion(){
   document.getElementById("login-gate").classList.remove("open");
   const logoutBtn = document.getElementById("nav-btn-logout");
   const logoutSep = document.getElementById("nav-sep-cuenta");
+  const miInfoBtn = document.getElementById("nav-btn-mi-informacion");
   if (logoutBtn) logoutBtn.style.display = "block";
   if (logoutSep) logoutSep.style.display = "block";
+  // master/gerente/jefatura también son personas empleadas — esta ventana
+  // se ofrece a cualquiera de los tres; si su cuenta no tiene cédula o no
+  // hay expediente que coincida, el modal lo explica al abrirse (ver
+  // abrirMiInformacion) en vez de decidirlo aquí.
+  if (miInfoBtn) miInfoBtn.style.display = "block";
 
   // La propiedad la manda el servidor según la cuenta; el cliente solo la
   // refleja en la interfaz. Un master sin propiedad asignada sí la elige,
@@ -261,6 +267,45 @@ async function iniciarPortalEmpleado(u){
   aplicarModoSegunRol(u.rol);
   renderAppTopbar();
   showTab("miperfil");
+}
+
+// "Mi información": master/gerente/jefatura también son personas empleadas
+// — esto les muestra, en un modal de solo lectura, el mismo contenido que ya
+// ve un empleado sobre sí mismo (vacaciones, horas extra, días libres,
+// estimado de liquidación, documentos, incapacidades). Se resuelve solo, por
+// cédula (ver GET /api/auth/mi-informacion) — nadie tiene que vincular nada
+// a mano. Reusa el modal genérico #modal-incompletos en vez de una pestaña
+// nueva, así no hace falta tocar las pestañas permitidas por rol.
+async function abrirMiInformacion(){
+  const modal = document.getElementById("modal-incompletos");
+  const body = document.getElementById("modal-incompletos-body");
+  modal.querySelector(".modal-head span").textContent = "🙋 Mi información";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  modal.classList.add("open");
+  try{
+    const info = await window.sdgApi.miInformacion();
+    if (!info || !info.clave){
+      const motivo = info && info.motivo;
+      body.innerHTML = `<div class="empty-state">${
+        motivo === "sin_cedula"
+          ? "Tu cuenta no tiene una cédula registrada. Pídele a un master que la agregue en el panel de Empleador."
+          : "No se encontró ningún expediente con tu cédula. Verifica que esté escrita igual en tu cuenta y en tu ficha de empleado."
+      }</div>`;
+      return;
+    }
+    const prefix = CATALOGS.empleados.prefix;
+    const empKey = info.clave.startsWith(prefix) ? info.clave.slice(prefix.length) : info.clave;
+    // Solo se manda como override si de verdad difiere de la propiedad
+    // activa (el caso normal de gerente/jefatura, cuya propiedad siempre es
+    // la misma que la activa): así solo un master viendo su propia ficha en
+    // otra propiedad paga el costo de saltarse la caché.
+    const propiedadOverride = (info.propiedadId && info.propiedadId !== currentPropiedadId)
+      ? info.propiedadId
+      : undefined;
+    body.innerHTML = await construirHtmlMiInformacion(empKey, propiedadOverride);
+  }catch(e){
+    body.innerHTML = `<div class="empty-state">No se pudo cargar tu información.</div>`;
+  }
 }
 
 // Ajusta la interfaz al rol. Es comodidad visual: quien manipule la petición
@@ -7059,12 +7104,16 @@ async function importarHorasExtraArchivo(inputEl){
   inputEl.value = "";
 }
 
-async function listarRegistrosHorasExtra(){
-  const res = await window.storage.list(HORAS_EXTRA_PREFIX, false);
+// `propiedadOverride`: solo para "Mi información" de un master cuya propia
+// ficha vive en otra propiedad (ver construirHtmlMiInformacion) — se pasa
+// tal cual a list()/get() para que ninguna de las dos toque la caché
+// compartida con la propiedad realmente activa.
+async function listarRegistrosHorasExtra(propiedadOverride){
+  const res = await window.storage.list(HORAS_EXTRA_PREFIX, propiedadOverride);
   const keys = (res && res.keys) || [];
   const registros = await Promise.all(keys.map(async k => {
     try{
-      const r = await window.storage.get(k, false);
+      const r = await window.storage.get(k, false, propiedadOverride);
       const v = r && r.value ? JSON.parse(r.value) : {};
       return { key: k, ...v };
     }catch(e){ return null; }
@@ -10377,12 +10426,12 @@ function diasEntreFechasISO(desde, hasta){
   return Math.round((b - a) / 86400000) + 1;
 }
 
-async function listarSolicitudesAusencia(){
-  const res = await window.storage.list(SOLICITUD_AUSENCIA_PREFIX, false);
+async function listarSolicitudesAusencia(propiedadOverride){
+  const res = await window.storage.list(SOLICITUD_AUSENCIA_PREFIX, propiedadOverride);
   const keys = (res && res.keys) || [];
   const registros = await Promise.all(keys.map(async k => {
     try{
-      const r = await window.storage.get(k, false);
+      const r = await window.storage.get(k, false, propiedadOverride);
       const v = r && r.value ? JSON.parse(r.value) : {};
       return { key: k, ...v };
     }catch(e){ return null; }
@@ -12300,43 +12349,57 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
   </div></div>`;
 }
 
-async function renderMiPerfilEmpleado(){
-  const panel = document.getElementById("miperfil-panel");
-  if (!panel) return;
-  if (!perfilActualKey){
-    panel.innerHTML = `<div class="empty-state">No se pudo identificar tu expediente. Contacta a Recursos Humanos.</div>`;
-    return;
+// Arma el HTML de "mi información" (vacaciones, horas extra, días libres,
+// estimado de liquidación, documentos, incapacidades) para CUALQUIER rol —
+// es el mismo contenido de solo lectura que ya ve un empleado sobre sí
+// mismo, usado también por master/gerente/jefatura en su propia ventana
+// "Mi información" (ver abrirMiInformacion). `propiedadOverride` solo lo usa
+// un master cuya propia ficha vive en una propiedad distinta a la que tiene
+// activa ahora mismo — para los demás roles llega undefined y no cambia nada.
+async function construirHtmlMiInformacion(empKey, propiedadOverride){
+  if (!empKey){
+    return `<div class="empty-state">No se pudo identificar tu expediente. Contacta a Recursos Humanos.</div>`;
   }
-  panel.innerHTML = `<div class="empty-state">Cargando tu perfil…</div>`;
   try{
-    const fullKey = CATALOGS.empleados.prefix + perfilActualKey;
-    const res = await window.storage.get(fullKey, false);
+    const fullKey = CATALOGS.empleados.prefix + empKey;
+    const res = await window.storage.get(fullKey, false, propiedadOverride);
     if (!res || !res.value){
-      panel.innerHTML = `<div class="empty-state">No se encontró tu expediente. Contacta a Recursos Humanos.</div>`;
-      return;
+      return `<div class="empty-state">No se encontró tu expediente. Contacta a Recursos Humanos.</div>`;
     }
     const emp = JSON.parse(res.value);
 
+    // La cédula se manda explícita (no solo para el rol empleado, a quien el
+    // servidor ya se la fuerza sola): master/gerente/jefatura NO tienen ese
+    // forzado automático, así que sin esto verían los documentos de TODOS
+    // los empleados de la propiedad en vez de solo los propios.
     let documentosEmpleado = [];
-    try{ documentosEmpleado = await window.sdgApi.documentos({ limite: 200 }); }
-    catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
+    try{
+      documentosEmpleado = await window.sdgApi.documentos({
+        limite: 200,
+        cedula: emp.IDENTIFICACION_EMP || "",
+        ...(propiedadOverride ? { propiedad: propiedadOverride } : {}),
+      });
+    }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
     let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 },
         diasIncapacidad = [], registrosDeEsteEmpleado = [], solicitudesPendientes = [];
     try{
-      const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
-      const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
-      solicitudesPendientes = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.ESTADO === "pendiente");
-      diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, perfilActualKey);
-      const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, perfilActualKey);
+      const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([
+        listarSolicitudesAusencia(propiedadOverride),
+        listarRegistrosHorasExtra(propiedadOverride),
+      ]);
+      const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === empKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+      solicitudesPendientes = solicitudesTodas.filter(s => s.EMPLEADO_KEY === empKey && s.ESTADO === "pendiente");
+      diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, empKey);
+      const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, empKey);
       saldoVacaciones = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidadPausan, new Date());
-      registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === perfilActualKey);
+      registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === empKey);
       resumenHorasExtra = {
         pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
         aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
         horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada").reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
       };
-    }catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
+    }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
     const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
     const salarioNum = Number(String(emp.SALARIO_EMP||"").replace(/[^0-9.]/g,""));
@@ -12363,9 +12426,9 @@ async function renderMiPerfilEmpleado(){
         preaviso: calcularPreavisoEstimado(fechaIngreso, hoy, salarioDiario),
         saldoPrestamosPendientes,
       };
-    }catch(e){ /* best effort — el resto del perfil se sigue mostrando igual */ }
+    }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
-    panel.innerHTML = `
+    return `
       <div class="section-card" style="border-color:var(--leaf);">
         <div class="section-body">
           <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">${escapeHtml(nombreCompletoEmpleado(emp))}</div>
@@ -12394,13 +12457,24 @@ async function renderMiPerfilEmpleado(){
         <div style="font-size:13px; padding:8px 0 0; font-weight:700; color:var(--navy-deep); display:flex; justify-content:space-between;"><span>Total estimado</span><span>${fmtMonedaEmpleado(prestaciones.vacacionesMonto + prestaciones.aguinaldo.total + prestaciones.cesantia.monto + prestaciones.preaviso.monto - prestaciones.saldoPrestamosPendientes, prestaciones.moneda)}</span></div>
       </div></div>` : ""}
 
-      ${renderSeccionColillasEmpleado(documentosEmpleado, perfilActualKey)}
+      ${renderSeccionColillasEmpleado(documentosEmpleado, empKey)}
 
       ${renderSeccionDocumentosPorConcepto(documentosEmpleado)}
 
       ${renderSeccionIncapacidades(diasIncapacidad)}
     `;
-  }catch(e){ panel.innerHTML = `<div class="empty-state">No se pudo cargar tu perfil.</div>`; }
+  }catch(e){
+    return `<div class="empty-state">No se pudo cargar tu información.</div>`;
+  }
+}
+
+// Pestaña "Mi Perfil" del rol empleado — sin cambios de comportamiento,
+// ahora es solo un envoltorio de construirHtmlMiInformacion.
+async function renderMiPerfilEmpleado(){
+  const panel = document.getElementById("miperfil-panel");
+  if (!panel) return;
+  panel.innerHTML = `<div class="empty-state">Cargando tu perfil…</div>`;
+  panel.innerHTML = await construirHtmlMiInformacion(perfilActualKey);
 }
 
 async function renderPerfilEmpleado(){

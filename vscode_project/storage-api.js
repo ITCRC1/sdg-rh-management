@@ -38,8 +38,14 @@
   // que la sesión se cayó, y en una página sin pantalla de login propia eso
   // provocaba un bucle infinito de recargas.
   async function pedir(ruta, opciones, sondeo) {
+    // Si la ruta YA trae su propia "propiedad=" (ver get/list con
+    // propiedadOverride, para "Mi información" de un master cuya ficha vive
+    // en otra propiedad distinta a la que tiene activa) no se le pega la
+    // activa encima — el servidor recibiría dos valores para el mismo
+    // parámetro.
+    const yaTienePropiedad = /[?&]propiedad=/.test(ruta);
     const propAct = propiedadActivaParaApi();
-    const rutaConPropiedad = propAct
+    const rutaConPropiedad = propAct && !yaTienePropiedad
       ? ruta + (ruta.includes("?") ? "&" : "?") + "propiedad=" + encodeURIComponent(propAct)
       : ruta;
     const res = await fetch(API + rutaConPropiedad, {
@@ -134,12 +140,22 @@
       }
     },
 
-    async get(clave) {
-      if (cache.has(clave)) return { key: clave, value: cache.get(clave) };
+    // `propiedadOverride`: SOLO para "Mi información" de un master cuya
+    // propia ficha vive en una propiedad distinta a la que tiene activa
+    // ahora mismo (ver construirHtmlMiInformacion en app.js). Con override,
+    // nunca se lee ni se escribe la caché en memoria — esa caché no
+    // distingue propiedad, y mezclar "mi ficha de otra propiedad" con los
+    // datos de la propiedad activa sería un bug silencioso.
+    async get(clave, _sinUsar, propiedadOverride) {
+      if (!propiedadOverride && cache.has(clave)) return { key: clave, value: cache.get(clave) };
       try {
-        const r = await pedir("/datos/" + encodeURIComponent(clave));
-        cache.set(clave, r.valor);
-        versiones.set(clave, r.version);
+        const ruta = "/datos/" + encodeURIComponent(clave) +
+          (propiedadOverride ? "?propiedad=" + encodeURIComponent(propiedadOverride) : "");
+        const r = await pedir(ruta);
+        if (!propiedadOverride) {
+          cache.set(clave, r.valor);
+          versiones.set(clave, r.version);
+        }
         return { key: clave, value: r.valor };
       } catch (e) {
         // app.js espera una excepción cuando la clave no existe.
@@ -155,15 +171,19 @@
       return { key: clave, deleted: true };
     },
 
-    async list(prefijo) {
-      const r = await pedir("/datos?prefijo=" + encodeURIComponent(prefijo || "") + "&valores=1");
+    async list(prefijo, propiedadOverride) {
+      const ruta = "/datos?prefijo=" + encodeURIComponent(prefijo || "") + "&valores=1" +
+        (propiedadOverride ? "&propiedad=" + encodeURIComponent(propiedadOverride) : "");
+      const r = await pedir(ruta);
       const claves = [];
       for (const item of r.items) {
         claves.push(item.clave);
-        // Precargar los valores ahorra N peticiones: la app siempre hace
-        // list() y acto seguido un get() por cada clave devuelta.
-        cache.set(item.clave, item.valor);
-        versiones.set(item.clave, item.version);
+        if (!propiedadOverride) {
+          // Precargar los valores ahorra N peticiones: la app siempre hace
+          // list() y acto seguido un get() por cada clave devuelta.
+          cache.set(item.clave, item.valor);
+          versiones.set(item.clave, item.version);
+        }
       }
       return { keys: claves, prefix: prefijo };
     },
@@ -228,6 +248,13 @@
 
     sesionActual() {
       return sesion;
+    },
+
+    // "Mi información" (ver app.js): resuelve por cédula a cuál expediente
+    // corresponde la cuenta que llama — master/gerente/jefatura también son
+    // empleados, aunque el rol de su cuenta sea otro.
+    async miInformacion() {
+      return pedir("/auth/mi-informacion");
     },
 
     // jefatura y empleado son de solo lectura (jefatura con una excepción

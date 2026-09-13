@@ -69,11 +69,25 @@ async function valorDeClave(propiedad, clave) {
 // clasifica el catálogo del Ministerio de Trabajo). Compartido por
 // horas_extra:, solicitud_ausencia: e incapacidad:, los únicos prefijos que
 // una jefatura puede llegar a tocar o consultar.
-async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider) {
-  if (!departamentoLider || !empleadoKey) return false;
+// `cedulaPropia`, si viene, es SOLO para lectura ("Mi información" — ver
+// app.js): una jefatura siempre puede ver sus propias filas aunque su propio
+// puesto no caiga en el departamento que lidera. Quien llama a escribir o
+// aprobar (puedeEscribirClave) nunca manda este parámetro, así que esto
+// nunca abre una autoaprobación — solo lectura de lo propio.
+async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia) {
+  if (!empleadoKey) return false;
   const empleado = await valorDeClave(propiedad, EMPLEADO_PREFIX + empleadoKey);
-  if (!empleado || !empleado.PUESTO_KEY) return false;
+  if (!empleado) return false;
 
+  if (
+    cedulaPropia &&
+    empleado.IDENTIFICACION_EMP &&
+    empleado.IDENTIFICACION_EMP.replace(/\D/g, "") === String(cedulaPropia).replace(/\D/g, "")
+  ) {
+    return true;
+  }
+
+  if (!departamentoLider || !empleado.PUESTO_KEY) return false;
   const puesto = await valorDeClave(propiedad, PUESTO_PREFIX + empleado.PUESTO_KEY);
   if (!puesto) return false;
 
@@ -81,28 +95,28 @@ async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLide
 }
 
 // ¿El empleado dueño de esta clave de horas_extra pertenece al departamento
-// que lidera esta jefatura? Un registro "sinmatch-" (todavía sin empleado
-// identificado) nunca pertenece a ninguna jefatura — esa asignación es
-// trabajo de master/gerente.
-async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departamentoLider) {
+// que lidera esta jefatura (o es la jefatura misma, en lectura)? Un registro
+// "sinmatch-" (todavía sin empleado identificado) nunca pertenece a nadie —
+// esa asignación es trabajo de master/gerente.
+async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departamentoLider, cedulaPropia) {
   const empleadoKey = claveHorasExtra.split(":")[1] || "";
   if (!empleadoKey || empleadoKey.startsWith("sinmatch-")) return false;
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
 }
 
 // Igual que arriba, para solicitud_ausencia:<empleadoKey>:<id> — la clave
 // del empleado sale del mismo segundo segmento.
-async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamentoLider) {
+async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamentoLider, cedulaPropia) {
   const empleadoKey = claveSolicitud.split(":")[1] || "";
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
 }
 
 // Igual que arriba, para incapacidad:<empleadoKey>:<id> — a diferencia de
 // horas_extra: no existe un "sinmatch-" aquí (crearIncapacidad siempre exige
 // elegir un empleado ya identificado), así que no hace falta esa excepción.
-async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departamentoLider) {
+async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departamentoLider, cedulaPropia) {
   const empleadoKey = claveIncapacidad.split(":")[1] || "";
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
 }
 
 // ¿Puede este usuario escribir en esta clave? master/gerente: todo, como
@@ -168,17 +182,18 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
 }
 
 // Filtra filas (con o sin `valor`) de horas_extra:, solicitud_ausencia: o
-// incapacidad: dejando solo las del equipo de esa jefatura. Secuencial y no
-// en paralelo a propósito: son pocas filas por período, y evita abrir
-// decenas de conexiones a la vez.
-async function filtrarFilasPorEquipo(filas, propiedad, puestoLider) {
+// incapacidad: dejando solo las del equipo de esa jefatura, MÁS las propias
+// (ver "Mi información" en app.js — cedula de `usuario` habilita esa
+// excepción de solo lectura). Secuencial y no en paralelo a propósito: son
+// pocas filas por período, y evita abrir decenas de conexiones a la vez.
+async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
   const resultado = [];
   for (const fila of filas) {
     const pertenece = fila.clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)
-      ? await solicitudPerteneceAEquipo(propiedad, fila.clave, puestoLider)
+      ? await solicitudPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
       : fila.clave.startsWith(INCAPACIDAD_PREFIX)
-      ? await incapacidadPerteneceAEquipo(propiedad, fila.clave, puestoLider)
-      : await horaExtraPerteneceAEquipo(propiedad, fila.clave, puestoLider);
+      ? await incapacidadPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
+      : await horaExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula);
     if (pertenece) resultado.push(fila);
   }
   return resultado;
@@ -338,7 +353,7 @@ router.get("/", async (req, res, next) => {
         [propiedad, like]
       );
       const items = filtrarPorEquipo
-        ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario.puesto)
+        ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario)
         : filtrarPropias
         ? filtrarFilasPropias(rows, req.usuario.empleadoClave)
         : rows;
@@ -352,7 +367,7 @@ router.get("/", async (req, res, next) => {
       [propiedad, like]
     );
     const filas = filtrarPorEquipo
-      ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario.puesto)
+      ? await filtrarFilasPorEquipo(rows, propiedad, req.usuario)
       : filtrarPropias
       ? filtrarFilasPropias(rows, req.usuario.empleadoClave)
       : rows;
@@ -384,15 +399,15 @@ router.get("/:clave(*)", async (req, res, next) => {
     if (!rows[0]) return res.status(404).json({ error: "No encontrado", clave });
 
     if (req.usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
-      const enSuEquipo = await horaExtraPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      const enSuEquipo = await horaExtraPerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "jefatura" && clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)) {
-      const enSuEquipo = await solicitudPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      const enSuEquipo = await solicitudPerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "jefatura" && clave.startsWith(INCAPACIDAD_PREFIX)) {
-      const enSuEquipo = await incapacidadPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      const enSuEquipo = await incapacidadPerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "empleado" && !esClavePropiaDeEmpleado(clave, req.usuario.empleadoClave)) {
@@ -510,9 +525,10 @@ router.delete("/:clave(*)", A.requiereEscritura, async (req, res, next) => {
   }
 });
 
-// Jefatura no tiene "página de RH": nada de histórico ni de documentos
-// congelados (contratos, colillas, cartas...) — eso vive fuera del módulo
-// de horas extra, que es lo único a lo que esa cuenta debe llegar.
+// Jefatura no tiene "página de RH": nada de histórico (bitácora interna).
+// Documentos congelados (contratos, colillas, cartas...) es distinto: ahí sí
+// puede leer, pero SOLO los suyos propios — ver el router `emitidos` más
+// abajo, que ya no usa esta función y en su lugar fuerza su propia cédula.
 function bloquearJefatura(req, res, next) {
   if (req.usuario.rol === "jefatura") {
     return res.status(403).json({ error: "Tu cuenta no tiene acceso a esto.", codigo: "sin_permiso" });
@@ -585,7 +601,12 @@ historial.get("/", async (req, res, next) => {
 // Documentos emitidos (contratos congelados)
 // ==========================================================================
 const emitidos = express.Router();
-emitidos.use(A.requiereSesion, A.exigeCambioPassword, bloquearJefatura);
+// A diferencia de /api/historial, aquí NO se bloquea a jefatura por
+// completo: puede leer (nunca escribir — eso sigue exigiendo
+// A.requiereEscritura) SOLO sus propios documentos, para "Mi información"
+// (ver GET / y GET /:id/archivo más abajo, que fuerzan su propia cédula
+// igual que ya hacían para el rol empleado).
+emitidos.use(A.requiereSesion, A.exigeCambioPassword);
 
 // POST /api/documentos — congela un archivo tal como se generó
 emitidos.post("/", A.requiereEscritura, async (req, res, next) => {
@@ -644,11 +665,11 @@ emitidos.get("/", async (req, res, next) => {
 
     const filtros = ["propiedad_id = $1"];
     const params = [propiedad];
-    // Un empleado solo ve SUS propios documentos: la cédula la pone el
-    // servidor desde la sesión, ignorando lo que mande el cliente — a
-    // diferencia de los demás roles, que sí pueden pedir la de otra persona
-    // (RRHH consultando el expediente de un empleado).
-    if (req.usuario.rol === "empleado") {
+    // Un empleado (y una jefatura, que aquí NUNCA ve documentos ajenos) solo
+    // ve SUS PROPIOS documentos: la cédula la pone el servidor desde la
+    // sesión, ignorando lo que mande el cliente. master/gerente sí pueden
+    // pedir la de otra persona (RRHH consultando el expediente de alguien).
+    if (req.usuario.rol === "empleado" || req.usuario.rol === "jefatura") {
       params.push(String(req.usuario.cedula || ""));
       filtros.push("empleado_cedula = $" + params.length);
     } else if (req.query.cedula) {
@@ -691,7 +712,7 @@ emitidos.get("/:id/archivo", async (req, res, next) => {
     if (d.propiedad_id !== propiedad && req.usuario.rol !== "master") {
       return res.status(403).json({ error: "Ese documento pertenece a otra propiedad." });
     }
-    if (req.usuario.rol === "empleado" && d.empleado_cedula !== req.usuario.cedula) {
+    if ((req.usuario.rol === "empleado" || req.usuario.rol === "jefatura") && d.empleado_cedula !== req.usuario.cedula) {
       return res.status(403).json({ error: "Ese documento no es tuyo." });
     }
 
