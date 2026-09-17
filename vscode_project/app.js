@@ -4178,7 +4178,7 @@ function renderPropiedadGate(){
   // avanzando en sentido horario. Los 5 giran juntos y al mismo tiempo
   // porque ninguno lleva retraso — CSS ve todos los <div> como "recién
   // insertados" a la vez y corre la animación de girarLogoPropiedad en sync.
-  const cx = 150, cy = 150, r = 110;
+  const cx = 190, cy = 190, r = 150;
   grid.innerHTML = PROPIEDADES_MAESTRAS.map((p, i) => {
     const angulo = (-90 + i * (360 / PROPIEDADES_MAESTRAS.length)) * Math.PI / 180;
     const x = cx + r * Math.cos(angulo);
