@@ -998,11 +998,13 @@ data.LIDER_DIRECTOR = DIRECTOR_PROYECTO_FIJO;
 
 // ---------- progress bar ----------
 function updateProgress(){
-  // Only count fields that belong to the employment contract itself — the
-  // despido/recomendación groups are separate, optional documents and
-  // shouldn't affect the contract's completion percentage.
+  // Only count fields that belong to the employment contract itself — despido,
+  // recomendación, permiso sin goce y vacaciones son documentos aparte, cada
+  // uno con su propio formulario en Documentos, y no deben afectar el
+  // porcentaje de avance del contrato.
   const contractSections = groupFieldsIntoSections().filter(sec =>
-    !DESPIDO_SECTION_TITLES.includes(sec.title) && !RECOM_SECTION_TITLES.includes(sec.title));
+    !DESPIDO_SECTION_TITLES.includes(sec.title) && !RECOM_SECTION_TITLES.includes(sec.title) &&
+    !PERMISO_SECTION_TITLES.includes(sec.title) && !VACACIONES_SECTION_TITLES.includes(sec.title));
   // Los campos "hidden_derivado" (NOMBRE_TRABAJADOR, PROVINCIA/CANTON/DISTRITO/
   // SENAS_TRABAJADOR) nunca se le piden a la persona — son un espejo
   // recompuesto de otros campos que sí cuentan (Apellidos/Nombre,
@@ -1588,7 +1590,9 @@ function renderForm(){
       direccionTxt + `<button type="button" class="btn" style="margin-top:6px; padding:5px 10px; font-size:11px;" onclick="desvincularEmpleadoContrato()">🔓 ${tr("Desvincular (editar manualmente)","Unlink (edit manually)")}</button>`);
     exclude = new Set(["NOMBRE_TRABAJADOR","IDENTIFICACION","APELLIDOS_TRABAJADOR","NOMBRE_PILA_TRABAJADOR","DIRECCION_TRABAJADOR","ESTADO_CIVIL"]);
   }
-  renderFieldSections("form-panel", title => !DESPIDO_SECTION_TITLES.includes(title) && !RECOM_SECTION_TITLES.includes(title), intro, exclude);
+  renderFieldSections("form-panel", title =>
+    !DESPIDO_SECTION_TITLES.includes(title) && !RECOM_SECTION_TITLES.includes(title) &&
+    !PERMISO_SECTION_TITLES.includes(title) && !VACACIONES_SECTION_TITLES.includes(title), intro, exclude);
   updateProgress();
   updateValidationHints();
 }
