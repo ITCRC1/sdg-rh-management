@@ -2374,10 +2374,20 @@ function catalogFieldHtml(meta){
         <div class="hint-error" id="hint-${id}">${val && !cedulaOk ? "Formato incompleto — debe ser 1-1112-1111 (9 dígitos)." : ""}</div>`;
     }
   } else if (type === "date_ingreso_emp"){
+    // El selector SIEMPRE debe interpretar el texto guardado con el mismo
+    // criterio que usa el resto de la app para antigüedad/cesantía/preaviso/
+    // vacaciones/aguinaldo (parsearFechaEmpleado → parsearFechaDDMMYYYY,
+    // día/mes primero) — antes usaba parseFechaFlexible (que prioriza
+    // mes/día, pensado para fechas sueltas de Excel) y por eso este selector
+    // podía mostrar una fecha distinta a la que en verdad se usaba para
+    // calcular la antigüedad, con el mismo dato guardado. Se arma el ISO a
+    // mano con los mismos año/mes/día (nunca con toISOString(), que puede
+    // correrse un día según la zona horaria) para que el selector muestre
+    // exactamente el mismo día que ya se está usando en los cálculos.
     let isoVal = "";
     if (catalogEditing.values.FECHA_INGRESO_EMP){
-      const d = parseFechaFlexible(catalogEditing.values.FECHA_INGRESO_EMP);
-      if (d) isoVal = d.toISOString().slice(0,10);
+      const d = parsearFechaEmpleado(catalogEditing.values.FECHA_INGRESO_EMP);
+      if (d) isoVal = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
     }
     control = `<input type="date" value="${isoVal}" onchange="onFechaIngresoEmpChange(this.value)">
       ${catalogEditing.values.FECHA_INGRESO_EMP ? `<div class="hint">${escapeHtml(catalogEditing.values.FECHA_INGRESO_EMP)}${catalogEditing.values.FECHA_INGRESO_LETRAS_EMP ? " — " + escapeHtml(catalogEditing.values.FECHA_INGRESO_LETRAS_EMP) : ""}</div>` : ""}`;
@@ -3874,8 +3884,8 @@ async function renderCatalogTab(type){
       activos = activos.slice().sort((a, b) => {
         if (empleadosOrden === "nombre_asc") return a.name.localeCompare(b.name, "es");
         if (empleadosOrden === "nombre_desc") return b.name.localeCompare(a.name, "es");
-        const fa = parseFechaFlexible(a.raw.FECHA_INGRESO_EMP);
-        const fb = parseFechaFlexible(b.raw.FECHA_INGRESO_EMP);
+        const fa = parsearFechaEmpleado(a.raw.FECHA_INGRESO_EMP);
+        const fb = parsearFechaEmpleado(b.raw.FECHA_INGRESO_EMP);
         if (!fa && !fb) return a.name.localeCompare(b.name, "es");
         if (!fa) return 1;  // sin fecha registrada: al final, sin importar la dirección
         if (!fb) return -1;
@@ -5717,7 +5727,7 @@ function fechaISO(d){
 // que ocurra DESPUÉS de su fecha de ingreso — nunca antes. Ej.: ingresa el 26
 // de agosto (cae en el rango 16–31) → elegible desde el 1 de septiembre.
 function empleadoElegibleParaColilla(fechaIngresoStr, checkDate){
-  const fechaIngreso = parseFechaFlexible(fechaIngresoStr);
+  const fechaIngreso = parsearFechaEmpleado(fechaIngresoStr);
   if (!fechaIngreso) return true; // sin fecha registrada no se puede excluir — se revisa por seguridad
   const dia = fechaIngreso.getDate();
   const fechaDesdeQueAplica = dia <= 15
