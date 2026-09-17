@@ -2614,7 +2614,7 @@ function catalogFieldHtml(meta){
         <input type="text" id="puesto-selector-search" placeholder="🔍 Buscar puesto por nombre…" value="${escapeHtml(puestoSelectorBusqueda)}" oninput="filtrarPuestoSelectorInput(this.value)" autocomplete="off">
         <div style="max-height:220px; overflow-y:auto; border:1px solid var(--paper-line); border-radius:8px; margin-top:6px;">
           ${filtradas.length
-            ? filtradas.map(p => `<div class="catalog-item" style="cursor:pointer; padding:8px 10px;" onclick="onSelectPuestoCatalogo('${p.key.replace(/'/g,"\\'")}')">${escapeHtml(p.nombre)}</div>`).join("")
+            ? filtradas.map(p => `<div class="catalog-item" style="cursor:pointer; padding:8px 10px;" onclick="onSelectPuestoCatalogo('${p.key.replace(/'/g,"\\'")}')">${escapeHtml(p.nombre)}${p.esReferencia ? ` <span style="color:var(--ink-soft); font-size:10.5px;">(sugerido MTSS)</span>` : ""}</div>`).join("")
             : `<div class="hint" style="padding:10px;">Ningún puesto coincide con "${escapeHtml(puestoSelectorBusqueda)}".</div>`}
         </div>
         <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="onSelectPuestoCatalogo('__custom__')">✏️ No está en la lista (escribir abajo)</button>`;
@@ -2747,6 +2747,34 @@ async function importFromMinisterio(){
   renderCatalogTab("puestos");
 }
 
+// Convierte una de las opciones "sugeridas" del Ministerio de Trabajo (ver
+// openCatalogForm, selector de "Puesto a contratar" de Empleados) en un
+// puesto real y guardado del catálogo — mismos datos de referencia que ya
+// usa "Usar como base para nuevo puesto" en la pestaña Puestos (salario
+// mínimo, responsabilidades y tareas de apoyo sugeridas). Así se puede
+// contratar directo en cualquiera de los ~45 puestos oficiales sin tener
+// que darlos de alta antes en Puestos — el primero que lo elija lo crea
+// para todos los que vengan después.
+async function materializarPuestoDesdeMinisterio(idx){
+  const p = MINISTERIO_PUESTOS[idx];
+  if (!p) throw new Error("Puesto de referencia no encontrado.");
+  const key = slugify(p.puestoEs);
+  const fullKey = CATALOGS.puestos.prefix + key;
+  const existente = await window.storage.get(fullKey, false);
+  if (existente && existente.value) return { key, nombre: p.puestoEs }; // ya lo había creado otra persona antes — se reutiliza, no se pisa
+  const values = { PUESTO: p.puestoEs, PUESTO_EN: p.puestoEn, SALARIO_MINISTERIO: p.salarioMin || "", DEPARTAMENTO_MINISTERIO: p.departamento || "" };
+  if (p.salarioMin){
+    values.SALARIO_PUESTO = String(Math.round(p.salarioMin));
+    values.SALARIO_PUESTO_LETRAS = salarioEnLetras(p.salarioMin, "colones", "es");
+  }
+  if (RESPONSABILIDADES_SUGERIDAS[p.puestoEs]) values.RESPONSABILIDADES = RESPONSABILIDADES_SUGERIDAS[p.puestoEs];
+  if (RESPONSABILIDADES_SUGERIDAS_EN[p.puestoEs]) values.RESPONSABILIDADES_EN = RESPONSABILIDADES_SUGERIDAS_EN[p.puestoEs];
+  if (TAREAS_APOYO_SUGERIDAS[p.puestoEs]) values.TAREAS_APOYO = TAREAS_APOYO_SUGERIDAS[p.puestoEs];
+  if (TAREAS_APOYO_SUGERIDAS_EN[p.puestoEs]) values.TAREAS_APOYO_EN = TAREAS_APOYO_SUGERIDAS_EN[p.puestoEs];
+  await window.storage.set(fullKey, JSON.stringify(values), false);
+  return { key, nombre: p.puestoEs };
+}
+
 function toggleEmpresaPropiedad(key, checked){
   const chosenKeys = new Set((catalogEditing.values.PROPIEDADES_KEYS || "").split(",").map(s=>s.trim()).filter(Boolean));
   if (checked) chosenKeys.add(key); else chosenKeys.delete(key);
@@ -2805,6 +2833,20 @@ async function openCatalogForm(type, key){
     if (puestosConProblema > 0){
       statusMsg(`${puestosConProblema} puesto(s) del catálogo tienen un registro dañado — igual aparecen en la lista, mostrados por su clave interna en vez de su nombre.`, false);
     }
+    // Además de los puestos YA creados, se ofrecen también los puestos
+    // hoteleros oficiales del Ministerio de Trabajo que todavía nadie haya
+    // dado de alta como puesto propio — así "Puesto a contratar" trae la
+    // lista estándar completa desde el día uno, sin tener que ir antes a
+    // Puestos a crearlos uno por uno. Al elegir uno de estos (marcado como
+    // "esReferencia"), onSelectPuestoCatalogo lo convierte solo en un puesto
+    // real del catálogo (ver materializarPuestoDesdeMinisterio).
+    const nombresYaCreados = new Set(catalogEditing.puestoOptions.map(p => (p.nombre||"").trim().toUpperCase()));
+    MINISTERIO_PUESTOS.forEach((p, i) => {
+      if (!nombresYaCreados.has(p.puestoEs.trim().toUpperCase())){
+        catalogEditing.puestoOptions.push({ key: "mtss:" + i, nombre: p.puestoEs, esReferencia: true });
+      }
+    });
+    catalogEditing.puestoOptions.sort((a,b) => a.nombre.localeCompare(b.nombre, "es"));
     // Sin puesto asignado todavía: arranca mostrando el buscador directo en
     // vez del resumen "puesto elegido + Cambiar" (no hay nada que resumir).
     catalogEditing.puestoSelectorAbierto = !values.PUESTO_KEY;
@@ -2979,6 +3021,19 @@ async function onSelectPuestoCatalogo(val){
     catalogEditing.values.PUESTO_KEY = "";
     renderCatalogTab("empleados");
     return;
+  }
+  if (val && val.startsWith("mtss:")){
+    try{
+      const nuevo = await materializarPuestoDesdeMinisterio(parseInt(val.slice(5), 10));
+      catalogEditing.puestoOptions = (catalogEditing.puestoOptions || []).filter(p => p.key !== val);
+      catalogEditing.puestoOptions.push({ key: nuevo.key, nombre: nuevo.nombre });
+      catalogEditing.puestoOptions.sort((a,b) => a.nombre.localeCompare(b.nombre, "es"));
+      val = nuevo.key;
+      statusMsg(`"${nuevo.nombre}" se agregó como puesto nuevo en el catálogo, con los datos de referencia del Ministerio de Trabajo.`, true);
+    }catch(e){
+      statusMsg("No se pudo crear el puesto: " + (e.message || "error"), false);
+      return;
+    }
   }
   catalogEditing.values.PUESTO_KEY = val;
   if (val){
