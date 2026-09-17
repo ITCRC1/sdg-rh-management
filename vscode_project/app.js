@@ -5703,7 +5703,17 @@ async function mostrarModalColillasArchivadas(){
 
     body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${docs.length} colilla(s) archivada(s) de ${grupos.length} trabajador(es).</div>
       <button class="btn" style="width:100%; margin-bottom:8px;" onclick="descargarTodasLasColillas()">⬇️ Descargar absolutamente todas (${docs.length})</button>
-      <button class="btn" style="width:100%; margin-bottom:12px;${totalDuplicados ? " border-color:#B3261E; color:#B3261E;" : ""}" onclick="mostrarModalDuplicadosColillas()">🧹 Buscar y eliminar duplicados${totalDuplicados ? ` (${totalDuplicados})` : ""}</button>` +
+      <button class="btn" style="width:100%; margin-bottom:12px;${totalDuplicados ? " border-color:#B3261E; color:#B3261E;" : ""}" onclick="mostrarModalDuplicadosColillas()">🧹 Buscar y eliminar duplicados${totalDuplicados ? ` (${totalDuplicados})` : ""}</button>
+      <div class="section-card" style="border-color:#B3261E; margin-bottom:12px;"><div class="section-body">
+        <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">🗑️ Anular todas las colillas de una fecha (de todos los empleados)</div>
+        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Útil cuando una tanda completa se generó mal (fecha, período o monto equivocado) y hay que subir/generar la correcta — no se borran de la base, quedan anuladas con el motivo que escribas.</div>
+        <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+          <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Fecha en que se archivaron
+            <input type="date" id="colillas-anular-fecha">
+          </label>
+          <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="confirmarAnularColillasPorFecha()">🗑️ Anular esa tanda</button>
+        </div>
+      </div></div>` +
       grupos.map((g, gi) => `
         <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
@@ -5713,11 +5723,42 @@ async function mostrarModalColillasArchivadas(){
           ${g.docs.map(d => `
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0;">
               <div style="font-size:11px; color:var(--ink-soft); min-width:0;">${d.emitido_en ? new Date(d.emitido_en).toLocaleDateString("es-CR") : "—"} · ${escapeHtml(d.titulo)}</div>
-              <a class="btn" style="padding:4px 9px; font-size:10.5px; flex-shrink:0;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">⬇️</a>
+              <div style="display:flex; gap:4px; flex-shrink:0;">
+                <a class="btn" style="padding:4px 9px; font-size:10.5px;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">⬇️</a>
+                <button class="btn" style="padding:4px 9px; font-size:10.5px;" onclick="anularDocumentoConMotivo('${String(d.id).replace(/'/g,"\\'")}', mostrarModalColillasArchivadas)">🗑️</button>
+              </div>
             </div>`).join("")}
         </div>`).join("");
     window._colillasArchivadasGrupos = grupos;
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar la lista: ${escapeHtml(e.message)}</div>`; }
+}
+
+// Anula de un solo golpe TODAS las colillas vigentes cuya fecha de archivo
+// (emitido_en) caiga en el día elegido, sin importar de qué empleado sean —
+// pensado para cuando una tanda completa (ej. "Generar colillas de pago" de
+// todos los empleados de un período) se generó mal y hay que subir/generar
+// la correcta encima. Nunca se borran de la base (documentos_emitidos es de
+// solo-inserción) — solo quedan anuladas con el motivo que se escriba, igual
+// que el resto de anulaciones.
+async function confirmarAnularColillasPorFecha(){
+  const fecha = (document.getElementById("colillas-anular-fecha") || {}).value;
+  if (!fecha){ statusMsg("Elegí la fecha de la tanda que querés anular.", false); return; }
+  const todos = window._colillasArchivadasCache || [];
+  const delDia = todos.filter(d => !d.anulado_en && String(d.emitido_en||"").slice(0,10) === fecha);
+  if (!delDia.length){ statusMsg("No hay colillas vigentes archivadas en esa fecha.", false); return; }
+  const nombres = [...new Set(delDia.map(d => d.empleado_nombre || "sin nombre"))];
+  const seguro = confirm(`Se van a anular ${delDia.length} colilla(s) de ${nombres.length} empleado(s), archivadas el ${new Date(fecha+"T00:00:00").toLocaleDateString("es-CR")}.\n\n${nombres.slice(0,15).join(", ")}${nombres.length>15 ? ` y ${nombres.length-15} más…` : ""}\n\n¿Continuar?`);
+  if (!seguro) return;
+  const motivo = prompt("Motivo de la anulación en bloque (ej. \"tanda generada con datos incorrectos, se sube/genera de nuevo\"):", "");
+  if (motivo === null) return;
+  if (!motivo.trim()){ statusMsg("Escribe un motivo antes de anular.", false); return; }
+  let ok = 0, fallidos = 0;
+  for (const d of delDia){
+    try{ await window.sdgApi.anularDocumento(d.id, motivo.trim()); ok++; }
+    catch(e){ fallidos++; }
+  }
+  statusMsg(`${ok} colilla(s) anulada(s)` + (fallidos ? ` — ${fallidos} no se pudieron anular.` : "."), fallidos === 0);
+  await mostrarModalColillasArchivadas();
 }
 
 // Agrupa por la misma clave que usa el archivador (cédula/nombre + inicio de
@@ -13137,15 +13178,19 @@ const TIPOS_DOCUMENTO_EXPEDIENTE = {
 // para poder auditar después qué existió y por qué se anuló), solo deja de
 // contar como vigente y desaparece de este listado. Pide el motivo a mano
 // (ej. "era de prueba") para que quede en el registro por qué se anuló.
-async function anularDocumentoDesdeExpediente(id){
+async function anularDocumentoConMotivo(id, alConfirmar){
   const motivo = prompt("Motivo de la anulación (ej. \"generado de prueba\"):", "");
   if (motivo === null) return; // canceló el prompt
   if (!motivo.trim()){ statusMsg("Escribe un motivo antes de anular.", false); return; }
   try{
     await window.sdgApi.anularDocumento(id, motivo.trim());
     statusMsg("Documento anulado.");
-    await renderPerfilEmpleado();
+    if (alConfirmar) await alConfirmar();
   }catch(e){ statusMsg("No se pudo anular: " + (e.message || "error"), false); }
+}
+
+async function anularDocumentoDesdeExpediente(id){
+  await anularDocumentoConMotivo(id, renderPerfilEmpleado);
 }
 
 function renderSeccionDocumentosEmpleado(documentosSinFiltrar){
