@@ -3314,6 +3314,18 @@ function normalizarFechaImportada(raw){
   }
   const s = String(raw == null ? "" : raw).trim();
   if (!s) return "";
+  // Fecha de texto en formato #/#/#### (CSV, o celda de Excel guardada como
+  // texto en vez de fecha real): llega en el orden de EE. UU. (MM/DD/AAAA,
+  // el que exporta Excel en inglés) — mes primero, al revés de cómo ya queda
+  // guardado FECHA_INGRESO_EMP en la ficha (DD/MM/AAAA, ver
+  // parsearFechaDDMMYYYY). Por eso acá se usa parseFechaFlexible (prioriza
+  // mes primero) en vez de parsearFechaEmpleado para este formato — el resto
+  // de formatos (serial de Excel, "10 de marzo del 2026", etc.) no tienen
+  // esa ambigüedad día/mes y siguen resolviéndose con el envoltorio de siempre.
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){
+    const d = parseFechaFlexible(s);
+    return d ? `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}` : s;
+  }
   const d = parsearFechaEmpleado(s);
   return d ? `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}` : s;
 }
@@ -4945,6 +4957,23 @@ function filtrarSelectEmpleados(inputBusqueda, selectId){
   });
 }
 
+// Si el emparejado vino por número de empleado o cédula (no por nombre) pero
+// el nombre de la ficha resultante no comparte NINGUNA palabra con el que
+// trae la colilla, casi seguro no es la misma persona. Pasa cuando dos
+// planillas separadas (ej. una en colones y otra en dólares) numeran a su
+// gente cada una por su cuenta y un mismo número le toca a alguien distinto
+// en cada una — el número "coincide" mecánicamente, pero con la persona
+// equivocada.
+function nombresSinRelacion(nombreColilla, nombreFicha){
+  const palabrasColilla = new Set(normalizarNombre(nombreColilla).split(" ").filter(Boolean));
+  const palabrasFicha = new Set(normalizarNombre(nombreFicha).split(" ").filter(Boolean));
+  if (!palabrasColilla.size || !palabrasFicha.size) return false;
+  for (const palabra of palabrasColilla){
+    if (palabrasFicha.has(palabra)) return false;
+  }
+  return true;
+}
+
 function construirIndicesEmpleados(empleadosDB){
   const porNumero = {}, porCedula = {}, porNombre = {};
   empleadosDB.forEach(e => {
@@ -5023,7 +5052,13 @@ async function procesarColillas(){
       const anterior = Number(String(match.SALARIO_EMP).replace(/[^0-9.]/g,""));
       if (anterior > 0 && (p.salario < anterior * 0.3 || p.salario > anterior * 3)) salarioSospechoso = true;
     }
-    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso });
+    // Emparejado por número/cédula pero con un nombre que no tiene ninguna
+    // palabra en común con la ficha encontrada — ver nombresSinRelacion.
+    let nombreSospechoso = false;
+    if (match && (matchedBy === "número de empleado" || matchedBy === "cédula") && nombresSinRelacion(p.nombre, nombreCompletoEmpleado(match))){
+      nombreSospechoso = true;
+    }
+    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso, nombreSospechoso });
   });
   renderColillasPreview();
 }
@@ -5086,17 +5121,18 @@ async function guardarMapeoOcupacionDesdeColilla(idx){
 function renderColillasPreview(){
   const wrap = document.getElementById("colillas-resultados");
   const todosEncontrados = colillasResultadosCache.filter(r => r.match);
-  const usd = todosEncontrados.filter(r => r.moneda === "USD");
+  const usdTodos = todosEncontrados.filter(r => r.moneda === "USD");
+  const usd = usdTodos.filter(r => !r.nombreSospechoso);
   const resto = todosEncontrados.filter(r => r.moneda !== "USD");
-  const encontrados = resto.filter(r => !r.salarioSospechoso);
-  const sospechosos = resto.filter(r => r.salarioSospechoso);
+  const encontrados = resto.filter(r => !r.salarioSospechoso && !r.nombreSospechoso);
+  const sospechosos = [...resto.filter(r => r.salarioSospechoso || r.nombreSospechoso), ...usdTodos.filter(r => r.nombreSospechoso)];
   const noEncontrados = colillasResultadosCache.filter(r => !r.match);
   const puestosSinMapear = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "sin_mapear").length;
   const puestosDistintos = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "distinto").length;
 
   let html = `<div class="section-card" style="border-color:var(--leaf); margin-top:12px;"><div class="section-body">
     <div style="font-weight:700; margin-bottom:4px;">Resumen</div>
-    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} con salario sospechoso</b>` : ""}${usd.length ? ` · <b style="color:var(--navy-deep);">${usd.length} en dólares</b>` : ""}${puestosSinMapear ? ` · <b style="color:#8a6d1f;">${puestosSinMapear} ocupación(es) sin mapear</b>` : ""}${puestosDistintos ? ` · <b style="color:#B3261E;">${puestosDistintos} con puesto para actualizar</b>` : ""}</div>
+    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} para revisar antes de aplicar</b>` : ""}${usd.length ? ` · <b style="color:var(--navy-deep);">${usd.length} en dólares</b>` : ""}${puestosSinMapear ? ` · <b style="color:#8a6d1f;">${puestosSinMapear} ocupación(es) sin mapear</b>` : ""}${puestosDistintos ? ` · <b style="color:#B3261E;">${puestosDistintos} con puesto para actualizar</b>` : ""}</div>
   </div></div>`;
 
   if (usd.length){
@@ -5119,13 +5155,17 @@ function renderColillasPreview(){
 
   if (sospechosos.length){
     html += `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
-      <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🚫 Salario muy distinto al guardado — no se aplica solo, confírmalo uno por uno</div>
-      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">El caso típico es una colilla en dólares que se leyó como si fueran colones. Verifica el monto real antes de confirmar — si de verdad es correcto, "Aplicar de todas formas" lo guarda.</div>
-      ${sospechosos.map((r, i) => {
+      <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🚫 Revisar antes de aplicar — no se aplican solos</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Un salario muy distinto al guardado (típico de una colilla en dólares leída como si fueran colones), o un número de empleado/cédula que coincide pero con un nombre que no tiene nada que ver, casi nunca es la misma persona. Verifícalo antes de confirmar — si de verdad es correcto, "Aplicar de todas formas" lo guarda.</div>
+      ${sospechosos.map(r => {
         const idx = colillasResultadosCache.indexOf(r);
+        const esUSD = r.moneda === "USD";
+        const razon = r.nombreSospechoso
+          ? `Coincidió por <b>${escapeHtml(r.matchedBy)}</b> con la ficha de <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b>, pero la colilla trae el nombre <b>${escapeHtml(r.nombre)}</b> — no parecen la misma persona (puede ser un número repetido entre dos planillas distintas).`
+          : `Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)`;
         return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)}<br>
-          Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)
+          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)}${esUSD ? " (dólares)" : ""}<br>
+          ${razon}
           ${renderPuestoAvisoHtml(r)}
           <div style="margin-top:4px;">
             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="aplicarColillaIndividual(${idx})">Aplicar de todas formas</button>
@@ -5163,25 +5203,50 @@ function renderColillasPreview(){
   wrap.innerHTML = html;
 }
 
-// Aplica UNA sola fila de la lista de "salario sospechoso", tras confirmarla
-// a mano — usa la misma lógica que aplicarColillas() pero para un solo registro.
+// Aplica UNA sola fila de la lista de "revisar antes de aplicar" (salario
+// sospechoso o nombre que no calza con el número/cédula emparejado), tras
+// confirmarla a mano — usa la misma lógica que aplicarColillas()/
+// aplicarColillasUSD() pero para un solo registro, en la moneda que le
+// corresponda a esa fila.
 async function aplicarColillaIndividual(idx){
   const r = colillasResultadosCache[idx];
   if (!r || !r.match) return;
   const fullKey = CATALOGS.empleados.prefix + r.match.key;
-  const salarioAnterior = r.match.SALARIO_EMP || "—";
-  r.match.SALARIO_EMP = String(r.salario);
-  registrarSalarioHistorial(r.match, r.salario, "CRC", "colilla");
-  if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
-  if (r.nombreCorregido){
-    const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
-    r.match.NOMBRE_EMP = partido.nombre;
-    r.match.APELLIDOS_EMP = partido.apellidos;
+  const motivo = r.nombreSospechoso ? "confirmado a mano tras aviso de nombre que no coincidía" : "confirmado a mano tras aviso de monto sospechoso";
+  if (r.moneda === "USD"){
+    const anteriorUsd = r.match.SALARIO_USD_EMP || "—";
+    r.match.SALARIO_USD_EMP = String(r.salario);
+    r.match.MONEDA_SALARIO_EMP = "USD";
+    registrarSalarioHistorial(r.match, r.salario, "USD", "colilla");
+    r.match.SALARIO_USD_EMP_LETRAS = salarioEnLetras(r.salario, "dólares", "es");
+    const netoUsd = r.salario * (1 - DEDUCCION_CCSS);
+    r.match.SALARIO_USD_EMP_NETO = netoUsd.toFixed(2);
+    r.match.SALARIO_USD_EMP_NETO_LETRAS = salarioEnLetras(netoUsd, "dólares", "es");
+    if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
+    if (r.nombreCorregido){
+      const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
+      r.match.NOMBRE_EMP = partido.nombre;
+      r.match.APELLIDOS_EMP = partido.apellidos;
+    }
+    const notaPuesto = aplicarPuestoDesdeColilla(r);
+    await window.storage.set(fullKey, JSON.stringify(r.match), false);
+    await agregarBitacora(r.match.key, `Salario en dólares actualizado desde colilla de pago (${motivo}): ${anteriorUsd} → ${r.salario} (№ empleado ${r.numero}).`);
+    if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
+  } else {
+    const salarioAnterior = r.match.SALARIO_EMP || "—";
+    r.match.SALARIO_EMP = String(r.salario);
+    registrarSalarioHistorial(r.match, r.salario, "CRC", "colilla");
+    if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
+    if (r.nombreCorregido){
+      const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
+      r.match.NOMBRE_EMP = partido.nombre;
+      r.match.APELLIDOS_EMP = partido.apellidos;
+    }
+    const notaPuesto = aplicarPuestoDesdeColilla(r);
+    await window.storage.set(fullKey, JSON.stringify(r.match), false);
+    await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago (${motivo}): ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
+    if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
   }
-  const notaPuesto = aplicarPuestoDesdeColilla(r);
-  await window.storage.set(fullKey, JSON.stringify(r.match), false);
-  await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago (confirmado a mano tras aviso de monto sospechoso): ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
-  if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
   statusMsg(`Salario de ${nombreCompletoEmpleado(r.match)} actualizado.`);
   colillasResultadosCache[idx] = Object.assign({}, r, { match: null }); // ya aplicado, se quita de la lista de pendientes
   renderColillasPreview();
@@ -5190,7 +5255,10 @@ async function aplicarColillaIndividual(idx){
 // Aplica en bloque los registros marcados como dólares (por el nombre del
 // archivo) — escribe en SALARIO_USD_EMP, nunca en SALARIO_EMP (colones).
 async function aplicarColillasUSD(){
-  const usd = colillasResultadosCache.filter(r => r.match && r.moneda === "USD");
+  // Los de nombre sospechoso (número/cédula coincide pero el nombre no tiene
+  // nada que ver) quedan fuera del botón masivo — se confirman uno por uno
+  // desde la sección "Revisar antes de aplicar".
+  const usd = colillasResultadosCache.filter(r => r.match && r.moneda === "USD" && !r.nombreSospechoso);
   let count = 0;
   for (const r of usd){
     const fullKey = CATALOGS.empleados.prefix + r.match.key;
@@ -5223,14 +5291,15 @@ async function aplicarColillasUSD(){
     count++;
   }
   statusMsg(`Actualizado el salario en dólares de ${count} empleado(s).`);
-  colillasResultadosCache = colillasResultadosCache.map(r => (r.match && r.moneda === "USD") ? Object.assign({}, r, { match: null }) : r);
+  colillasResultadosCache = colillasResultadosCache.map(r => (r.match && r.moneda === "USD" && !r.nombreSospechoso) ? Object.assign({}, r, { match: null }) : r);
   renderColillasPreview();
 }
 
 async function aplicarColillas(){
-  // Los de salario sospechoso, y los de dólares (que van por su propio botón
-  // "Aplicar ... en dólares" arriba), quedan fuera del botón masivo en colones.
-  const encontrados = colillasResultadosCache.filter(r => r.match && !r.salarioSospechoso && r.moneda !== "USD");
+  // Los de salario o nombre sospechoso, y los de dólares (que van por su
+  // propio botón "Aplicar ... en dólares" arriba), quedan fuera del botón
+  // masivo en colones.
+  const encontrados = colillasResultadosCache.filter(r => r.match && !r.salarioSospechoso && !r.nombreSospechoso && r.moneda !== "USD");
   let count = 0;
   const numerosSospechosos = [];
   for (const r of encontrados){
