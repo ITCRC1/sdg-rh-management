@@ -7096,6 +7096,75 @@ function limpiarRangoHorasExtra(){
   renderHorasExtrasPanel();
 }
 
+// ---------- Limpieza de tandas de prueba (horas_extra:) ----------
+// "horas_extra:" no es solo horas extra: en la misma tabla vive TODO el
+// historial de días de cada empleado (vacaciones tomadas, incapacidades,
+// permisos, ausencias, días libres) — un registro solo tiene ORIGEN_ARCHIVO
+// cuando salió de un archivo de marcación importado (ver
+// guardarFilasHorasExtra); lo cargado a mano desde Vacaciones/Incapacidades/
+// etc. nunca lo tiene. Por eso esta limpieza agrupa y borra por archivo de
+// origen, nunca "todo lo pendiente" ni por tipo de día — así una tanda de
+// prueba se puede quitar completa sin arriesgar el historial real de nadie
+// más. No hay papelera para esta tabla: es un borrado permanente de verdad.
+async function mostrarModalLimpiezaDatosPrueba(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🧹 Limpiar datos de prueba";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const registros = await listarRegistrosHorasExtra();
+    const porArchivo = {};
+    registros.forEach(r => {
+      if (!r.ORIGEN_ARCHIVO) return; // cargado a mano desde otra pantalla — nunca se ofrece acá
+      (porArchivo[r.ORIGEN_ARCHIVO] || (porArchivo[r.ORIGEN_ARCHIVO] = [])).push(r);
+    });
+    const grupos = Object.keys(porArchivo).map(nombre => {
+      const regs = porArchivo[nombre];
+      const fechas = regs.map(r => r.FECHA).filter(Boolean).sort();
+      const empleadosUnicos = new Set(regs.map(r => r.EMPLEADO_KEY || r.NOMBRE_ARCHIVO || r.CEDULA).filter(Boolean));
+      const importadoEn = regs.map(r => r.IMPORTADO_EN).filter(Boolean).sort().pop();
+      return { nombre, cantidad: regs.length, desde: fechas[0], hasta: fechas[fechas.length - 1], empleados: empleadosUnicos.size, importadoEn, regs };
+    }).sort((a, b) => (b.importadoEn || "").localeCompare(a.importadoEn || ""));
+    window._gruposLimpiezaHorasExtra = grupos;
+    if (!grupos.length){
+      body.innerHTML = `<div class="empty-state">No hay registros que vengan de un archivo importado — nada para limpiar acá.</div>`;
+      return;
+    }
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Cada tanda es un archivo distinto que se subió en Horas Extras. Elegir "Eliminar esta tanda" borra de verdad (sin poder deshacerlo) todos sus registros — días laborales, horas extra y ausencias detectadas de ese archivo — sin importar si ya estaban aprobados. Nunca toca vacaciones, incapacidades ni permisos cargados desde otras pantallas.</div>
+      ${grupos.map((g, gi) => `
+        <div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--paper-line);">
+          <div style="font-weight:700; font-size:12.5px;">${escapeHtml(g.nombre)}</div>
+          <div style="font-size:11.5px; color:var(--ink-soft);">${g.cantidad} registro(s) · ${g.empleados} empleado(s)${g.desde && g.hasta ? ` · del ${fmtFecha(g.desde + "T00:00:00")} al ${fmtFecha(g.hasta + "T00:00:00")}` : ""}${g.importadoEn ? ` · subido el ${fmtFecha(g.importadoEn)}` : ""}</div>
+          <button class="btn" style="margin-top:4px; padding:4px 10px; font-size:11px; border-color:#B3261E; color:#B3261E;" onclick="pedirConfirmacionLimpiezaHorasExtra(${gi})">🗑️ Eliminar esta tanda</button>
+        </div>`).join("")}
+    `;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message)}</div>`; }
+}
+
+function pedirConfirmacionLimpiezaHorasExtra(gi){
+  const g = (window._gruposLimpiezaHorasExtra || [])[gi];
+  if (!g) return;
+  const escrito = prompt(`Esto va a BORRAR PERMANENTEMENTE ${g.cantidad} registro(s) de "${g.nombre}" (${g.empleados} empleado(s)) — no se puede deshacer.\n\nPara confirmar, escribí exactamente el nombre del archivo:\n${g.nombre}`, "");
+  if (escrito === null) return; // canceló
+  if (escrito.trim() !== g.nombre){ statusMsg("El nombre escrito no coincide exactamente — no se borró nada.", false); return; }
+  ejecutarLimpiezaHorasExtra(gi);
+}
+
+async function ejecutarLimpiezaHorasExtra(gi){
+  const g = (window._gruposLimpiezaHorasExtra || [])[gi];
+  if (!g) return;
+  const body = document.getElementById("modal-incompletos-body");
+  body.innerHTML = `<div class="empty-state">Borrando ${g.cantidad} registro(s)…</div>`;
+  let ok = 0, fallidos = 0;
+  for (const r of g.regs){
+    try{ await window.storage.delete(r.key, false); ok++; }
+    catch(e){ fallidos++; }
+  }
+  statusMsg(`${ok} registro(s) de "${g.nombre}" eliminado(s) permanentemente` + (fallidos ? ` — ${fallidos} no se pudieron borrar.` : "."), fallidos === 0);
+  await mostrarModalLimpiezaDatosPrueba();
+  renderHorasExtrasPanel();
+}
+
 // Último cálculo de "empleados sin ningún registro en el rango" — lo llena
 // renderHorasExtrasPanel cada vez que pinta el banner; el modal de abajo lo
 // lee de acá en vez de recibirlo como parámetro, para no tener que meter un
@@ -8231,6 +8300,14 @@ async function renderHorasExtrasPanel(){
       <button class="btn" onclick="limpiarRangoHorasExtra()">Ver todo (sin filtro)</button>
       <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">Acota solo lo ya <b>aprobado</b> y <b>rechazado</b> de abajo — lo pendiente/por aprobar siempre se ve completo, sin importar cuándo pasó.</div>
     </div></div>`;
+
+    if (puedeEditar){
+      html += `<div class="section-card" style="margin-bottom:14px; border-color:#B3261E;"><div class="section-body">
+        <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">🧹 Limpiar datos de prueba</div>
+        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo (sin papelera) todos los registros que vinieron de un archivo de marcación específico que hayas subido — útil para quitar una tanda que se subió solo para probar el sistema, antes de subir la real. Nunca toca vacaciones/incapacidades/permisos cargados desde otras pantallas.</div>
+        <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalLimpiezaDatosPrueba()">🧹 Ver archivos importados y limpiar</button>
+      </div></div>`;
+    }
 
     // Empleados activos sin NINGÚN registro — de ningún estado — dentro del
     // rango elegido: señal de que a esa persona no se le importó/marcó nada
