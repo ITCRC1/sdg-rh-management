@@ -2950,8 +2950,31 @@ async function saveCatalogItem(type){
             bitacoraNotas.push(`Puesto actualizado: ${prev.DEPARTAMENTO_EMP || "—"} → ${catalogEditing.values.DEPARTAMENTO_EMP || "—"}`);
           }
           catalogEditing.values.HISTORIAL = prev.HISTORIAL || [];
+          // Historial de salarios (para el aguinaldo mes a mes, ver
+          // calcularAguinaldoEstimado): se registra la tasa nueva en el mes en
+          // que RH la edita — se asume que el cambio rige desde ahora, no
+          // desde el arranque de la ficha.
+          catalogEditing.values.HISTORIAL_SALARIOS = prev.HISTORIAL_SALARIOS || [];
+          if (prev.SALARIO_EMP !== catalogEditing.values.SALARIO_EMP && catalogEditing.values.SALARIO_EMP){
+            registrarSalarioHistorial(catalogEditing.values, Number(String(catalogEditing.values.SALARIO_EMP).replace(/[^0-9.]/g, "")), "CRC", "manual");
+          }
+          if (prev.SALARIO_USD_EMP !== catalogEditing.values.SALARIO_USD_EMP && catalogEditing.values.SALARIO_USD_EMP){
+            registrarSalarioHistorial(catalogEditing.values, Number(String(catalogEditing.values.SALARIO_USD_EMP).replace(/[^0-9.]/g, "")), "USD", "manual");
+          }
         }
       }catch(e){ /* ignore */ }
+    } else if (type === "empleados" && !catalogEditing.key){
+      // Empleado nuevo: primera entrada del historial de salarios, fechada en
+      // el mes real de ingreso (no el día en que RH llena el formulario).
+      const ingreso = parsearFechaEmpleado(catalogEditing.values.FECHA_INGRESO_EMP);
+      const periodoIngreso = ingreso ? `${ingreso.getFullYear()}-${String(ingreso.getMonth() + 1).padStart(2, "0")}` : isoMesActual();
+      catalogEditing.values.HISTORIAL_SALARIOS = [];
+      if (catalogEditing.values.SALARIO_EMP){
+        registrarSalarioHistorial(catalogEditing.values, Number(String(catalogEditing.values.SALARIO_EMP).replace(/[^0-9.]/g, "")), "CRC", "ingreso", periodoIngreso);
+      }
+      if (catalogEditing.values.SALARIO_USD_EMP){
+        registrarSalarioHistorial(catalogEditing.values, Number(String(catalogEditing.values.SALARIO_USD_EMP).replace(/[^0-9.]/g, "")), "USD", "ingreso", periodoIngreso);
+      }
     }
     const res = await window.storage.set(storageKey, JSON.stringify(catalogEditing.values), false);
     if (res){
@@ -4281,6 +4304,7 @@ function showTab(which){
   document.getElementById("contracts-panel").style.display = which === "contracts" ? "block" : "none";
   document.getElementById("form-panel").style.display = which === "form" ? "block" : "none";
   document.getElementById("despidoform-panel").style.display = which === "despidoform" ? "block" : "none";
+  document.getElementById("liquidacionform-panel").style.display = which === "liquidacionform" ? "block" : "none";
   document.getElementById("amonestacionform-panel").style.display = which === "amonestacionform" ? "block" : "none";
   document.getElementById("recomform-panel").style.display = which === "recomform" ? "block" : "none";
   document.getElementById("permisoform-panel").style.display = which === "permisoform" ? "block" : "none";
@@ -4301,6 +4325,7 @@ function showTab(which){
   document.getElementById("permiso-wrap").style.display = "none";
   document.getElementById("vacaciones-wrap").style.display = "none";
   document.getElementById("despido-wrap").style.display = "none";
+  document.getElementById("liquidacion-wrap").style.display = "none";
   document.getElementById("amonestacion-wrap").style.display = "none";
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
@@ -4309,6 +4334,7 @@ function showTab(which){
   document.getElementById("incapacidades-panel").style.display = which === "incapacidades" ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
+  document.getElementById("liquidacionform-toolbar").style.display = (which === "liquidacionform") ? "flex" : "none";
   document.getElementById("amonestacionform-toolbar").style.display = (which === "amonestacionform") ? "flex" : "none";
   document.getElementById("recomform-toolbar").style.display = (which === "recomform") ? "flex" : "none";
   document.getElementById("permisoform-toolbar").style.display = (which === "permisoform") ? "flex" : "none";
@@ -4318,7 +4344,7 @@ function showTab(which){
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
     empleados:"empleados", archivo:"empleados",
     perfil:"expedientes",
-    despidoform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos",
+    despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos",
     datos:"datos",
     planilla:"planilla",
     vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla",
@@ -4350,6 +4376,7 @@ function showTab(which){
   if (which === "planilla") renderPlanillaPanel();
   if (which === "horasextras") renderHorasExtrasPanel();
   if (which === "despidoform") renderDespidoForm();
+  if (which === "liquidacionform") renderLiquidacionForm();
   if (which === "amonestacionform") renderAmonestacionForm();
   if (which === "recomform") renderRecomForm();
   if (which === "permisoform") renderPermisoForm();
@@ -5048,6 +5075,7 @@ async function aplicarColillaIndividual(idx){
   const fullKey = CATALOGS.empleados.prefix + r.match.key;
   const salarioAnterior = r.match.SALARIO_EMP || "—";
   r.match.SALARIO_EMP = String(r.salario);
+  registrarSalarioHistorial(r.match, r.salario, "CRC", "colilla");
   if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
   if (r.nombreCorregido){
     const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
@@ -5073,6 +5101,7 @@ async function aplicarColillasUSD(){
     const anteriorUsd = r.match.SALARIO_USD_EMP || "—";
     r.match.SALARIO_USD_EMP = String(r.salario);
     r.match.MONEDA_SALARIO_EMP = "USD";
+    registrarSalarioHistorial(r.match, r.salario, "USD", "colilla");
     // Igual que la entrada manual (onSalarioUsdEmpInput): guarda el bruto en
     // letras y el neto aproximado (–10.83% CCSS), número y letras, sin tocar
     // nunca el salario en colones de la ficha.
@@ -5112,6 +5141,7 @@ async function aplicarColillas(){
     const fullKey = CATALOGS.empleados.prefix + r.match.key;
     const salarioAnterior = r.match.SALARIO_EMP || "—";
     r.match.SALARIO_EMP = String(r.salario);
+    registrarSalarioHistorial(r.match, r.salario, "CRC", "colilla");
     // El número de empleado solo se GRABA la primera vez (cuando el registro
     // todavía no tenía uno). Si ya tenía un número distinto guardado, NO se
     // pisa en silencio — el emparejado por número tiene prioridad sobre el de
@@ -9392,6 +9422,7 @@ function descargarDespidoPDF(){
   if (currentEmpKeyForLetter){
     const tipoTxt = data.TIPO_DESPIDO === "sin_responsabilidad" ? "sin responsabilidad patronal" : "con responsabilidad patronal";
     agregarBitacora(currentEmpKeyForLetter, "Carta de despido generada (" + tipoTxt + ").");
+    guardarTipoDespidoEnFicha(currentEmpKeyForLetter, data.TIPO_DESPIDO);
   }
   congelarEmitido("despido-root", {
     tipo: "carta_despido",
@@ -9418,6 +9449,287 @@ async function descargarDespidoDeContrato(key){
     descargarDespidoPDF();
     statusMsg("Carta de despido generada para “" + key.replace("contrato:", "") + "”.");
   }catch(e){ statusMsg("No se pudo generar la carta de despido.", false); }
+}
+
+// Guarda el tipo de despido elegido (con/sin responsabilidad) en la ficha del
+// empleado en el momento en que la carta realmente se emite (se descarga) —
+// no apenas se toca el toggle, para no dejar guardado un valor que RH solo
+// estaba probando. Así "Calcular liquidación" ya abre con el tipo correcto
+// preseleccionado en vez de tener que volver a preguntarlo.
+async function guardarTipoDespidoEnFicha(empKeyShort, tipoDespido){
+  if (!empKeyShort || !tipoDespido) return;
+  try{
+    const fullKey = CATALOGS.empleados.prefix + empKeyShort;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value) return;
+    const emp = JSON.parse(res.value);
+    emp.TIPO_DESPIDO_EMP = tipoDespido;
+    emp.FECHA_TIPO_DESPIDO_EMP = fmtFecha(new Date().toISOString());
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+  }catch(e){ /* no debe bloquear la descarga de la carta si esto falla */ }
+}
+
+// ---------- Calcular liquidación ----------
+// Tipos de salida que reconoce la calculadora. Solo "despido_con" da derecho
+// a cesantía y preaviso (Art. 85 CT: despido sin justa causa). Los demás
+// (despido sin responsabilidad, renuncia voluntaria, abandono laboral u
+// otro) se liquidan igual bajo el Código de Trabajo: únicamente aguinaldo
+// proporcional y vacaciones pendientes — nunca cesantía ni preaviso.
+const TIPOS_SALIDA_LIQUIDACION = [
+  { id: "despido_con", label: "Despido con responsabilidad patronal" },
+  { id: "despido_sin", label: "Despido sin responsabilidad patronal" },
+  { id: "renuncia", label: "Renuncia voluntaria" },
+  { id: "abandono", label: "Abandono laboral" },
+  { id: "otro", label: "Otro" },
+];
+
+// Estado de la calculadora abierta actualmente: se carga una sola vez al
+// abrir (ficha del empleado, vacaciones/incapacidades ya aprobadas) y desde
+// ahí los cambios de tipo de salida / fecha / modo de preaviso solo
+// recalculan en memoria — sin volver a pedirle nada al servidor por cada
+// clic.
+let liquidacionState = null;
+
+function fechaDesdeISO(iso){
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+async function abrirCalculadoraLiquidacion(empKey){
+  try{
+    const fullKey = CATALOGS.empleados.prefix + empKey;
+    const res = await window.storage.get(fullKey, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+
+    const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([
+      listarSolicitudesAusencia(),
+      listarRegistrosHorasExtra(),
+    ]);
+    const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === empKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+    const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, empKey);
+    const registrosDelEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === empKey);
+
+    const { monto: salarioDiario } = salarioDiarioDeEmpleado(emp);
+    const jornadaEmp = await jornadaDiariaDeEmpleado(emp, {});
+    const montoPorHoraExtra = salarioDiario ? (salarioDiario / jornadaEmp) * TARIFA_HORAS_EXTRA : 0;
+
+    // Si ya se emitió una carta de despido para esta persona, se preselecciona
+    // el mismo tipo (guardado por guardarTipoDespidoEnFicha) — RH no tiene que
+    // volver a elegirlo.
+    let tipoSalidaInicial = "";
+    if (emp.TIPO_DESPIDO_EMP === "con_responsabilidad") tipoSalidaInicial = "despido_con";
+    else if (emp.TIPO_DESPIDO_EMP === "sin_responsabilidad") tipoSalidaInicial = "despido_sin";
+
+    liquidacionState = {
+      empKey, emp,
+      solicitudesVacacionesAprobadas, diasIncapacidadPausan, registrosDelEmpleado, montoPorHoraExtra,
+      tipoSalida: tipoSalidaInicial,
+      fechaSalida: new Date().toISOString().slice(0, 10),
+      preavisoModo: "pagado",
+    };
+    showTab("liquidacionform");
+  }catch(e){ statusMsg("No se pudo abrir la calculadora de liquidación.", false); }
+}
+
+function onLiquidacionCampoChange(campo, valor){
+  if (!liquidacionState) return;
+  liquidacionState[campo] = valor;
+  if (campo === "preavisoModo" && valor === "trabajado"){
+    // Sugerencia: si se otorga trabajado, la persona sigue laborando hasta
+    // cumplir el preaviso — se propone esa fecha como salida efectiva
+    // (editable después). El preaviso se calcula sobre la antigüedad a HOY
+    // (cuándo se comunica la decisión), no sobre la fecha futura de salida.
+    const emp = liquidacionState.emp;
+    const { monto: salarioDiario } = salarioDiarioDeEmpleado(emp);
+    const ingreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+    const hoy = new Date();
+    const pre = calcularPreavisoEstimado(ingreso, hoy, salarioDiario || 0);
+    const sugerida = new Date(hoy);
+    sugerida.setDate(sugerida.getDate() + pre.dias);
+    liquidacionState.fechaSalida = sugerida.toISOString().slice(0, 10);
+  }
+  renderLiquidacionForm();
+}
+
+// Fórmula única de la liquidación: siempre paga aguinaldo proporcional y
+// vacaciones pendientes (Art. 153-157 CT y Ley de Aguinaldo, sin importar el
+// motivo de salida); cesantía y preaviso (Art. 28/29 CT) solo cuando el tipo
+// de salida es despido CON responsabilidad patronal.
+function calcularLiquidacionActual(){
+  const st = liquidacionState;
+  const emp = st.emp;
+  const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+  const fechaSalida = fechaDesdeISO(st.fechaSalida) || new Date();
+  const { monto: salarioDiario, moneda } = salarioDiarioDeEmpleado(emp);
+  const antiguedad = calcularAntiguedad(fechaIngreso, fechaSalida);
+
+  const saldoVacaciones = calcularSaldoVacaciones(emp, st.solicitudesVacacionesAprobadas, st.diasIncapacidadPausan, fechaSalida);
+  const vacacionesMonto = calcularVacacionesEnDinero(saldoVacaciones, salarioDiario);
+  const aguinaldo = calcularAguinaldoEstimado(emp, st.registrosDelEmpleado, fechaSalida, st.montoPorHoraExtra || 0);
+
+  const tieneDerechoCesantiaPreaviso = st.tipoSalida === "despido_con";
+  const cesantia = tieneDerechoCesantiaPreaviso ? calcularCesantiaEstimada(fechaIngreso, fechaSalida, salarioDiario) : { dias: 0, monto: 0 };
+  const preaviso = tieneDerechoCesantiaPreaviso ? calcularPreavisoEstimado(fechaIngreso, new Date(), salarioDiario) : { dias: 0, monto: 0 };
+  const preavisoSePaga = tieneDerechoCesantiaPreaviso && st.preavisoModo === "pagado";
+
+  const saldoPrestamosPendientes = (emp.DEDUCCIONES_RECURRENTES || [])
+    .filter(d => d.tipo === "prestamo")
+    .reduce((s, d) => s + (d.saldoPendiente || 0), 0);
+
+  const total = vacacionesMonto + aguinaldo.total + cesantia.monto + (preavisoSePaga ? preaviso.monto : 0) - saldoPrestamosPendientes;
+
+  return { moneda, fechaSalida, antiguedad, saldoVacaciones, vacacionesMonto, aguinaldo, tieneDerechoCesantiaPreaviso, cesantia, preaviso, preavisoSePaga, saldoPrestamosPendientes, total };
+}
+
+function renderLiquidacionForm(){
+  const panel = document.getElementById("liquidacionform-panel");
+  if (!panel) return;
+  if (!liquidacionState){
+    panel.innerHTML = `<div class="empty-state">Elige un empleado desde Empleados → Acciones → 🧮 Calcular liquidación.</div>`;
+    return;
+  }
+  const st = liquidacionState;
+  const emp = st.emp;
+  const calc = calcularLiquidacionActual();
+  const salarioNum = Number(String(emp.SALARIO_EMP || "").replace(/[^0-9.]/g, ""));
+
+  const opcionesTipo = TIPOS_SALIDA_LIQUIDACION.map(t =>
+    `<option value="${t.id}" ${st.tipoSalida === t.id ? "selected" : ""}>${escapeHtml(t.label)}</option>`
+  ).join("");
+
+  const notaRubros = calc.tieneDerechoCesantiaPreaviso
+    ? `Al ser un despido <b>con responsabilidad patronal</b>, el Código de Trabajo obliga a pagar cesantía (Art. 29 CT), preaviso o su equivalente en dinero (Art. 28 CT), aguinaldo proporcional y vacaciones pendientes.`
+    : `Con este tipo de salida, el Código de Trabajo solo obliga a pagar <b>aguinaldo proporcional</b> y <b>vacaciones pendientes</b> — no aplica cesantía ni preaviso.`;
+
+  panel.innerHTML = `
+    <div class="section-card" style="border-color:var(--leaf);"><div class="section-body">
+      <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">🧮 Calcular liquidación — ${escapeHtml(nombreCompletoEmpleado(emp))}</div>
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(emp.DEPARTAMENTO_EMP || "")} · Cédula: ${escapeHtml(emp.IDENTIFICACION_EMP || "")}</div>
+      <div style="font-size:12.5px; color:var(--ink-soft);">Salario: ${salarioNum ? "₡" + salarioNum.toLocaleString("es-CR") : "—"} · Ingreso: ${escapeHtml(emp.FECHA_INGRESO_EMP || "—")}</div>
+    </div></div>
+
+    <div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div class="field">
+        <label>Tipo de salida</label>
+        <select onchange="onLiquidacionCampoChange('tipoSalida', this.value)">
+          <option value="">— Selecciona —</option>
+          ${opcionesTipo}
+        </select>
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label>Fecha de salida efectiva</label>
+        <input type="date" value="${st.fechaSalida}" onchange="onLiquidacionCampoChange('fechaSalida', this.value)">
+      </div>
+      ${calc.tieneDerechoCesantiaPreaviso ? `
+      <div class="field" style="margin-top:10px;">
+        <label>Preaviso (Art. 28 CT) — ${calc.preaviso.dias} día(s) según antigüedad</label>
+        <div class="sino-toggle">
+          <button type="button" class="${st.preavisoModo === "trabajado" ? "active" : ""}" onclick="onLiquidacionCampoChange('preavisoModo','trabajado')">Trabajado</button>
+          <button type="button" class="${st.preavisoModo === "pagado" ? "active" : ""}" onclick="onLiquidacionCampoChange('preavisoModo','pagado')">Pagado en dinero</button>
+        </div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-top:4px;">${st.preavisoModo === "trabajado"
+          ? "El trabajador sigue laborando ese período (ya cubierto por su salario normal) — no se suma en dinero a la liquidación. La fecha de salida se ajustó sola; puedes corregirla."
+          : "El patrono prescinde de inmediato del trabajador y le paga el preaviso en dinero — se suma al total de la liquidación."}</div>
+      </div>` : ""}
+      ${!st.tipoSalida ? `<div class="hint-error" style="margin-top:8px;">Elige el tipo de salida para calcular los rubros correspondientes.</div>` : ""}
+    </div></div>
+
+    <div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:4px;">💰 Desglose de la liquidación</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antigüedad a la fecha de salida: ${calc.antiguedad.años} año(s), ${calc.antiguedad.meses} mes(es). ${notaRubros}</div>
+      <div style="font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; ${calc.saldoVacaciones < 0 ? "color:#B3261E;" : ""}"><span>${calc.saldoVacaciones < 0 ? `🔻 Vacaciones en adelanto (${Math.abs(calc.saldoVacaciones)} día(s))` : `🏖️ Vacaciones pendientes (${calc.saldoVacaciones} día(s))`}</span><b>${fmtMonedaEmpleado(calc.vacacionesMonto, calc.moneda)}</b></div>
+      <div style="font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🎁 Aguinaldo proporcional (${fmtFechaDesdeDate(calc.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(calc.aguinaldo.periodoFin)})</span><b>${fmtMonedaEmpleado(calc.aguinaldo.total, calc.moneda)}</b></div>
+      ${calc.tieneDerechoCesantiaPreaviso ? `
+      <div style="font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>⚖️ Cesantía (${calc.cesantia.dias} día(s))</span><b>${fmtMonedaEmpleado(calc.cesantia.monto, calc.moneda)}</b></div>
+      <div style="font-size:12.5px; padding:5px 0; ${calc.saldoPrestamosPendientes > 0 ? "border-bottom:1px solid var(--paper-line);" : ""} display:flex; justify-content:space-between;"><span>📣 Preaviso (${calc.preaviso.dias} día(s))${calc.preavisoSePaga ? "" : " — trabajado, no se paga en dinero"}</span><b>${fmtMonedaEmpleado(calc.preavisoSePaga ? calc.preaviso.monto : 0, calc.moneda)}</b></div>` : ""}
+      ${calc.saldoPrestamosPendientes > 0 ? `<div style="font-size:12.5px; padding:5px 0; color:#B3261E; display:flex; justify-content:space-between;"><span>➖ Saldo de préstamo/adelanto pendiente</span><b>-${fmtMonedaEmpleado(calc.saldoPrestamosPendientes, calc.moneda)}</b></div>` : ""}
+      <div style="font-size:14px; padding:10px 0 0; font-weight:800; color:var(--navy-deep); display:flex; justify-content:space-between;"><span>Total a pagar</span><span>${fmtMonedaEmpleado(calc.total, calc.moneda)}</span></div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-top:8px;">Cálculo de referencia según el Código de Trabajo de Costa Rica (Arts. 28, 29 y 153-157) y la Ley de Aguinaldo, sobre el salario vigente en la ficha. No sustituye el cálculo oficial de planilla ni el criterio de contabilidad o asesoría legal.</div>
+    </div></div>
+  `;
+}
+
+function mostrarSoloLiquidacion(){
+  ALL_MAIN_PANELS.filter(id => id !== "liquidacion-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("liquidacion-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function renderLiquidacionDocumento(){
+  const st = liquidacionState;
+  if (!st) return;
+  const emp = st.emp;
+  const calc = calcularLiquidacionActual();
+  const tipoLabel = (TIPOS_SALIDA_LIQUIDACION.find(t => t.id === st.tipoSalida) || {}).label || "—";
+
+  let html = logoHeaderHtml();
+  html += `<div class="page-header-line">LIQUIDACIÓN LABORAL&nbsp;&nbsp;|&nbsp;&nbsp;CONFIDENCIAL</div>`;
+  html += `<h2 class="doc-title">CÁLCULO DE LIQUIDACIÓN LABORAL</h2>`;
+  html += `<div class="clause-block">
+    <p>Trabajador(a): <b>${escapeHtml(nombreCompletoEmpleado(emp))}</b> — Cédula: <b>${escapeHtml(emp.IDENTIFICACION_EMP || "")}</b></p>
+    <p>Puesto: ${escapeHtml(emp.DEPARTAMENTO_EMP || "")} · Fecha de ingreso: ${escapeHtml(emp.FECHA_INGRESO_EMP || "—")} · Fecha de salida: ${fmtFechaDesdeDate(calc.fechaSalida)}</p>
+    <p>Antigüedad: ${calc.antiguedad.años} año(s), ${calc.antiguedad.meses} mes(es) · Tipo de salida: <b>${escapeHtml(tipoLabel)}</b>${calc.tieneDerechoCesantiaPreaviso ? ` · Preaviso: <b>${st.preavisoModo === "trabajado" ? "trabajado" : "pagado en dinero"}</b>` : ""}</p>
+  </div>`;
+
+  const filas = [];
+  filas.push([calc.saldoVacaciones < 0 ? `Vacaciones en adelanto (${Math.abs(calc.saldoVacaciones)} día(s))` : `Vacaciones pendientes (${calc.saldoVacaciones} día(s))`, calc.vacacionesMonto]);
+  filas.push([`Aguinaldo proporcional (${fmtFechaDesdeDate(calc.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(calc.aguinaldo.periodoFin)})`, calc.aguinaldo.total]);
+  if (calc.tieneDerechoCesantiaPreaviso){
+    filas.push([`Auxilio de cesantía — Art. 29 CT (${calc.cesantia.dias} día(s))`, calc.cesantia.monto]);
+    filas.push([`Preaviso — Art. 28 CT (${calc.preaviso.dias} día(s))${calc.preavisoSePaga ? "" : ", otorgado trabajado — no se paga en dinero"}`, calc.preavisoSePaga ? calc.preaviso.monto : 0]);
+  }
+
+  html += `<div class="clause-block"><table style="width:100%; border-collapse:collapse;">
+    ${filas.map(f => `<tr><td style="padding:5px 0; border-bottom:1px solid #ccc;">${escapeHtml(f[0])}</td><td style="padding:5px 0; border-bottom:1px solid #ccc; text-align:right; white-space:nowrap;">${fmtMonedaEmpleado(f[1], calc.moneda)}</td></tr>`).join("")}
+    ${calc.saldoPrestamosPendientes > 0 ? `<tr><td style="padding:5px 0; border-bottom:1px solid #ccc;">Saldo de préstamo/adelanto pendiente</td><td style="padding:5px 0; border-bottom:1px solid #ccc; text-align:right; white-space:nowrap;">-${fmtMonedaEmpleado(calc.saldoPrestamosPendientes, calc.moneda)}</td></tr>` : ""}
+    <tr><td style="padding:10px 0 0; font-weight:800;">Total a pagar</td><td style="padding:10px 0 0; font-weight:800; text-align:right; white-space:nowrap;">${fmtMonedaEmpleado(calc.total, calc.moneda)}</td></tr>
+  </table></div>`;
+
+  html += `<div class="clause-block"><p style="font-size:11.5px; color:#555;">Cálculo de referencia elaborado con base en el Código de Trabajo de Costa Rica (Arts. 28, 29 y 153-157) y la Ley de Aguinaldo, sobre el salario vigente en la ficha del trabajador. No sustituye el cálculo oficial de planilla ni el criterio de contabilidad o asesoría legal.</p></div>`;
+
+  html += `<div class="clause-block" style="display:flex; gap:40px; margin-top:40px;">
+    <div style="flex:1;"><div style="border-bottom:1px solid #000; height:2px; margin-bottom:4px;"></div><div>EL PATRONO</div></div>
+    <div style="flex:1;"><div style="border-bottom:1px solid #000; height:2px; margin-bottom:4px;"></div><div>EL TRABAJADOR — recibí conforme</div></div>
+  </div>`;
+  html += `<div class="print-footer">SDG RH Management · Confidencial · Generado el ${fmtFecha(new Date().toISOString())}</div>`;
+
+  document.getElementById("liquidacion-root").innerHTML = html;
+}
+
+async function descargarLiquidacionPDF(){
+  if (!liquidacionState){ statusMsg("Elige un empleado antes de generar la liquidación.", false); return; }
+  const st = liquidacionState;
+  if (!st.tipoSalida){ statusMsg("Elige el tipo de salida antes de generar la liquidación.", false); return; }
+  const emp = st.emp;
+  const calc = calcularLiquidacionActual();
+
+  const original = document.title;
+  const nombreBase = (nombreCompletoEmpleado(emp) || new Date().toISOString().slice(0, 10)).trim().replace(/\s+/g, "_");
+  document.title = ("Liquidacion_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  renderLiquidacionDocumento();
+  mostrarSoloLiquidacion();
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+
+  const tipoLabel = (TIPOS_SALIDA_LIQUIDACION.find(t => t.id === st.tipoSalida) || {}).label || st.tipoSalida;
+  agregarBitacora(st.empKey, `Liquidación calculada (${tipoLabel}) — total ${fmtMonedaEmpleado(calc.total, calc.moneda)}.`);
+  congelarEmitido("liquidacion-root", {
+    tipo: "liquidacion",
+    titulo: "Liquidación laboral — " + (nombreCompletoEmpleado(emp) || "sin nombre"),
+    nombreArchivo: "Liquidacion_" + nombreBase,
+    claveOrigen: CATALOGS.empleados.prefix + st.empKey,
+    empleadoCedula: emp.IDENTIFICACION_EMP || null,
+    empleadoNombre: nombreCompletoEmpleado(emp) || null,
+  });
 }
 
 // ---------- employment recommendation letter (fixed signer) ----------
@@ -9464,8 +9776,8 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
-const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar","vacacionesform-toolbar"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","liquidacionform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","liquidacion-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
+const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","liquidacionform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar","vacacionesform-toolbar"];
 
 function mostrarSoloRecomendacion(){
   ALL_MAIN_PANELS.filter(id => id !== "recomendacion-wrap").forEach(id => {
@@ -10186,30 +10498,91 @@ function fmtMonedaEmpleado(monto, moneda){
     : "₡" + Math.round(n).toLocaleString("es-CR");
 }
 
-// Aguinaldo: la ley lo define como lo devengado entre el 1° de diciembre y
-// el 30 de noviembre siguiente, entre 12. Como no hay un historial real mes
-// a mes, se aproxima con el salario mensual VIGENTE por los meses (y
-// fracción) que caen dentro de ese rango — respetando la fecha de ingreso
-// si entró después del 1° de diciembre — más las horas extra que ya estén
-// aprobadas con fecha dentro de ese mismo rango (esas sí son reales).
-// `montoPorHoraExtra` ya viene calculado por quien llama (salario/30/jornada
-// × 1.5, la misma fórmula del panel de Horas Extras) porque la jornada del
-// puesto no es un dato que esta función deba resolver por su cuenta.
+// ---------- Historial de salarios (para el aguinaldo mes a mes) ----------
+// Guarda cada TASA MENSUAL vigente que tuvo la persona (no cada pago
+// quincenal) — se registra al crear el empleado (mes de ingreso), al editar
+// el salario a mano en su ficha, y al aplicar un salario leído de una
+// colilla de pago importada (ver saveCatalogItem, aplicarColillaIndividual,
+// aplicarColillasUSD y aplicarColillas). Un mismo mes/moneda solo guarda UNA
+// tasa: si ya existe una entrada para ese período, se reemplaza en vez de
+// duplicarla (permite corregir un dato mal cargado sin ensuciar el
+// historial).
+function isoMesActual(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function registrarSalarioHistorial(empValues, monto, moneda, origen, periodo){
+  if (!monto || isNaN(monto)) return;
+  if (!Array.isArray(empValues.HISTORIAL_SALARIOS)) empValues.HISTORIAL_SALARIOS = [];
+  const per = periodo || isoMesActual();
+  const existente = empValues.HISTORIAL_SALARIOS.find(h => h.periodo === per && h.moneda === moneda);
+  if (existente){
+    existente.monto = monto;
+    existente.origen = origen;
+  } else {
+    empValues.HISTORIAL_SALARIOS.push({ periodo: per, monto, moneda, origen });
+    empValues.HISTORIAL_SALARIOS.sort((a, b) => a.periodo < b.periodo ? -1 : a.periodo > b.periodo ? 1 : 0);
+  }
+}
+
+// La tasa mensual que en verdad regía en un mes dado: la última entrada del
+// historial cuyo período sea igual o anterior al buscado. Sin historial para
+// ese mes (empleados o meses de antes de que existiera este seguimiento), se
+// usa el salario vigente actual de la ficha — mismo comportamiento que tenía
+// el sistema antes de guardar historial.
+function salarioVigenteEnMes(emp, periodoYYYYMM, monedaEsUSD){
+  const historial = Array.isArray(emp.HISTORIAL_SALARIOS) ? emp.HISTORIAL_SALARIOS : [];
+  const monedaBuscada = monedaEsUSD ? "USD" : "CRC";
+  const vigentes = historial.filter(h => h.moneda === monedaBuscada && h.periodo <= periodoYYYYMM);
+  if (vigentes.length){
+    return vigentes.reduce((mejor, h) => (!mejor || h.periodo > mejor.periodo) ? h : mejor, null).monto;
+  }
+  return Number(String((monedaEsUSD ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP) || "").replace(/[^0-9.]/g, "")) || 0;
+}
+
+// Aguinaldo: la ley lo define como la suma de los salarios devengados entre
+// el 1° de diciembre y el 30 de noviembre siguiente, dividida entre 12 (no
+// "el salario actual × fracción de meses" — eso subestima o sobrestima el
+// aguinaldo de quien tuvo un aumento o rebajo de salario a mitad de período).
+// Por eso se recorre mes a mes el rango efectivo (respetando la fecha de
+// ingreso si entró después del 1° de diciembre, y la fecha de corte si es
+// antes del 30 de noviembre) usando la tasa que de verdad regía CADA mes
+// (salarioVigenteEnMes) — un mes parcial (el de ingreso o el de corte) se
+// prorratea por días sobre esa misma tasa mensual. Las horas extra ya
+// aprobadas con fecha dentro de ese mismo rango se suman aparte (esas sí son
+// reales, no estimadas). `montoPorHoraExtra` ya viene calculado por quien
+// llama (salario/30/jornada × 1.5, la misma fórmula del panel de Horas
+// Extras) porque la jornada del puesto no es un dato que esta función deba
+// resolver por su cuenta.
 function calcularAguinaldoEstimado(emp, registrosHorasExtraDelEmpleado, fechaCorte, montoPorHoraExtra){
   const enDiciembre = fechaCorte.getMonth() === 11;
   const periodoInicio = new Date(fechaCorte.getFullYear() - (enDiciembre ? 0 : 1), 11, 1);
   const periodoFin = new Date(fechaCorte.getFullYear() + (enDiciembre ? 1 : 0), 10, 30);
   const moneda = emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC";
+  const monedaEsUSD = moneda === "USD";
   const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
   const inicioEfectivo = (fechaIngreso && fechaIngreso > periodoInicio) ? fechaIngreso : periodoInicio;
   const finEfectivo = fechaCorte < periodoFin ? fechaCorte : periodoFin;
   if (finEfectivo < inicioEfectivo){
     return { periodoInicio, periodoFin, montoBase: 0, montoHorasExtra: 0, total: 0, moneda };
   }
-  const ant = calcularAntiguedad(inicioEfectivo, finEfectivo);
-  const mesesProporcionales = ant.mesesCompletosTotales + (ant.dias / 30);
-  const salarioMensual = Number(String((moneda === "USD" ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP) || "").replace(/[^0-9.]/g, "")) || 0;
-  const montoBase = salarioMensual * (Math.min(mesesProporcionales, 12) / 12);
+
+  let montoBase = 0;
+  let cursor = new Date(inicioEfectivo.getFullYear(), inicioEfectivo.getMonth(), 1);
+  while (cursor <= finEfectivo){
+    const periodoMes = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+    const salarioDelMes = salarioVigenteEnMes(emp, periodoMes, monedaEsUSD);
+    const inicioMes = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const finMes = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const desde = inicioMes < inicioEfectivo ? inicioEfectivo : inicioMes;
+    const hasta = finMes > finEfectivo ? finEfectivo : finMes;
+    const diasEnEsteMes = Math.round((hasta - desde) / 86400000) + 1;
+    montoBase += salarioDelMes * (diasEnEsteMes / finMes.getDate());
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  montoBase = montoBase / 12;
+
   const inicioISO = isoDeFechaLocal(inicioEfectivo);
   const finISO = isoDeFechaLocal(finEfectivo);
   const montoHorasExtra = (registrosHorasExtraDelEmpleado || [])
@@ -12078,18 +12451,19 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   const n = i => numerado ? `${i}. ` : "";
   const botones = [];
   botones.push(`<button onclick="generarDespidoDeEmpleado('${empKey}')">${n(1)}⚖️ Carta de despido</button>`);
-  botones.push(`<button onclick="generarAmonestacionDeEmpleado('${empKey}')">${n(2)}⚠️ Amonestación</button>`);
+  botones.push(`<button onclick="abrirCalculadoraLiquidacion('${empKey}')">${n(2)}🧮 Calcular liquidación</button>`);
+  botones.push(`<button onclick="generarAmonestacionDeEmpleado('${empKey}')">${n(3)}⚠️ Amonestación</button>`);
   if (archivado) botones.push(`<button onclick="generarRecomendacionDeEmpleado('${empKey}')">📝 Recomendación laboral</button>`);
-  botones.push(`<button onclick="actualizarContratoDeEmpleado('${empKey}')">${n(3)}📄 ${(contratosVinculados && contratosVinculados.length) ? "Actualizar" : "Crear"} contrato</button>`);
-  if (!archivado) botones.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">${n(4)}🗓️ Permiso sin goce salarial</button>`);
-  if (!archivado) botones.push(`<button onclick="generarVacacionesDeEmpleado('${empKey}')">${n(5)}🏖️ Vacaciones</button>`);
-  botones.push(`<button onclick="openCatalogForm('empleados','${empKey}')">${n(6)}✏️ Editar datos (puesto, salario, contacto...)</button>`);
-  botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(7)}✍️ Confirmar handbook</button>`);
-  botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(8)}📎 Subir contrato firmado (PDF)</button>`);
-  botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(9)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
+  botones.push(`<button onclick="actualizarContratoDeEmpleado('${empKey}')">${n(4)}📄 ${(contratosVinculados && contratosVinculados.length) ? "Actualizar" : "Crear"} contrato</button>`);
+  if (!archivado) botones.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">${n(5)}🗓️ Permiso sin goce salarial</button>`);
+  if (!archivado) botones.push(`<button onclick="generarVacacionesDeEmpleado('${empKey}')">${n(6)}🏖️ Vacaciones</button>`);
+  botones.push(`<button onclick="openCatalogForm('empleados','${empKey}')">${n(7)}✏️ Editar datos (puesto, salario, contacto...)</button>`);
+  botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(8)}✍️ Confirmar handbook</button>`);
+  botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(9)}📎 Subir contrato firmado (PDF)</button>`);
+  botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(10)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
   if (esMaster && !archivado) botones.push(`<button onclick="mostrarModalDesignarJefatura('${empKey}')">👑 Designar como jefatura</button>`);
   if (!archivado) botones.push(`<button onclick="mostrarCredencialesEmpleado('${empKey}')">🔑 Ver/generar credenciales de acceso</button>`);
-  if (!archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(10)}🗄️ Archivar</button>`);
+  if (!archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(11)}🗄️ Archivar</button>`);
   return botones.join("");
 }
 

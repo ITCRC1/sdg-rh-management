@@ -157,6 +157,9 @@
 <div class="toolbar" id="despidoform-toolbar" style="display:none;">
   <button class="btn gold" onclick="mostrarSoloDespido(); descargarDespidoPDF();">⚖️ Descargar carta de despido</button>
 </div>
+<div class="toolbar" id="liquidacionform-toolbar" style="display:none;">
+  <button class="btn gold" onclick="descargarLiquidacionPDF()">⬇️ Descargar liquidación</button>
+</div>
 <div class="toolbar" id="amonestacionform-toolbar" style="display:none;">
   <button class="btn gold" onclick="descargarAmonestacionPDF()">⚠️ Generar y descargar amonestación</button>
 </div>
@@ -287,6 +290,7 @@
   </div>
   <div id="form-panel" style="display:none;"></div>
   <div id="despidoform-panel" style="display:none;"></div>
+  <div id="liquidacionform-panel" style="display:none;"></div>
   <div id="amonestacionform-panel" style="display:none;"></div>
   <div id="recomform-panel" style="display:none;"></div>
   <div id="permisoform-panel" style="display:none;"></div>
@@ -330,6 +334,10 @@
 
   <div id="despido-wrap" style="display:none;">
     <div class="doc-scroll"><div class="doc" id="despido-root"></div></div>
+  </div>
+
+  <div id="liquidacion-wrap" style="display:none;">
+    <div class="doc-scroll"><div class="doc" id="liquidacion-root"></div></div>
   </div>
 
   <div id="amonestacion-wrap" style="display:none;">
