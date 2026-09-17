@@ -1575,10 +1575,18 @@ function renderForm(){
   // APELLIDOS_TRABAJADOR + NOMBRE_PILA_TRABAJADOR (ver fieldHtml), así que
   // siempre queda fuera del formulario, con o sin empleado vinculado.
   let exclude = new Set(["NOMBRE_TRABAJADOR"]);
+  // Con empleado vinculado (contrato creado/actualizado DESDE Empleados),
+  // nombre, cédula y dirección ya vienen copiados tal cual de la ficha
+  // (ver actualizarContratoDeEmpleado) — no se vuelven a pedir ni a mostrar
+  // como campos editables, solo como resumen de solo lectura. Editarlos a
+  // mano solo tiene sentido en un contrato SIN empleado todavía (p. ej. una
+  // oferta laboral) — para eso está "Desvincular".
   if (currentEmpKeyForContract && data.NOMBRE_TRABAJADOR){
-    intro += renderEmpleadoVinculadoCard(data.NOMBRE_TRABAJADOR, data.IDENTIFICACION, "",
-      `<button type="button" class="btn" style="margin-top:6px; padding:5px 10px; font-size:11px;" onclick="desvincularEmpleadoContrato()">🔓 ${tr("Desvincular (editar manualmente)","Unlink (edit manually)")}</button>`);
-    exclude = new Set(["NOMBRE_TRABAJADOR","IDENTIFICACION","APELLIDOS_TRABAJADOR","NOMBRE_PILA_TRABAJADOR"]);
+    const direccionTxt = data.DIRECCION_TRABAJADOR
+      ? `<div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">📍 ${escapeHtml(data.DIRECCION_TRABAJADOR)}</div>` : "";
+    intro += renderEmpleadoVinculadoCard(data.NOMBRE_TRABAJADOR, data.IDENTIFICACION, data.ESTADO_CIVIL || "",
+      direccionTxt + `<button type="button" class="btn" style="margin-top:6px; padding:5px 10px; font-size:11px;" onclick="desvincularEmpleadoContrato()">🔓 ${tr("Desvincular (editar manualmente)","Unlink (edit manually)")}</button>`);
+    exclude = new Set(["NOMBRE_TRABAJADOR","IDENTIFICACION","APELLIDOS_TRABAJADOR","NOMBRE_PILA_TRABAJADOR","DIRECCION_TRABAJADOR","ESTADO_CIVIL"]);
   }
   renderFieldSections("form-panel", title => !DESPIDO_SECTION_TITLES.includes(title) && !RECOM_SECTION_TITLES.includes(title), intro, exclude);
   updateProgress();
@@ -13712,6 +13720,15 @@ async function actualizarContratoDeEmpleado(key){
     data.APELLIDOS_TRABAJADOR = emp.APELLIDOS_EMP || "";
     data.NOMBRE_PILA_TRABAJADOR = emp.NOMBRE_EMP || "";
     data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+    // Dirección: se copia tal cual de la ficha (ya viene partida en
+    // Provincia/Cantón/Distrito/Señas desde Empleados) — al crear el contrato
+    // DESDE el empleado, RH no debería tener que volver a elegirla a mano.
+    data.PROVINCIA_TRABAJADOR = emp.PROVINCIA_EMP || "";
+    data.CANTON_TRABAJADOR = emp.CANTON_EMP || "";
+    data.DISTRITO_TRABAJADOR = emp.DISTRITO_EMP || "";
+    data.SENAS_TRABAJADOR = emp.SENAS_EMP || "";
+    data.DIRECCION_TRABAJADOR = emp.DIRECCION_EMP || "";
+    data.ESTADO_CIVIL = emp.ESTADO_CIVIL_EMP || "";
     currentEmpKeyForContract = key;
     if (!emp.PUESTO_KEY && !data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
     const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
