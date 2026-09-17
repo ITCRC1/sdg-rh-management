@@ -13130,13 +13130,32 @@ const TIPOS_DOCUMENTO_EXPEDIENTE = {
 // /api/documentos?cedula=...). Un documento anulado se muestra igual —
 // atenuado y marcado — en vez de desaparecer, para que el expediente no
 // oculte que algo se generó y después se anuló.
+// Anula un documento archivado (contrato, amonestación, carta de despido,
+// etc.) desde el expediente del empleado — mismo mecanismo que ya usa
+// "Buscar y eliminar duplicados" para colillas (window.sdgApi.anularDocumento):
+// nunca se borra de verdad de documentos_emitidos (es de solo-inserción,
+// para poder auditar después qué existió y por qué se anuló), solo deja de
+// contar como vigente y desaparece de este listado. Pide el motivo a mano
+// (ej. "era de prueba") para que quede en el registro por qué se anuló.
+async function anularDocumentoDesdeExpediente(id){
+  const motivo = prompt("Motivo de la anulación (ej. \"generado de prueba\"):", "");
+  if (motivo === null) return; // canceló el prompt
+  if (!motivo.trim()){ statusMsg("Escribe un motivo antes de anular.", false); return; }
+  try{
+    await window.sdgApi.anularDocumento(id, motivo.trim());
+    statusMsg("Documento anulado.");
+    await renderPerfilEmpleado();
+  }catch(e){ statusMsg("No se pudo anular: " + (e.message || "error"), false); }
+}
+
 function renderSeccionDocumentosEmpleado(documentosSinFiltrar){
   // Los anulados (duplicados eliminados vía "Buscar y eliminar duplicados",
-  // correcciones, etc.) nunca se borran de la base — documentos_emitidos es
-  // de solo-inserción — pero ya no deben aparecer en el expediente como si
-  // siguieran vigentes. Mismo criterio que ya usa la sección de Colillas de
-  // pago de más abajo: si alguna vez hace falta auditar qué se anuló y por
-  // qué, eso se consulta directo en la base, no mezclado en este listado.
+  // correcciones, anulados a mano desde este expediente, etc.) nunca se
+  // borran de la base — documentos_emitidos es de solo-inserción — pero ya
+  // no deben aparecer en el expediente como si siguieran vigentes. Mismo
+  // criterio que ya usa la sección de Colillas de pago de más abajo: si
+  // alguna vez hace falta auditar qué se anuló y por qué, eso se consulta
+  // directo en la base, no mezclado en este listado.
   const documentos = documentosSinFiltrar.filter(d => !d.anulado_en);
   if (!documentos.length){
     return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
@@ -13154,7 +13173,10 @@ function renderSeccionDocumentosEmpleado(documentosSinFiltrar){
           <div style="color:var(--ink-soft);">${escapeHtml(d.titulo || "")}</div>
           <div style="color:var(--ink-soft); font-size:11px;">${d.emitido_en ? fmtFecha(d.emitido_en) : ""}</div>
         </div>
-        <a class="btn" style="padding:5px 10px; font-size:11px; flex-shrink:0; text-decoration:none;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">👁️ Ver</a>
+        <div style="display:flex; gap:6px; flex-shrink:0;">
+          <a class="btn" style="padding:5px 10px; font-size:11px; text-decoration:none;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">👁️ Ver</a>
+          <button class="btn" style="padding:5px 10px; font-size:11px;" onclick="anularDocumentoDesdeExpediente('${String(d.id).replace(/'/g,"\\'")}')">🗑️ Anular</button>
+        </div>
       </div>`;
     }).join("")}
   </div></div>`;
