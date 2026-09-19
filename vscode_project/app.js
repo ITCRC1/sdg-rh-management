@@ -586,6 +586,7 @@ const CAMPOS_EXPORTAR_EMPLEADOS = [
     ["TIPO_IDENTIFICACION_EMP", "Tipo de identificación"],
     ["IDENTIFICACION_EMP", "Cédula"],
     ["DEPARTAMENTO_EMP", "Puesto / Departamento"],
+    ["EMPLEADO_CONFIANZA", "Puesto de confianza (Art. 143 CT)"],
     ["NUMERO_EMPLEADO", "Número de empleado"],
     ["FECHA_INGRESO_EMP", "Fecha de ingreso"],
   ]},
@@ -790,6 +791,7 @@ const CATALOGS = {
       ["IDENTIFICACION_EMP","text_cedula_emp","3. Número de cédula","Formato: 1-1112-1111"],
       ["PUESTO_KEY","select_puesto_catalogo","4. Puesto a contratar",""],
       ["DEPARTAMENTO_EMP","text","Puesto / departamento (texto libre, se llena solo al elegir arriba)","","libre"],
+      ["EMPLEADO_CONFIANZA","select_sino_puro","Puesto de confianza (Art. 143 CT) — no marca asistencia ni genera horas extra",""],
       ["NUMERO_EMPLEADO","text","Número de empleado (planilla)",""],
       ["FECHA_INGRESO_DATE","date_ingreso_emp","5. Fecha de ingreso",""],
       ["grp", "Salario"],
@@ -2496,6 +2498,15 @@ function catalogFieldHtml(meta){
       estado = `<div class="hint">Sin archivo adjunto todavía.</div>`;
     }
     control = `<input type="file" accept="image/*,.pdf" onchange="onAdjuntoEmpChange('${id}', this)">${estado}`;
+  } else if (type === "select_sino_puro"){
+    // Sí/No simple, sin campo compañero — a diferencia de select_sino_cantidad/
+    // select_sino_detalle, "No" es el valor por defecto (la mayoría de puestos
+    // NO son de confianza), así que no se deja "sin responder" como esos otros.
+    const esSi = catalogEditing.values[id] === true || catalogEditing.values[id] === "true";
+    control = `<div class="sino-toggle">
+        <button type="button" class="${esSi?'active':''}" onclick="catalogEditing.values['${id}']=true; renderCatalogTab('empleados');">Sí</button>
+        <button type="button" class="${!esSi?'active':''}" onclick="catalogEditing.values['${id}']=false; renderCatalogTab('empleados');">No</button>
+      </div>`;
   } else if (type === "select_sino_cantidad"){
     const tieneSi = catalogEditing.values[id+"_SI"] === true || catalogEditing.values[id+"_SI"] === "true";
     control = `<div class="sino-toggle">
@@ -7115,6 +7126,10 @@ async function generarReporteHorarioPlanilla(){
       const montoFeriado = (salarioHora && salarioDiario && !isNaN(salarioHora))
         ? Math.round(((f.diasFeriadosTrabajados || 0) * salarioDiario + horasExtraFeriado * salarioHora * TARIFA_HORAS_EXTRA_FERIADO) * 100) / 100
         : "";
+      // Puesto de confianza: horasExtra/horasExtraFeriado ya vienen en 0 desde
+      // calcularResumenQuincena (nunca se les paga horas extra), así que estas
+      // columnas quedan en 0 solas — mismas columnas y formato que siempre,
+      // sin agregar ninguna columna nueva al reporte.
       const valores = [
         nombreCompletoEmpleado(f.emp),
         f.emp.NUMERO_EMPLEADO || "",
@@ -7618,6 +7633,19 @@ async function jornadaDiariaDeEmpleado(empleado, cachePuestos){
   return jornadaDiariaDePuesto(cachePuestos[empleado.PUESTO_KEY]);
 }
 
+// Puesto de confianza (Art. 143 CT, ver campo EMPLEADO_CONFIANZA en
+// CATALOGS.empleados): no marca asistencia ni genera horas extra — un
+// archivo de marcación nunca debe crearle registros "laboral" ni, sobre
+// todo, "ausencia" por días sin marcar (si nunca marca, TODOS los días
+// quedarían sin marca, y eso lo dejaría con ausencias injustificadas por su
+// quincena completa). Las incapacidades, permisos sin goce y citas médicas
+// SÍ le siguen aplicando igual que a cualquiera — esas se registran por sus
+// propios flujos (incapacidad:, permiso sin goce, solicitud de ausencia
+// médica), no por el archivo de marcación.
+function esEmpleadoConfianza(emp){
+  return !!(emp && (emp.EMPLEADO_CONFIANZA === true || emp.EMPLEADO_CONFIANZA === "true"));
+}
+
 // El archivo de marcación es "completo" para su propio rango de fechas: si
 // trae marcas de un empleado del 1 al 15, cualquier día de ese mismo rango
 // donde esa persona no tenga ni una marca es información (algo pasó ese
@@ -7640,6 +7668,7 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
   const fechasPorEmpleado = new Map();
   Object.values(acumulado).forEach(info => {
     if (!info.EMPLEADO_KEY) return;
+    if (esEmpleadoConfianza(info.EMPLEADO)) return; // no marca — un hueco no es una ausencia
     if (!empleadosEnArchivo.has(info.EMPLEADO_KEY)) empleadosEnArchivo.set(info.EMPLEADO_KEY, info.EMPLEADO);
     if (!fechasPorEmpleado.has(info.EMPLEADO_KEY)) fechasPorEmpleado.set(info.EMPLEADO_KEY, new Set());
     fechasPorEmpleado.get(info.EMPLEADO_KEY).add(info.FECHA);
@@ -7788,7 +7817,12 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   // valor de verdad cambió, para avisarle a quien importa en vez de dejarlo
   // pasar en silencio.
   const cambiosDeHoras = [];
+  let confianzaOmitidos = 0;
   for (const info of Object.values(acumulado)){
+    // Puesto de confianza: no marca asistencia ni genera horas extra — se
+    // omite del archivo de marcación por completo, aunque su código/nombre
+    // sí aparezca en alguna fila (ver esEmpleadoConfianza).
+    if (esEmpleadoConfianza(info.EMPLEADO)){ confianzaOmitidos++; continue; }
     // La jornada de referencia es la del puesto del empleado (turno diurno,
     // mixto o nocturno) — sin match todavía, se usa la jornada por defecto,
     // así que esa fila queda visible en "Sin identificar" en vez de perderse.
@@ -7848,7 +7882,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
 
   const ausenciasDetectadas = await detectarAusenciasDelArchivo(acumulado, nombreArchivo);
 
-  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols, cambiosDeHoras };
+  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols, cambiosDeHoras, confianzaOmitidos };
 }
 
 async function importarHorasExtraArchivo(inputEl){
@@ -7887,6 +7921,7 @@ async function importarHorasExtraArchivo(inputEl){
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
+    if (r.confianzaOmitidos) msg += ` ${r.confianzaOmitidos} día(s) de puesto(s) de confianza se ignoraron — no marcan asistencia ni generan horas extra.`;
     if (r.cambiosDeHoras && r.cambiosDeHoras.length){
       const detalle = r.cambiosDeHoras.slice(0, 5)
         .map(c => `${c.nombre} (${fmtFechaSimple(c.fecha)}): ${c.antes}h → ${c.despues}h`)
@@ -8050,9 +8085,15 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     const inicioISO = datosDesdeISO || isoDeFechaLocal(activo.inicioEfectivo);
     const finISO = datosHastaISO || isoDeFechaLocal(activo.finEfectivo);
 
+    const confianza = esEmpleadoConfianza(emp);
     const delEmpleadoEnRango = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
-    const horasExtra = delEmpleadoEnRango.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
-    const horasExtraFeriado = delEmpleadoEnRango
+    // Puesto de confianza: nunca genera horas extra, así que se fuerza a 0 acá
+    // mismo (defensivo — aunque por error existiera algún registro "laboral"
+    // con horas, no debe pagarse). El día doble por feriado trabajado
+    // (diasFeriadosTrabajados, más abajo) SÍ le sigue aplicando igual que a
+    // cualquiera — lo único que no aplica es el recargo por HORAS extra.
+    const horasExtra = confianza ? 0 : delEmpleadoEnRango.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+    const horasExtraFeriado = confianza ? 0 : delEmpleadoEnRango
       .filter(r => r.TIPO_DIA === "laboral" && feriadoLeyEnFecha(r.FECHA))
       .reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
     let diasFeriadosTrabajados = 0;
@@ -8083,7 +8124,7 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
       && (!datosHastaISO || r.FECHA <= datosHastaISO)
     ).length;
 
-    return { emp, activo: true, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
+    return { emp, activo: true, confianza, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
   }).filter(f => f.activo);
 }
 
