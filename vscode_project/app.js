@@ -5615,6 +5615,54 @@ async function cargarClavesColillasArchivadas(){
   return claves;
 }
 
+// Buzón de colillas SIN ASIGNAR: antes, una colilla que no emparejaba con
+// ningún empleado (típicamente alguien que todavía no está creado en el
+// sistema) se perdía por completo — ni la página del PDF ni sus datos
+// quedaban guardados en ningún lado, así que había que volver a subir el
+// archivo original completo el día que se creara a esa persona. Ahora la
+// página se archiva igual (tipo "colilla_pago_pendiente") y sus datos quedan
+// en una clave propia, para poder asignarla después desde Planilla →
+// "📥 Colillas sin asignar" (ver renderBuzonColillasPendientes /
+// asignarColillaPendiente), sin perder el PDF ni volver a subir nada.
+function cargarClavesColillasPendientes(){
+  return window.storage.list("colilla_pendiente:", false).then(res => new Set((res && res.keys) || []));
+}
+
+async function guardarColillaPendiente(reg, srcDoc, PDFDocumentClase, clavesPendientesYaGuardadas, nombreArchivoOrigen){
+  const claveInterna = claveColillaArchivada(reg.cedula, reg.nombre, reg.periodoInicio);
+  const key = "colilla_pendiente:" + claveInterna;
+  if (clavesPendientesYaGuardadas.has(key)) return; // ya está en el buzón — no se duplica
+
+  const nuevoDoc = await PDFDocumentClase.create();
+  const [copiada] = await nuevoDoc.copyPages(srcDoc, [reg.pageIndex]);
+  nuevoDoc.addPage(copiada);
+  const bytes = await nuevoDoc.save();
+  const blob = new Blob([bytes], { type: "application/pdf" });
+
+  const periodoTxt = (reg.periodoInicio && reg.periodoFin) ? (reg.periodoInicio + " al " + reg.periodoFin) : "";
+  const doc = await window.sdgApi.congelarDocumento(blob, {
+    tipo: "colilla_pago_pendiente",
+    titulo: "Colilla SIN ASIGNAR" + (periodoTxt ? " — " + periodoTxt : "") + " — " + (reg.nombre || "sin nombre en la colilla"),
+    nombreArchivo: "Colilla_pendiente_" + (reg.nombre || "sin_nombre").replace(/[^a-zA-Z0-9]+/g,"_") + "_" + (reg.periodoInicio || "").replace(/\//g,"-") + ".pdf",
+    empleadoCedula: reg.cedula || null,
+    empleadoNombre: reg.nombre || null,
+  });
+
+  await window.storage.set(key, JSON.stringify({
+    nombre: reg.nombre || "",
+    numero: reg.numero || "",
+    cedula: reg.cedula || "",
+    salario: reg.salario || 0,
+    moneda: reg.moneda || "CRC",
+    periodoInicio: reg.periodoInicio || "",
+    periodoFin: reg.periodoFin || "",
+    docId: doc.id,
+    archivoOrigen: nombreArchivoOrigen || "",
+    creadoEn: new Date().toISOString(),
+  }), false);
+  clavesPendientesYaGuardadas.add(key);
+}
+
 // Lee un PDF de colillas página por página (cada página = una colilla), recorta
 // la página de cada empleado que logre emparejar con el catálogo de Empleados
 // como su propio PDF de una hoja, y la archiva en documentos_emitidos — igual
@@ -5623,7 +5671,7 @@ async function cargarClavesColillasArchivadas(){
 // clavesYaArchivadas es compartido entre todos los archivos de una misma
 // subida (ver onColillasPdfSelected), así que también detecta duplicados
 // dentro del mismo lote, no solo contra lo que ya estaba guardado antes.
-async function archivarColillasPDF(file, clavesYaArchivadas, moneda){
+async function archivarColillasPDF(file, clavesYaArchivadas, moneda, clavesPendientesYaGuardadas){
   if (typeof pdfjsLib === "undefined" || typeof PDFLib === "undefined"){
     throw new Error("El lector/escritor de PDF no está disponible en este navegador.");
   }
@@ -5646,16 +5694,27 @@ async function archivarColillasPDF(file, clavesYaArchivadas, moneda){
   const empleadosDB = await cargarEmpleadosDB();
   const indices = construirIndicesEmpleados(empleadosDB);
   if (!clavesYaArchivadas) clavesYaArchivadas = await cargarClavesColillasArchivadas();
+  if (!clavesPendientesYaGuardadas) clavesPendientesYaGuardadas = await cargarClavesColillasPendientes();
 
   const bufEscritura = await file.arrayBuffer(); // copia aparte: pdf.js puede dejar inservible el buffer que ya usó
   const { PDFDocument } = PDFLib;
   const srcDoc = await PDFDocument.load(bufEscritura);
 
-  let archivados = 0, duplicados = 0;
+  let archivados = 0, duplicados = 0, pendientesNuevas = 0;
   const sinCoincidencia = [];
   for (const reg of registros){
     const { match } = emparejarRegistroColilla(reg, indices, empleadosDB);
-    if (!match){ sinCoincidencia.push(reg); continue; }
+    if (!match){
+      sinCoincidencia.push(reg);
+      try{
+        const key = "colilla_pendiente:" + claveColillaArchivada(reg.cedula, reg.nombre, reg.periodoInicio);
+        if (!clavesPendientesYaGuardadas.has(key)){
+          await guardarColillaPendiente(reg, srcDoc, PDFDocument, clavesPendientesYaGuardadas, file.name);
+          pendientesNuevas++;
+        }
+      }catch(e){ /* no se pudo guardar en el buzón — igual queda listada como "sin coincidencia" en el resumen */ }
+      continue;
+    }
 
     const clave = claveColillaArchivada(match.IDENTIFICACION_EMP, nombreCompletoEmpleado(match), reg.periodoInicio);
     if (clavesYaArchivadas.has(clave)){ duplicados++; continue; }
@@ -5682,7 +5741,7 @@ async function archivarColillasPDF(file, clavesYaArchivadas, moneda){
       sinCoincidencia.push(Object.assign({}, reg, { errorArchivo: e.message }));
     }
   }
-  return { archivados, duplicados, sinCoincidencia, total: registros.length };
+  return { archivados, duplicados, sinCoincidencia, total: registros.length, pendientesNuevas };
 }
 
 async function onColillasPdfSelected(inputEl){
@@ -5694,6 +5753,7 @@ async function onColillasPdfSelected(inputEl){
   let archivadosTotal = 0;
   let sinArchivarTotal = 0;
   let duplicadosTotal = 0;
+  let pendientesNuevasTotal = 0;
   let sinArchivarDetalle = [];
   // Se carga una sola vez y se comparte entre todos los archivos de esta
   // subida, así detecta tanto "esta colilla ya estaba archivada de antes"
@@ -5703,6 +5763,12 @@ async function onColillasPdfSelected(inputEl){
     clavesYaArchivadas = await cargarClavesColillasArchivadas();
   }catch(e){
     clavesYaArchivadas = new Set(); // si falla la consulta, no bloquea la subida — solo no filtra duplicados de antes
+  }
+  let clavesPendientesYaGuardadas;
+  try{
+    clavesPendientesYaGuardadas = await cargarClavesColillasPendientes();
+  }catch(e){
+    clavesPendientesYaGuardadas = new Set();
   }
   for (const file of files){
     statusEl.textContent = `Leyendo ${file.name} (${leidos.length + 1} de ${files.length})…`;
@@ -5720,10 +5786,11 @@ async function onColillasPdfSelected(inputEl){
     // por persona. Si esto falla, no debe impedir que el salario sí se actualice.
     try{
       statusEl.textContent = `Archivando colillas individuales de ${file.name}…`;
-      const resultado = await archivarColillasPDF(file, clavesYaArchivadas, moneda);
+      const resultado = await archivarColillasPDF(file, clavesYaArchivadas, moneda, clavesPendientesYaGuardadas);
       archivadosTotal += resultado.archivados;
       sinArchivarTotal += resultado.sinCoincidencia.length;
       duplicadosTotal += resultado.duplicados;
+      pendientesNuevasTotal += resultado.pendientesNuevas || 0;
       sinArchivarDetalle.push(...resultado.sinCoincidencia.map(r => Object.assign({ archivo: file.name }, r)));
     }catch(e){
       statusMsg(`Se leyó "${file.name}" pero no se pudieron archivar las colillas individuales: ${e.message}`, false);
@@ -5738,7 +5805,8 @@ async function onColillasPdfSelected(inputEl){
         (archivadosTotal ? ` — ${archivadosTotal} colilla(s) individual(es) archivada(s)` +
           (sinArchivarTotal ? ` (${sinArchivarTotal} sin coincidencia)` : "") +
           (duplicadosTotal ? ` (${duplicadosTotal} ya estaban archivadas, no se repitieron)` : "") + "." : "") +
-        (!archivadosTotal && duplicadosTotal ? ` — ${duplicadosTotal} colilla(s) ya estaban archivadas, no se repitieron.` : "");
+        (!archivadosTotal && duplicadosTotal ? ` — ${duplicadosTotal} colilla(s) ya estaban archivadas, no se repitieron.` : "") +
+        (pendientesNuevasTotal ? ` 📥 ${pendientesNuevasTotal} sin coincidencia se guardaron en el buzón (Planilla → "Colillas sin asignar") para asignarlas cuando quieras.` : "");
       // renderColillasPreview() (llamado dentro de procesarColillas) ya
       // reemplazó el contenido de #colillas-resultados con lo que dice el
       // emparejado por NOMBRE sobre texto completo — eso puede coincidir aunque
@@ -6488,6 +6556,8 @@ async function renderPlanillaPanel(){
     </div></div>`
       : `<div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;"><div class="section-body" style="font-size:12px; color:var(--ink-soft);">🧾 Esta propiedad no sube colillas de un proveedor externo — usá el generador de colillas de abajo para crearlas directo en el sistema.</div></div>`;
 
+    html += `<div id="buzon-colillas-pendientes"></div>`;
+
     html += `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">Acciones</div>
       <button class="btn primary" style="width:100%; margin-bottom:8px;" onclick="mostrarModalColillasArchivadas();">📋 Ver todas las colillas archivadas</button>
@@ -6585,8 +6655,127 @@ async function renderPlanillaPanel(){
 
     panel.innerHTML = html;
     if (esCorcovado) await renderColillasImporter();
+    await renderBuzonColillasPendientes();
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
+  }
+}
+
+// Buzón de colillas sin asignar (ver guardarColillaPendiente) — solo se
+// muestra si hay algo pendiente, para no meter una tarjeta vacía en el panel
+// de Planilla cuando no hace falta.
+async function renderBuzonColillasPendientes(){
+  const cont = document.getElementById("buzon-colillas-pendientes");
+  if (!cont) return;
+  try{
+    const res = await window.storage.list("colilla_pendiente:", false);
+    const keys = (res && res.keys) || [];
+    const items = (await Promise.all(keys.map(async k => {
+      try{
+        const r = await window.storage.get(k, false);
+        return r && r.value ? Object.assign({ key: k }, JSON.parse(r.value)) : null;
+      }catch(e){ return null; }
+    }))).filter(Boolean).sort((a,b) => (b.creadoEn||"").localeCompare(a.creadoEn||""));
+    if (!items.length){ cont.innerHTML = ""; return; }
+    cont.innerHTML = `<div class="section-card" style="margin-bottom:14px; border-color:#D9A54A;"><div class="section-body">
+      <div style="font-weight:700; color:#8a6d1f; margin-bottom:4px;">📥 Colillas sin asignar (${items.length})</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">No coincidieron con ningún empleado al subirlas — el PDF ya quedó archivado, solo falta decidir a quién corresponde. Asígnalas cuando la persona ya esté creada en el sistema, o si ya existe pero con el número/nombre mal escrito.</div>
+      ${items.map(it => `
+        <div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+          <b>${escapeHtml(it.nombre || "(sin nombre en la colilla)")}</b> — № ${escapeHtml(it.numero || "—")}${it.cedula ? " · cédula " + escapeHtml(it.cedula) : ""}
+          — ${it.moneda === "USD" ? "$" : "₡"}${Number(it.salario||0).toLocaleString(it.moneda === "USD" ? "en-US" : "es-CR")}
+          ${it.periodoInicio ? ` · período ${escapeHtml(it.periodoInicio)}${it.periodoFin ? " al " + escapeHtml(it.periodoFin) : ""}` : ""}
+          <br>
+          ${it.docId ? `<a href="${escapeHtml(window.sdgApi.urlDescarga(it.docId))}" target="_blank" rel="noopener" style="font-size:11px;">📄 Ver PDF</a>` : ""}
+          <div style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn" style="padding:4px 9px; font-size:11px;" onclick="abrirModalAsignarColillaPendiente('${it.key.replace(/'/g,"\\'")}')">🔗 Asignar a un empleado existente</button>
+            <button class="btn" style="padding:4px 9px; font-size:11px;" onclick="abrirModalCrearEmpleadoDesdeColillaPendiente('${it.key.replace(/'/g,"\\'")}')">🆕 Crear empleado nuevo</button>
+            <button class="btn" style="padding:4px 9px; font-size:11px;" onclick="descartarColillaPendiente('${it.key.replace(/'/g,"\\'")}')">🗑️ Descartar</button>
+          </div>
+        </div>`).join("")}
+    </div></div>`;
+  }catch(e){ /* si falla la consulta, simplemente no se muestra el buzón esta vez */ }
+}
+
+async function descartarColillaPendiente(key){
+  if (!confirm("¿Descartar esta colilla del buzón? El PDF que ya se archivó no se borra, solo deja de aparecer aquí pendiente de asignar.")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Descartada del buzón.");
+    renderBuzonColillasPendientes();
+  }catch(e){ statusMsg("No se pudo descartar: " + e.message, false); }
+}
+
+let colillaPendienteEnAsignacion = null;
+
+async function abrirModalAsignarColillaPendiente(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔗 Asignar colilla a un empleado";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const r = await window.storage.get(key, false);
+    const it = r && r.value ? JSON.parse(r.value) : null;
+    if (!it){ body.innerHTML = `<div class="empty-state">Esa colilla ya no está en el buzón.</div>`; return; }
+    colillaPendienteEnAsignacion = { key, it };
+    const empleados = (await cargarEmpleadosDB()).filter(e => !e.ARCHIVADO).sort(compararPorApellido);
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
+        Colilla: <b>${escapeHtml(it.nombre || "(sin nombre)")}</b> — № ${escapeHtml(it.numero || "—")} —
+        ${it.moneda === "USD" ? "$" : "₡"}${Number(it.salario||0).toLocaleString(it.moneda === "USD" ? "en-US" : "es-CR")}
+      </div>
+      <div class="field">
+        <label>Asignar al empleado</label>
+        <input type="text" id="asignar-colilla-busqueda" placeholder="🔍 Buscar por nombre…" oninput="filtrarSelectEmpleados(this, 'asignar-colilla-select')" autocomplete="off">
+        <select id="asignar-colilla-select" size="8" style="margin-top:6px;">
+          ${empleados.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}${e.NUMERO_EMPLEADO ? " — № " + escapeHtml(e.NUMERO_EMPLEADO) : ""}</option>`).join("")}
+        </select>
+      </div>
+      <div id="asignar-colilla-status" style="font-size:12px; color:#B3261E; margin:6px 0;"></div>
+      <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarAsignarColillaPendiente()">Aplicar salario y quitar del buzón</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message||"")}</div>`; }
+}
+
+async function confirmarAsignarColillaPendiente(){
+  const ctx = colillaPendienteEnAsignacion;
+  const status = document.getElementById("asignar-colilla-status");
+  const select = document.getElementById("asignar-colilla-select");
+  const empKey = select && select.value;
+  if (!ctx) return;
+  if (!empKey){ if (status) status.textContent = "Elegí a quién le pertenece esta colilla."; return; }
+  try{
+    const fullKey = CATALOGS.empleados.prefix + empKey;
+    const res = await window.storage.get(fullKey, false);
+    const emp = res && res.value ? JSON.parse(res.value) : null;
+    if (!emp) throw new Error("Ese empleado ya no existe.");
+    const it = ctx.it;
+    if (it.moneda === "USD"){
+      const anteriorUsd = emp.SALARIO_USD_EMP || "—";
+      emp.SALARIO_USD_EMP = String(it.salario);
+      emp.MONEDA_SALARIO_EMP = "USD";
+      registrarSalarioHistorial(emp, it.salario, "USD", "colilla_buzon");
+      emp.SALARIO_USD_EMP_LETRAS = salarioEnLetras(it.salario, "dólares", "es");
+      const netoUsd = it.salario * (1 - DEDUCCION_CCSS);
+      emp.SALARIO_USD_EMP_NETO = netoUsd.toFixed(2);
+      emp.SALARIO_USD_EMP_NETO_LETRAS = salarioEnLetras(netoUsd, "dólares", "es");
+      if (!emp.NUMERO_EMPLEADO && it.numero) emp.NUMERO_EMPLEADO = it.numero;
+      await window.storage.set(fullKey, JSON.stringify(emp), false);
+      await agregarBitacora(empKey, `Salario en dólares actualizado desde una colilla del buzón (sin asignar hasta ahora): ${anteriorUsd} → ${it.salario} (№ empleado ${it.numero || "—"}, colilla a nombre de "${it.nombre || "—"}").`);
+    } else {
+      const salarioAnterior = emp.SALARIO_EMP || "—";
+      emp.SALARIO_EMP = String(it.salario);
+      registrarSalarioHistorial(emp, it.salario, "CRC", "colilla_buzon");
+      if (!emp.NUMERO_EMPLEADO && it.numero) emp.NUMERO_EMPLEADO = it.numero;
+      await window.storage.set(fullKey, JSON.stringify(emp), false);
+      await agregarBitacora(empKey, `Salario actualizado desde una colilla del buzón (sin asignar hasta ahora): ${salarioAnterior} → ${it.salario} (№ empleado ${it.numero || "—"}, colilla a nombre de "${it.nombre || "—"}").`);
+    }
+    await window.storage.delete(ctx.key, false);
+    colillaPendienteEnAsignacion = null;
+    cerrarModalIncompletos();
+    statusMsg(`Colilla asignada a ${nombreCompletoEmpleado(emp)}.`, true);
+    renderBuzonColillasPendientes();
+  }catch(e){
+    if (status) status.textContent = e.message || "No se pudo asignar.";
   }
 }
 
