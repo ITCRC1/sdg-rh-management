@@ -6410,6 +6410,22 @@ async function renderPlanillaPanel(){
       <div style="font-size:12px; color:var(--ink-soft);">Colillas de pago archivadas por trabajador.</div>
     </div>`;
 
+    // Franja fija arriba de todo el panel — no parpadea (eso distrae y se ve
+    // roto), pero es lo primero que se ve al entrar a Planilla, sin tener que
+    // bajar hasta la tarjeta de tipo de cambio para notar que hace falta.
+    if (tipoCambioVencido(tipoCambioActual)){
+      html += `<div style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:#FDECEA; border:1.5px solid #B3261E; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:20px;">⚠️</span>
+        <div style="flex:1; min-width:200px; font-size:12.5px; color:#7a1d16;">
+          <b>${tipoCambioActual ? "Tipo de cambio vencido" : "Falta configurar el tipo de cambio"}</b> —
+          ${tipoCambioActual
+            ? `el guardado (₡${tipoCambioActual.valor} del ${fmtFecha(tipoCambioActual.actualizadoEn)}) es de una quincena anterior. Ponlo al día antes de descargar datos de planilla de empleados en dólares.`
+            : `necesario para convertir a colones el salario de quienes ganan en dólares al descargar sus datos para planilla CCSS.`}
+        </div>
+        <button class="btn primary" style="flex-shrink:0;" onclick="document.getElementById('tipo-cambio-input').scrollIntoView({behavior:'smooth', block:'center'}); document.getElementById('tipo-cambio-input').focus();">Ir a actualizarlo</button>
+      </div>`;
+    }
+
     // La subida de colillas EXTERNAS queda exclusiva de Corcovado — es la
     // única propiedad que viene migrando desde un proveedor externo de
     // planillas. Cualquier propiedad nueva empieza de cero y usa desde el
@@ -6433,7 +6449,9 @@ async function renderPlanillaPanel(){
     html += `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">💵 Tipo de cambio de referencia (USD → ₡)</div>
       <div style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;">Se usa para convertir a colones el salario de quienes ganan en dólares al descargar sus datos para planilla CCSS — la CCSS se presenta siempre en colones. Se guarda a mano (no se consulta ningún servicio externo) para que elijas vos qué tipo de cambio corresponde al reporte que estás llenando.</div>
-      ${tipoCambioActual ? `<div style="font-size:12.5px; margin-bottom:8px;">Actual: <b>₡${tipoCambioActual.valor}</b> por US$1 — actualizado el ${fmtFecha(tipoCambioActual.actualizadoEn)}${tipoCambioActual.actualizadoPorEmail ? " por " + escapeHtml(tipoCambioActual.actualizadoPorEmail) : ""}.</div>` : `<div style="font-size:12.5px; color:#B3261E; margin-bottom:8px;">⚠️ Todavía no se ha configurado — el Excel de CCSS de empleados en dólares no podrá convertir a colones hasta que lo pongas.</div>`}
+      ${tipoCambioActual
+        ? `<div style="font-size:12.5px; margin-bottom:8px; ${tipoCambioVencido(tipoCambioActual) ? "color:#B3261E;" : ""}">${tipoCambioVencido(tipoCambioActual) ? "⚠️ Vencido — " : ""}Actual: <b>₡${tipoCambioActual.valor}</b> por US$1 — actualizado el ${fmtFecha(tipoCambioActual.actualizadoEn)}${tipoCambioActual.actualizadoPorEmail ? " por " + escapeHtml(tipoCambioActual.actualizadoPorEmail) : ""}${tipoCambioVencido(tipoCambioActual) ? " (de una quincena anterior)" : ""}.</div>`
+        : `<div style="font-size:12.5px; color:#B3261E; margin-bottom:8px;">⚠️ Todavía no se ha configurado — el Excel de CCSS de empleados en dólares no podrá convertir a colones hasta que lo pongas.</div>`}
       <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nuevo tipo de cambio (₡ por US$1)
           <input type="number" id="tipo-cambio-input" min="0" step="0.01" placeholder="Ej. 520.50" value="${tipoCambioActual ? tipoCambioActual.valor : ""}">
@@ -12750,6 +12768,18 @@ async function guardarTipoCambio(valor){
   await window.storage.set(CLAVE_TIPO_CAMBIO, JSON.stringify({ valor: n, actualizadoEn: new Date().toISOString(), actualizadoPorEmail: email }), false);
 }
 
+// "Vencido" = guardado antes de que arrancara la quincena actual (1 o 16 de
+// cada mes) — cada quincena de planilla debe correr con SU propio tipo de
+// cambio, no con uno que quedó de la quincena pasada. Sin esto era fácil
+// arrastrar un tipo de cambio viejo por semanas sin darse cuenta porque
+// "Planilla" solo avisaba cuando el campo estaba vacío, nunca cuando estaba
+// desactualizado.
+function tipoCambioVencido(tipoCambio){
+  if (!tipoCambio) return true;
+  const actualizado = new Date(tipoCambio.actualizadoEn);
+  return isNaN(actualizado) || actualizado < rangoQuincenaActual().inicio;
+}
+
 async function guardarTipoCambioDesdeInput(){
   const input = document.getElementById("tipo-cambio-input");
   const status = document.getElementById("tipo-cambio-status");
@@ -12771,41 +12801,111 @@ async function descargarDatosCCSS(key){
       statusMsg("No se pudo cargar el lector de Excel. Recarga la página e intenta de nuevo.", false);
       return;
     }
-    const esUSD = emp.MONEDA_SALARIO_EMP === "USD";
-    let salarioTexto = "";
-    if (esUSD){
-      const bruto = Number(String(emp.SALARIO_USD_EMP || "").replace(/[^0-9.]/g,""));
-      if (bruto){
-        const tipoCambio = await cargarTipoCambio();
-        salarioTexto = tipoCambio
-          ? `₡${Math.round(bruto * tipoCambio.valor).toLocaleString("es-CR")} (convertido de $${bruto.toLocaleString("en-US")} al tipo de cambio de referencia ₡${tipoCambio.valor} del ${fmtFecha(tipoCambio.actualizadoEn)} — configúralo en Planilla)`
-          : `$${bruto.toLocaleString("en-US")} (sin tipo de cambio de referencia configurado — anda a Planilla para ponerlo y que este Excel convierta a colones solo)`;
-      }
-    } else {
-      const bruto = Number(String(emp.SALARIO_EMP || "").replace(/[^0-9.]/g,""));
-      salarioTexto = bruto || "";
+    // Quien gana en colones no necesita tipo de cambio para nada — se descarga
+    // directo, igual que siempre. Quien gana en dólares SÍ lo necesita para
+    // convertir a colones (la CCSS se presenta siempre en colones), así que se
+    // le pide confirmarlo (o actualizarlo) en el momento, en vez de arrastrar
+    // en silencio el que haya quedado guardado de una quincena anterior.
+    if (emp.MONEDA_SALARIO_EMP === "USD"){
+      await mostrarModalConfirmarTipoCambioCCSS(emp);
+      return;
     }
-    const fila = {
-      "Cédula": emp.IDENTIFICACION_EMP || "",
-      "Tipo de identificación": emp.TIPO_IDENTIFICACION_EMP || "",
-      "Nombre completo": nombreCompletoEmpleado(emp),
-      "Fecha de nacimiento": emp.FECHA_NACIMIENTO_EMP || "",
-      "Fecha de ingreso": emp.FECHA_INGRESO_EMP || "",
-      "Puesto / Ocupación": emp.DEPARTAMENTO_EMP || "",
-      "Salario bruto mensual": salarioTexto,
-      "Estado civil": emp.ESTADO_CIVIL_EMP || "",
-      "Teléfono": emp.CELULAR_EMP || "",
-      "Correo electrónico": emp.CORREO_EMP || "",
-    };
-    const ws = XLSX.utils.json_to_sheet([fila]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "CCSS");
-    const nombreArchivo = "CCSS_" + (nombreCompletoEmpleado(emp) || "empleado").replace(/[^a-zA-Z0-9]+/g,"_") + ".xlsx";
-    XLSX.writeFile(wb, nombreArchivo);
-    statusMsg("Descargado. Revisa que las columnas calcen con lo que pide el portal de la CCSS antes de subirlo — este formato es un punto de partida, no la plantilla oficial confirmada.", true);
+    await generarExcelCCSS(emp, null);
   }catch(e){
     statusMsg("No se pudo generar el Excel: " + e.message, false);
   }
+}
+
+let empPendienteCCSS = null;
+
+async function mostrarModalConfirmarTipoCambioCCSS(emp){
+  empPendienteCCSS = emp;
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "💵 Confirmar tipo de cambio";
+  const tipoCambio = await cargarTipoCambio();
+  const vencido = tipoCambioVencido(tipoCambio);
+  body.innerHTML = `
+    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;"><b>${escapeHtml(nombreCompletoEmpleado(emp))}</b> gana en dólares — la CCSS se presenta en colones, así que hace falta el tipo de cambio para convertir el monto en este Excel.</div>
+    ${tipoCambio
+      ? `<div style="font-size:12px; margin-bottom:8px; ${vencido ? "color:#B3261E;" : "color:var(--ink-soft);"}">${vencido ? "⚠️ El guardado es de una quincena anterior: " : "Guardado actualmente: "}₡${tipoCambio.valor} por US$1 del ${fmtFecha(tipoCambio.actualizadoEn)}.</div>`
+      : `<div style="font-size:12px; color:#B3261E; margin-bottom:8px;">⚠️ Todavía no hay ninguno guardado.</div>`}
+    <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; margin-bottom:10px;">Tipo de cambio a usar (₡ por US$1) — déjalo vacío para descargar en dólares sin convertir
+      <input type="number" id="ccss-tipo-cambio-input" min="0" step="0.01" placeholder="Ej. 520.50" value="${tipoCambio && !vencido ? tipoCambio.valor : ""}">
+    </label>
+    <div id="ccss-tipo-cambio-status" style="font-size:12px; color:#B3261E; margin-bottom:8px;"></div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn primary" style="flex:1;" onclick="confirmarTipoCambioYDescargarCCSS();">⬇️ Confirmar y descargar</button>
+      <button class="btn" style="flex:1;" onclick="empPendienteCCSS=null; cerrarModalIncompletos();">Cancelar</button>
+    </div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+}
+
+async function confirmarTipoCambioYDescargarCCSS(){
+  const emp = empPendienteCCSS;
+  if (!emp) return;
+  const input = document.getElementById("ccss-tipo-cambio-input");
+  const status = document.getElementById("ccss-tipo-cambio-status");
+  const valor = input ? input.value.trim() : "";
+  const n = Number(valor);
+  if (valor && (!n || n <= 0)){
+    if (status) status.textContent = "El tipo de cambio debe ser un número mayor que cero.";
+    return;
+  }
+  try{
+    // Guardarlo de una vez lo deja como el vigente para la próxima persona que
+    // lo necesite — mismo campo que se ve/edita en la pestaña Planilla.
+    let tipoCambioInfo = null;
+    if (n){
+      await guardarTipoCambio(n);
+      tipoCambioInfo = await cargarTipoCambio(); // trae la fecha real ya guardada, no "ahora mismo" a mano
+    }
+    empPendienteCCSS = null;
+    cerrarModalIncompletos();
+    await generarExcelCCSS(emp, tipoCambioInfo);
+  }catch(e){
+    if (status) status.textContent = e.message;
+  }
+}
+
+// tipoCambioInfo ({valor, actualizadoEn}) queda registrado en columnas propias
+// del Excel — no solo mezclado como texto dentro del salario — para que quien
+// abra este reporte después (o lo compare con otro de otra quincena) pueda
+// ver exactamente qué tipo de cambio y de qué fecha se usó para convertir,
+// sin tener que ir a preguntar o confiar en lo que diga Planilla en ese momento.
+async function generarExcelCCSS(emp, tipoCambioInfo){
+  const esUSD = emp.MONEDA_SALARIO_EMP === "USD";
+  const brutoUsd = esUSD ? Number(String(emp.SALARIO_USD_EMP || "").replace(/[^0-9.]/g,"")) : 0;
+  let salarioTexto = "";
+  if (esUSD){
+    salarioTexto = (brutoUsd && tipoCambioInfo)
+      ? "₡" + Math.round(brutoUsd * tipoCambioInfo.valor).toLocaleString("es-CR")
+      : (brutoUsd ? "$" + brutoUsd.toLocaleString("en-US") + " (sin convertir — no había tipo de cambio)" : "");
+  } else {
+    const bruto = Number(String(emp.SALARIO_EMP || "").replace(/[^0-9.]/g,""));
+    salarioTexto = bruto || "";
+  }
+  const fila = {
+    "Cédula": emp.IDENTIFICACION_EMP || "",
+    "Tipo de identificación": emp.TIPO_IDENTIFICACION_EMP || "",
+    "Nombre completo": nombreCompletoEmpleado(emp),
+    "Fecha de nacimiento": emp.FECHA_NACIMIENTO_EMP || "",
+    "Fecha de ingreso": emp.FECHA_INGRESO_EMP || "",
+    "Puesto / Ocupación": emp.DEPARTAMENTO_EMP || "",
+    "Salario bruto mensual": salarioTexto,
+    "Moneda original del salario": esUSD ? "USD" : "CRC",
+    "Salario original en dólares": esUSD && brutoUsd ? brutoUsd : "",
+    "Tipo de cambio usado (₡ por US$1)": (esUSD && tipoCambioInfo) ? tipoCambioInfo.valor : "",
+    "Fecha del tipo de cambio usado": (esUSD && tipoCambioInfo) ? fmtFecha(tipoCambioInfo.actualizadoEn) : "",
+    "Estado civil": emp.ESTADO_CIVIL_EMP || "",
+    "Teléfono": emp.CELULAR_EMP || "",
+    "Correo electrónico": emp.CORREO_EMP || "",
+  };
+  const ws = XLSX.utils.json_to_sheet([fila]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "CCSS");
+  const nombreArchivo = "CCSS_" + (nombreCompletoEmpleado(emp) || "empleado").replace(/[^a-zA-Z0-9]+/g,"_") + ".xlsx";
+  XLSX.writeFile(wb, nombreArchivo);
+  statusMsg("Descargado. Revisa que las columnas calcen con lo que pide el portal de la CCSS antes de subirlo — este formato es un punto de partida, no la plantilla oficial confirmada.", true);
 }
 
 async function generarRecomendacionDeEmpleado(key){
