@@ -2,6 +2,7 @@
     --navy:#4C5D39;
     --navy-deep:#3C2B23;
     --gold:#C2A15A;
+    --gold-bright:#E4C27C;
     --leaf:#4C5D39;
     --paper:#F6F3EC;
     --paper-line:#E4DBC8;
@@ -620,7 +621,11 @@ body.solo-lectura select{
 }
 .app-sidebar .nav-dd-menu button:last-child{ border-bottom:none; }
 .app-sidebar .nav-dd-menu button:hover{ background:rgba(255,255,255,.08); }
-.app-sidebar .nav-dd-sep{ background:transparent; color:#B9A98F; padding:8px 12px 2px 20px; border-bottom:none; }
+.app-sidebar .nav-dd-sep{
+  display:inline-flex; background:var(--gold-bright); color:var(--navy-deep); font-weight:800;
+  margin:10px 0 6px 20px; padding:3px 10px; border-radius:20px; border-bottom:none;
+}
+.app-sidebar .nav-dd-menu > .nav-dd-sep:first-child{ margin-top:6px; }
 .app-sidebar #propiedad-actual-badge-wrap:empty{ display:none; }
 .app-sidebar #propiedad-actual-badge-wrap{ padding:0 16px 12px; }
 
