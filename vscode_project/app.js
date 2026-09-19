@@ -12351,13 +12351,23 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
       if (s.TIPO === "ausencia_medica") return { texto: "CITA", color: TIPOS_SOLICITUD_AUSENCIA.ausencia_medica.colorHex };
     }
   }
+  // "SALE"/"ENTRA" marcan el día de salida/regreso del día libre PAGADO que
+  // brinda el hotel — no aplican cuando ese mismo día el empleado ya está
+  // fuera por otro motivo (incapacidad). En ese caso el día debe mostrar
+  // continuidad de esa ausencia real (INCAP), no la marca de salida del día
+  // libre — por eso esta revisión va ANTES del bucle de "SALE"/"ENTRA" de
+  // abajo. (permiso_sin_goce/vacaciones/ausencia_medica ya quedan resueltos
+  // arriba, en el primer bucle, así que tampoco llegan nunca a "SALE"/"ENTRA".)
+  const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
+  if (horasDia && horasDia.TIPO_DIA === "incapacidad") return { texto: "INCAP", color: "FFE68A8A" };
+
   // El día ANTES de que arranque un bloque de "Día libre" es cuando el
   // empleado sale (su último día trabajado antes de salir libre) — se marca
   // "SALE". El día DESPUÉS de que termina es cuando vuelve a trabajar — se
   // marca "ENTRA". Se revisan en un segundo bucle, después del de arriba,
   // para que un día que además cae DENTRO de otro tramo de ausencia (ej.
-  // entra directo a otro bloque libre) siempre gane esa etiqueta en vez de
-  // "SALE"/"ENTRA".
+  // entra directo a otro bloque libre, o está incapacitado) siempre gane esa
+  // etiqueta en vez de "SALE"/"ENTRA".
   for (const s of solicitudesEmp){
     if (s.ESTADO !== "aprobada" || s.TIPO !== "dia_libre") continue;
     const diaAntes = new Date(s.FECHA_INICIO + "T00:00:00");
@@ -12368,11 +12378,7 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
     diaDespues.setDate(diaDespues.getDate() + 1);
     if (isoDeFechaLocal(diaDespues) === fechaISO) return { texto: "ENTRA", color: "FFD9D9D9" };
   }
-  const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
-  if (horasDia){
-    if (horasDia.TIPO_DIA === "incapacidad") return { texto: "INCAP", color: "FFE68A8A" };
-    if (horasDia.TIPO_DIA === "cumpleanos") return { texto: "🎂", color: "FFE0C4F0" };
-  }
+  if (horasDia && horasDia.TIPO_DIA === "cumpleanos") return { texto: "🎂", color: "FFE0C4F0" };
   return null;
 }
 
