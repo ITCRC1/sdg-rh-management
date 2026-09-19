@@ -5055,10 +5055,19 @@ function nombresSinRelacion(nombreColilla, nombreFicha){
   return true;
 }
 
+// porNumero guarda un ARRAY por número — el mismo número de planilla puede
+// tocarle a dos personas distintas cuando el sistema de origen numera por
+// interfaz separada de moneda (colones y dólares cada una por su cuenta, ver
+// emparejarRegistroColilla). Antes se guardaba un solo empleado por número:
+// si dos compartían número, el segundo pisaba al primero en el índice y esa
+// persona quedaba invisible para el emparejado por número desde ese momento.
 function construirIndicesEmpleados(empleadosDB){
   const porNumero = {}, porCedula = {}, porNombre = {};
   empleadosDB.forEach(e => {
-    if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).trim().replace(/^0+/,"")] = e;
+    if (e.NUMERO_EMPLEADO){
+      const num = String(e.NUMERO_EMPLEADO).trim().replace(/^0+/,"");
+      (porNumero[num] = porNumero[num] || []).push(e);
+    }
     if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
     porNombre[normalizarNombre(nombreCompletoEmpleado(e))] = e;
   });
@@ -5069,10 +5078,24 @@ function construirIndicesEmpleados(empleadosDB){
 // pequeños errores de tipeo) usado tanto para actualizar salarios como para
 // archivar la colilla individual de cada quien.
 function emparejarRegistroColilla(p, indices, empleadosDB){
-  let match = null, nombreCorregido = null, matchedBy = null;
-  if (p.numero && indices.porNumero[p.numero.replace(/^0+/,"")]){
-    match = indices.porNumero[p.numero.replace(/^0+/,"")];
-    matchedBy = "número de empleado";
+  let match = null, nombreCorregido = null, matchedBy = null, numeroAmbiguo = false;
+  if (p.numero){
+    const candidatos = indices.porNumero[p.numero.replace(/^0+/,"")] || [];
+    if (candidatos.length === 1){
+      match = candidatos[0];
+      matchedBy = "número de empleado";
+    } else if (candidatos.length > 1){
+      // Mismo número, dos o más fichas: desempata por la moneda que trae esta
+      // colilla (detectada del nombre del archivo — ver detectarMonedaArchivo)
+      // contra la moneda guardada en cada ficha (MONEDA_SALARIO_EMP).
+      const porMoneda = candidatos.filter(e => (e.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC") === p.moneda);
+      if (porMoneda.length === 1){
+        match = porMoneda[0];
+        matchedBy = "número de empleado (por moneda)";
+      } else {
+        numeroAmbiguo = true; // no se pudo desempatar con seguridad — sigue a cédula/nombre
+      }
+    }
   }
   if (!match && p.cedula && indices.porCedula[p.cedula.replace(/\D/g,"")]){
     match = indices.porCedula[p.cedula.replace(/\D/g,"")];
@@ -5090,7 +5113,7 @@ function emparejarRegistroColilla(p, indices, empleadosDB){
       matchedBy = "nombre (con corrección)";
     }
   }
-  return { match, nombreCorregido, matchedBy };
+  return { match, nombreCorregido, matchedBy, numeroAmbiguo };
 }
 
 async function procesarColillas(){
@@ -5121,7 +5144,7 @@ async function procesarColillas(){
   const indices = construirIndicesEmpleados(empleadosDB);
 
   colillasResultadosCache = parsed.map(p => {
-    const { match, nombreCorregido, matchedBy } = emparejarRegistroColilla(p, indices, empleadosDB);
+    const { match, nombreCorregido, matchedBy, numeroAmbiguo } = emparejarRegistroColilla(p, indices, empleadosDB);
     const puestoInfo = calcularPuestoInfo(p, match, mapaOcupaciones);
     // Un salario en colones que cae a menos de un tercio del que ya tenía
     // guardado (o que se triplica) casi nunca es un cambio real dentro de la
@@ -5139,7 +5162,7 @@ async function procesarColillas(){
     if (match && (matchedBy === "número de empleado" || matchedBy === "cédula") && nombresSinRelacion(p.nombre, nombreCompletoEmpleado(match))){
       nombreSospechoso = true;
     }
-    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso, nombreSospechoso });
+    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso, nombreSospechoso, numeroAmbiguo });
   });
   renderColillasPreview();
 }
@@ -5277,7 +5300,7 @@ function renderColillasPreview(){
   if (noEncontrados.length){
     html += `<div class="section-card" style="margin-top:10px; border-color:#D9A54A;"><div class="section-body">
       <div style="font-weight:700; color:#8a6d1f; margin-bottom:6px;">⚠️ Sin coincidencia en tu lista de empleados (revisar nombre manualmente):</div>
-      ${noEncontrados.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre)} — № ${escapeHtml(r.numero)} — ₡${r.salario.toLocaleString("es-CR")} (${escapeHtml(r.ocupacion)})</div>`).join("")}
+      ${noEncontrados.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre)} — № ${escapeHtml(r.numero)} — ₡${r.salario.toLocaleString("es-CR")} (${escapeHtml(r.ocupacion)})${r.numeroAmbiguo ? `<br><span style="color:#B3261E;">Ese número le pertenece a más de una ficha y no se pudo desempatar por moneda (${escapeHtml(r.moneda)}) — revisa que "Moneda del salario" esté bien puesta en ambas fichas, o corrígelo por cédula/nombre.</span>` : ""}</div>`).join("")}
     </div></div>`;
   }
 
@@ -5549,10 +5572,15 @@ async function cargarClavesColillasArchivadas(){
 // clavesYaArchivadas es compartido entre todos los archivos de una misma
 // subida (ver onColillasPdfSelected), así que también detecta duplicados
 // dentro del mismo lote, no solo contra lo que ya estaba guardado antes.
-async function archivarColillasPDF(file, clavesYaArchivadas){
+async function archivarColillasPDF(file, clavesYaArchivadas, moneda){
   if (typeof pdfjsLib === "undefined" || typeof PDFLib === "undefined"){
     throw new Error("El lector/escritor de PDF no está disponible en este navegador.");
   }
+  // moneda (detectada del nombre del archivo, ver detectarMonedaArchivo) se le
+  // pega a cada registro para que emparejarRegistroColilla pueda desempatar un
+  // número de empleado que le toque a más de una ficha — mismo criterio que ya
+  // usa el flujo de actualizar salarios (parseColillas).
+  if (!moneda) moneda = detectarMonedaArchivo(file.name);
   const bufLectura = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: bufLectura }).promise;
   const registros = [];
@@ -5560,7 +5588,7 @@ async function archivarColillasPDF(file, clavesYaArchivadas){
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     const parsed = parseColillaConPeriodo(textoDePagina(content));
-    if (parsed) registros.push(Object.assign({ pageIndex: i - 1 }, parsed));
+    if (parsed) registros.push(Object.assign({ pageIndex: i - 1, moneda }, parsed));
   }
   if (!registros.length) return { archivados: 0, duplicados: 0, sinCoincidencia: [], total: 0 };
 
@@ -5641,7 +5669,7 @@ async function onColillasPdfSelected(inputEl){
     // por persona. Si esto falla, no debe impedir que el salario sí se actualice.
     try{
       statusEl.textContent = `Archivando colillas individuales de ${file.name}…`;
-      const resultado = await archivarColillasPDF(file, clavesYaArchivadas);
+      const resultado = await archivarColillasPDF(file, clavesYaArchivadas, moneda);
       archivadosTotal += resultado.archivados;
       sinArchivarTotal += resultado.sinCoincidencia.length;
       duplicadosTotal += resultado.duplicados;
