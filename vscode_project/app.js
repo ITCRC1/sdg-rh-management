@@ -4854,6 +4854,18 @@ function calcularPuestoInfo(p, match, mapaOcupaciones){
   return { estado: "distinto", puestoKey: mapeo.puestoKey, puestoNombre: mapeo.puestoNombre, ocupacion: p.ocupacion };
 }
 
+// Un cambio de puesto NUNCA debe colarse en un botón masivo — a diferencia
+// del salario (donde un monto raro se detecta comparando contra lo guardado),
+// un puesto "distinto" puede ser perfectamente real (alguien ascendió) o un
+// error de sincronización con el sistema de origen (la ocupación que trae la
+// colilla usa otro vocabulario, o ese mapeo quedó mal armado la primera vez).
+// Aplicarlo en bloque sin que nadie lo revise puede terminar reescribiendo el
+// puesto de TODA la planilla de una sola vez. Por eso cuenta como "sospechoso"
+// igual que un nombre o salario que no calzan — ver renderColillasPreview.
+function tienePuestoDistinto(r){
+  return !!(r.puestoInfo && r.puestoInfo.estado === "distinto");
+}
+
 // Al aplicar una colilla con puesto "distinto" confirmado por el mapa, PUESTO_KEY
 // y DEPARTAMENTO_EMP se actualizan siempre juntos — nunca uno sin el otro, para
 // no dejar la ficha mostrando un puesto que ya no corresponde a su PUESTO_KEY
@@ -5226,10 +5238,13 @@ function renderColillasPreview(){
   const wrap = document.getElementById("colillas-resultados");
   const todosEncontrados = colillasResultadosCache.filter(r => r.match);
   const usdTodos = todosEncontrados.filter(r => r.moneda === "USD");
-  const usd = usdTodos.filter(r => !r.nombreSospechoso);
+  const usd = usdTodos.filter(r => !r.nombreSospechoso && !tienePuestoDistinto(r));
   const resto = todosEncontrados.filter(r => r.moneda !== "USD");
-  const encontrados = resto.filter(r => !r.salarioSospechoso && !r.nombreSospechoso);
-  const sospechosos = [...resto.filter(r => r.salarioSospechoso || r.nombreSospechoso), ...usdTodos.filter(r => r.nombreSospechoso)];
+  const encontrados = resto.filter(r => !r.salarioSospechoso && !r.nombreSospechoso && !tienePuestoDistinto(r));
+  const sospechosos = [
+    ...resto.filter(r => r.salarioSospechoso || r.nombreSospechoso || tienePuestoDistinto(r)),
+    ...usdTodos.filter(r => r.nombreSospechoso || tienePuestoDistinto(r)),
+  ];
   const noEncontrados = colillasResultadosCache.filter(r => !r.match);
   const puestosSinMapear = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "sin_mapear").length;
   const puestosDistintos = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "distinto").length;
@@ -5260,13 +5275,15 @@ function renderColillasPreview(){
   if (sospechosos.length){
     html += `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
       <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🚫 Revisar antes de aplicar — no se aplican solos</div>
-      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Un salario muy distinto al guardado (típico de una colilla en dólares leída como si fueran colones), o un número de empleado/cédula que coincide pero con un nombre que no tiene nada que ver, casi nunca es la misma persona. Verifícalo antes de confirmar — si de verdad es correcto, "Aplicar de todas formas" lo guarda.</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Un salario muy distinto al guardado (típico de una colilla en dólares leída como si fueran colones), un número de empleado/cédula que coincide pero con un nombre que no tiene nada que ver, o un cambio de puesto/departamento, casi nunca deben aplicarse a ciegas. Verifícalo antes de confirmar — si de verdad es correcto, "Aplicar de todas formas" lo guarda (salario y puesto juntos, si ambos cambiaron).</div>
       ${sospechosos.map(r => {
         const idx = colillasResultadosCache.indexOf(r);
         const esUSD = r.moneda === "USD";
         const razon = r.nombreSospechoso
           ? `Coincidió por <b>${escapeHtml(r.matchedBy)}</b> con la ficha de <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b>, pero la colilla trae el nombre <b>${escapeHtml(r.nombre)}</b> — no parecen la misma persona (puede ser un número repetido entre dos planillas distintas).`
-          : `Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)`;
+          : r.salarioSospechoso
+            ? `Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)`
+            : `🔁 Cambio de puesto: el catálogo tiene guardado "<b>${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}</b>" y esta colilla corresponde a "<b>${escapeHtml(r.puestoInfo.puestoNombre)}</b>" — confírmalo antes de aplicar (puede ser un ascenso real, o que el sistema de origen todavía no está sincronizado con el catálogo de Puestos).`;
         return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
           <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)}${esUSD ? " (dólares)" : ""}<br>
           ${razon}
@@ -5315,6 +5332,12 @@ function renderColillasPreview(){
 async function aplicarColillaIndividual(idx){
   const r = colillasResultadosCache[idx];
   if (!r || !r.match) return;
+  // Última confirmación explícita antes de escribir — este es el único camino
+  // por el que puede pasar un cambio de puesto (ver tienePuestoDistinto), así
+  // que el mensaje lo deja clarísimo en vez de asumir que ya se leyó arriba.
+  const cambios = [`salario → ${r.moneda === "USD" ? "$" : "₡"}${r.salario.toLocaleString(r.moneda === "USD" ? "en-US" : "es-CR")}`];
+  if (tienePuestoDistinto(r)) cambios.push(`puesto → "${r.puestoInfo.puestoNombre}"`);
+  if (!confirm(`Vas a aplicarle a ${nombreCompletoEmpleado(r.match)}: ${cambios.join(", ")}. ¿Confirmas?`)) return;
   const fullKey = CATALOGS.empleados.prefix + r.match.key;
   const motivo = r.nombreSospechoso ? "confirmado a mano tras aviso de nombre que no coincidía" : "confirmado a mano tras aviso de monto sospechoso";
   if (r.moneda === "USD"){
@@ -5360,9 +5383,12 @@ async function aplicarColillaIndividual(idx){
 // archivo) — escribe en SALARIO_USD_EMP, nunca en SALARIO_EMP (colones).
 async function aplicarColillasUSD(){
   // Los de nombre sospechoso (número/cédula coincide pero el nombre no tiene
-  // nada que ver) quedan fuera del botón masivo — se confirman uno por uno
-  // desde la sección "Revisar antes de aplicar".
-  const usd = colillasResultadosCache.filter(r => r.match && r.moneda === "USD" && !r.nombreSospechoso);
+  // nada que ver), o con un cambio de puesto/departamento propuesto, quedan
+  // fuera del botón masivo — se confirman uno por uno desde la sección
+  // "Revisar antes de aplicar" (ver tienePuestoDistinto).
+  const usd = colillasResultadosCache.filter(r => r.match && r.moneda === "USD" && !r.nombreSospechoso && !tienePuestoDistinto(r));
+  if (!usd.length) return;
+  if (!confirm(`Vas a actualizar el salario en dólares de ${usd.length} empleado(s) a partir de esta colilla. ¿Continuar?`)) return;
   let count = 0;
   for (const r of usd){
     const fullKey = CATALOGS.empleados.prefix + r.match.key;
@@ -5395,15 +5421,17 @@ async function aplicarColillasUSD(){
     count++;
   }
   statusMsg(`Actualizado el salario en dólares de ${count} empleado(s).`);
-  colillasResultadosCache = colillasResultadosCache.map(r => (r.match && r.moneda === "USD" && !r.nombreSospechoso) ? Object.assign({}, r, { match: null }) : r);
+  colillasResultadosCache = colillasResultadosCache.map(r => (r.match && r.moneda === "USD" && !r.nombreSospechoso && !tienePuestoDistinto(r)) ? Object.assign({}, r, { match: null }) : r);
   renderColillasPreview();
 }
 
 async function aplicarColillas(){
-  // Los de salario o nombre sospechoso, y los de dólares (que van por su
-  // propio botón "Aplicar ... en dólares" arriba), quedan fuera del botón
-  // masivo en colones.
-  const encontrados = colillasResultadosCache.filter(r => r.match && !r.salarioSospechoso && !r.nombreSospechoso && r.moneda !== "USD");
+  // Los de salario o nombre sospechoso, los que traen un cambio de puesto/
+  // departamento propuesto, y los de dólares (que van por su propio botón
+  // "Aplicar ... en dólares" arriba), quedan fuera del botón masivo en colones.
+  const encontrados = colillasResultadosCache.filter(r => r.match && !r.salarioSospechoso && !r.nombreSospechoso && !tienePuestoDistinto(r) && r.moneda !== "USD");
+  if (!encontrados.length) return;
+  if (!confirm(`Vas a actualizar el salario de ${encontrados.length} empleado(s) a partir de esta colilla. ¿Continuar?`)) return;
   let count = 0;
   const numerosSospechosos = [];
   for (const r of encontrados){
