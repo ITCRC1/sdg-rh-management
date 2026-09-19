@@ -109,6 +109,8 @@
       <button onclick="navCloseAndRun(function(){ showTab('permisoform'); })">🗓️ Nueva acción de personal</button>
       <div class="nav-dd-sep">Vacaciones</div>
       <button onclick="navCloseAndRun(function(){ showTab('vacacionesform'); })">🏖️ Nueva acción de personal</button>
+      <div class="nav-dd-sep">Constancia salarial</div>
+      <button onclick="navCloseAndRun(function(){ showTab('constanciasalarialform'); })">💵 Nueva constancia salarial</button>
       <div class="nav-dd-sep">Próximamente</div>
       <div style="padding:8px 14px 10px; font-size:11px; color:var(--ink-soft); line-height:1.5;">⏳ Carga masiva de archivos, plantillas de documentos, vista de documentos recientes por empleado y permisos por rol para documentos sensibles.</div>
     </div>
@@ -295,6 +297,7 @@
   <div id="recomform-panel" style="display:none;"></div>
   <div id="permisoform-panel" style="display:none;"></div>
   <div id="vacacionesform-panel" style="display:none;"></div>
+  <div id="constanciasalarialform-panel" style="display:none;"></div>
 
   <div id="empresas-panel" class="catalog-panel" style="display:none;"></div>
   <div id="puestos-panel" class="catalog-panel" style="display:none;"></div>
@@ -330,6 +333,11 @@
   <div id="constancia-wrap" style="display:none;">
     <div class="toolbar"><button class="btn gold" onclick="descargarConstanciaPDF()">⬇️ Descargar Constancia PDF</button></div>
     <div class="doc-scroll"><div class="doc" id="constancia-root"></div></div>
+  </div>
+
+  <div id="constancia-salarial-wrap" style="display:none;">
+    <div class="toolbar"><button class="btn gold" onclick="descargarConstanciaSalarialPDF()">⬇️ Descargar Constancia Salarial PDF</button></div>
+    <div class="doc-scroll"><div class="doc" id="constancia-salarial-root"></div></div>
   </div>
 
   <div id="despido-wrap" style="display:none;">

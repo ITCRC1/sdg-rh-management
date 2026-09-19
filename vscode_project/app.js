@@ -1731,6 +1731,19 @@ function renderVacacionesForm(){
   actualizarSaldoVacacionesInfo();
 }
 
+// A diferencia de despido/recomendación/permiso/vacaciones, la constancia
+// salarial no tiene campos propios que llenar después de elegir a quién es
+// — todo sale de la ficha (y de la empresa que se elige en el modal, ver
+// generarConstanciaSalarialDeEmpleado) — así que este panel es solo la
+// búsqueda de empleado; elegir uno salta derecho a esa pantalla.
+function renderConstanciaSalarialForm(){
+  document.getElementById("constanciasalarialform-panel").innerHTML = renderElegirEmpleadoGate(
+    tr("La constancia salarial se genera desde el registro del empleado, para que el nombre, la cédula, el puesto y el salario nunca se escriban a mano ni se desalineen con Empleados.",
+       "The salary certificate is generated from the employee record, so the name, ID, position and salary are never hand-typed or out of sync with Employees."),
+    null, null, { gateId: "constanciasalarial", onSeleccionar: "generarConstanciaSalarialDeEmpleado" }
+  );
+}
+
 // Saldo de vacaciones acumulado a hoy para el empleado de esta acción de
 // personal — mismo cálculo (calcularSaldoVacaciones) que ya usan el módulo
 // de Días Libres y el perfil del empleado, para que el número nunca se
@@ -4509,6 +4522,7 @@ function showTab(which){
   document.getElementById("recomform-panel").style.display = which === "recomform" ? "block" : "none";
   document.getElementById("permisoform-panel").style.display = which === "permisoform" ? "block" : "none";
   document.getElementById("vacacionesform-panel").style.display = which === "vacacionesform" ? "block" : "none";
+  document.getElementById("constanciasalarialform-panel").style.display = which === "constanciasalarialform" ? "block" : "none";
   document.getElementById("empresas-panel").style.display = which === "empresas" ? "block" : "none";
   document.getElementById("puestos-panel").style.display = which === "puestos" ? "block" : "none";
   document.getElementById("propiedades-panel").style.display = which === "propiedades" ? "block" : "none";
@@ -4544,7 +4558,7 @@ function showTab(which){
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
     empleados:"empleados", archivo:"empleados",
     perfil:"expedientes",
-    despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos",
+    despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos", constanciasalarialform:"documentos",
     datos:"datos",
     planilla:"planilla",
     vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla",
@@ -4581,6 +4595,7 @@ function showTab(which){
   if (which === "recomform") renderRecomForm();
   if (which === "permisoform") renderPermisoForm();
   if (which === "vacacionesform") renderVacacionesForm();
+  if (which === "constanciasalarialform") renderConstanciaSalarialForm();
   if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
   if (which === "vacaciones") renderDiasLibresVacacionesPanel();
   if (which === "incapacidades") renderIncapacidadesPanel();
@@ -9798,6 +9813,214 @@ async function descargarConstanciaDeContrato(key){
   }catch(e){ statusMsg("No se pudo generar la constancia.", false); }
 }
 
+// ---------- Constancia salarial (para trámites bancarios) ----------
+// A diferencia de Recomendación/Despido, no tiene formulario propio — todo
+// sale directo de la ficha del empleado (y de su contrato vigente, para los
+// datos de la empresa), así que se genera y se muestra de un solo golpe
+// desde el botón de Acciones. El firmante es quien tenga la sesión abierta
+// al generarla (a pedido explícito: "la firma el que la solicita"), nunca un
+// nombre fijo — solo el puesto que aparece bajo la firma es fijo.
+const PUESTO_FIRMANTE_CONSTANCIA_SALARIAL = "Encargado de Recursos Humanos";
+let constanciaSalarialActual = null;
+
+// Formato de esta constancia en particular: "[monto en letras] CON [XX]/100",
+// sin palabra de moneda (el símbolo ₡/$ ya va justo antes, en números) y con
+// los centavos en DÍGITOS, no en letras — a diferencia de salarioEnLetras
+// (usada en contratos), que sí deletrea los centavos y sí agrega la moneda.
+function montoEnLetrasParaConstancia(monto){
+  const entero = Math.floor(monto);
+  const centavos = Math.round((monto - entero) * 100);
+  return `${numeroALetrasEs(entero, true).toUpperCase()} CON ${String(centavos).padStart(2, "0")}/100`;
+}
+
+async function generarConstanciaSalarialDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    const esUSD = emp.MONEDA_SALARIO_EMP === "USD";
+    const bruto = Number(String((esUSD ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP) || "").replace(/[^0-9.]/g,""));
+    if (!bruto){
+      statusMsg("Este empleado no tiene un salario guardado — complétalo en su ficha antes de generar la constancia.", false);
+      return;
+    }
+    await mostrarModalElegirEmpresaConstancia(key, emp);
+  }catch(e){ statusMsg("No se pudo generar la constancia salarial: " + (e.message || ""), false); }
+}
+
+// La empresa de la constancia se elige a mano, del catálogo de Empresas de
+// ESTA propiedad — a propósito, en vez de tomarla del contrato del empleado:
+// la selección de empresa es un dato propio de cada contrato en particular
+// (puede variar contrato a contrato, o el empleado puede no tener uno
+// todavía), no la fuente correcta para saber a nombre de quién se emite un
+// documento de RH como este.
+let constanciaSalarialEmpPendiente = null;
+
+async function mostrarModalElegirEmpresaConstancia(key, emp){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "💵 Constancia salarial — elegir empresa";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  constanciaSalarialEmpPendiente = { key, emp };
+  try{
+    const resEmpresas = await window.storage.list(CATALOGS.empresas.prefix, false);
+    const empresaKeys = ((resEmpresas && resEmpresas.keys) || []).slice().sort();
+    const empresas = await Promise.all(empresaKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, EMPRESA: v.EMPRESA || k, CEDULA_JURIDICA_EMPRESA: v.CEDULA_JURIDICA_EMPRESA || "" };
+    }));
+    if (!empresas.length){
+      body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Todavía no hay ninguna empresa registrada en esta propiedad — agrégala primero en la pestaña Empresas, o continúa sin ella (queda marcado en rojo en el PDF para completarlo a mano).</div>
+        <button class="btn primary" style="width:100%;" onclick="confirmarEmpresaConstanciaSalarial('')">Continuar sin empresa</button>`;
+      return;
+    }
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">¿A nombre de cuál empresa se emite esta constancia?</div>
+      <div class="field">
+        <label>Empresa</label>
+        <select id="constancia-empresa-select">
+          ${empresas.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.EMPRESA)}${e.CEDULA_JURIDICA_EMPRESA ? " — " + escapeHtml(e.CEDULA_JURIDICA_EMPRESA) : ""}</option>`).join("")}
+        </select>
+      </div>
+      <button class="btn primary" style="width:100%; margin-top:8px;" onclick="confirmarEmpresaConstanciaSalarial(document.getElementById('constancia-empresa-select').value)">Continuar</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar el catálogo de empresas: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarEmpresaConstanciaSalarial(empresaKey){
+  const ctx = constanciaSalarialEmpPendiente;
+  if (!ctx) return;
+  let empresaInfo = { EMPRESA: "", CEDULA_JURIDICA_EMPRESA: "" };
+  if (empresaKey){
+    try{
+      const eRes = await window.storage.get(empresaKey, false);
+      const e = eRes && eRes.value ? JSON.parse(eRes.value) : {};
+      empresaInfo = { EMPRESA: e.EMPRESA || "", CEDULA_JURIDICA_EMPRESA: e.CEDULA_JURIDICA_EMPRESA || "" };
+    }catch(e){ /* se deja en blanco */ }
+  }
+  constanciaSalarialEmpPendiente = null;
+  cerrarModalIncompletos();
+  construirConstanciaSalarial(ctx.key, ctx.emp, empresaInfo);
+}
+
+function construirConstanciaSalarial(key, emp, empresaInfo){
+  const esUSD = emp.MONEDA_SALARIO_EMP === "USD";
+  const bruto = Number(String((esUSD ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP) || "").replace(/[^0-9.]/g,""));
+  const simbolo = esUSD ? "$" : "₡";
+  const monedaPalabra = esUSD ? "dólares" : "colones";
+  const ccss = Math.round(bruto * DEDUCCION_CCSS * 100) / 100;
+  const otrosRebajos = 0, embargos = 0;
+  const totalDeducciones = Math.round((ccss + otrosRebajos + embargos) * 100) / 100;
+  const neto = Math.round((bruto - totalDeducciones) * 100) / 100;
+
+  const ingreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+  const fechaIngresoTexto = ingreso ? `${ingreso.getDate()} de ${MESES[ingreso.getMonth()]} de ${ingreso.getFullYear()}` : "";
+
+  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+
+  constanciaSalarialActual = {
+    empKey: key,
+    nombreEmpleado: nombreCompletoEmpleado(emp),
+    identificacion: emp.IDENTIFICACION_EMP || "",
+    puesto: emp.DEPARTAMENTO_EMP || "",
+    fechaIngresoTexto,
+    simbolo, monedaPalabra,
+    bruto, ccss, otrosRebajos, embargos, totalDeducciones, neto,
+    brutoLetras: montoEnLetrasParaConstancia(bruto),
+    empresa: empresaInfo.EMPRESA,
+    cedulaJuridica: empresaInfo.CEDULA_JURIDICA_EMPRESA,
+    firmante: (sesion && sesion.nombre) || "",
+    puestoFirmante: PUESTO_FIRMANTE_CONSTANCIA_SALARIAL,
+    fechaEmisionTexto: fmtFecha(new Date().toISOString()),
+  };
+  renderConstanciaSalarial();
+  mostrarSoloConstanciaSalarial();
+}
+
+function fmtMontoConstancia(monto, simbolo){
+  return `${simbolo} ${Number(monto).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function renderConstanciaSalarial(){
+  const c = constanciaSalarialActual;
+  if (!c) return;
+  const filaMonto = (label, monto, destacado) => `
+    <div style="display:flex; justify-content:space-between; padding:5px 0; ${destacado ? "border-top:1.5px solid #999; margin-top:4px; font-weight:700;" : "border-bottom:1px solid #eee;"}">
+      <span>${escapeHtml(label)}</span><span>${fmtMontoConstancia(monto, c.simbolo)}</span>
+    </div>`;
+  let html = logoHeaderHtml();
+  html += `
+    <h2 class="doc-title" style="margin-bottom:18px;">CONSTANCIA SALARIAL</h2>
+    <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+      <div>A quien corresponda</div>
+      <div>Fecha: ${escapeHtml(c.fechaEmisionTexto)}</div>
+    </div>
+    <p style="text-align:justify; margin:0 0 18px;">
+      Por este medio hacemos constar que el(la) señor(a)(ita): <b>${escapeHtml(c.nombreEmpleado)}</b>,
+      con número de identificación <b>${escapeHtml(c.identificacion)}</b>, labora para nuestra empresa
+      ${c.fechaIngresoTexto ? `desde el ${escapeHtml(c.fechaIngresoTexto)}` : `<span class="missing">[falta la fecha de ingreso en la ficha]</span>`},
+      desempeñando la función de <b>${c.puesto ? escapeHtml(c.puesto) : '<span class="missing">[falta el puesto en la ficha]</span>'}</b>,
+      devengando un salario bruto de <b>${fmtMontoConstancia(c.bruto, c.simbolo)}</b>
+      (${c.brutoLetras}).
+    </p>
+    <p style="margin:0 0 8px;">A continuación un desglose detallado:</p>
+    <div style="max-width:420px; margin-bottom:24px;">
+      ${filaMonto("Salario Bruto:", c.bruto)}
+      ${filaMonto("C.C.S.S. 10.83%", c.ccss)}
+      ${filaMonto("Otros rebajos:", c.otrosRebajos)}
+      ${filaMonto("Embargos:", c.embargos)}
+      ${filaMonto("Total deducciones:", c.totalDeducciones, true)}
+      ${filaMonto("Salario Neto Líquido:", c.neto, true)}
+    </div>
+    <div style="margin-top:36px;">
+      <div style="width:260px; border-top:1px solid #333; padding-top:4px;">
+        <div style="font-weight:700;">${c.firmante ? escapeHtml(c.firmante) : '<span class="missing">[sin sesión identificada]</span>'}</div>
+        <div style="font-size:12px; color:#555;">${escapeHtml(c.puestoFirmante)}</div>
+      </div>
+    </div>
+    ${(c.empresa || c.cedulaJuridica) ? `
+    <div style="margin-top:24px; font-size:12px; color:#555;">
+      ${c.empresa ? escapeHtml(c.empresa) + "<br>" : ""}
+      ${c.cedulaJuridica ? "Cédula jurídica: " + escapeHtml(c.cedulaJuridica) : ""}
+    </div>` : `<div style="margin-top:24px; font-size:12px;" class="missing">[No hay ninguna empresa registrada en esta propiedad (pestaña Empresas) — agrega los datos a mano en el PDF si hace falta]</div>`}
+  `;
+  document.getElementById("constancia-salarial-root").innerHTML = html;
+}
+
+function mostrarSoloConstanciaSalarial(){
+  ALL_MAIN_PANELS.filter(id => id !== "constancia-salarial-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("constancia-salarial-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function descargarConstanciaSalarialPDF(){
+  const c = constanciaSalarialActual;
+  if (!c) return;
+  const original = document.title;
+  const nombreBase = c.nombreEmpleado ? c.nombreEmpleado.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Constancia_Salarial_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  mostrarSoloConstanciaSalarial();
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  congelarEmitido("constancia-salarial-root", {
+    tipo: "constancia_salarial",
+    titulo: "Constancia salarial — " + (c.nombreEmpleado || "sin nombre"),
+    nombreArchivo: "Constancia_Salarial_" + nombreBase,
+    empleadoCedula: c.identificacion || null,
+    empleadoNombre: c.nombreEmpleado || null,
+  });
+  if (c.empKey){
+    agregarBitacora(c.empKey, `Constancia salarial generada (firmada por ${c.firmante || "—"}).`);
+  }
+}
+
 // ---------- termination letter (Art. 81 CT causales database) ----------
 function renderDespido(){
   const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
@@ -10289,7 +10512,7 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","liquidacionform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","despido-wrap","liquidacion-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","liquidacionform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","constanciasalarialform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","constancia-salarial-wrap","despido-wrap","liquidacion-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
 const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","liquidacionform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar","vacacionesform-toolbar"];
 
 function mostrarSoloRecomendacion(){
@@ -13202,6 +13425,7 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(8)}✍️ Confirmar handbook</button>`);
   botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(9)}📎 Subir contrato firmado (PDF)</button>`);
   botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(10)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
+  if (!archivado) botones.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">💵 Constancia salarial</button>`);
   if (esMaster && !archivado) botones.push(`<button onclick="mostrarModalDesignarJefatura('${empKey}')">👑 Designar como jefatura</button>`);
   if (!archivado) botones.push(`<button onclick="mostrarCredencialesEmpleado('${empKey}')">🔑 Ver/generar credenciales de acceso</button>`);
   if (!archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(11)}🗄️ Archivar</button>`);
@@ -13604,6 +13828,7 @@ async function verPerfilEmpleado(key){
 const TIPOS_DOCUMENTO_EXPEDIENTE = {
   contrato: { emoji: "📄", label: "Contrato" },
   constancia_handbook: { emoji: "📋", label: "Constancia Handbook" },
+  constancia_salarial: { emoji: "💵", label: "Constancia salarial" },
   carta_despido: { emoji: "⚖️", label: "Carta de despido" },
   accion_personal: { emoji: "🗓️", label: "Permiso sin goce salarial" },
   accion_personal_vacaciones: { emoji: "🏖️", label: "Vacaciones" },
@@ -13878,6 +14103,7 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
   const grupos = [
     { tipo: "contrato", titulo: "📄 Contratos" },
     { tipo: "constancia_handbook", titulo: "📋 Constancias" },
+    { tipo: "constancia_salarial", titulo: "💵 Constancias salariales" },
     { tipo: "amonestacion", titulo: "⚠️ Amonestaciones" },
     { tipo: "carta_despido", titulo: "⚖️ Cartas de despido" },
     { tipo: "recomendacion", titulo: "📝 Recomendaciones laborales" },
