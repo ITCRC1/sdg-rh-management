@@ -301,6 +301,25 @@
 
     <div class="card">
       <h2>👥 Usuarios</h2>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <input type="text" id="filtro-usuarios-texto" placeholder="🔍 Buscar por nombre o correo…" style="flex:2; min-width:160px;" oninput="aplicarFiltroUsuarios()">
+        <select id="filtro-usuarios-rol" style="flex:1; min-width:120px;" onchange="aplicarFiltroUsuarios()">
+          <option value="">Todos los roles</option>
+          <option value="master">Master</option>
+          <option value="gerente">Gerente</option>
+          <option value="jefatura">Jefatura</option>
+          <option value="empleado">Colaborador</option>
+        </select>
+        <select id="filtro-usuarios-propiedad" style="flex:1; min-width:140px;" onchange="aplicarFiltroUsuarios()">
+          <option value="">Todas las propiedades</option>
+        </select>
+        <select id="filtro-usuarios-estado" style="flex:1; min-width:110px;" onchange="aplicarFiltroUsuarios()">
+          <option value="">Activos e inactivos</option>
+          <option value="activos">Solo activos</option>
+          <option value="inactivos">Solo inactivos</option>
+        </select>
+      </div>
+      <div id="filtro-usuarios-resumen" class="hint" style="margin-bottom:4px;"></div>
       <div id="lista-usuarios"><div class="hint">Cargando…</div></div>
     </div>
 
@@ -462,6 +481,9 @@ async function cargarPropiedades(){
   sel.innerHTML = propiedadesCache
     .map(p => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`)
     .join("");
+  const selFiltro = document.getElementById("filtro-usuarios-propiedad");
+  selFiltro.innerHTML = `<option value="">Todas las propiedades</option>`
+    + propiedadesCache.map(p => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join("");
 }
 
 function nombrePropiedad(id){
@@ -508,11 +530,49 @@ async function crearTrabajador(){
   }
 }
 
+let usuariosCache = [];
+
 async function cargarUsuarios(){
   const cont = document.getElementById("lista-usuarios");
   try{
-    const usuarios = await api.usuarios.listar();
-    if (!usuarios.length){ cont.innerHTML = `<div class="hint">Todavía no hay usuarios.</div>`; return; }
+    usuariosCache = await api.usuarios.listar();
+    aplicarFiltroUsuarios();
+  }catch(e){
+    cont.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+  }
+}
+
+// Todo el filtrado es en el navegador, sobre lo que ya se cargó — la lista de
+// usuarios de una organización es chica (decenas, no miles), así que no hace
+// falta pedirle al servidor un endpoint de búsqueda aparte.
+function aplicarFiltroUsuarios(){
+  const texto = (document.getElementById("filtro-usuarios-texto").value || "").trim().toLowerCase();
+  const rol = document.getElementById("filtro-usuarios-rol").value;
+  const propiedadId = document.getElementById("filtro-usuarios-propiedad").value;
+  const estado = document.getElementById("filtro-usuarios-estado").value;
+
+  const filtrados = usuariosCache.filter(u => {
+    if (rol && u.rol !== rol) return false;
+    if (propiedadId && u.propiedadId !== propiedadId) return false;
+    if (estado === "activos" && !u.activo) return false;
+    if (estado === "inactivos" && u.activo) return false;
+    if (texto && !`${u.nombre||""} ${u.email||""}`.toLowerCase().includes(texto)) return false;
+    return true;
+  });
+
+  const resumen = document.getElementById("filtro-usuarios-resumen");
+  resumen.textContent = (texto || rol || propiedadId || estado)
+    ? `Mostrando ${filtrados.length} de ${usuariosCache.length} usuario(s).`
+    : "";
+
+  renderListaUsuarios(filtrados);
+}
+
+function renderListaUsuarios(usuarios){
+  const cont = document.getElementById("lista-usuarios");
+  try{
+    if (!usuariosCache.length){ cont.innerHTML = `<div class="hint">Todavía no hay usuarios.</div>`; return; }
+    if (!usuarios.length){ cont.innerHTML = `<div class="hint">Ningún usuario coincide con ese filtro.</div>`; return; }
     cont.innerHTML = usuarios.map(u => `
       <div class="user-row">
         <div style="min-width:0;">
