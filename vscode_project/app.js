@@ -12143,6 +12143,8 @@ async function renderDiasLibresVacacionesPanel(){
 
     html += renderListaSolicitudesPendientes(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, puedeAprobar, esJefatura);
 
+    html += renderListaSolicitudesOtorgadas(solicitudesVisibles, empleadosPorKey, puedeAprobar);
+
     html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario);
 
     html += renderSeccionReportesAusencias();
@@ -12355,6 +12357,144 @@ function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departam
       </div>`;
     }).join("")}
   </div></div>`;
+}
+
+// Vacaciones/días libres YA OTORGADOS (aprobados) — antes, una vez aprobada
+// una solicitud, no había ninguna acción disponible sobre ella (ni siquiera
+// para gerencia/master): si la fecha había quedado mal puesta, no se podía
+// corregir. Se limita a "vacaciones"/"dia_libre" a propósito — permiso sin
+// goce y ausencia médica se tramitan con su propio documento (acción de
+// personal / comprobante) y no se editan desde acá. Exclusivo de gerencia/
+// master, igual que aprobar/rechazar — jefatura no puede reescribir una
+// decisión ya tomada. Se limita a las últimas 30 para no crecer sin límite
+// con los años.
+function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeAprobar){
+  if (!puedeAprobar) return "";
+  const todasOtorgadas = solicitudes
+    .filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre"))
+    .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""));
+  if (!todasOtorgadas.length) return "";
+  const otorgadas = todasOtorgadas.slice(0, 30);
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">✅ Días libres y vacaciones otorgados</div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si una fecha quedó mal puesta, corrígela acá — el calendario, el saldo de vacaciones y el reporte de planilla se ajustan solos.${todasOtorgadas.length > otorgadas.length ? ` Mostrando ${otorgadas.length} de ${todasOtorgadas.length}, las más recientes.` : ""}</div>
+    <div style="max-height:320px; overflow-y:auto;">
+    ${otorgadas.map(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+      const keyEsc = String(s.key).replace(/'/g, "\\'");
+      return `<div class="catalog-item">
+        <div class="row1">
+          <div class="info">
+            <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
+            <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s)${s.CORREGIDO_POR ? ` · ✏️ corregido por ${escapeHtml(s.CORREGIDO_POR)}` : ""}</div>
+          </div>
+          <div class="actions"><button class="use" onclick="abrirModalCorregirSolicitud('${keyEsc}')">✏️ Corregir fechas</button></div>
+        </div>
+      </div>`;
+    }).join("")}
+    </div>
+  </div></div>`;
+}
+
+let corregirSolicitudPendienteKey = null;
+
+async function abrirModalCorregirSolicitud(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "✏️ Corregir día libre/vacaciones";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const res = await window.storage.get(key, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s){ body.innerHTML = `<div class="empty-state">Esa solicitud ya no existe.</div>`; return; }
+    corregirSolicitudPendienteKey = key;
+    const empRes = await window.storage.get(CATALOGS.empleados.prefix + s.EMPLEADO_KEY, false);
+    const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;"><b>${escapeHtml(emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY)}</b> — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}. Actualmente: ${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} (${s.DIAS} día(s)).</div>
+      <div class="field">
+        <label>Nueva fecha de inicio</label>
+        <input type="date" id="corregir-solicitud-desde" value="${s.FECHA_INICIO}">
+      </div>
+      <div class="field">
+        <label>Nueva fecha de fin</label>
+        <input type="date" id="corregir-solicitud-hasta" value="${s.FECHA_FIN}">
+      </div>
+      <div id="corregir-solicitud-status" style="font-size:12px; color:#B3261E; margin:6px 0;"></div>
+      <button class="btn primary" style="margin-top:6px;" onclick="guardarCorreccionSolicitud()">💾 Guardar corrección</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message||"")}</div>`; }
+}
+
+// Solo toca los días que ESTA solicitud justificó (ver SOLICITUD_KEY en
+// justificarRangoISO/aprobarSolicitudAusencia) — nunca uno que ya haya sido
+// procesado aparte (aprobado/rechazado/reclasificado) desde Horas Extra, para
+// no revertir en silencio una decisión que ya se tomó por otra vía.
+async function guardarCorreccionSolicitud(){
+  const key = corregirSolicitudPendienteKey;
+  const status = document.getElementById("corregir-solicitud-status");
+  const nuevaDesde = (document.getElementById("corregir-solicitud-desde")||{}).value;
+  const nuevaHasta = (document.getElementById("corregir-solicitud-hasta")||{}).value;
+  if (!key) return;
+  if (!nuevaDesde || !nuevaHasta){ if (status) status.textContent = "Elegí ambas fechas."; return; }
+  if (nuevaHasta < nuevaDesde){ if (status) status.textContent = "La fecha de fin no puede ser anterior a la de inicio."; return; }
+  if (status) status.textContent = "Guardando…";
+  try{
+    const res = await window.storage.get(key, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s) throw new Error("Esa solicitud ya no existe.");
+    const fechaAnteriorDesde = s.FECHA_INICIO, fechaAnteriorHasta = s.FECHA_FIN;
+    if (fechaAnteriorDesde === nuevaDesde && fechaAnteriorHasta === nuevaHasta){
+      corregirSolicitudPendienteKey = null;
+      cerrarModalIncompletos();
+      return;
+    }
+
+    const todosLosRegistros = await listarRegistrosHorasExtra();
+    const diasDeEstaSolicitud = todosLosRegistros.filter(r => r.SOLICITUD_KEY === key);
+
+    const diasNuevoSet = new Set();
+    const cursor = new Date(nuevaDesde + "T00:00:00");
+    const finCursor = new Date(nuevaHasta + "T00:00:00");
+    while (cursor <= finCursor){ diasNuevoSet.add(isoDeFechaLocal(cursor)); cursor.setDate(cursor.getDate() + 1); }
+
+    let noTocados = 0;
+    for (const dia of diasDeEstaSolicitud){
+      if (diasNuevoSet.has(dia.FECHA)) continue; // sigue dentro del rango corregido — no se toca
+      if (dia.ESTADO !== "pendiente"){ noTocados++; continue; } // ya se procesó aparte — no se revierte solo
+      await window.storage.delete(dia.key, false);
+    }
+
+    const diasYaJustificados = new Set(diasDeEstaSolicitud.filter(d => diasNuevoSet.has(d.FECHA)).map(d => d.FECHA));
+    for (const fecha of diasNuevoSet){
+      if (diasYaJustificados.has(fecha)) continue;
+      await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, s.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
+    }
+
+    s.FECHA_INICIO = nuevaDesde;
+    s.FECHA_FIN = nuevaHasta;
+    s.DIAS = diasEntreFechasISO(nuevaDesde, nuevaHasta);
+    s.CORREGIDO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    s.FECHA_CORRECCION = new Date().toISOString();
+    if (!Array.isArray(s.HISTORIAL_CORRECCIONES)) s.HISTORIAL_CORRECCIONES = [];
+    s.HISTORIAL_CORRECCIONES.push({
+      antes: { FECHA_INICIO: fechaAnteriorDesde, FECHA_FIN: fechaAnteriorHasta },
+      despues: { FECHA_INICIO: nuevaDesde, FECHA_FIN: nuevaHasta },
+      por: s.CORREGIDO_POR, fecha: s.FECHA_CORRECCION,
+    });
+    await window.storage.set(key, JSON.stringify(s), false);
+
+    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
+    await agregarBitacora(s.EMPLEADO_KEY, `${tipoInfo.label} corregido: ${fmtFechaSimple(fechaAnteriorDesde)} al ${fmtFechaSimple(fechaAnteriorHasta)} → ${fmtFechaSimple(nuevaDesde)} al ${fmtFechaSimple(nuevaHasta)}.`);
+
+    corregirSolicitudPendienteKey = null;
+    cerrarModalIncompletos();
+    statusMsg(`Corregido.${noTocados ? ` ${noTocados} día(s) fuera del nuevo rango ya se habían procesado aparte y no se tocaron.` : ""}`, true);
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){
+    if (status) status.textContent = e.message || "No se pudo guardar.";
+  }
 }
 
 function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, hoy){

@@ -111,6 +111,18 @@ async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamento
   return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
 }
 
+// Igual que arriba, para cat_empleado:<empleadoKey> directamente — a
+// diferencia de horas_extra:/solicitud_ausencia:/incapacidad:, acá la clave
+// completa YA ES el empleadoKey (con el prefijo pegado), sin segmentos extra.
+// Sin esto, una jefatura veía el nombre de TODA la planilla de la propiedad
+// en cualquier pantalla que liste empleados (ej. el calendario de Días
+// Libres) — el resto de sus lecturas ya estaban filtradas por equipo, pero
+// cat_empleado: se leía completo, sin filtrar.
+async function empleadoClavePerteneceAEquipo(propiedad, claveEmpleado, departamentoLider, cedulaPropia) {
+  const empleadoKey = claveEmpleado.slice(EMPLEADO_PREFIX.length);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
+}
+
 // Igual que arriba, para incapacidad:<empleadoKey>:<id> — a diferencia de
 // horas_extra: no existe un "sinmatch-" aquí (crearIncapacidad siempre exige
 // elegir un empleado ya identificado), así que no hace falta esa excepción.
@@ -193,6 +205,8 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
       ? await solicitudPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
       : fila.clave.startsWith(INCAPACIDAD_PREFIX)
       ? await incapacidadPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
+      : fila.clave.startsWith(EMPLEADO_PREFIX)
+      ? await empleadoClavePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
       : await horaExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula);
     if (pertenece) resultado.push(fila);
   }
@@ -361,11 +375,14 @@ router.get("/", async (req, res, next) => {
     // El prefijo se pasa como parámetro y se escapa: nunca se concatena SQL.
     const like = prefijo.replace(/([\\%_])/g, "\\$1") + "%";
 
-    // Una jefatura solo ve horas_extra:/solicitud_ausencia:/incapacidad: de
-    // su propio equipo — nunca las de otros departamentos, aunque esté
-    // pidiendo el mismo prefijo que vería un master/gerente.
+    // Una jefatura solo ve horas_extra:/solicitud_ausencia:/incapacidad: y
+    // cat_empleado: de su propio equipo — nunca las de otros departamentos,
+    // aunque esté pidiendo el mismo prefijo que vería un master/gerente.
+    // cat_empleado: se suma acá (antes solo se filtraba lo demás) para que el
+    // nombre de gente de otros departamentos no aparezca ni siquiera en
+    // pantallas que solo listan empleados, como el calendario de Días Libres.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
-      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX));
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX));
     // Un empleado solo ve sus propias filas — nunca las de un compañero,
     // aunque pida el mismo prefijo que vería un master/gerente.
     const filtrarPropias = req.usuario.rol === "empleado" &&
@@ -436,6 +453,10 @@ router.get("/:clave(*)", async (req, res, next) => {
     if (req.usuario.rol === "jefatura" && clave.startsWith(INCAPACIDAD_PREFIX)) {
       const enSuEquipo = await incapacidadPerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(EMPLEADO_PREFIX)) {
+      const enSuEquipo = await empleadoClavePerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese empleado no es de tu equipo.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "empleado" && !esClavePropiaDeEmpleado(clave, req.usuario.empleadoClave)) {
       return res.status(403).json({ error: "Ese registro no es tuyo.", codigo: "sin_permiso" });
