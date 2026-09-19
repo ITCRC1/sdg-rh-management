@@ -339,8 +339,7 @@ function aplicarModoSegunRol(rol){
   // no ofrezca puertas cerradas).
   if (rol === "jefatura"){
     ["navbtn-inicio","navbtn-empleados","navbtn-expedientes",
-     "navbtn-contratos","navbtn-documentos","navbtn-reportes",
-     "navbtn-estadisticas","navbtn-asistente","navbtn-datos"].forEach(id => {
+     "navbtn-contratos","navbtn-documentos","navbtn-reportes","navbtn-datos"].forEach(id => {
       const el = document.getElementById(id);
       if (el) (el.closest(".nav-dd") || el).style.display = "none";
     });
@@ -4563,11 +4562,9 @@ function showTab(which){
     planilla:"planilla",
     vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla",
     reporte:"reportes",
-    estadisticas:"estadisticas",
-    asistente:"asistente",
     faq:"configuracion",
   };
-  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","reportes","estadisticas","asistente","configuracion"].forEach(g => {
+  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","reportes","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
@@ -6431,10 +6428,7 @@ function formatoRelativoActividad(iso){
 // En vez de simular datos que no existen, se muestra "Pendiente" — así la
 // navegación ya refleja la estructura final aprobada y el desarrollo puede
 // ser incremental sin fingir funcionalidad a medias.
-const MODULOS_PENDIENTES = {
-  estadisticas: { icono: "📊", titulo: "Estadísticas", resumen: "Gráficos de distribución de personal y otros indicadores — separados del Dashboard a propósito." },
-  asistente: { icono: "🤖", titulo: "Asistente IA", resumen: "Consultas en lenguaje natural sobre los datos internos (ej. \"¿cuántos empleados están incapacitados?\", \"contratos que vencen este mes\")." },
-};
+const MODULOS_PENDIENTES = {};
 
 function renderModuloPendiente(clave){
   const panel = document.getElementById("pendiente-panel");
