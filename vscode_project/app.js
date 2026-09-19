@@ -5300,7 +5300,7 @@ function renderColillasPreview(){
   if (noEncontrados.length){
     html += `<div class="section-card" style="margin-top:10px; border-color:#D9A54A;"><div class="section-body">
       <div style="font-weight:700; color:#8a6d1f; margin-bottom:6px;">⚠️ Sin coincidencia en tu lista de empleados (revisar nombre manualmente):</div>
-      ${noEncontrados.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre)} — № ${escapeHtml(r.numero)} — ₡${r.salario.toLocaleString("es-CR")} (${escapeHtml(r.ocupacion)})${r.numeroAmbiguo ? `<br><span style="color:#B3261E;">Ese número le pertenece a más de una ficha y no se pudo desempatar por moneda (${escapeHtml(r.moneda)}) — revisa que "Moneda del salario" esté bien puesta en ambas fichas, o corrígelo por cédula/nombre.</span>` : ""}</div>`).join("")}
+      ${noEncontrados.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre)} — № ${escapeHtml(r.numero)} — ${r.moneda === "USD" ? "$"+r.salario.toLocaleString("en-US") : "₡"+r.salario.toLocaleString("es-CR")} (${escapeHtml(r.ocupacion)})${r.numeroAmbiguo ? `<br><span style="color:#B3261E;">Ese número le pertenece a más de una ficha y no se pudo desempatar por moneda (${escapeHtml(r.moneda)}) — revisa que "Moneda del salario" esté bien puesta en ambas fichas, o corrígelo por cédula/nombre.</span>` : ""}</div>`).join("")}
     </div></div>`;
   }
 
