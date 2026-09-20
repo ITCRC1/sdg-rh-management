@@ -7673,6 +7673,75 @@ async function ejecutarLimpiezaHorasExtra(gi){
   renderHorasExtrasPanel();
 }
 
+// Borrado permanente por rango de FECHA (no por archivo de origen): para
+// cuando una quincena ya se pagó y hay que limpiar todo lo suyo antes de
+// reimportar el período siguiente — sin importar de qué archivo vino cada
+// registro ni en qué estado quedó (pendiente/aprobado/rechazado). Reusa el
+// mismo modal genérico ("modal-incompletos") que "Limpiar datos de prueba".
+async function mostrarModalEliminarRangoHorasExtra(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🗑️ Eliminar horas extra por rango de fechas";
+  body.innerHTML = `
+    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Borra por completo (sin poder deshacerlo) todos los registros de horas extra — días laborales, horas extra, ausencias, días libres/vacaciones/incapacidades registrados por este medio— cuya fecha caiga dentro del rango, de cualquier archivo y sin importar si ya estaban aprobados o rechazados.</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+        <input type="date" id="eliminarrango-desde">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+        <input type="date" id="eliminarrango-hasta">
+      </label>
+      <button class="btn" onclick="buscarHorasExtraParaEliminarRango()">Buscar</button>
+    </div>
+    <div id="eliminarrango-resultado"></div>
+  `;
+  document.getElementById("modal-incompletos").classList.add("open");
+}
+
+async function buscarHorasExtraParaEliminarRango(){
+  const desde = document.getElementById("eliminarrango-desde").value;
+  const hasta = document.getElementById("eliminarrango-hasta").value;
+  const cont = document.getElementById("eliminarrango-resultado");
+  if (!desde || !hasta){ cont.innerHTML = `<div class="empty-state">Elegí ambas fechas.</div>`; return; }
+  if (hasta < desde){ cont.innerHTML = `<div class="empty-state">"Hasta" no puede ser antes de "desde".</div>`; return; }
+  cont.innerHTML = `<div class="empty-state">Buscando…</div>`;
+  const registros = await listarRegistrosHorasExtra();
+  const coincidencias = registros.filter(r => r.FECHA && r.FECHA >= desde && r.FECHA <= hasta);
+  window._eliminarRangoHorasExtra = { desde, hasta, regs: coincidencias };
+  if (!coincidencias.length){
+    cont.innerHTML = `<div class="empty-state">No hay ningún registro de horas extra entre ${fmtFechaSimple(desde)} y ${fmtFechaSimple(hasta)}.</div>`;
+    return;
+  }
+  const empleadosUnicos = new Set(coincidencias.map(r => r.EMPLEADO_KEY || r.NOMBRE_ARCHIVO || r.CEDULA).filter(Boolean));
+  cont.innerHTML = `
+    <div style="font-size:12.5px; margin-bottom:8px;"><b>${coincidencias.length}</b> registro(s) de <b>${empleadosUnicos.size}</b> empleado(s) entre ${fmtFechaSimple(desde)} y ${fmtFechaSimple(hasta)} (de cualquier estado: pendiente, aprobado o rechazado).</div>
+    <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="pedirConfirmacionEliminarRangoHorasExtra()">🗑️ Eliminar estos ${coincidencias.length} registro(s)</button>
+  `;
+}
+
+function pedirConfirmacionEliminarRangoHorasExtra(){
+  const info = window._eliminarRangoHorasExtra;
+  if (!info || !info.regs.length) return;
+  const escrito = prompt(`Esto va a BORRAR PERMANENTEMENTE ${info.regs.length} registro(s) de horas extra entre ${fmtFechaSimple(info.desde)} y ${fmtFechaSimple(info.hasta)} — no se puede deshacer.\n\nPara confirmar, escribí BORRAR:`, "");
+  if (escrito === null) return;
+  if (escrito.trim().toUpperCase() !== "BORRAR"){ statusMsg("No se escribió \"BORRAR\" exactamente — no se borró nada.", false); return; }
+  ejecutarEliminarRangoHorasExtra();
+}
+
+async function ejecutarEliminarRangoHorasExtra(){
+  const info = window._eliminarRangoHorasExtra;
+  if (!info) return;
+  const cont = document.getElementById("eliminarrango-resultado");
+  cont.innerHTML = `<div class="empty-state">Borrando ${info.regs.length} registro(s)…</div>`;
+  let ok = 0, fallidos = 0;
+  for (const r of info.regs){
+    try{ await window.storage.delete(r.key); ok++; }
+    catch(e){ fallidos++; }
+  }
+  statusMsg(`${ok} registro(s) de horas extra eliminado(s) permanentemente` + (fallidos ? ` — ${fallidos} no se pudieron borrar.` : "."), fallidos === 0);
+  cerrarModalIncompletos();
+  renderHorasExtrasPanel();
+}
+
 // Último cálculo de "empleados sin ningún registro en el rango" — lo llena
 // renderHorasExtrasPanel cada vez que pinta el banner; el modal de abajo lo
 // lee de acá en vez de recibirlo como parámetro, para no tener que meter un
@@ -8970,6 +9039,9 @@ async function renderHorasExtrasPanel(){
         <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">🧹 Limpiar datos de prueba</div>
         <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo (sin papelera) todos los registros que vinieron de un archivo de marcación específico que hayas subido — útil para quitar una tanda que se subió solo para probar el sistema, antes de subir la real. Nunca toca vacaciones/incapacidades/permisos cargados desde otras pantallas.</div>
         <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalLimpiezaDatosPrueba()">🧹 Ver archivos importados y limpiar</button>
+        <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🗑️ Eliminar por rango de fechas</div>
+        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo todos los registros de horas extra (de cualquier archivo o estado: pendiente, aprobado o rechazado) cuya fecha caiga dentro de un rango — útil para limpiar una quincena que ya se pagó, antes de una reimportación.</div>
+        <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalEliminarRangoHorasExtra()">🗑️ Eliminar por rango de fechas</button>
       </div></div>`;
     }
 
