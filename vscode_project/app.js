@@ -9547,6 +9547,13 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
     if (!v) return;
     v.TIPO_DIA = tipo;
     await window.storage.set(key, JSON.stringify(v), false);
+    // Sin esto la fila se quedaba tal cual estaba pintada — si se reclasificó
+    // una "Ausencia" a "Día laboral" (ej. el empleado sí trabajó y hasta hizo
+    // horas extra, solo que olvidó marcar), el campo para escribir las horas
+    // (renderInputHorasExtra) solo aparece cuando tipoDia === "laboral", y sin
+    // volver a pintar el panel esa condición nunca se vuelve a evaluar — no
+    // había forma de que apareciera el campo para cargarlas.
+    await renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
 }
 
