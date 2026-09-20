@@ -15239,8 +15239,27 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
     });
   const hoy = new Date();
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+
+  // Selector: 12 meses hacia atrás y 4 hacia adelante, a propósito — para
+  // poder ver también lo que ya se otorgó (o falta otorgar) de un mes que
+  // todavía no llega, no solo el historial de lo ya pasado.
+  const opcionesMes = [];
+  for (let delta = -12; delta <= 4; delta++){
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() + delta, 1);
+    const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    opcionesMes.push({ valor, etiqueta: `${MESES[d.getMonth()]} ${d.getFullYear()}`, esActual: delta === 0 });
+  }
+  const mesElegido = (miInfoMesDiasLibres && opcionesMes.some(o => o.valor === miInfoMesDiasLibres))
+    ? miInfoMesDiasLibres
+    : mesActual;
+
+  // La tabla siempre muestra el mes actual y el mes elegido en el selector
+  // (aunque sea el mismo, o uno futuro sin nada otorgado todavía), más
+  // cualquier otro mes que ya tenga algo otorgado — hasta 12, más recientes
+  // primero, para no crecer sin límite con los años.
   const meses = new Set(Object.keys(porMes));
   meses.add(mesActual);
+  meses.add(mesElegido);
   const mesesOrdenados = [...meses].sort().reverse().slice(0, 12);
 
   const filas = mesesOrdenados.map(mes => {
@@ -15251,14 +15270,21 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
   });
 
   return `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--paper-line);">
-    <div style="font-weight:600; font-size:12.5px; margin-bottom:4px;">📆 Días libres otorgados por mes</div>
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es lo que todavía no se te ha asignado ese mes — no un derecho garantizado, depende de que gerencia/master lo otorgue.</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+      <div style="font-weight:600; font-size:12.5px;">📆 Días libres otorgados por mes</div>
+      <label style="font-size:11px; color:var(--ink-soft); display:flex; align-items:center; gap:4px;">Ver mes:
+        <select style="font-size:11.5px;" onchange="cambiarMesDiasLibresEmpleado(this.value)">
+          ${opcionesMes.map(o => `<option value="${o.valor}"${o.valor === mesElegido ? " selected" : ""}>${escapeHtml(o.etiqueta)}${o.esActual ? " (actual)" : ""}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es lo que todavía no se te ha asignado ese mes — no un derecho garantizado, depende de que gerencia/master lo otorgue. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
     <div style="display:grid; grid-template-columns:1fr auto auto; gap:2px 10px; align-items:center; font-size:12px;">
       <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px;">Mes</div>
       <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Otorgados</div>
       <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Pendientes</div>
       ${filas.map(f => `
-        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line);">${escapeHtml(f.etiqueta)}${f.mes === mesActual ? " (actual)" : ""}</div>
+        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); ${f.mes === mesElegido ? "font-weight:700;" : ""}">${escapeHtml(f.etiqueta)}${f.mes === mesActual ? " (actual)" : ""}${f.mes === mesElegido && f.mes !== mesActual ? " (elegido)" : ""}</div>
         <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; font-weight:700;">${f.otorgados}/${cupoMes}</div>
         <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; ${f.pendientes > 0 ? "color:#8a6d1f; font-weight:700;" : "color:var(--ink-soft);"}">${f.pendientes > 0 ? `⏳ ${f.pendientes}` : "✅ 0"}</div>
       `).join("")}
@@ -15389,6 +15415,16 @@ function cambiarRangoMiInformacion(campo, valor){
 function limpiarRangoMiInformacion(){
   miInfoRangoDesde = null;
   miInfoRangoHasta = null;
+  reconstruirMiInformacion();
+}
+
+// Mes elegido para "📆 Días libres otorgados por mes" — "AAAA-MM"; null usa
+// el mes en curso. Se acuerda mientras dura la sesión, igual que el rango de
+// horas extra de arriba.
+let miInfoMesDiasLibres = null;
+
+function cambiarMesDiasLibresEmpleado(valor){
+  miInfoMesDiasLibres = valor || null;
   reconstruirMiInformacion();
 }
 
