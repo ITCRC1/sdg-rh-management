@@ -13073,7 +13073,17 @@ async function archivarDocumentoDesdeHtml(htmlContenido, meta){
   try{
     const html = await documentoAutocontenido(contenedorTmp.id, meta.titulo);
     if (!html) return null;
-    const blob = new Blob([html], { type: "text/html" });
+    // A diferencia del resto de documentos (que el admin ya vio en pantalla
+    // e imprimió/exportó a PDF de forma interactiva ANTES de archivarse, ver
+    // congelarEmitido/descargarVacacionesPDF), este se genera en segundo
+    // plano sin que nadie lo haya visto todavía — sin esto, "👁️ Ver" desde
+    // Documentos solo mostraba la página web en vez de ofrecer descargarla
+    // como PDF. Se dispara solo, una vez, al abrir la página archivada.
+    const htmlConAutoImprimir = html.replace(
+      "</body>",
+      `<script>window.addEventListener("load", function(){ setTimeout(function(){ window.print(); }, 300); });</script></body>`
+    );
+    const blob = new Blob([htmlConAutoImprimir], { type: "text/html" });
     return await window.sdgApi.congelarDocumento(blob, {
       tipo: meta.tipo,
       titulo: meta.titulo,
@@ -13193,6 +13203,10 @@ async function confirmarDocumentoSolicitud(key){
     await window.storage.set(key, JSON.stringify(s), false);
     statusMsg("Documento confirmado — a partir de ahora, corregir esta solicitud ya no lo va a regenerar solo.");
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+    // También puede haberse confirmado desde el expediente del empleado
+    // (Perfil → Todos los documentos, ver renderSeccionDocumentosEmpleado) —
+    // si esa es la pantalla abierta ahora mismo, se refresca igual.
+    if (typeof perfilActualKey !== "undefined" && perfilActualKey === s.EMPLEADO_KEY && typeof renderPerfilEmpleado === "function") renderPerfilEmpleado();
   }catch(e){ statusMsg("No se pudo confirmar: " + e.message, false); }
 }
 
@@ -15074,7 +15088,7 @@ async function anularDocumentoDesdeExpediente(id){
   await anularDocumentoConMotivo(id, renderPerfilEmpleado);
 }
 
-function renderSeccionDocumentosEmpleado(documentosSinFiltrar){
+function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes){
   // Los anulados (duplicados eliminados vía "Buscar y eliminar duplicados",
   // correcciones, anulados a mano desde este expediente, etc.) nunca se
   // borran de la base — documentos_emitidos es de solo-inserción — pero ya
@@ -15089,15 +15103,36 @@ function renderSeccionDocumentosEmpleado(documentosSinFiltrar){
       <div style="font-size:12px; color:var(--ink-soft);">Sin documentos archivados todavía.</div>
     </div></div>`;
   }
+  // Una acción de personal de vacaciones/permiso sin goce lleva, además de
+  // ver/anular, el mismo botón de confirmar que ya existe en Días Libres y
+  // Vacaciones (ver generarDocumentoAccionPersonalDeSolicitud/
+  // confirmarDocumentoSolicitud) — para poder confirmarla desde acá mismo,
+  // sin tener que ir a buscar la solicitud en ese otro panel. Se ubica la
+  // solicitud que generó CADA documento por su DOCUMENTO_ID (no hay otra
+  // forma de ir del documento hacia la solicitud: congelarDocumento no
+  // guarda esa relación, solo la cédula/clave del EMPLEADO).
+  const puedeConfirmar = !!(window.sdgApi && window.sdgApi.puedeEditar());
+  const solicitudPorDocId = {};
+  (solicitudes || []).forEach(s => { if (s.DOCUMENTO_ID) solicitudPorDocId[s.DOCUMENTO_ID] = s; });
+
   return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
     <div style="font-weight:700; margin-bottom:8px;">📁 Todos los documentos (${documentos.length})</div>
     ${documentos.map(d => {
       const info = TIPOS_DOCUMENTO_EXPEDIENTE[d.tipo] || { emoji: "📄", label: d.tipo || "Documento" };
+      const s = solicitudPorDocId[d.id];
+      let bloqueConfirmacion = "";
+      if (s && puedeConfirmar){
+        const keyEsc = String(s.key).replace(/'/g, "\\'");
+        bloqueConfirmacion = s.DOCUMENTO_CONFIRMADO
+          ? `<div style="margin-top:2px;"><span class="meta" style="color:#2e7d32;">✅ Confirmado por ${escapeHtml((s.DOCUMENTO_CONFIRMADO_POR||"").split("@")[0]||"—")}</span>${s.DOCUMENTO_DESACTUALIZADO ? ` <span class="meta" style="color:#B3261E;">⚠️ Desactualizado por una corrección posterior</span>` : ""}</div>`
+          : `<div style="margin-top:2px;"><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="confirmarDocumentoSolicitud('${keyEsc}')">✅ Confirmar documento</button></div>`;
+      }
       return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
         <div>
           <b>${info.emoji} ${escapeHtml(info.label)}</b>
           <div style="color:var(--ink-soft);">${escapeHtml(d.titulo || "")}</div>
           <div style="color:var(--ink-soft); font-size:11px;">${d.emitido_en ? fmtFecha(d.emitido_en) : ""}</div>
+          ${bloqueConfirmacion}
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0;">
           <a class="btn" style="padding:5px 10px; font-size:11px; text-decoration:none;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">👁️ Ver</a>
@@ -15677,9 +15712,10 @@ async function renderPerfilEmpleado(){
     // acá se filtran a este único empleado. Sale de horas_extra:/
     // solicitud_ausencia: (no de campos guardados en el propio empleado),
     // así que siempre refleja lo mismo que verían esos módulos.
-    let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 }, diasIncapacidad = [], registrosDeEsteEmpleado = [];
+    let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 }, diasIncapacidad = [], registrosDeEsteEmpleado = [], solicitudesDeEsteEmpleado = [];
     try{
       const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
+      solicitudesDeEsteEmpleado = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey);
       const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === perfilActualKey && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
       diasIncapacidad = diasIncapacidadAprobados(registrosHorasExtraTodos, perfilActualKey);
       const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, perfilActualKey);
@@ -15826,7 +15862,7 @@ async function renderPerfilEmpleado(){
 
       ${renderSeccionColillasEmpleado(documentosEmpleado, perfilActualKey)}
 
-      ${renderSeccionDocumentosEmpleado(documentosEmpleado)}
+      ${renderSeccionDocumentosEmpleado(documentosEmpleado, solicitudesDeEsteEmpleado)}
 
       ${Array.isArray(emp.PERMISOS_HISTORIAL) && emp.PERMISOS_HISTORIAL.length > 0 ? `
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
