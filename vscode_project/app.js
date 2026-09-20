@@ -12927,6 +12927,224 @@ async function crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, com
   return key;
 }
 
+// ---------- Documento de "Acción de Personal" AUTOMÁTICO al otorgar
+// vacaciones/permiso sin goce desde Días Libres y Vacaciones ----------
+// Mismo diseño visual que renderAccionVacaciones/renderAccionPersonal (el
+// editor manual de "Acción de Personal", en el menú Documentos), pero
+// autocontenido — no depende del `data` global de esa pantalla — para poder
+// generarse en segundo plano al otorgar/corregir una solicitud sin pisar lo
+// que un admin pueda tener abierto en ese editor en ese momento. Si el
+// diseño de una de las dos plantillas cambia, hay que replicarlo a mano en
+// la otra.
+function construirHtmlAccionPersonalAuto({ tipo, nombre, cedula, puesto, depto, dias, fechaInicioISO, fechaFinISO, numeroAccion, firmanteNombre, firmantePuesto }){
+  const empresaInfo = FIRMANTE_RECOMENDACION;
+  const propiedad = getPropiedadActual();
+  const propiedadNombre = propiedad ? propiedad.nombre : "";
+  const esVacaciones = tipo === "vacaciones";
+  const subtitulo = esVacaciones ? "VACACIONES" : "PERMISO SIN GOCE SALARIAL";
+  const tituloSeccion = esVacaciones ? "PERÍODO DE VACACIONES SOLICITADO" : "PERÍODO DE PERMISO SOLICITADO";
+  const etiquetaTotal = esVacaciones ? "TOTAL DÍAS DE VACACIONES" : "TOTAL DÍAS SIN GOCE SALARIAL";
+  const fIni = fmtFechaSimple(fechaInicioISO);
+  const fFin = fmtFechaSimple(fechaFinISO);
+  const fechaEmision = fmtFecha(new Date().toISOString());
+  const firmNombre = firmanteNombre || FIRMANTE_RECOMENDACION.nombre;
+  const firmPuesto = firmantePuesto || FIRMANTE_RECOMENDACION.puesto;
+  const diasTxt = String(dias);
+
+  return `<div class="ap-page">
+    ${logoHeaderHtml()}
+    <div class="ap-title">ACCIÓN DE PERSONAL</div>
+    <div class="ap-subtitle">${subtitulo}</div>
+    <div class="ap-company">${escapeHtml(empresaInfo.empresa)}</div>
+    <div class="ap-companyid">Cédula Jurídica. No. ${empresaInfo.cedulaJuridica}</div>
+
+    <div class="ap-infobox">
+      <div class="row"><b>Empleado:</b> ${cedula ? escapeHtml(cedula)+" " : ""}<u>${escapeHtml(nombre)}</u></div>
+      <div class="row"><b>Fecha de emisión:</b> ${fechaEmision}</div>
+      <div class="row"><b>No. de Acción:</b> ${escapeHtml(numeroAccion)}</div>
+      <div class="row"><b>Departamento:</b> ${escapeHtml(depto)}</div>
+      <div class="row"><b>Puesto:</b> ${escapeHtml(puesto)}</div>
+      <div class="row"><b>Propiedad:</b> ${escapeHtml(propiedadNombre)}</div>
+    </div>
+
+    <div class="ap-section-title">1 - ${tituloSeccion}</div>
+    <table class="ap-lines">
+      <tr>
+        <td class="ap-desc">${subtitulo}</td>
+        <td class="ap-num">${escapeHtml(diasTxt)}</td>
+        <td class="ap-unit">Días</td>
+        <td style="text-align:right; color:var(--ink-soft); font-size:11.5px;">Del ${fIni} al ${fFin}</td>
+      </tr>
+      <tr class="ap-total-row">
+        <td class="ap-desc">Total</td>
+        <td colspan="2" style="text-align:right; padding-right:64px;">1 - PERÍODO SOLICITADO</td>
+        <td class="ap-num" style="text-align:right;">${escapeHtml(diasTxt)}</td>
+      </tr>
+    </table>
+
+    <div class="ap-grand-total">
+      <div class="ap-label">${etiquetaTotal}</div>
+      <div class="ap-dots"></div>
+      <div class="ap-box">${escapeHtml(diasTxt)}</div>
+    </div>
+
+    <div class="ap-signatures">
+      <div class="ap-sig">
+        <div class="ap-line"></div>
+        <div class="ap-lbl">Firma de quien autoriza</div>
+        <div class="ap-sub">${escapeHtml(firmNombre)} — ${escapeHtml(firmPuesto)}</div>
+      </div>
+      <div class="ap-sig">
+        <div class="ap-line"></div>
+        <div class="ap-lbl">Firma del colaborador</div>
+        <div class="ap-sub">${escapeHtml(nombre)} — Recibido conforme</div>
+      </div>
+    </div>
+
+    <div class="ap-footer">Este documento constituye respaldo de Recursos Humanos y debe conservarse firmado en el expediente del colaborador.</div>
+  </div>`;
+}
+
+// Archiva un HTML ya armado (no necesariamente un elemento visible en
+// pantalla ahora mismo) — arma un contenedor oculto y temporal solo para
+// poder reusar documentoAutocontenido/congelarDocumento, y lo quita apenas
+// termina. Necesario para generar documentos en segundo plano (ej. al
+// aprobar una solicitud desde Días Libres y Vacaciones) sin depender de que
+// el admin tenga abierta la pantalla del editor manual de ese documento.
+async function archivarDocumentoDesdeHtml(htmlContenido, meta){
+  if (!CON_BACKEND) return null;
+  if (window.sdgApi && !window.sdgApi.puedeEditar()) return null;
+  const contenedorTmp = document.createElement("div");
+  contenedorTmp.id = "doc-autogenerado-tmp-" + Date.now();
+  contenedorTmp.style.display = "none";
+  contenedorTmp.innerHTML = htmlContenido;
+  document.body.appendChild(contenedorTmp);
+  try{
+    const html = await documentoAutocontenido(contenedorTmp.id, meta.titulo);
+    if (!html) return null;
+    const blob = new Blob([html], { type: "text/html" });
+    return await window.sdgApi.congelarDocumento(blob, {
+      tipo: meta.tipo,
+      titulo: meta.titulo,
+      nombreArchivo: meta.nombreArchivo + ".html",
+      claveOrigen: meta.claveOrigen || null,
+      empleadoCedula: meta.empleadoCedula || null,
+      empleadoNombre: meta.empleadoNombre || null,
+    });
+  }catch(e){ return null; }
+  finally{ contenedorTmp.remove(); }
+}
+
+// Genera (o REGENERA) el documento de Acción de Personal de una solicitud de
+// vacaciones/permiso sin goce ya otorgada — nada más esos dos tipos, a
+// propósito (día libre/ausencia médica/día de viaje no tienen este
+// documento). Se llama al otorgar (aprobarSolicitudAusencia/
+// asignarAusenciaDirecta) y de nuevo al corregir fechas/tipo MIENTRAS el
+// documento anterior siga sin confirmar (ver DOCUMENTO_CONFIRMADO/
+// confirmarDocumentoSolicitud más abajo): anula el documento viejo (si
+// había uno) y archiva uno nuevo con los datos corregidos, para que el PDF
+// que se descargue siempre refleje lo último ANTES de la firma. Una vez que
+// gerencia/master lo confirma, esta función ya no se llama para esa
+// solicitud — guardarCorreccionSolicitud se encarga de eso.
+async function generarDocumentoAccionPersonalDeSolicitud(solicitudKey){
+  try{
+    const r = await window.storage.get(solicitudKey, false);
+    const s = r && r.value ? JSON.parse(r.value) : null;
+    if (!s || (s.TIPO !== "vacaciones" && s.TIPO !== "permiso_sin_goce")) return;
+    if (s.DOCUMENTO_CONFIRMADO) return;
+
+    const empRes = await window.storage.get(CATALOGS.empleados.prefix + s.EMPLEADO_KEY, false);
+    const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+    if (!emp) return;
+
+    if (s.DOCUMENTO_ID){
+      try{ await window.sdgApi.anularDocumento(s.DOCUMENTO_ID, "Reemplazado por otorgamiento/corrección de la solicitud antes de confirmarse."); }
+      catch(e){ /* si no se pudo anular el viejo, igual se archiva el nuevo abajo */ }
+    }
+
+    let puestoNombre = emp.DEPARTAMENTO_EMP || "";
+    if (emp.PUESTO_KEY){
+      try{
+        const puestoRes = await window.storage.get(CATALOGS.puestos.prefix + emp.PUESTO_KEY, false);
+        if (puestoRes && puestoRes.value) puestoNombre = JSON.parse(puestoRes.value).PUESTO || puestoNombre;
+      }catch(e){ /* se queda con DEPARTAMENTO_EMP */ }
+    }
+
+    if (!s.DOC_NUMERO_ACCION) s.DOC_NUMERO_ACCION = await siguienteNumeroAccion();
+
+    // Quien tiene la sesión abierta manda como firmante — mismo criterio que
+    // el editor manual (ver generarPermisoDeEmpleado/generarVacacionesDeEmpleado):
+    // literalmente quien está otorgando/corrigiendo la solicitud ahora mismo.
+    let firmanteNombre, firmantePuesto;
+    if (trabajadorActual){
+      firmanteNombre = trabajadorActual.nombre;
+      firmantePuesto = trabajadorActual.puesto;
+    } else {
+      const firmante = await buscarFirmanteAccionesPropiedad();
+      firmanteNombre = firmante.nombre;
+      firmantePuesto = firmante.puesto;
+    }
+
+    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO];
+    const nombreEmp = nombreCompletoEmpleado(emp);
+    const htmlDoc = construirHtmlAccionPersonalAuto({
+      tipo: s.TIPO,
+      nombre: nombreEmp,
+      cedula: emp.IDENTIFICACION_EMP || "",
+      puesto: puestoNombre,
+      depto: emp.DEPARTAMENTO_EMP || "",
+      dias: s.DIAS || diasEntreFechasISO(s.FECHA_INICIO, s.FECHA_FIN),
+      fechaInicioISO: s.FECHA_INICIO,
+      fechaFinISO: s.FECHA_FIN,
+      numeroAccion: s.DOC_NUMERO_ACCION,
+      firmanteNombre, firmantePuesto,
+    });
+    const nombreBase = (nombreEmp || "sin_nombre").replace(/\s+/g, "_");
+    const doc = await archivarDocumentoDesdeHtml(htmlDoc, {
+      tipo: s.TIPO === "vacaciones" ? "accion_personal_vacaciones" : "accion_personal",
+      titulo: `Acción de personal ${s.DOC_NUMERO_ACCION} — ${tipoInfo.label} — ${nombreEmp}`,
+      nombreArchivo: `Accion_Personal_${tipoInfo.label.replace(/\s+/g, "_")}_${nombreBase}`,
+      claveOrigen: CATALOGS.empleados.prefix + s.EMPLEADO_KEY,
+      empleadoCedula: emp.IDENTIFICACION_EMP || null,
+      empleadoNombre: nombreEmp || null,
+    });
+
+    // Se relee la solicitud (en vez de reusar la `s` de arriba) por si algo
+    // más la tocó mientras se armaba el documento — así solo se pisan los
+    // campos de DOCUMENTO_*/DOC_NUMERO_ACCION, nunca el resto.
+    const r2 = await window.storage.get(solicitudKey, false);
+    const s2 = r2 && r2.value ? JSON.parse(r2.value) : s;
+    s2.DOC_NUMERO_ACCION = s.DOC_NUMERO_ACCION;
+    s2.DOCUMENTO_DESACTUALIZADO = false;
+    if (doc){
+      s2.DOCUMENTO_ID = doc.id;
+      s2.DOCUMENTO_SHA256 = doc.sha256 || null;
+      s2.DOCUMENTO_GENERADO_EN = new Date().toISOString();
+    }
+    await window.storage.set(solicitudKey, JSON.stringify(s2), false);
+  }catch(e){ /* best effort — la solicitud ya quedó otorgada/corregida igual; el documento se puede generar luego a mano desde Acción de Personal si esto falla */ }
+}
+
+// Bloquea el documento contra futuras regeneraciones automáticas — a partir
+// de acá, corregir fechas/tipo de la solicitud NUNCA vuelve a tocar el
+// documento ya archivado (que se asume ya impreso/firmado); solo deja
+// avisado que quedó desactualizado (ver guardarCorreccionSolicitud), para
+// que gerencia/master decida a mano si hace falta una acción de personal
+// nueva aparte.
+async function confirmarDocumentoSolicitud(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const s = r && r.value ? JSON.parse(r.value) : null;
+    if (!s || !s.DOCUMENTO_ID){ statusMsg("Esta solicitud no tiene ningún documento generado todavía.", false); return; }
+    s.DOCUMENTO_CONFIRMADO = true;
+    s.DOCUMENTO_CONFIRMADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    s.DOCUMENTO_CONFIRMADO_EN = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(s), false);
+    statusMsg("Documento confirmado — a partir de ahora, corregir esta solicitud ya no lo va a regenerar solo.");
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo confirmar: " + e.message, false); }
+}
+
 // Asignación directa — exclusiva de gerencia/master. A diferencia de una
 // solicitud (la crea jefatura y queda "pendiente" hasta que gerencia/master
 // decida), esto lo crea gerencia/master directamente YA aprobado: no pasa
@@ -12962,6 +13180,7 @@ async function asignarAusenciaDirecta({ empKey, tipo, fechaInicio, fechaFin, com
   };
   await window.storage.set(key, JSON.stringify(value), false);
   await justificarRangoISO(empKey, fechaInicio, fechaFin, tipo, "asignacion_directa", { SOLICITUD_KEY: key });
+  await generarDocumentoAccionPersonalDeSolicitud(key);
   return key;
 }
 
@@ -13008,6 +13227,7 @@ async function aprobarSolicitudAusencia(key){
     await window.storage.set(key, JSON.stringify(v), false);
 
     await justificarRangoISO(v.EMPLEADO_KEY, v.FECHA_INICIO, v.FECHA_FIN, v.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
+    await generarDocumentoAccionPersonalDeSolicitud(key);
 
     statusMsg("Solicitud aprobada.");
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
@@ -13411,23 +13631,39 @@ function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departam
 function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeAprobar){
   if (!puedeAprobar) return "";
   const todasOtorgadas = solicitudes
-    .filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "dia_viaje"))
+    .filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "dia_viaje" || s.TIPO === "permiso_sin_goce"))
     .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""));
   if (!todasOtorgadas.length) return "";
   const otorgadas = todasOtorgadas.slice(0, 30);
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">✅ Días libres y vacaciones otorgados</div>
-    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si una fecha quedó mal puesta, corrígela acá — el calendario, el saldo de vacaciones y el reporte de planilla se ajustan solos.${todasOtorgadas.length > otorgadas.length ? ` Mostrando ${otorgadas.length} de ${todasOtorgadas.length}, las más recientes.` : ""}</div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si una fecha quedó mal puesta, corrígela acá — el calendario, el saldo de vacaciones y el reporte de planilla se ajustan solos. Vacaciones y permiso sin goce generan solos su Acción de Personal — descargala y confirmala una vez firmada; mientras no se confirme, corregir la fecha/tipo la vuelve a generar sola.${todasOtorgadas.length > otorgadas.length ? ` Mostrando ${otorgadas.length} de ${todasOtorgadas.length}, las más recientes.` : ""}</div>
     <div style="max-height:320px; overflow-y:auto;">
     ${otorgadas.map(s => {
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
       const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
       const keyEsc = String(s.key).replace(/'/g, "\\'");
+      const tieneDocumento = s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce";
+      let bloqueDocumento = "";
+      if (tieneDocumento){
+        if (s.DOCUMENTO_ID){
+          bloqueDocumento = `<div style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <a class="btn" style="padding:3px 8px; font-size:10.5px; text-decoration:none;" href="${window.sdgApi.urlDescarga(s.DOCUMENTO_ID)}" target="_blank" rel="noopener">📄 Ver/descargar documento</a>
+            ${s.DOCUMENTO_CONFIRMADO
+              ? `<span class="meta" style="color:#2e7d32;">✅ Confirmado por ${escapeHtml((s.DOCUMENTO_CONFIRMADO_POR||"").split("@")[0]||"—")}</span>`
+              : `<button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="confirmarDocumentoSolicitud('${keyEsc}')">✅ Confirmar documento</button>`}
+            ${s.DOCUMENTO_DESACTUALIZADO ? `<span class="meta" style="color:#B3261E;">⚠️ Desactualizado por una corrección posterior</span>` : ""}
+          </div>`;
+        } else {
+          bloqueDocumento = `<div style="margin-top:4px;"><span class="meta" style="color:#B3261E;">⚠️ No se pudo generar el documento — generalo a mano desde Documentos → Acción de Personal.</span></div>`;
+        }
+      }
       return `<div class="catalog-item">
         <div class="row1">
           <div class="info">
             <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
             <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s)${s.CORREGIDO_POR ? ` · ✏️ corregido por ${escapeHtml(s.CORREGIDO_POR)}` : ""}</div>
+            ${bloqueDocumento}
           </div>
           <div class="actions">
             <button class="use" onclick="abrirModalCorregirSolicitud('${keyEsc}')">✏️ Corregir fechas</button>
@@ -13463,6 +13699,7 @@ async function abrirModalCorregirSolicitud(key){
           <option value="vacaciones"${s.TIPO === "vacaciones" ? " selected" : ""}>🏖️ Vacaciones</option>
           <option value="dia_libre"${s.TIPO === "dia_libre" ? " selected" : ""}>🛌 Día libre</option>
           <option value="dia_viaje"${s.TIPO === "dia_viaje" ? " selected" : ""}>✈️ Día de viaje</option>
+          <option value="permiso_sin_goce"${s.TIPO === "permiso_sin_goce" ? " selected" : ""}>📄 Permiso sin goce</option>
         </select>
       </div>
       <div class="field">
@@ -13489,7 +13726,7 @@ async function guardarCorreccionSolicitud(){
   const nuevaDesde = (document.getElementById("corregir-solicitud-desde")||{}).value;
   const nuevaHasta = (document.getElementById("corregir-solicitud-hasta")||{}).value;
   if (!key) return;
-  if (nuevoTipo !== "vacaciones" && nuevoTipo !== "dia_libre" && nuevoTipo !== "dia_viaje"){ if (status) status.textContent = "Elegí el tipo."; return; }
+  if (nuevoTipo !== "vacaciones" && nuevoTipo !== "dia_libre" && nuevoTipo !== "dia_viaje" && nuevoTipo !== "permiso_sin_goce"){ if (status) status.textContent = "Elegí el tipo."; return; }
   if (!nuevaDesde || !nuevaHasta){ if (status) status.textContent = "Elegí ambas fechas."; return; }
   if (nuevaHasta < nuevaDesde){ if (status) status.textContent = "La fecha de fin no puede ser anterior a la de inicio."; return; }
   if (status) status.textContent = "Guardando…";
@@ -13551,6 +13788,31 @@ async function guardarCorreccionSolicitud(){
     });
     await window.storage.set(key, JSON.stringify(s), false);
 
+    // El documento de Acción de Personal (vacaciones/permiso sin goce) sigue
+    // al día solo mientras nadie lo haya confirmado (ver
+    // generarDocumentoAccionPersonalDeSolicitud/confirmarDocumentoSolicitud):
+    // si ya se confirmó, esta corrección NUNCA lo regenera sola — solo lo
+    // deja marcado como desactualizado para que gerencia/master decida si
+    // hace falta una acción de personal nueva aparte.
+    let avisoDocumento = "";
+    if (s.DOCUMENTO_CONFIRMADO){
+      if (s.DOCUMENTO_ID){
+        s.DOCUMENTO_DESACTUALIZADO = true;
+        await window.storage.set(key, JSON.stringify(s), false);
+        avisoDocumento = " ⚠️ El documento de Acción de Personal ya estaba confirmado y NO se actualizó solo — quedó marcado como desactualizado.";
+      }
+    } else if (nuevoTipo === "vacaciones" || nuevoTipo === "permiso_sin_goce"){
+      await generarDocumentoAccionPersonalDeSolicitud(key);
+    } else if (s.DOCUMENTO_ID){
+      // Cambió a un tipo que no lleva este documento (día libre/día de
+      // viaje) y el anterior (de cuando era vacaciones/permiso) todavía no
+      // se había confirmado — se anula solo, no debe quedar activo un
+      // "Acción de Personal" para un tipo que ya no aplica.
+      try{ await window.sdgApi.anularDocumento(s.DOCUMENTO_ID, "La solicitud cambió a un tipo que no genera este documento."); }catch(e){ /* best effort */ }
+      s.DOCUMENTO_ID = null; s.DOCUMENTO_SHA256 = null; s.DOCUMENTO_DESACTUALIZADO = false;
+      await window.storage.set(key, JSON.stringify(s), false);
+    }
+
     const tipoInfoAnterior = TIPOS_SOLICITUD_AUSENCIA[tipoAnterior] || { label: tipoAnterior };
     const tipoInfoNuevo = TIPOS_SOLICITUD_AUSENCIA[nuevoTipo] || { label: nuevoTipo };
     const detalleTipo = cambioTipo ? `${tipoInfoAnterior.label} → ${tipoInfoNuevo.label}, ` : "";
@@ -13558,7 +13820,7 @@ async function guardarCorreccionSolicitud(){
 
     corregirSolicitudPendienteKey = null;
     cerrarModalIncompletos();
-    statusMsg(`Corregido.${noTocados ? ` ${noTocados} día(s) fuera del nuevo rango ya se habían procesado aparte y no se tocaron.` : ""}`, true);
+    statusMsg(`Corregido.${noTocados ? ` ${noTocados} día(s) fuera del nuevo rango ya se habían procesado aparte y no se tocaron.` : ""}${avisoDocumento}`, true);
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
   }catch(e){
     if (status) status.textContent = e.message || "No se pudo guardar.";
@@ -13580,7 +13842,8 @@ async function eliminarSolicitudOtorgada(key){
     const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
     const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
     const nombreEmp = emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY;
-    if (!confirm(`¿Eliminar por completo "${tipoInfo.label}" de ${nombreEmp} (${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)})?\n\nLos días que ya se hayan procesado aparte (aprobados/rechazados) no se revierten solos.`)) return;
+    const avisoDocConfirmado = (s.DOCUMENTO_ID && s.DOCUMENTO_CONFIRMADO) ? "\n\nOjo: ya tiene un documento de Acción de Personal CONFIRMADO — eliminar la solicitud no anula ese documento solo, quedaría archivado igual." : "";
+    if (!confirm(`¿Eliminar por completo "${tipoInfo.label}" de ${nombreEmp} (${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)})?\n\nLos días que ya se hayan procesado aparte (aprobados/rechazados) no se revierten solos.${avisoDocConfirmado}`)) return;
 
     const todosLosRegistros = await listarRegistrosHorasExtra();
     const diasDeEstaSolicitud = todosLosRegistros.filter(r => r.SOLICITUD_KEY === key);
@@ -13588,6 +13851,12 @@ async function eliminarSolicitudOtorgada(key){
     for (const dia of diasDeEstaSolicitud){
       if (dia.ESTADO !== "pendiente"){ noTocados++; continue; }
       await window.storage.delete(dia.key, false);
+    }
+    // El documento de Acción de Personal solo se anula solo mientras no se
+    // haya confirmado — uno ya confirmado se asume firmado/entregado, así
+    // que se deja tal cual en el archivo histórico del empleado.
+    if (s.DOCUMENTO_ID && !s.DOCUMENTO_CONFIRMADO){
+      try{ await window.sdgApi.anularDocumento(s.DOCUMENTO_ID, "Solicitud eliminada antes de confirmar el documento."); }catch(e){ /* best effort */ }
     }
     await window.storage.delete(key, false);
 
@@ -15046,6 +15315,8 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
     { tipo: "amonestacion", titulo: "⚠️ Amonestaciones" },
     { tipo: "carta_despido", titulo: "⚖️ Cartas de despido" },
     { tipo: "recomendacion", titulo: "📝 Recomendaciones laborales" },
+    { tipo: "accion_personal_vacaciones", titulo: "🏖️ Acciones de personal — Vacaciones" },
+    { tipo: "accion_personal", titulo: "📄 Acciones de personal — Permiso sin goce" },
   ];
   const tiposConocidos = new Set(grupos.map(g => g.tipo));
   const otros = documentos.filter(d => !tiposConocidos.has(d.tipo));
