@@ -13059,69 +13059,6 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
   }catch(e){ statusMsg("No se pudo otorgar: " + e.message, false); }
 }
 
-// Dos o más colaboradores del MISMO departamento con vacaciones o permiso
-// sin goce programados el mismo día — no bloquea nada, solo alerta (sección
-// 6.5). Solo mira solicitudes aprobadas o pendientes (una rechazada/cancelada
-// ya no es un conflicto real).
-function detectarCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado){
-  const porDeptoFecha = {};
-  solicitudes
-    .filter(s => (s.ESTADO === "aprobada" || s.ESTADO === "pendiente") && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "permiso_sin_goce" || s.TIPO === "dia_viaje"))
-    .forEach(s => {
-      const emp = empleadosPorKey[s.EMPLEADO_KEY];
-      const depto = departamentoDeEmpleado(emp);
-      const cursor = new Date(s.FECHA_INICIO + "T00:00:00");
-      const fin = new Date(s.FECHA_FIN + "T00:00:00");
-      while (cursor <= fin){
-        const clave = depto + "|" + isoDeFechaLocal(cursor);
-        (porDeptoFecha[clave] = porDeptoFecha[clave] || []).push(s.EMPLEADO_KEY);
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    });
-  const coincidencias = [];
-  Object.keys(porDeptoFecha).forEach(clave => {
-    const empleadosUnicos = [...new Set(porDeptoFecha[clave])];
-    if (empleadosUnicos.length >= 2){
-      const [depto, fecha] = clave.split("|");
-      coincidencias.push({ depto, fecha, empleados: empleadosUnicos });
-    }
-  });
-  coincidencias.sort((a,b) => a.fecha.localeCompare(b.fecha));
-  return coincidencias;
-}
-
-const COINCIDENCIA_PREFIX = "coincidencia_confirmada:";
-
-// La solicitud NO se bloquea automáticamente: jefatura y gerencia/master
-// confirman cada quien su lado, y solo cuando ambos confirmaron se
-// considera aceptada (sección 6.5).
-async function confirmarCoincidencia(depto, fecha, quien){
-  const key = COINCIDENCIA_PREFIX + depto + ":" + fecha;
-  try{
-    const r = await window.storage.get(key, false);
-    const v = r && r.value ? JSON.parse(r.value) : { CONFIRMADO_JEFATURA: false, CONFIRMADO_GERENCIA: false };
-    if (quien === "jefatura") v.CONFIRMADO_JEFATURA = true;
-    if (quien === "gerencia") v.CONFIRMADO_GERENCIA = true;
-    await window.storage.set(key, JSON.stringify(v), false);
-    statusMsg("Confirmación registrada.");
-    renderDiasLibresVacacionesPanel();
-  }catch(e){ statusMsg("No se pudo confirmar: " + e.message, false); }
-}
-
-async function obtenerConfirmacionesCoincidencia(){
-  const res = await window.storage.list(COINCIDENCIA_PREFIX, false);
-  const keys = (res && res.keys) || [];
-  const mapa = {};
-  await Promise.all(keys.map(async k => {
-    try{
-      const r = await window.storage.get(k, false);
-      const v = r && r.value ? JSON.parse(r.value) : null;
-      if (v) mapa[k.replace(COINCIDENCIA_PREFIX, "")] = v;
-    }catch(e){ /* se ignora ese registro suelto */ }
-  }));
-  return mapa;
-}
-
 let diasLibresFiltroDepto = "todos";
 let diasLibresMesCalendario = null; // "AAAA-MM" — se fija al mes actual la primera vez que se renderiza
 
@@ -13188,9 +13125,6 @@ async function renderDiasLibresVacacionesPanel(){
       html += renderSeccionCumpleanos(empleadosVisibles, puedeAprobar);
     }
 
-    const confirmaciones = await obtenerConfirmacionesCoincidencia();
-    html += renderSeccionCoincidencias(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, confirmaciones, esJefatura, puedeAprobar);
-
     // Quién pide y quién asigna son roles distintos: jefatura PIDE (queda
     // pendiente hasta que gerencia/master decida) — gerencia/master no
     // necesita pedirse nada a sí mismo, así que en vez del formulario de
@@ -13237,31 +13171,6 @@ function renderSeccionCumpleanos(empleados, puedeOtorgar){
         <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(p.emp))}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : `en ${p.diasFaltan} día(s)`})</div>
         ${puedeOtorgar ? `<button class="btn primary" style="padding:5px 10px; font-size:11px;" onclick="abrirModalOtorgarCumpleanos('${p.emp.key}', '${nombreCompletoEmpleado(p.emp).replace(/'/g,"\\'")}', '${isoDeFechaLocal(p.fecha)}')">🎁 Otorgar día</button>` : `<span class="meta">Pendiente — lo otorga gerencia/master</span>`}
       </div>`).join("")}
-  </div></div>`;
-}
-
-function renderSeccionCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado, confirmaciones, esJefatura, puedeAprobar){
-  const coincidencias = detectarCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado);
-  const pendientes = coincidencias.filter(c => {
-    const conf = confirmaciones[c.depto + ":" + c.fecha];
-    return !(conf && conf.CONFIRMADO_JEFATURA && conf.CONFIRMADO_GERENCIA);
-  });
-  if (!pendientes.length) return "";
-  return `<div class="section-card" style="margin-bottom:14px; border-color:#D9A54A;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">⚠️ Coincidencias de días libres en el mismo departamento</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">No se bloquea automáticamente — jefatura y gerencia/master deben confirmar explícitamente que aceptan que salgan libres al mismo tiempo.</p>
-    ${pendientes.map(c => {
-      const conf = confirmaciones[c.depto + ":" + c.fecha] || {};
-      const nombres = c.empleados.map(k => (empleadosPorKey[k] && nombreCompletoEmpleado(empleadosPorKey[k])) || k).join(", ");
-      const deptoEsc = c.depto.replace(/'/g,"\\'");
-      return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line); font-size:12.5px;">
-        <div><b>${escapeHtml(c.depto)}</b> — ${fmtFechaSimple(c.fecha)}: ${escapeHtml(nombres)}</div>
-        <div style="margin-top:4px; display:flex; gap:8px; flex-wrap:wrap;">
-          ${conf.CONFIRMADO_JEFATURA ? `<span class="meta">✅ Jefatura confirmó</span>` : ((esJefatura || puedeAprobar) ? `<button class="btn" style="padding:4px 9px; font-size:10.5px;" onclick="confirmarCoincidencia('${deptoEsc}', '${c.fecha}', 'jefatura')">Confirmar (jefatura)</button>` : "")}
-          ${conf.CONFIRMADO_GERENCIA ? `<span class="meta">✅ Gerencia/master confirmó</span>` : (puedeAprobar ? `<button class="btn" style="padding:4px 9px; font-size:10.5px;" onclick="confirmarCoincidencia('${deptoEsc}', '${c.fecha}', 'gerencia')">Confirmar (gerencia/master)</button>` : "")}
-        </div>
-      </div>`;
-    }).join("")}
   </div></div>`;
 }
 

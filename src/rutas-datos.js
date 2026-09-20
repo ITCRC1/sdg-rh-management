@@ -45,7 +45,6 @@ function claveValida(clave) {
 // --------------------------------------------------------------------------
 const HORAS_EXTRA_PREFIX = "horas_extra:";
 const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
-const COINCIDENCIA_PREFIX = "coincidencia_confirmada:";
 const INCAPACIDAD_PREFIX = "incapacidad:";
 const EMPLEADO_PREFIX = "cat_empleado:";
 const PUESTO_PREFIX = "cat_puesto:";
@@ -179,13 +178,6 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
     if (!nuevo || nuevo.ESTADO !== "pendiente") return false;
     return solicitudPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
-  // Alertas de coincidencia (dos o más colaboradores del mismo departamento
-  // libres el mismo día): jefatura puede confirmar su lado, pero solo para
-  // el departamento que lidera — el nombre del departamento va literal en
-  // la clave (coincidencia_confirmada:<departamento>:<fecha>).
-  if (usuario.rol === "jefatura" && clave.startsWith(COINCIDENCIA_PREFIX) && usuario.puesto) {
-    return clave.startsWith(COINCIDENCIA_PREFIX + usuario.puesto + ":");
-  }
   // incapacidad: queda fuera a propósito, sin excepción: jefatura puede
   // CONSULTAR el historial de su equipo (ver PREFIJOS_LECTURA_JEFATURA) pero
   // nunca registrar ni editar una incapacidad — no es una decisión de la
@@ -222,7 +214,7 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
 // filtrarFilasPorEquipo), y cat_empleado:/cat_puesto: (para poder resolver
 // nombre, puesto y departamento de su propio equipo — nada de contratos,
 // documentos, otros catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, COINCIDENCIA_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
 
 // Un "empleado" (portal de autoservicio) no tiene "página de RH" tampoco —
 // solo su propio expediente (cat_empleado:<su clave>, exacta, nunca la lista
