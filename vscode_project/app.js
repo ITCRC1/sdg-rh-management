@@ -13386,7 +13386,10 @@ function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeApro
             <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
             <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s)${s.CORREGIDO_POR ? ` · ✏️ corregido por ${escapeHtml(s.CORREGIDO_POR)}` : ""}</div>
           </div>
-          <div class="actions"><button class="use" onclick="abrirModalCorregirSolicitud('${keyEsc}')">✏️ Corregir fechas</button></div>
+          <div class="actions">
+            <button class="use" onclick="abrirModalCorregirSolicitud('${keyEsc}')">✏️ Corregir fechas</button>
+            <button class="del" onclick="eliminarSolicitudOtorgada('${keyEsc}')">🗑️ Eliminar</button>
+          </div>
         </div>
       </div>`;
     }).join("")}
@@ -13412,6 +13415,13 @@ async function abrirModalCorregirSolicitud(key){
     body.innerHTML = `
       <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;"><b>${escapeHtml(emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY)}</b> — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}. Actualmente: ${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} (${s.DIAS} día(s)).</div>
       <div class="field">
+        <label>Tipo</label>
+        <select id="corregir-solicitud-tipo">
+          <option value="vacaciones"${s.TIPO === "vacaciones" ? " selected" : ""}>🏖️ Vacaciones</option>
+          <option value="dia_libre"${s.TIPO === "dia_libre" ? " selected" : ""}>🛌 Día libre</option>
+        </select>
+      </div>
+      <div class="field">
         <label>Nueva fecha de inicio</label>
         <input type="date" id="corregir-solicitud-desde" value="${s.FECHA_INICIO}">
       </div>
@@ -13431,9 +13441,11 @@ async function abrirModalCorregirSolicitud(key){
 async function guardarCorreccionSolicitud(){
   const key = corregirSolicitudPendienteKey;
   const status = document.getElementById("corregir-solicitud-status");
+  const nuevoTipo = (document.getElementById("corregir-solicitud-tipo")||{}).value;
   const nuevaDesde = (document.getElementById("corregir-solicitud-desde")||{}).value;
   const nuevaHasta = (document.getElementById("corregir-solicitud-hasta")||{}).value;
   if (!key) return;
+  if (nuevoTipo !== "vacaciones" && nuevoTipo !== "dia_libre"){ if (status) status.textContent = "Elegí el tipo."; return; }
   if (!nuevaDesde || !nuevaHasta){ if (status) status.textContent = "Elegí ambas fechas."; return; }
   if (nuevaHasta < nuevaDesde){ if (status) status.textContent = "La fecha de fin no puede ser anterior a la de inicio."; return; }
   if (status) status.textContent = "Guardando…";
@@ -13442,7 +13454,9 @@ async function guardarCorreccionSolicitud(){
     const s = res && res.value ? JSON.parse(res.value) : null;
     if (!s) throw new Error("Esa solicitud ya no existe.");
     const fechaAnteriorDesde = s.FECHA_INICIO, fechaAnteriorHasta = s.FECHA_FIN;
-    if (fechaAnteriorDesde === nuevaDesde && fechaAnteriorHasta === nuevaHasta){
+    const tipoAnterior = s.TIPO;
+    const cambioTipo = tipoAnterior !== nuevoTipo;
+    if (fechaAnteriorDesde === nuevaDesde && fechaAnteriorHasta === nuevaHasta && !cambioTipo){
       corregirSolicitudPendienteKey = null;
       cerrarModalIncompletos();
       return;
@@ -13458,7 +13472,17 @@ async function guardarCorreccionSolicitud(){
 
     let noTocados = 0;
     for (const dia of diasDeEstaSolicitud){
-      if (diasNuevoSet.has(dia.FECHA)) continue; // sigue dentro del rango corregido — no se toca
+      if (diasNuevoSet.has(dia.FECHA)){
+        // Sigue dentro del rango corregido — no se recrea, pero si cambió el
+        // tipo (vacaciones ↔ día libre) sí hay que reflejarlo en el día ya
+        // guardado, o quedaría con el tipo viejo aunque la solicitud diga
+        // otra cosa (afecta el saldo de vacaciones y el reporte de planilla).
+        if (cambioTipo && dia.ESTADO === "pendiente" && dia.TIPO_DIA !== nuevoTipo){
+          dia.TIPO_DIA = nuevoTipo;
+          await window.storage.set(dia.key, JSON.stringify(dia), false);
+        }
+        continue;
+      }
       if (dia.ESTADO !== "pendiente"){ noTocados++; continue; } // ya se procesó aparte — no se revierte solo
       await window.storage.delete(dia.key, false);
     }
@@ -13466,9 +13490,10 @@ async function guardarCorreccionSolicitud(){
     const diasYaJustificados = new Set(diasDeEstaSolicitud.filter(d => diasNuevoSet.has(d.FECHA)).map(d => d.FECHA));
     for (const fecha of diasNuevoSet){
       if (diasYaJustificados.has(fecha)) continue;
-      await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, s.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
+      await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, nuevoTipo, "solicitud_ausencia", { SOLICITUD_KEY: key });
     }
 
+    s.TIPO = nuevoTipo;
     s.FECHA_INICIO = nuevaDesde;
     s.FECHA_FIN = nuevaHasta;
     s.DIAS = diasEntreFechasISO(nuevaDesde, nuevaHasta);
@@ -13476,14 +13501,16 @@ async function guardarCorreccionSolicitud(){
     s.FECHA_CORRECCION = new Date().toISOString();
     if (!Array.isArray(s.HISTORIAL_CORRECCIONES)) s.HISTORIAL_CORRECCIONES = [];
     s.HISTORIAL_CORRECCIONES.push({
-      antes: { FECHA_INICIO: fechaAnteriorDesde, FECHA_FIN: fechaAnteriorHasta },
-      despues: { FECHA_INICIO: nuevaDesde, FECHA_FIN: nuevaHasta },
+      antes: { TIPO: tipoAnterior, FECHA_INICIO: fechaAnteriorDesde, FECHA_FIN: fechaAnteriorHasta },
+      despues: { TIPO: nuevoTipo, FECHA_INICIO: nuevaDesde, FECHA_FIN: nuevaHasta },
       por: s.CORREGIDO_POR, fecha: s.FECHA_CORRECCION,
     });
     await window.storage.set(key, JSON.stringify(s), false);
 
-    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
-    await agregarBitacora(s.EMPLEADO_KEY, `${tipoInfo.label} corregido: ${fmtFechaSimple(fechaAnteriorDesde)} al ${fmtFechaSimple(fechaAnteriorHasta)} → ${fmtFechaSimple(nuevaDesde)} al ${fmtFechaSimple(nuevaHasta)}.`);
+    const tipoInfoAnterior = TIPOS_SOLICITUD_AUSENCIA[tipoAnterior] || { label: tipoAnterior };
+    const tipoInfoNuevo = TIPOS_SOLICITUD_AUSENCIA[nuevoTipo] || { label: nuevoTipo };
+    const detalleTipo = cambioTipo ? `${tipoInfoAnterior.label} → ${tipoInfoNuevo.label}, ` : "";
+    await agregarBitacora(s.EMPLEADO_KEY, `${tipoInfoNuevo.label} corregido: ${detalleTipo}${fmtFechaSimple(fechaAnteriorDesde)} al ${fmtFechaSimple(fechaAnteriorHasta)} → ${fmtFechaSimple(nuevaDesde)} al ${fmtFechaSimple(nuevaHasta)}.`);
 
     corregirSolicitudPendienteKey = null;
     cerrarModalIncompletos();
@@ -13492,6 +13519,38 @@ async function guardarCorreccionSolicitud(){
   }catch(e){
     if (status) status.textContent = e.message || "No se pudo guardar.";
   }
+}
+
+// Elimina por completo una solicitud ya otorgada (vacaciones/día libre) — a
+// diferencia de "Corregir fechas" (que la deja viva con otro rango/tipo),
+// esto es para cuando ni siquiera debió existir (se cargó por error). Mismo
+// resguardo que la corrección: un día que ESTA solicitud creó pero que ya se
+// procesó aparte (aprobado/rechazado/reclasificado desde Horas Extra) no se
+// revierte solo — solo se borran los que sigan "pendiente".
+async function eliminarSolicitudOtorgada(key){
+  try{
+    const res = await window.storage.get(key, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s){ statusMsg("Esa solicitud ya no existe.", false); return; }
+    const empRes = await window.storage.get(CATALOGS.empleados.prefix + s.EMPLEADO_KEY, false);
+    const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
+    const nombreEmp = emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY;
+    if (!confirm(`¿Eliminar por completo "${tipoInfo.label}" de ${nombreEmp} (${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)})?\n\nLos días que ya se hayan procesado aparte (aprobados/rechazados) no se revierten solos.`)) return;
+
+    const todosLosRegistros = await listarRegistrosHorasExtra();
+    const diasDeEstaSolicitud = todosLosRegistros.filter(r => r.SOLICITUD_KEY === key);
+    let noTocados = 0;
+    for (const dia of diasDeEstaSolicitud){
+      if (dia.ESTADO !== "pendiente"){ noTocados++; continue; }
+      await window.storage.delete(dia.key, false);
+    }
+    await window.storage.delete(key, false);
+
+    await agregarBitacora(s.EMPLEADO_KEY, `${tipoInfo.label} eliminado: ${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)}.`);
+    statusMsg(`Eliminado.${noTocados ? ` ${noTocados} día(s) ya procesados aparte no se tocaron.` : ""}`, true);
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + e.message, false); }
 }
 
 function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, hoy){
