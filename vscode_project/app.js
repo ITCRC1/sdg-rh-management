@@ -8835,6 +8835,57 @@ function diasLibresMesDeEmpleado(emp){
   const n = parseInt(emp && emp.DIAS_LIBRES_MES_EMP, 10);
   return n > 0 ? n : DIAS_LIBRES_POR_MES;
 }
+
+// Saldo ACUMULADO (con arrastre entre meses) del cupo de "días libres al
+// mes" — a diferencia del saldo de vacaciones (Art. 153 CT, con su propio
+// ciclo legal de aniversario/diciembre — ver calcularSaldoVacaciones), este
+// es un beneficio interno de la empresa: se acredita el cupo mensual del
+// empleado (diasLibresMesDeEmpleado) el día 1 de cada mes desde su ingreso,
+// y cada día de vacaciones/día libre YA OTORGADO (por su fecha real, sin
+// importar cuándo se asignó — asignarlo con un mes de anticipo es lo
+// normal) lo va consumiendo, en orden cronológico. Si un mes no se usan
+// todos los que tocan, el sobrante queda de saldo y se arrastra solo al mes
+// siguiente (y al que sigue, sin límite) — el caso de "en septiembre no
+// tomó los días libres, que quede pendiente para octubre".
+// `diasOtorgados` es un arreglo plano de fechas ISO (una por cada día ya
+// otorgado de tipo vacaciones/dia_libre/libre — ver renderDiasLibresPorMesEmpleado).
+// El seguimiento de "días libres al mes" CON ARRASTRE recién se implementó
+// — aplicarlo retroactivo hasta la fecha de ingreso real de cada quien
+// generaría una deuda artificial de años acumulados que nunca se prometió
+// ni se llevó control de antes. Por pedido de gerencia, para TODOS los
+// empleados el arranque de este cálculo se adelanta al más tardío entre su
+// ingreso real y esta fecha — sin tocar FECHA_INGRESO_EMP (que sigue
+// rigiendo antigüedad, vacaciones, planilla, etc. tal cual está en la
+// ficha). A quien ingresó DESPUÉS de esta fecha no se le adelanta nada,
+// sigue acumulando desde su propio ingreso real.
+const INICIO_ACUMULACION_DIAS_LIBRES = new Date(2026, 8, 1); // 1° de setiembre de 2026
+
+function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
+  let ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
+  if (!ingreso || ingreso > fechaCorte) return 0;
+  if (ingreso < INICIO_ACUMULACION_DIAS_LIBRES) ingreso = INICIO_ACUMULACION_DIAS_LIBRES;
+  if (ingreso > fechaCorte) return 0;
+  const cupoMes = diasLibresMesDeEmpleado(empleado);
+
+  const eventos = [];
+  let inicioMes = new Date(ingreso.getFullYear(), ingreso.getMonth(), 1);
+  while (inicioMes <= fechaCorte){
+    eventos.push({ fecha: inicioMes, tipo: "acredita", dias: cupoMes });
+    inicioMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 1);
+  }
+  (diasOtorgados || []).forEach(fechaISO => {
+    const fecha = new Date(fechaISO + "T00:00:00");
+    if (fecha >= ingreso && fecha <= fechaCorte) eventos.push({ fecha, tipo: "usa", dias: 1 });
+  });
+  // Un día otorgado justo el día 1 de un mes debe poder consumir el cupo
+  // que se acredita ESE MISMO día 1 — de ahí el desempate.
+  eventos.sort((a, b) => a.fecha - b.fecha || (a.tipo === "acredita" ? -1 : 1));
+
+  let saldo = 0;
+  eventos.forEach(ev => { saldo += ev.tipo === "acredita" ? ev.dias : -ev.dias; });
+  return saldo;
+}
+
 const TIPOS_DIA_DESCUENTA_QUINCENA = {
   incapacidad: "Incapacidad",
   permiso_sin_goce: "Permiso sin goce",
@@ -15223,19 +15274,25 @@ function etiquetaTipoDia(tipo){
 // se aprueban, así que se muestran desde la propia solicitud.
 // Cupo mensual de días libres (vacaciones o día libre, lo que se haya usado
 // para cubrirlo — ver diasLibresMesDeEmpleado) contra lo que de verdad ya se
-// otorgó cada mes. El mes en curso siempre se muestra, aunque todavía tenga
-// 0 otorgados — es justo el caso que un empleado necesita ver ("¿me falta
-// que me asignen días libres este mes?"), no solo un historial de lo ya
-// resuelto. Los demás meses solo se listan si tuvieron al menos 1 día
+// otorgó cada mes, MÁS el saldo acumulado con arrastre (ver
+// calcularSaldoDiasLibres): si un mes no se otorgan todos los que tocan, el
+// sobrante no se pierde — pasa a "pendientes" del mes siguiente, sumado a lo
+// propio de ese mes. El mes en curso siempre se muestra, aunque todavía
+// tenga 0 otorgados — es justo el caso que un empleado necesita ver ("¿me
+// falta que me asignen días libres este mes?"), no solo un historial de lo
+// ya resuelto. Los demás meses solo se listan si tuvieron al menos 1 día
 // otorgado, y se topa en 12 para no crecer sin límite con los años.
 function renderDiasLibresPorMesEmpleado(confirmados, emp){
   const cupoMes = diasLibresMesDeEmpleado(emp);
   const porMes = {};
+  const todasLasFechasOtorgadas = [];
   confirmados
     .filter(r => r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
     .forEach(r => {
-      const mes = String(r.FECHA || "").slice(0, 7); // "AAAA-MM"
-      if (mes) (porMes[mes] = porMes[mes] || []).push(r.FECHA);
+      if (!r.FECHA) return;
+      todasLasFechasOtorgadas.push(r.FECHA);
+      const mes = String(r.FECHA).slice(0, 7); // "AAAA-MM"
+      (porMes[mes] = porMes[mes] || []).push(r.FECHA);
     });
   const hoy = new Date();
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
@@ -15264,8 +15321,13 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
 
   const filas = mesesOrdenados.map(mes => {
     const otorgados = (porMes[mes] || []).length;
-    const pendientes = Math.max(0, cupoMes - otorgados);
     const [anio, mesNum] = mes.split("-").map(Number);
+    // Saldo acumulado (con arrastre) al FINAL de ese mes — nunca al día de
+    // hoy si el mes ya terminó, para que un mes viejo no se vea influido por
+    // días otorgados después de que ese mes ya cerró.
+    const finDeMes = new Date(anio, mesNum, 0); // día 0 del mes siguiente = último día de "mes"
+    const fechaCorte = finDeMes < hoy ? finDeMes : hoy;
+    const pendientes = Math.max(0, calcularSaldoDiasLibres(emp, todasLasFechasOtorgadas, fechaCorte));
     return { mes, etiqueta: `${MESES[mesNum - 1]} ${anio}`, otorgados, pendientes };
   });
 
@@ -15278,7 +15340,7 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
         </select>
       </label>
     </div>
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es lo que todavía no se te ha asignado ese mes — no un derecho garantizado, depende de que gerencia/master lo otorgue. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es el saldo acumulado a esa fecha, CON ARRASTRE — si un mes no se asignan todos, el sobrante se suma al siguiente en vez de perderse. No es un derecho garantizado por adelantado, depende de que gerencia/master los otorgue. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
     <div style="display:grid; grid-template-columns:1fr auto auto; gap:2px 10px; align-items:center; font-size:12px;">
       <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px;">Mes</div>
       <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Otorgados</div>
