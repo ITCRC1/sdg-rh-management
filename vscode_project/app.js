@@ -8903,6 +8903,21 @@ function toggleResumenQuincena(){
   if (btn) btn.textContent = resumenQuincenaColapsado ? "➕" : "➖";
 }
 
+// Empieza PLEGADO (a diferencia del resumen de arriba): son herramientas de
+// mantenimiento que se usan de vez en cuando (limpiar una tanda de prueba,
+// borrar una quincena ya pagada antes de reimportar), no parte del trabajo
+// diario de aprobar — dejarlas abiertas de entrada solo agrega alto antes de
+// llegar a la lista real que se está aprobando.
+let herramientasHorasExtraColapsado = true;
+
+function toggleHerramientasHorasExtra(){
+  herramientasHorasExtraColapsado = !herramientasHorasExtraColapsado;
+  const cuerpo = document.getElementById("herramientas-horasextra-cuerpo");
+  const btn = document.getElementById("herramientas-horasextra-toggle");
+  if (cuerpo) cuerpo.style.display = herramientasHorasExtraColapsado ? "none" : "";
+  if (btn) btn.textContent = herramientasHorasExtraColapsado ? "➕" : "➖";
+}
+
 function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado){
   const rango = rangoQuincenaActual();
   let visibles = empleados.filter(e => !e.ARCHIVADO);
@@ -9036,12 +9051,18 @@ async function renderHorasExtrasPanel(){
 
     if (puedeEditar){
       html += `<div class="section-card" style="margin-bottom:14px; border-color:#B3261E;"><div class="section-body">
-        <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">🧹 Limpiar datos de prueba</div>
-        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo (sin papelera) todos los registros que vinieron de un archivo de marcación específico que hayas subido — útil para quitar una tanda que se subió solo para probar el sistema, antes de subir la real. Nunca toca vacaciones/incapacidades/permisos cargados desde otras pantallas.</div>
-        <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalLimpiezaDatosPrueba()">🧹 Ver archivos importados y limpiar</button>
-        <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🗑️ Eliminar por rango de fechas</div>
-        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo todos los registros de horas extra (de cualquier archivo o estado: pendiente, aprobado o rechazado) cuya fecha caiga dentro de un rango — útil para limpiar una quincena que ya se pagó, antes de una reimportación.</div>
-        <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalEliminarRangoHorasExtra()">🗑️ Eliminar por rango de fechas</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div style="font-weight:700; color:#B3261E;">🛠️ Herramientas de limpieza</div>
+          <button id="herramientas-horasextra-toggle" class="btn" style="padding:2px 10px; font-size:14px; line-height:1.4; flex-shrink:0; border-color:#B3261E; color:#B3261E;" onclick="toggleHerramientasHorasExtra()" title="${herramientasHorasExtraColapsado ? "Mostrar" : "Ocultar"}">${herramientasHorasExtraColapsado ? "➕" : "➖"}</button>
+        </div>
+        <div id="herramientas-horasextra-cuerpo" style="${herramientasHorasExtraColapsado ? "display:none; " : ""}margin-top:10px;">
+          <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">🧹 Limpiar datos de prueba</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo (sin papelera) todos los registros que vinieron de un archivo de marcación específico que hayas subido — útil para quitar una tanda que se subió solo para probar el sistema, antes de subir la real. Nunca toca vacaciones/incapacidades/permisos cargados desde otras pantallas.</div>
+          <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalLimpiezaDatosPrueba()">🧹 Ver archivos importados y limpiar</button>
+          <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🗑️ Eliminar por rango de fechas</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo todos los registros de horas extra (de cualquier archivo o estado: pendiente, aprobado o rechazado) cuya fecha caiga dentro de un rango — útil para limpiar una quincena que ya se pagó, antes de una reimportación.</div>
+          <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalEliminarRangoHorasExtra()">🗑️ Eliminar por rango de fechas</button>
+        </div>
       </div></div>`;
     }
 
