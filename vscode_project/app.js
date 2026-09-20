@@ -8404,8 +8404,21 @@ async function importarHorasExtraArchivo(inputEl){
   }
   if (!rows.length){
     statusMsg(esPDF
-      ? "No se detectó ninguna marca válida en ese PDF (¿las marcas no vinieron en pares completos de entrada/salida?)."
+      ? "No se detectó ninguna fila válida en ese PDF con los formatos conocidos (tabla de SmartPSS Lite, o marcas sueltas de \"Ingreso/Salida\") — revisa el texto extraído abajo del botón de importar."
       : "Ese archivo no tiene filas.", false);
+    // Deja ver el texto tal como lo extrajo el navegador, para poder ajustar
+    // el lector al formato exacto sin tener que adivinar — mismo criterio
+    // que ya usa "Pegar texto de colilla" cuando tampoco reconoce nada.
+    if (esPDF){
+      const wrap = document.getElementById("horasextra-debug-wrap");
+      const area = document.getElementById("horasextra-debug-texto");
+      if (wrap && area){
+        try{
+          area.value = await extraerTextoPDF(file);
+          wrap.style.display = "block";
+        }catch(e){ /* si ni esto se puede leer, se deja el mensaje de arriba nada más */ }
+      }
+    }
     inputEl.value = "";
     return;
   }
@@ -8993,6 +9006,10 @@ async function renderHorasExtrasPanel(){
         <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV/PDF de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae horas trabajadas o entrada/salida (o un PDF de marcas sueltas de "Ingreso/Salida"), se comparan contra la jornada diaria del puesto de cada empleado (turno diurno, mixto o nocturno — la misma que se define al crear el puesto), a tiempo y medio (Art. 139 CT). Las marcas se emparejan en orden cronológico, así que un turno nocturno que cruza la medianoche se calcula bien.</p>
         <button class="btn primary" onclick="document.getElementById('horasextra-file-input').click()">📥 Importar archivo de marcación</button>
         <input type="file" id="horasextra-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarHorasExtraArchivo(this)">
+        <div id="horasextra-debug-wrap" style="display:none; margin-top:10px;">
+          <div style="font-size:11.5px; color:#B3261E; margin-bottom:4px;">No se pudo interpretar ninguna fila de ese PDF con los formatos que ya conoce el lector. Este es el texto tal como lo extrajo el navegador — copia todo y compártelo para poder ajustar el lector a este formato exacto.</div>
+          <textarea id="horasextra-debug-texto" readonly style="width:100%; min-height:180px; font-family:monospace; font-size:10.5px;" onclick="this.select();"></textarea>
+        </div>
       </div></div>`;
     }
 
