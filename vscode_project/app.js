@@ -13591,35 +13591,41 @@ async function confirmarCrearSolicitudAusencia(){
 // Formulario aparte para gerencia/master: asigna ya aprobado, sin la cola de
 // pendientes ni la anticipación mínima de 15 días que sí exige la
 // solicitud de jefatura (ver renderFormularioSolicitud / asignarAusenciaDirecta).
+// Hasta 3 líneas de Tipo/Desde/Hasta para el MISMO empleado (varias salidas
+// del mes, o permisos de distinto tipo — ej. 2 días libres sueltos y una
+// incapacidad) — todas se asignan con un solo clic en "Asignar". Una línea
+// se ignora si no tiene ninguna fecha cargada; no hace falta llenar las 3.
 function renderFormularioAsignacionDirecta(empleadosDisponibles){
   const ordenados = empleadosDisponibles.slice().sort(compararPorApellido);
-  return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Asignar directamente</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar).</p>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
-        <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
-        <select id="asignacion-directa-empleado">
-          <option value="">— Elegí —</option>
-          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
-        </select>
-      </label>
+  const filaHtml = (i) => `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; padding:6px 0;${i > 0 ? " border-top:1px dashed var(--paper-line); margin-top:4px;" : ""}">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
-        <select id="asignacion-directa-tipo" onchange="document.getElementById('asignacion-directa-comprobante-wrap').style.display = this.value === 'ausencia_medica' ? 'flex' : 'none';">
+        <select id="asignacion-directa-tipo-${i}" onchange="document.getElementById('asignacion-directa-comprobante-wrap-${i}').style.display = this.value === 'ausencia_medica' ? 'flex' : 'none';">
           ${Object.keys(TIPOS_SOLICITUD_AUSENCIA).map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
-        <input type="date" id="asignacion-directa-desde">
+        <input type="date" id="asignacion-directa-desde-${i}">
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
-        <input type="date" id="asignacion-directa-hasta">
+        <input type="date" id="asignacion-directa-hasta-${i}">
       </label>
-      <label id="asignacion-directa-comprobante-wrap" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
-        <input type="file" id="asignacion-directa-comprobante" accept=".pdf,image/*">
+      <label id="asignacion-directa-comprobante-wrap-${i}" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
+        <input type="file" id="asignacion-directa-comprobante-${i}" accept=".pdf,image/*">
       </label>
-      <button class="btn primary" onclick="confirmarAsignacionDirecta();">✅ Asignar</button>
-    </div>
+    </div>`;
+  return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Asignar directamente</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar). Podés cargar hasta 3 rangos distintos para el mismo empleado (varias salidas del mes, o permisos de distinto tipo) y asignarlos todos de una vez.</p>
+    <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:320px; margin-bottom:4px;">Empleado
+      <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
+      <select id="asignacion-directa-empleado">
+        <option value="">— Elegí —</option>
+        ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
+      </select>
+    </label>
+    ${[0, 1, 2].map(filaHtml).join("")}
+    <button class="btn primary" style="margin-top:8px;" onclick="confirmarAsignacionDirecta();">✅ Asignar</button>
     <div id="asignacion-directa-status" style="font-size:12px; margin-top:6px;"></div>
   </div></div>`;
 }
@@ -13627,28 +13633,51 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
 async function confirmarAsignacionDirecta(){
   const status = document.getElementById("asignacion-directa-status");
   const empKey = (document.getElementById("asignacion-directa-empleado")||{}).value;
-  const tipo = (document.getElementById("asignacion-directa-tipo")||{}).value;
-  const fechaInicio = (document.getElementById("asignacion-directa-desde")||{}).value;
-  const fechaFin = (document.getElementById("asignacion-directa-hasta")||{}).value;
-  const inputComprobante = document.getElementById("asignacion-directa-comprobante");
-  const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
-  try{
-    if (tipo === "vacaciones" && fechaInicio && fechaFin && fechaFin >= fechaInicio){
-      const aviso = await advertenciaSaldoNegativoVacaciones(empKey, tipo, diasEntreFechasISO(fechaInicio, fechaFin));
-      if (aviso && !confirm(aviso)) return;
-    }
-    let comprobanteDataUrl = null, comprobanteNombre = null;
-    if (archivo){
-      if (archivo.size > 3.5*1024*1024) throw new Error("El comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
-      comprobanteDataUrl = await leerArchivoComoDataUrl(archivo);
-      comprobanteNombre = archivo.name;
-    }
-    await asignarAusenciaDirecta({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre });
-    statusMsg("Asignado y aprobado.");
-    renderDiasLibresVacacionesPanel();
-  }catch(e){
-    if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
+  if (!empKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí un empleado.</span>`; return; }
+
+  const filas = [];
+  for (let i = 0; i < 3; i++){
+    const fechaInicio = (document.getElementById(`asignacion-directa-desde-${i}`)||{}).value;
+    const fechaFin = (document.getElementById(`asignacion-directa-hasta-${i}`)||{}).value;
+    if (!fechaInicio && !fechaFin) continue; // línea sin usar — se ignora, no hace falta llenar las 3
+    const tipo = (document.getElementById(`asignacion-directa-tipo-${i}`)||{}).value;
+    const inputComprobante = document.getElementById(`asignacion-directa-comprobante-${i}`);
+    const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
+    filas.push({ linea: i + 1, tipo, fechaInicio, fechaFin, archivo });
   }
+  if (!filas.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá al menos un rango de fechas.</span>`; return; }
+
+  if (status) status.textContent = "Asignando…";
+  let ok = 0;
+  const errores = [];
+  for (const f of filas){
+    try{
+      if (!f.fechaInicio || !f.fechaFin) throw new Error("faltó una de las dos fechas.");
+      if (f.tipo === "vacaciones" && f.fechaFin >= f.fechaInicio){
+        const aviso = await advertenciaSaldoNegativoVacaciones(empKey, f.tipo, diasEntreFechasISO(f.fechaInicio, f.fechaFin));
+        if (aviso && !confirm(`Línea ${f.linea}: ${aviso}`)){ errores.push(`Línea ${f.linea}: cancelada.`); continue; }
+      }
+      let comprobanteDataUrl = null, comprobanteNombre = null;
+      if (f.archivo){
+        if (f.archivo.size > 3.5*1024*1024) throw new Error("el comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+        comprobanteDataUrl = await leerArchivoComoDataUrl(f.archivo);
+        comprobanteNombre = f.archivo.name;
+      }
+      await asignarAusenciaDirecta({ empKey, tipo: f.tipo, fechaInicio: f.fechaInicio, fechaFin: f.fechaFin, comprobanteDataUrl, comprobanteNombre });
+      ok++;
+    }catch(e){ errores.push(`Línea ${f.linea}: ${e.message}`); }
+  }
+
+  // El resumen va por el toast (statusMsg), no por el <span> del formulario
+  // — si algo se asignó, el panel se vuelve a pintar entero para que se vea
+  // ya en las listas de abajo, y eso reemplaza el formulario (con su status
+  // inline) por uno nuevo y vacío; un mensaje escrito ahí antes de repintar
+  // se perdería.
+  let resumen = ok ? `${ok} de ${filas.length} asignación(es) aprobada(s).` : "No se pudo asignar ninguna.";
+  if (errores.length) resumen += " " + errores.join(" ");
+  statusMsg(resumen, errores.length === 0);
+  if (ok) renderDiasLibresVacacionesPanel();
+  else if (status) status.innerHTML = `<span style="color:#b23b3b;">${errores.map(escapeHtml).join("<br>")}</span>`;
 }
 
 function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departamentoDeEmpleado, puedeAprobar, esJefatura){
