@@ -7935,45 +7935,58 @@ function mostrarFechaHoraCorta(isoLocal){
   return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : String(isoLocal || "");
 }
 
-// "Informe de Registros" del software de marcación SmartPSS Lite (Dahua,
-// el que usa Corcovado) exportado a PDF en vez de a Excel — una fila de
-// tabla por empleado/día (id, nombre, fecha, hasta 6 horas de marca,
-// horas trabajadas/regulares/extra ya calculadas, cantidad de marcas y una
-// observación libre), no una marca suelta por línea como el formato de
-// abajo (parsearLineaMarcacionPDF/leerRegistrosMarcacionPDF, para máquinas
-// que exportan así). Se ancla cada campo por su FORMATO, no por una posición
-// fija de columna, porque en el texto extraído del PDF una celda vacía
-// (nombre con menos palabras, día con menos de 6 marcas) simplemente
-// desaparece y correría todas las columnas que le siguen si se contara por
-// posición:
-//   - id: dígitos al inicio de la línea.
-//   - fecha: el primer token con forma D/M/AAAA (con guiones "/", así que
-//     nunca se confunde con una hora ni con parte del nombre).
-//   - marcas: cero o más horas HH:MM entre la fecha y las tres cifras que
-//     siguen.
-//   - horas trabajadas / regulares / extra: siempre tres números con
-//     exactamente 2 decimales, en ese orden — es la única forma que la app
-//     necesita para importar (ya vienen calculadas por el propio sistema de
-//     marcación, ver guardarFilasHorasExtra/HORAS_EXTRA_YA_CALCULADA).
-//   - cantidad de marcas: un entero suelto justo después.
-//   - observación: lo que quede de la línea (opcional, se ignora — es solo
-//     una nota del propio sistema de origen, ej. "Marcas incompletas").
+// "Zpráva o podrobnostech docházky" ("Reporte de detalles de asistencia")
+// del software de marcación que usa Corcovado (exportado a PDF) — una fila
+// de tabla por empleado/día, pero el PDF envuelve cada fila en 2 líneas de
+// texto extraído (el nombre y la duración del turno se cortan a mitad de
+// palabra cuando no caben en su columna, y la continuación queda en su
+// propia línea, ej. "16 BRAYAN JORGE Capitanes Hombre 2026-09-01 480.00
+// minu CWL 00.00 00.00 0.00 0.00 0.00 0.00 0.00 8.00 ZG" seguido de
+// "SOLANO GUIDO to(s)"). Esa línea de continuación nunca empieza con el
+// número de empleado ni trae fecha/horas con el formato esperado, así que
+// simplemente no calza con este patrón y se ignora sola — no hace falta
+// tratarla aparte. Por eso el nombre que se rescata aquí puede quedar
+// incompleto (le falta el apellido que se fue a la línea de continuación);
+// no importa porque el emparejamiento con el empleado se hace por número
+// (ver guardarFilasHorasExtra), el nombre es solo un dato de respaldo para
+// mostrar en "Sin identificar" si ese número no hace match con nadie.
+// Cada campo se ancla por su FORMATO, no por posición fija de columna:
+//   - id: dígitos al inicio de la línea (sin ceros a la izquierda de forma
+//     consistente — algunos sí los traen, ej. "010" — por eso el match
+//     contra los empleados usa normalizarCodigoEmpleado, que ya ignora
+//     ceros a la izquierda y solo compara los últimos dígitos).
+//   - fecha: AAAA-MM-DD (formato ISO, no D/M/AAAA).
+//   - entrada/salida: puede venir como "HH:MM" (marca real) o como "00.00"
+//     (sin marcar ese día — con punto, no dos puntos, así nunca se confunde
+//     con una hora real).
+//   - trabajo actual / horas extra: los primeros dos de los 6 números
+//     decimales que siguen a la salida (después vienen trabajo válido,
+//     tiempo de retardo, tiempo de salida adelantada y ausente, que esta
+//     app no necesita).
+//   - estado: código de letras al final (ej. "ZG", "ZSY") — se ignora, es
+//     solo la combinación de los códigos del pie de página del reporte.
 // El resultado usa las MISMAS llaves que ya reconoce detectarColumnasHorasExtra
-// para un Excel de este mismo reporte (id, nombre, fecha, horas_extra...),
-// así que las filas entran a guardarFilasHorasExtra sin ningún cambio aparte.
+// (id, nombre, fecha, horas_extra, horas_trabajadas), así que las filas
+// entran a guardarFilasHorasExtra sin ningún cambio aparte; las marcas
+// reales (cuando no son "00.00") se arman directo en MARCAS para que
+// guardarFilasHorasExtra las tome tal cual (ver el chequeo de
+// Array.isArray(row.MARCAS) ahí).
+const RE_FILA_ASISTENCIA_DOCHAZKY = /^(\d{1,6})\s+(.+?)\s+(\d{4}-\d{2}-\d{2})\s+[\d.]+\s+\S+\s+\S+\s+([\d:.]+)\s+([\d:.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*([A-Za-z]*)$/;
+
 function parsearLineaMarcacionTabla(linea){
-  const m = /^(\d{6,10})\s+(.+?)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+((?:\d{1,2}:\d{2}\s*)*)(\d+\.\d{2})\s+(\d+\.\d{2})\s+(\d+\.\d{2})\s+(\d+)(?:\s+(.+))?$/.exec(String(linea || "").trim());
+  const m = RE_FILA_ASISTENCIA_DOCHAZKY.exec(String(linea || "").trim());
   if (!m) return null;
-  return {
+  const entrada = m[4], salida = m[5];
+  const marcaReal = v => /^\d{1,2}:\d{2}$/.test(v);
+  const fila = {
     id: m[1],
     nombre: m[2].trim(),
     fecha: m[3],
-    horas_trabajadas: m[5],
-    horas_regulares: m[6],
+    horas_trabajadas: m[6],
     horas_extra: m[7],
-    cantidad_marcas: m[8],
-    observacion: (m[9] || "").trim(),
   };
+  if (marcaReal(entrada) && marcaReal(salida)) fila.MARCAS = [{ entrada, salida }];
+  return fila;
 }
 
 async function leerInformeRegistrosTablaPDF(file){
