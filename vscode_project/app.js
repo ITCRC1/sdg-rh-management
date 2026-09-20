@@ -7878,6 +7878,38 @@ async function confirmarMoverHorasExtra(){
   renderHorasExtrasPanel();
 }
 
+// Días de vacaciones/día libre/día de viaje/permiso sin goce/incapacidad/
+// cumpleaños que quedaron en ESTADO "pendiente" por el bug ya corregido en
+// crearOJustificarDiaHorasExtra (se creaban pendientes en vez de aprobados,
+// aunque la decisión ya se había tomado al aprobar la solicitud/registrar la
+// incapacidad/otorgar el cumpleaños) — se identifican por su ORIGEN, nunca
+// por TIPO_DIA, para no tocar por error un día "laboral"/"ausencia" que sí
+// necesita pasar por la revisión normal de Horas Extra.
+const ORIGENES_YA_DECIDIDOS_HORAS_EXTRA = ["permiso_sin_goce", "vacaciones", "incapacidad_registro", "asignacion_directa", "solicitud_ausencia", "cumpleanos_otorgado"];
+
+async function corregirDiasPendientesYaDecididos(){
+  try{
+    const registros = await listarRegistrosHorasExtra();
+    const afectados = registros.filter(r => r.ESTADO === "pendiente" && ORIGENES_YA_DECIDIDOS_HORAS_EXTRA.includes(r.ORIGEN));
+    if (!afectados.length){ statusMsg("No se encontró ningún día atascado de ese tipo — no hay nada que corregir."); return; }
+    if (!confirm(`Se encontraron ${afectados.length} día(s) de vacaciones/permisos/etc. atascados en "pendiente" que en realidad ya estaban decididos. Se van a marcar como aprobados en definitiva.\n\n¿Continuar?`)) return;
+
+    const quien = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    const ahora = new Date().toISOString();
+    let ok = 0;
+    for (const r of afectados){
+      r.ESTADO = "aprobada";
+      r.APROBADO_POR = r.APROBADO_POR || quien;
+      r.APROBADO_FINAL_POR = quien;
+      r.FECHA_DECISION = r.FECHA_DECISION || ahora;
+      r.FECHA_DECISION_FINAL = ahora;
+      try{ await window.storage.set(r.key, JSON.stringify(r), false); ok++; }catch(e){ /* sigue con el resto */ }
+    }
+    statusMsg(`${ok} de ${afectados.length} día(s) corregido(s) — ya cuentan como aprobados en definitiva.`, ok === afectados.length);
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo corregir: " + e.message, false); }
+}
+
 // Último cálculo de "empleados sin ningún registro en el rango" — lo llena
 // renderHorasExtrasPanel cada vez que pinta el banner; el modal de abajo lo
 // lee de acá en vez de recibirlo como parámetro, para no tener que meter un
@@ -9225,6 +9257,9 @@ async function renderHorasExtrasPanel(){
           <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🔀 Mover horas extra a otro empleado</div>
           <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Traslada TODOS los registros de un empleado hacia otro — para corregir marcas que quedaron mal atribuidas por compartir el mismo número de empleado en el marcador (ver el aviso de "número ambiguo" al importar).</div>
           <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalMoverHorasExtra()">🔀 Mover horas extra a otro empleado</button>
+          <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🔧 Corregir días de vacaciones/permisos atascados</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antes, un día de vacaciones/día libre/permiso sin goce/incapacidad/cumpleaños ya aprobado por su propio trámite se guardaba igual como "pendiente" acá, y no contaba en "Días libres por fecha" del empleado ni en el reporte de planilla hasta aprobarlo también en Horas Extra (ya corregido de raíz — los nuevos ya se guardan aprobados de una vez). Este botón aprueba en definitiva, de un solo golpe, los que hayan quedado atascados así de antes.</div>
+          <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="corregirDiasPendientesYaDecididos()">🔧 Corregir días atascados</button>
         </div>
       </div></div>`;
     }
