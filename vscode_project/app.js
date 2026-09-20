@@ -14952,7 +14952,52 @@ function etiquetaTipoDia(tipo){
 // agruparFechasConsecutivas), y suma aparte las solicitudes todavía
 // pendientes de aprobación — esas no tienen fila en horas_extra: hasta que
 // se aprueban, así que se muestran desde la propia solicitud.
-function renderSeccionDiasLibresEmpleado(registrosHorasExtra, solicitudesPendientes){
+// Cupo mensual de días libres (vacaciones o día libre, lo que se haya usado
+// para cubrirlo — ver diasLibresMesDeEmpleado) contra lo que de verdad ya se
+// otorgó cada mes. El mes en curso siempre se muestra, aunque todavía tenga
+// 0 otorgados — es justo el caso que un empleado necesita ver ("¿me falta
+// que me asignen días libres este mes?"), no solo un historial de lo ya
+// resuelto. Los demás meses solo se listan si tuvieron al menos 1 día
+// otorgado, y se topa en 12 para no crecer sin límite con los años.
+function renderDiasLibresPorMesEmpleado(confirmados, emp){
+  const cupoMes = diasLibresMesDeEmpleado(emp);
+  const porMes = {};
+  confirmados
+    .filter(r => r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
+    .forEach(r => {
+      const mes = String(r.FECHA || "").slice(0, 7); // "AAAA-MM"
+      if (mes) (porMes[mes] = porMes[mes] || []).push(r.FECHA);
+    });
+  const hoy = new Date();
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+  const meses = new Set(Object.keys(porMes));
+  meses.add(mesActual);
+  const mesesOrdenados = [...meses].sort().reverse().slice(0, 12);
+
+  const filas = mesesOrdenados.map(mes => {
+    const otorgados = (porMes[mes] || []).length;
+    const pendientes = Math.max(0, cupoMes - otorgados);
+    const [anio, mesNum] = mes.split("-").map(Number);
+    return { mes, etiqueta: `${MESES[mesNum - 1]} ${anio}`, otorgados, pendientes };
+  });
+
+  return `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--paper-line);">
+    <div style="font-weight:600; font-size:12.5px; margin-bottom:4px;">📆 Días libres otorgados por mes</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es lo que todavía no se te ha asignado ese mes — no un derecho garantizado, depende de que gerencia/master lo otorgue.</div>
+    <div style="display:grid; grid-template-columns:1fr auto auto; gap:2px 10px; align-items:center; font-size:12px;">
+      <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px;">Mes</div>
+      <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Otorgados</div>
+      <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Pendientes</div>
+      ${filas.map(f => `
+        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line);">${escapeHtml(f.etiqueta)}${f.mes === mesActual ? " (actual)" : ""}</div>
+        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; font-weight:700;">${f.otorgados}/${cupoMes}</div>
+        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; ${f.pendientes > 0 ? "color:#8a6d1f; font-weight:700;" : "color:var(--ink-soft);"}">${f.pendientes > 0 ? `⏳ ${f.pendientes}` : "✅ 0"}</div>
+      `).join("")}
+    </div>
+  </div>`;
+}
+
+function renderSeccionDiasLibresEmpleado(registrosHorasExtra, solicitudesPendientes, emp){
   const confirmados = registrosHorasExtra.filter(r => r.ESTADO === "aprobada" && r.TIPO_DIA && r.TIPO_DIA !== "laboral");
   const porTipo = {};
   confirmados.forEach(r => { (porTipo[r.TIPO_DIA] = porTipo[r.TIPO_DIA] || []).push(r.FECHA); });
@@ -14970,16 +15015,20 @@ function renderSeccionDiasLibresEmpleado(registrosHorasExtra, solicitudesPendien
     ${solicitudesPendientes.map(s => `<div style="font-size:12px; padding:3px 0 3px 14px; border-bottom:1px solid var(--paper-line);">${etiquetaTipoDia(s.TIPO)} — ${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} (${s.DIAS || "?"} día(s))</div>`).join("")}
   </div>` : "";
 
+  const bloquePorMes = emp ? renderDiasLibresPorMesEmpleado(confirmados, emp) : "";
+
   if (!bloquesConfirmados && !bloquePendientes){
     return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
       <div style="font-weight:700; margin-bottom:6px;">🗓️ Días libres por fecha</div>
       <div style="font-size:12px; color:var(--ink-soft);">Sin días libres registrados todavía.</div>
+      ${bloquePorMes}
     </div></div>`;
   }
   return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
     <div style="font-weight:700; margin-bottom:8px;">🗓️ Días libres por fecha</div>
     ${bloquesConfirmados}
     ${bloquePendientes}
+    ${bloquePorMes}
   </div></div>`;
 }
 
@@ -15195,7 +15244,7 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
       ${(miInfoRangoDesde && miInfoRangoHasta && pendientesEnRangoMiInfo > 0) ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ ${pendientesEnRangoMiInfo} día(s) de horas extra de este rango todavía están pendientes de aprobación.</div></div>` : ""}
       ${(miInfoRangoDesde && miInfoRangoHasta && registrosEnRangoMiInfo.length === 0) ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ No hay ningún día registrado en este rango — puede que la marcación de ese período todavía no se haya importado, o que no hayas tenido marca en esas fechas.</div></div>` : ""}
 
-      ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesPendientes)}
+      ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesPendientes, emp)}
 
       ${prestaciones ? `<div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:4px;">💰 Datos Monetarios</div>
