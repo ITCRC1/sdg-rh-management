@@ -5703,9 +5703,20 @@ async function archivarColillasPDF(file, clavesYaArchivadas, moneda, clavesPendi
   let archivados = 0, duplicados = 0, pendientesNuevas = 0;
   const sinCoincidencia = [];
   for (const reg of registros){
-    const { match } = emparejarRegistroColilla(reg, indices, empleadosDB);
-    if (!match){
-      sinCoincidencia.push(reg);
+    const { match, matchedBy } = emparejarRegistroColilla(reg, indices, empleadosDB);
+    // Mismo criterio de seguridad que ya usa procesarColillas (ver
+    // nombresSinRelacion): un número/cédula que "coincide" pero con un
+    // nombre que no tiene nada que ver casi nunca es la misma persona (el
+    // caso típico: dos planillas distintas numeran cada una por su cuenta y
+    // un mismo número le toca a alguien distinto en cada una). Antes esto no
+    // se revisaba acá, así que la colilla de la persona equivocada se
+    // archivaba en silencio a nombre de quien tenía ese número — o, peor,
+    // si esa otra persona YA tenía una colilla archivada para el mismo
+    // período, la de la persona real se descartaba como "ya archivada"
+    // (duplicado) sin guardarse en ningún lado.
+    const sospechoso = match && (matchedBy === "número de empleado" || matchedBy === "cédula") && nombresSinRelacion(reg.nombre, nombreCompletoEmpleado(match));
+    if (!match || sospechoso){
+      sinCoincidencia.push(sospechoso ? Object.assign({}, reg, { nombreSospechoso: true, matchIncorrecto: nombreCompletoEmpleado(match) }) : reg);
       try{
         const key = "colilla_pendiente:" + claveColillaArchivada(reg.cedula, reg.nombre, reg.periodoInicio);
         if (!clavesPendientesYaGuardadas.has(key)){
@@ -5824,9 +5835,9 @@ async function onColillasPdfSelected(inputEl){
         bloque.className = "section-card";
         bloque.style.cssText = "margin-top:10px; border-color:#B3261E;";
         bloque.innerHTML = `<div class="section-body">
-          <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🧾 Colilla individual NO archivada — ${sinArchivarDetalle.length} (esto es aparte de la actualización de salario de arriba):</div>
-          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">Se leyó el nombre/número en esta página del PDF pero no coincidió con ningún empleado de tu lista al intentar guardar su colilla individual — revisa número, cédula y nombre en su ficha.</div>
-          ${sinArchivarDetalle.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre||"(nombre no leído)")} — № ${escapeHtml(r.numero||"—")}${r.cedula ? ` — cédula ${escapeHtml(r.cedula)}` : ""}${r.errorArchivo ? ` — error: ${escapeHtml(r.errorArchivo)}` : ""} <span style="color:var(--ink-soft);">(${escapeHtml(r.archivo)})</span></div>`).join("")}
+          <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🧾 Colilla individual sin archivar a nombre de nadie — ${sinArchivarDetalle.length} (esto es aparte de la actualización de salario de arriba):</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">Se leyó el nombre/número en esta página del PDF, pero no se archivó a nombre de ningún empleado — su página quedó guardada en el buzón (Planilla → "Colillas sin asignar") para asignarla o crear a la persona cuando quieras, en vez de perderse.</div>
+          ${sinArchivarDetalle.map(r => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(r.nombre||"(nombre no leído)")} — № ${escapeHtml(r.numero||"—")}${r.cedula ? ` — cédula ${escapeHtml(r.cedula)}` : ""}${r.nombreSospechoso ? ` — <span style="color:#B3261E;">ese número coincide con la ficha de "${escapeHtml(r.matchIncorrecto||"—")}", pero el nombre no calza — no se archivó ahí</span>` : ""}${r.errorArchivo ? ` — error: ${escapeHtml(r.errorArchivo)}` : ""} <span style="color:var(--ink-soft);">(${escapeHtml(r.archivo)})</span></div>`).join("")}
         </div>`;
         if (wrap) wrap.appendChild(bloque);
       }
