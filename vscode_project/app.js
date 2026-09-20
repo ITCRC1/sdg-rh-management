@@ -13565,20 +13565,20 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
   // fuera por otro motivo (incapacidad). En ese caso el día debe mostrar
   // continuidad de esa ausencia real (INCAP), no la marca de salida del día
   // libre — por eso esta revisión va ANTES del bucle de "SALE"/"ENTRA" de
-  // abajo. (permiso_sin_goce/vacaciones/ausencia_medica ya quedan resueltos
-  // arriba, en el primer bucle, así que tampoco llegan nunca a "SALE"/"ENTRA".)
+  // abajo. (permiso_sin_goce/ausencia_medica ya quedan resueltos arriba, en
+  // el primer bucle, así que tampoco llegan nunca a "SALE"/"ENTRA".)
   const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
   if (horasDia && horasDia.TIPO_DIA === "incapacidad") return { texto: "INCAP", color: "FFE68A8A" };
 
-  // El día ANTES de que arranque un bloque de "Día libre" es cuando el
-  // empleado sale (su último día trabajado antes de salir libre) — se marca
-  // "SALE". El día DESPUÉS de que termina es cuando vuelve a trabajar — se
-  // marca "ENTRA". Se revisan en un segundo bucle, después del de arriba,
-  // para que un día que además cae DENTRO de otro tramo de ausencia (ej.
-  // entra directo a otro bloque libre, o está incapacitado) siempre gane esa
-  // etiqueta en vez de "SALE"/"ENTRA".
+  // El día ANTES de que arranque un bloque de "Día libre" o "Vacaciones" es
+  // cuando el empleado sale (su último día trabajado antes de salir libre) —
+  // se marca "SALE". El día DESPUÉS de que termina es cuando vuelve a
+  // trabajar — se marca "ENTRA". Se revisan en un segundo bucle, después del
+  // de arriba, para que un día que además cae DENTRO de otro tramo de
+  // ausencia (ej. entra directo a otro bloque libre, o está incapacitado)
+  // siempre gane esa etiqueta en vez de "SALE"/"ENTRA".
   for (const s of solicitudesEmp){
-    if (s.ESTADO !== "aprobada" || s.TIPO !== "dia_libre") continue;
+    if (s.ESTADO !== "aprobada" || (s.TIPO !== "dia_libre" && s.TIPO !== "vacaciones")) continue;
     const diaAntes = new Date(s.FECHA_INICIO + "T00:00:00");
     diaAntes.setDate(diaAntes.getDate() - 1);
     if (isoDeFechaLocal(diaAntes) === fechaISO) return { texto: "SALE", color: "FFD9D9D9" };
