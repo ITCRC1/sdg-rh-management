@@ -587,6 +587,7 @@ const CAMPOS_EXPORTAR_EMPLEADOS = [
     ["DEPARTAMENTO_EMP", "Puesto / Departamento"],
     ["EMPLEADO_CONFIANZA", "Puesto de confianza (Art. 143 CT)"],
     ["NUMERO_EMPLEADO", "Número de empleado"],
+    ["DIAS_LIBRES_MES_EMP", "Días libres al mes (por contrato)"],
     ["FECHA_INGRESO_EMP", "Fecha de ingreso"],
   ]},
   { grupo: "Salario", campos: [
@@ -792,6 +793,7 @@ const CATALOGS = {
       ["DEPARTAMENTO_EMP","text","Puesto / departamento (texto libre, se llena solo al elegir arriba)","","libre"],
       ["EMPLEADO_CONFIANZA","select_sino_puro","Puesto de confianza (Art. 143 CT) — no marca asistencia ni genera horas extra",""],
       ["NUMERO_EMPLEADO","text","Número de empleado (planilla)",""],
+      ["DIAS_LIBRES_MES_EMP","text","Días libres al mes (por contrato) — vacío usa el estándar (4)",""],
       ["FECHA_INGRESO_DATE","date_ingreso_emp","5. Fecha de ingreso",""],
       ["grp", "Salario"],
       ["MONEDA_SALARIO_EMP","select_moneda_salario_emp","Moneda del salario",""],
@@ -7567,7 +7569,7 @@ async function generarReporteHorarioPlanilla(){
         f.descPorTipo.permiso_sin_goce || 0,
         f.descPorTipo.ausencia_medica || 0,
         f.descPorTipo.ausencia || 0,
-        `${f.diasLibresMes}/${DIAS_LIBRES_POR_MES}`,
+        `${f.diasLibresMes}/${diasLibresMesDeEmpleado(f.emp)}`,
         f.diasFeriadosTrabajados || 0,
         Math.round(horasExtraNormal * 100) / 100,
         montoHorasExtra,
@@ -7908,6 +7910,66 @@ async function corregirDiasPendientesYaDecididos(){
     statusMsg(`${ok} de ${afectados.length} día(s) corregido(s) — ya cuentan como aprobados en definitiva.`, ok === afectados.length);
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo corregir: " + e.message, false); }
+}
+
+// Diagnóstico puntual: para un empleado y una fecha exacta, muestra el
+// registro crudo de horas_extra: (si existe) y cualquier solicitud de
+// días libres/vacaciones que cubra esa fecha — para saber, sin adivinar, si
+// un día que se otorgó por Días Libres y Vacaciones de verdad llegó a crear
+// su registro correspondiente (y con qué ESTADO/TIPO_DIA quedó), en vez de
+// asumirlo por lo que muestra un reporte que puede estar filtrando por otra
+// razón (ver renderSeccionDiasLibresEmpleado/calcularResumenQuincena, ambos
+// exigen ESTADO === "aprobada").
+async function mostrarModalDiagnosticoDia(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔍 Ver registro de un día específico";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const empleados = (await cargarEmpleadosDB()).sort(compararPorApellido);
+    window._empleadosDiagnosticoDia = empleados;
+    const opciones = empleados.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}${e.ARCHIVADO ? " (archivado)" : ""}</option>`).join("");
+    body.innerHTML = `
+      <div class="field"><label>Empleado</label>
+        <select id="diagnostico-dia-empleado"><option value="">— Selecciona —</option>${opciones}</select>
+      </div>
+      <div class="field"><label>Fecha</label>
+        <input type="date" id="diagnostico-dia-fecha">
+      </div>
+      <button class="btn primary" onclick="buscarDiagnosticoDia()">Buscar</button>
+      <pre id="diagnostico-dia-resultado" style="margin-top:10px; font-size:11px; white-space:pre-wrap; background:var(--paper); border:1px solid var(--paper-line); border-radius:6px; padding:8px; max-height:320px; overflow:auto;"></pre>
+    `;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function buscarDiagnosticoDia(){
+  const empKey = document.getElementById("diagnostico-dia-empleado").value;
+  const fecha = document.getElementById("diagnostico-dia-fecha").value;
+  const cont = document.getElementById("diagnostico-dia-resultado");
+  if (!empKey || !fecha){ cont.textContent = "Elegí empleado y fecha."; return; }
+  cont.textContent = "Buscando…";
+  const partes = [];
+
+  const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    partes.push(v
+      ? `Registro en horas_extra: (clave "${key}"):\n${JSON.stringify(v, null, 2)}`
+      : `No existe ningún registro en horas_extra: para esa clave ("${key}").`);
+  }catch(e){
+    partes.push(`No existe ningún registro en horas_extra: para esa clave ("${key}").`);
+  }
+
+  try{
+    const solicitudes = await listarSolicitudesAusencia();
+    const cubren = solicitudes.filter(s => s.EMPLEADO_KEY === empKey && fecha >= s.FECHA_INICIO && fecha <= s.FECHA_FIN);
+    partes.push(cubren.length
+      ? `Solicitud(es) de Días Libres y Vacaciones que cubren esa fecha:\n${JSON.stringify(cubren, null, 2)}`
+      : "Ninguna solicitud de Días Libres y Vacaciones cubre esa fecha.");
+  }catch(e){ partes.push("No se pudo revisar las solicitudes: " + (e.message || "")); }
+
+  cont.textContent = partes.join("\n\n");
 }
 
 // Último cálculo de "empleados sin ningún registro en el rango" — lo llena
@@ -8765,7 +8827,14 @@ async function listarRegistrosHorasExtra(propiedadOverride){
 // Las horas extra sí se siguen tomando de lo real aprobado — para eso están
 // las aprobaciones de horas extra de este mismo panel.
 const DIAS_BASE_QUINCENA = 15;
+// Estándar de la empresa — algunos puestos tienen más días libres al mes por
+// contrato (ver DIAS_LIBRES_MES_EMP en la ficha del empleado, campo "Días
+// libres al mes (por contrato)"); vacío o inválido cae en este valor.
 const DIAS_LIBRES_POR_MES = 4;
+function diasLibresMesDeEmpleado(emp){
+  const n = parseInt(emp && emp.DIAS_LIBRES_MES_EMP, 10);
+  return n > 0 ? n : DIAS_LIBRES_POR_MES;
+}
 const TIPOS_DIA_DESCUENTA_QUINCENA = {
   incapacidad: "Incapacidad",
   permiso_sin_goce: "Permiso sin goce",
@@ -9144,16 +9213,17 @@ function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, depto
       </tr></thead>
       <tbody>
         ${filas.map(f => {
-          const mesCompleto = f.diasLibresMes >= DIAS_LIBRES_POR_MES;
+          const topeMes = diasLibresMesDeEmpleado(f.emp);
+          const mesCompleto = f.diasLibresMes >= topeMes;
           const notaMes = mesCompleto
             ? "✅"
-            : (f.diasLibresQuincena > 0 ? `⏳ ${DIAS_LIBRES_POR_MES - f.diasLibresMes} pendiente(s), se esperan la otra quincena` : `⏳ ${DIAS_LIBRES_POR_MES - f.diasLibresMes} pendiente(s)`);
+            : (f.diasLibresQuincena > 0 ? `⏳ ${topeMes - f.diasLibresMes} pendiente(s), se esperan la otra quincena` : `⏳ ${topeMes - f.diasLibresMes} pendiente(s)`);
           return `<tr style="border-bottom:1px solid #eee;">
           <td style="padding:4px 8px;">${escapeHtml(nombreCompletoEmpleado(f.emp) || f.emp.key)}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700; color:${f.diasLaborados < f.diasBase ? '#b23b3b' : 'var(--navy-deep)'};">${f.diasLaborados}${f.diasBase !== DIAS_BASE_QUINCENA ? ` / ${f.diasBase}` : ""}</td>
           ${cols.map(c => `<td style="padding:4px 8px; text-align:center;">${f.descPorTipo[c] || ""}</td>`).join("")}
           <td style="padding:4px 8px; text-align:center;">${f.diasLibresQuincena || ""}</td>
-          <td style="padding:4px 8px; text-align:center; font-size:11px;">${f.diasLibresMes}/${DIAS_LIBRES_POR_MES} ${notaMes}</td>
+          <td style="padding:4px 8px; text-align:center; font-size:11px;">${f.diasLibresMes}/${topeMes} ${notaMes}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700;">${f.horasExtra ? f.horasExtra.toFixed(1) : ""}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700; ${f.diasFeriadosTrabajados ? 'color:#b2703b;' : ''}">${f.diasFeriadosTrabajados || ""}</td>
         </tr>`;
@@ -9260,6 +9330,9 @@ async function renderHorasExtrasPanel(){
           <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🔧 Corregir días de vacaciones/permisos atascados</div>
           <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antes, un día de vacaciones/día libre/permiso sin goce/incapacidad/cumpleaños ya aprobado por su propio trámite se guardaba igual como "pendiente" acá, y no contaba en "Días libres por fecha" del empleado ni en el reporte de planilla hasta aprobarlo también en Horas Extra (ya corregido de raíz — los nuevos ya se guardan aprobados de una vez). Este botón aprueba en definitiva, de un solo golpe, los que hayan quedado atascados así de antes.</div>
           <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="corregirDiasPendientesYaDecididos()">🔧 Corregir días atascados</button>
+          <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🔍 Ver registro de un día específico</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Busca, para un empleado y una fecha exacta, qué hay guardado en horas_extra: (o si no hay nada) y qué solicitud de días libres/vacaciones cubre esa fecha — para diagnosticar por qué un día otorgado no aparece en algún reporte.</div>
+          <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalDiagnosticoDia()">🔍 Ver registro de un día específico</button>
         </div>
       </div></div>`;
     }
