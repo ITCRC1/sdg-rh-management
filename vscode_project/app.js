@@ -6779,6 +6779,79 @@ async function confirmarAsignarColillaPendiente(){
   }
 }
 
+// Crear un empleado NUEVO directo desde una colilla del buzón — para cuando
+// la persona todavía no existe en el sistema (la razón más común de que una
+// colilla no encuentre con quién emparejar). Nunca es automático/silencioso:
+// se muestra un formulario con los datos ya rellenados desde la colilla para
+// revisar/corregir, y un confirm() explícito antes de crear nada. El resto
+// de la ficha (cédula si no vino en la colilla, puesto, fecha de ingreso,
+// contacto, etc.) queda pendiente de completar después — igual que cualquier
+// empleado creado con datos incompletos.
+async function abrirModalCrearEmpleadoDesdeColillaPendiente(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🆕 Crear empleado desde colilla";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const r = await window.storage.get(key, false);
+    const it = r && r.value ? JSON.parse(r.value) : null;
+    if (!it){ body.innerHTML = `<div class="empty-state">Esa colilla ya no está en el buzón.</div>`; return; }
+    colillaPendienteEnAsignacion = { key, it };
+    const partido = dividirNombreCompleto(it.nombre || "");
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Revisa los datos antes de crear — vienen tal cual los trae la colilla, corrígelos si hace falta. El resto de la ficha (puesto, fecha de ingreso, contacto, etc.) queda pendiente de completar después, como cualquier empleado nuevo.</div>
+      <div class="field"><label>Apellidos</label><input type="text" id="crear-emp-apellidos" value="${escapeHtml(formatearNombrePropio(partido.apellidos))}"></div>
+      <div class="field"><label>Nombre</label><input type="text" id="crear-emp-nombre" value="${escapeHtml(formatearNombrePropio(partido.nombre))}"></div>
+      <div class="field"><label>Cédula (si la colilla la trae)</label><input type="text" id="crear-emp-cedula" value="${escapeHtml(it.cedula||"")}" placeholder="Ej. 1-1112-1111"></div>
+      <div class="field"><label>Número de empleado</label><input type="text" id="crear-emp-numero" value="${escapeHtml(it.numero||"")}"></div>
+      <div class="field"><label>Salario (${it.moneda === "USD" ? "dólares" : "colones"})</label><input type="text" id="crear-emp-salario" value="${escapeHtml(String(it.salario||""))}"></div>
+      <div id="crear-emp-status" style="font-size:12px; color:#B3261E; margin:6px 0;"></div>
+      <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarCrearEmpleadoDesdeColillaPendiente()">✅ Confirmar y crear empleado</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarCrearEmpleadoDesdeColillaPendiente(){
+  const ctx = colillaPendienteEnAsignacion;
+  const status = document.getElementById("crear-emp-status");
+  if (!ctx) return;
+  const apellidos = formatearNombrePropio((document.getElementById("crear-emp-apellidos") || {}).value);
+  const nombre = formatearNombrePropio((document.getElementById("crear-emp-nombre") || {}).value);
+  const cedula = ((document.getElementById("crear-emp-cedula") || {}).value || "").trim();
+  const numero = ((document.getElementById("crear-emp-numero") || {}).value || "").trim();
+  const salarioStr = ((document.getElementById("crear-emp-salario") || {}).value || "").trim();
+  const salario = Number(salarioStr.replace(/[^0-9.]/g,""));
+  const nombreCompleto = (apellidos + " " + nombre).trim();
+  if (!nombreCompleto){ if (status) status.textContent = "Escribe al menos el nombre."; return; }
+  if (!salario){ if (status) status.textContent = "El salario debe ser un número mayor que cero."; return; }
+  if (!confirm(`¿Crear un empleado nuevo para "${nombreCompleto}"? Vas a poder completar el resto de su ficha (puesto, fecha de ingreso, contacto, etc.) después.`)) return;
+  try{
+    const it = ctx.it;
+    const slug = nombreCompleto.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-]/g,"") || ("emp-" + Date.now());
+    const empKey = CATALOGS.empleados.prefix + slug;
+    const existente = await window.storage.get(empKey, false).catch(() => null);
+    if (existente && existente.value) throw new Error("Ya existe un empleado con ese mismo nombre — revisa si no es la misma persona antes de crear uno nuevo (podés usar «Asignar a un empleado existente» en su lugar).");
+    const value = {
+      APELLIDOS_EMP: apellidos,
+      NOMBRE_EMP: nombre,
+      IDENTIFICACION_EMP: cedula,
+      NUMERO_EMPLEADO: numero,
+      MONEDA_SALARIO_EMP: it.moneda === "USD" ? "USD" : "CRC",
+      ESTADO_EMP: "Activo",
+    };
+    if (it.moneda === "USD") value.SALARIO_USD_EMP = String(salario);
+    else value.SALARIO_EMP = String(salario);
+    await window.storage.set(empKey, JSON.stringify(value), false);
+    await agregarBitacora(slug, `Empleado creado desde una colilla del buzón sin asignar (№ ${numero || "—"}) — completa el resto de su ficha (puesto, fecha de ingreso, contacto, etc.).`);
+    await window.storage.delete(ctx.key, false);
+    colillaPendienteEnAsignacion = null;
+    cerrarModalIncompletos();
+    statusMsg(`Empleado "${nombreCompleto}" creado — completa el resto de su ficha cuando puedas.`, true);
+    renderBuzonColillasPendientes();
+  }catch(e){
+    if (status) status.textContent = e.message || "No se pudo crear.";
+  }
+}
+
 // ---------- Generar colillas de pago (vista previa + archivado) ----------
 // Cache en memoria de la última vista previa calculada — cada fila trae el
 // empleado, el resumen de la quincena, la jornada de su puesto (ya resuelta,
