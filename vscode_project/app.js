@@ -3360,6 +3360,41 @@ async function construirIndicesEmpleadosPorFila(){
   return { existentes, porCedula, porNumero, porNombre };
 }
 
+// Como construirIndicesEmpleadosPorFila, pero porNumero es un ARREGLO por
+// clave en vez de un solo valor: dos fichas de empleado pueden compartir el
+// mismo número si el sistema de marcación los numeró igual (caso real ya
+// reportado con colillas: Monge Mora / Castro Azofeifa comparten número).
+// Con un solo valor por clave, la ficha que se cargara después pisaba a la
+// primera en el índice y TODAS las marcas de esa persona quedaban siempre
+// atribuidas a la otra, sin ningún aviso — ni un "sin identificar" que
+// permitiera notarlo, porque el número sí encontraba "alguien". El
+// emparejado de colillas ya se corrigió así (ver construirIndicesEmpleados/
+// emparejarRegistroColilla); esto es lo mismo para horas extra, que necesita
+// además el esquema de clave por ÚLTIMOS 4 DÍGITOS (normalizarCodigoEmpleado)
+// en vez del número completo, porque así es como en la práctica coincide un
+// código corto del marcador contra un NUMERO_EMPLEADO más largo guardado acá
+// (ver el comentario de esa función) — usar construirIndicesEmpleados tal
+// cual (pensada para colillas) rompería ese caso.
+async function construirIndicesEmpleadosHorasExtra(){
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  const keys = (res && res.keys) || [];
+  const existentes = await Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    const v = r && r.value ? JSON.parse(r.value) : {};
+    return { key: k.replace(CATALOGS.empleados.prefix, ""), ...v };
+  }));
+  const porCedula = {}, porNumero = {}, porNombre = {};
+  existentes.forEach(e => {
+    if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
+    if (e.NUMERO_EMPLEADO){
+      const num = normalizarCodigoEmpleado(e.NUMERO_EMPLEADO);
+      if (num) (porNumero[num] = porNumero[num] || []).push(e);
+    }
+    if (e.NOMBRE_EMP) porNombre[normalizarNombreParaMatch(nombreCompletoEmpleado(e))] = e;
+  });
+  return { porCedula, porNumero, porNombre };
+}
+
 function buscarEmpleadoExistentePorFila(row, indices){
   const cedulaFila = String(row["IDENTIFICACION"] || "").trim();
   const numeroFila = String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim();
@@ -7742,6 +7777,107 @@ async function ejecutarEliminarRangoHorasExtra(){
   renderHorasExtrasPanel();
 }
 
+// Traslada TODOS los registros de horas extra de un empleado (el que quedó
+// con marcas que en realidad no son suyas — típicamente por compartir
+// número de empleado con otra persona en el marcador, ver
+// construirIndicesEmpleadosHorasExtra) hacia el empleado correcto. Un
+// registro nunca se pisa a ciegas: si el destino ya tiene un registro
+// PENDIENTE para la misma fecha, las horas se suman (mismo criterio que
+// confirmarAsignarHoraExtra); si ya tiene uno aprobado o rechazado para esa
+// fecha, ese día se deja como conflicto sin mover, para revisarlo a mano.
+async function mostrarModalMoverHorasExtra(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔀 Mover horas extra a otro empleado";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const empleados = (await cargarEmpleadosDB()).filter(e => !e.ARCHIVADO).sort(compararPorApellido);
+    window._empleadosMoverHorasExtra = empleados;
+    const opciones = empleados.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}${e.NUMERO_EMPLEADO ? " — #" + escapeHtml(e.NUMERO_EMPLEADO) : ""}</option>`).join("");
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Mueve TODOS los registros de horas extra (de cualquier estado y fecha) de un empleado hacia otro.</div>
+      <div class="field"><label>Empleado de origen (a quien hay que quitarle las horas)</label>
+        <select id="mover-horasextra-origen"><option value="">— Selecciona —</option>${opciones}</select>
+      </div>
+      <div class="field"><label>Empleado de destino (a quien de verdad le pertenecen)</label>
+        <select id="mover-horasextra-destino"><option value="">— Selecciona —</option>${opciones}</select>
+      </div>
+      <button class="btn" onclick="buscarHorasExtraParaMover()">Buscar registros del origen</button>
+      <div id="mover-horasextra-resultado" style="margin-top:10px;"></div>
+    `;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function buscarHorasExtraParaMover(){
+  const origenKey = document.getElementById("mover-horasextra-origen").value;
+  const destinoKey = document.getElementById("mover-horasextra-destino").value;
+  const cont = document.getElementById("mover-horasextra-resultado");
+  if (!origenKey || !destinoKey){ cont.innerHTML = `<div class="empty-state">Elegí origen y destino.</div>`; return; }
+  if (origenKey === destinoKey){ cont.innerHTML = `<div class="empty-state">Origen y destino no pueden ser el mismo empleado.</div>`; return; }
+  cont.innerHTML = `<div class="empty-state">Buscando…</div>`;
+  const registros = await listarRegistrosHorasExtra();
+  const deOrigen = registros.filter(r => r.EMPLEADO_KEY === origenKey).sort((a,b) => (a.FECHA||"").localeCompare(b.FECHA||""));
+  window._moverHorasExtra = { origenKey, destinoKey, regs: deOrigen };
+  if (!deOrigen.length){
+    cont.innerHTML = `<div class="empty-state">Ese empleado no tiene ningún registro de horas extra.</div>`;
+    return;
+  }
+  const empleados = window._empleadosMoverHorasExtra || [];
+  const nombreDestino = nombreCompletoEmpleado(empleados.find(e => e.key === destinoKey) || {}) || destinoKey;
+  cont.innerHTML = `
+    <div style="font-size:12.5px; margin-bottom:8px;"><b>${deOrigen.length}</b> registro(s) se van a mover a <b>${escapeHtml(nombreDestino)}</b>:</div>
+    <div style="max-height:220px; overflow:auto; margin-bottom:10px; border:1px solid var(--paper-line); border-radius:6px; padding:6px 8px;">
+      ${deOrigen.map(r => `<div style="font-size:11.5px; padding:2px 0; display:flex; justify-content:space-between; gap:8px;"><span>${fmtFechaSimple(r.FECHA)}</span><span>${(r.HORAS_EXTRA||0)}h · ${escapeHtml(r.ESTADO || "")}</span></div>`).join("")}
+    </div>
+    <button class="btn primary" style="border-color:#B3261E; color:#B3261E;" onclick="confirmarMoverHorasExtra()">🔀 Mover estos ${deOrigen.length} registro(s)</button>
+  `;
+}
+
+async function confirmarMoverHorasExtra(){
+  const info = window._moverHorasExtra;
+  if (!info || !info.regs.length) return;
+  const empleados = window._empleadosMoverHorasExtra || [];
+  const nombreOrigen = nombreCompletoEmpleado(empleados.find(e => e.key === info.origenKey) || {}) || info.origenKey;
+  const nombreDestino = nombreCompletoEmpleado(empleados.find(e => e.key === info.destinoKey) || {}) || info.destinoKey;
+  const escrito = prompt(`Esto va a mover ${info.regs.length} registro(s) de horas extra de "${nombreOrigen}" hacia "${nombreDestino}". Si el destino ya tiene un registro pendiente en la misma fecha, las horas se suman; si ya tiene uno aprobado o rechazado en esa fecha, ese día queda como conflicto sin mover.\n\nPara confirmar, escribí MOVER:`, "");
+  if (escrito === null) return;
+  if (escrito.trim().toUpperCase() !== "MOVER"){ statusMsg("No se escribió \"MOVER\" exactamente — no se movió nada.", false); return; }
+
+  const cont = document.getElementById("mover-horasextra-resultado");
+  cont.innerHTML = `<div class="empty-state">Moviendo ${info.regs.length} registro(s)…</div>`;
+  let movidos = 0, fusionados = 0;
+  const conflictos = [];
+  for (const r of info.regs){
+    const keyOrigen = r.key;
+    const keyDestino = HORAS_EXTRA_PREFIX + info.destinoKey + ":" + r.FECHA;
+    let existenteDestino = null;
+    try{ const rr = await window.storage.get(keyDestino, false); existenteDestino = rr && rr.value ? JSON.parse(rr.value) : null; }catch(e){ /* no existe */ }
+    try{
+      if (!existenteDestino){
+        const v = Object.assign({}, r);
+        delete v.key;
+        v.EMPLEADO_KEY = info.destinoKey;
+        await window.storage.set(keyDestino, JSON.stringify(v), false);
+        await window.storage.delete(keyOrigen, false);
+        movidos++;
+      } else if (existenteDestino.ESTADO === "pendiente" && r.ESTADO === "pendiente"){
+        existenteDestino.HORAS_EXTRA = Math.round(((existenteDestino.HORAS_EXTRA || 0) + (r.HORAS_EXTRA || 0)) * 100) / 100;
+        if (Array.isArray(r.MARCAS) && r.MARCAS.length) existenteDestino.MARCAS = [...(existenteDestino.MARCAS || []), ...r.MARCAS];
+        await window.storage.set(keyDestino, JSON.stringify(existenteDestino), false);
+        await window.storage.delete(keyOrigen, false);
+        fusionados++;
+      } else {
+        conflictos.push(fmtFechaSimple(r.FECHA));
+      }
+    }catch(e){ conflictos.push(fmtFechaSimple(r.FECHA) + " (error)"); }
+  }
+  let msg = `${movidos} registro(s) movido(s)` + (fusionados ? `, ${fusionados} fusionado(s) con uno pendiente que ya existía` : "") + ` hacia ${nombreDestino}.`;
+  if (conflictos.length) msg += ` ⚠️ ${conflictos.length} día(s) no se movieron porque el destino ya tenía un registro aprobado/rechazado en esa fecha — revísalos a mano: ${conflictos.slice(0,8).join(", ")}${conflictos.length > 8 ? "…" : ""}.`;
+  statusMsg(msg, conflictos.length === 0);
+  cerrarModalIncompletos();
+  renderHorasExtrasPanel();
+}
+
 // Último cálculo de "empleados sin ningún registro en el rango" — lo llena
 // renderHorasExtrasPanel cada vez que pinta el banner; el modal de abajo lo
 // lee de acá en vez de recibirlo como parámetro, para no tener que meter un
@@ -8293,7 +8429,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   if (!cols.horasExtra && !cols.horasTrabajadas && !(cols.entrada && cols.salida) && !tieneIncompletos) throw new Error("No se encontró una columna de horas extra, horas trabajadas, ni de entrada/salida para calcularlas.");
   const ordenFecha = cols.fecha ? detectarOrdenFechaMarcacion(rows.map(r => r[cols.fecha])) : "DMY";
 
-  const { porCedula, porNumero, porNombre } = await construirIndicesEmpleadosPorFila();
+  const { porCedula, porNumero, porNombre } = await construirIndicesEmpleadosHorasExtra();
   const cachePuestos = {};
 
   // Varias filas del mismo empleado+fecha se suman dentro de un mismo
@@ -8344,10 +8480,33 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     const identificador = numeroSinCeros || nombreNormalizado || cedulaDigits;
     if (!identificador){ sinIdentificar++; continue; }
 
-    const empleado = (numeroSinCeros && porNumero[numeroSinCeros])
-      || (nombreNormalizado && porNombre[nombreNormalizado])
-      || (cedulaDigits && porCedula[cedulaDigits])
-      || null;
+    // Dos o más fichas pueden compartir el mismo número de empleado (ver
+    // construirIndicesEmpleadosHorasExtra) — un archivo de marcación no trae
+    // moneda como una colilla para desempatar, así que se intenta por el
+    // nombre de la fila (aunque venga incompleto/con ruido, ver
+    // parsearLineaMarcacionTabla), comparando por inclusión de palabras en
+    // vez de igualdad exacta. Si no se puede desempatar con seguridad, la
+    // fila NO se le atribuye a nadie — se manda a "sin identificar" para que
+    // alguien la asigne a mano, en vez de pisar silenciosamente las horas de
+    // uno de los dos con las del otro.
+    let empleado = null;
+    const candidatosNumero = numeroSinCeros ? (porNumero[numeroSinCeros] || []) : [];
+    if (candidatosNumero.length === 1){
+      empleado = candidatosNumero[0];
+    } else if (candidatosNumero.length > 1){
+      const porNombreEntreCandidatos = nombreNormalizado
+        ? candidatosNumero.filter(e => {
+            const nombreEmp = normalizarNombreParaMatch(nombreCompletoEmpleado(e));
+            return nombreEmp && (nombreEmp.includes(nombreNormalizado) || nombreNormalizado.includes(nombreEmp));
+          })
+        : [];
+      if (porNombreEntreCandidatos.length === 1) empleado = porNombreEntreCandidatos[0];
+    }
+    if (!empleado){
+      empleado = (nombreNormalizado && porNombre[nombreNormalizado])
+        || (cedulaDigits && porCedula[cedulaDigits])
+        || null;
+    }
 
     const accKey = (empleado ? empleado.key : "sinmatch-" + identificador) + ":" + fecha;
     if (!acumulado[accKey]){
@@ -9062,6 +9221,9 @@ async function renderHorasExtrasPanel(){
           <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🗑️ Eliminar por rango de fechas</div>
           <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Borra por completo todos los registros de horas extra (de cualquier archivo o estado: pendiente, aprobado o rechazado) cuya fecha caiga dentro de un rango — útil para limpiar una quincena que ya se pagó, antes de una reimportación.</div>
           <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalEliminarRangoHorasExtra()">🗑️ Eliminar por rango de fechas</button>
+          <div style="font-weight:700; color:#B3261E; margin:14px 0 4px;">🔀 Mover horas extra a otro empleado</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Traslada TODOS los registros de un empleado hacia otro — para corregir marcas que quedaron mal atribuidas por compartir el mismo número de empleado en el marcador (ver el aviso de "número ambiguo" al importar).</div>
+          <button class="btn" style="border-color:#B3261E; color:#B3261E;" onclick="mostrarModalMoverHorasExtra()">🔀 Mover horas extra a otro empleado</button>
         </div>
       </div></div>`;
     }
@@ -9101,7 +9263,7 @@ async function renderHorasExtrasPanel(){
       : `<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
-          <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">${esGerente ? "Por aprobar (tuyo)" : "Por aprobar (gerencia)"}</div></div>
+          <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">${puedeEditar ? "Por aprobar (tuyo)" : "Por aprobar (gerencia)"}</div></div>
           <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
         </div>`;
@@ -9172,7 +9334,7 @@ async function renderHorasExtrasPanel(){
       } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
         acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
           <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Descartar</button>`;
-      } else if (r.ESTADO === "aprobada_jefatura" && esGerente){
+      } else if (r.ESTADO === "aprobada_jefatura" && puedeEditar){
         acciones = `<select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
@@ -9300,7 +9462,7 @@ async function renderHorasExtrasPanel(){
       });
       html += deptosOrdenados.map(depto => {
         const filasDepto = grupos[depto];
-        const batchFinal = (esGerente && horasExtraFiltro === "aprobada_jefatura" && filasDepto.length > 1)
+        const batchFinal = (puedeEditar && horasExtraFiltro === "aprobada_jefatura" && filasDepto.length > 1)
           ? `<div class="catalog-toolbar" style="margin-bottom:8px;">
               <button class="btn primary" onclick="aprobarVariasHorasExtraFinal(JSON.parse(this.dataset.keys))" data-keys='${escapeHtml(JSON.stringify(filasDepto.map(f => f.key)))}'>✅ Aprobar los ${filasDepto.length} de este departamento (final)</button>
             </div>`

@@ -137,27 +137,11 @@ async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departam
 // jefatura ese campo guarda el departamento que lidera, no un puesto
 // puntual). Cualquier otro caso (incluido empleado) queda fuera.
 //
-// Excepción por encima de todo lo anterior: el paso a ESTADO "aprobada" en
-// horas_extra: (la aprobación FINAL, la que hace que un día cuente para el
-// reporte de planilla) es exclusivo del rol "gerente" — ni siquiera master
-// lo hace directo, a propósito: la palabra final sobre lo que se paga queda
-// siempre en una sola persona. El resto de escrituras sobre horas_extra:
-// (aprobar en primera instancia a "aprobada_jefatura", rechazar, editar
-// horas, reclasificar tipo de día, importar) sigue las reglas de siempre.
+// La aprobación FINAL de horas_extra: (ESTADO "aprobada", la que hace que un
+// día cuente para el reporte de planilla) ya NO está restringida a un rol
+// aparte — master y gerente pueden dar los dos pasos (primera instancia y
+// final) por igual, como el resto de escrituras sobre horas_extra:.
 async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
-  if (clave.startsWith(HORAS_EXTRA_PREFIX) && typeof valorNuevo === "string") {
-    let nuevo = null;
-    try {
-      nuevo = JSON.parse(valorNuevo);
-    } catch (e) {
-      /* no es JSON válido — se rechaza más abajo en la ruta, no aquí */
-    }
-    if (nuevo && nuevo.ESTADO === "aprobada") {
-      const actual = await valorDeClave(propiedad, clave);
-      const yaEraFinal = actual && actual.ESTADO === "aprobada";
-      if (!yaEraFinal) return usuario.rol === "gerente";
-    }
-  }
   if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
     return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);
