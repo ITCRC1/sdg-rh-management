@@ -3380,6 +3380,25 @@ function extraerCuentaBancariaDeFila(row){
   return null;
 }
 
+// Varios reportes (ej. "Informe de Registros" de la máquina de marcación de
+// Corcovado) traen 2-3 filas de portada ANTES del encabezado real — el
+// nombre de la propiedad, "Informe de Registros", el rango de fechas —, cada
+// una con una sola celda llena. sheet_to_json por defecto toma la fila 1
+// como encabezado sin importar qué tenga, así que esa portada se colaba como
+// si fuera el encabezado real y las columnas de verdad (id, nombre, fecha,
+// horas_extra...) quedaban invisibles, con nombres de columna sin sentido.
+// Se busca la primera fila con al menos 3 celdas no vacías — una portada de
+// una sola celda nunca llega a eso, un encabezado de columnas real sí.
+function encontrarFilaEncabezado(filasComoArreglo){
+  const limite = Math.min(filasComoArreglo.length, 15);
+  for (let i = 0; i < limite; i++){
+    const fila = filasComoArreglo[i] || [];
+    const noVacias = fila.filter(c => c !== undefined && c !== null && String(c).trim() !== "").length;
+    if (noVacias >= 3) return i;
+  }
+  return 0; // no se encontró nada mejor — mismo comportamiento de siempre (primera fila)
+}
+
 async function leerFilasArchivo(file, esCSV){
   if (esCSV){
     // CSV needs no external library — always works, online or offline.
@@ -3396,7 +3415,10 @@ async function leerFilasArchivo(file, esCSV){
   // en otra — se usa la que tenga más filas, no la primera a ciegas.
   let mejores = [];
   for (const nombreHoja of wb.SheetNames){
-    const filas = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja], { defval: "" });
+    const hoja = wb.Sheets[nombreHoja];
+    const comoArreglo = XLSX.utils.sheet_to_json(hoja, { header: 1, defval: "" });
+    const filaEncabezado = encontrarFilaEncabezado(comoArreglo);
+    const filas = XLSX.utils.sheet_to_json(hoja, { defval: "", range: filaEncabezado });
     if (filas.length > mejores.length) mejores = filas;
   }
   return mejores;
@@ -7913,6 +7935,57 @@ function mostrarFechaHoraCorta(isoLocal){
   return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : String(isoLocal || "");
 }
 
+// "Informe de Registros" del software de marcación SmartPSS Lite (Dahua,
+// el que usa Corcovado) exportado a PDF en vez de a Excel — una fila de
+// tabla por empleado/día (id, nombre, fecha, hasta 6 horas de marca,
+// horas trabajadas/regulares/extra ya calculadas, cantidad de marcas y una
+// observación libre), no una marca suelta por línea como el formato de
+// abajo (parsearLineaMarcacionPDF/leerRegistrosMarcacionPDF, para máquinas
+// que exportan así). Se ancla cada campo por su FORMATO, no por una posición
+// fija de columna, porque en el texto extraído del PDF una celda vacía
+// (nombre con menos palabras, día con menos de 6 marcas) simplemente
+// desaparece y correría todas las columnas que le siguen si se contara por
+// posición:
+//   - id: dígitos al inicio de la línea.
+//   - fecha: el primer token con forma D/M/AAAA (con guiones "/", así que
+//     nunca se confunde con una hora ni con parte del nombre).
+//   - marcas: cero o más horas HH:MM entre la fecha y las tres cifras que
+//     siguen.
+//   - horas trabajadas / regulares / extra: siempre tres números con
+//     exactamente 2 decimales, en ese orden — es la única forma que la app
+//     necesita para importar (ya vienen calculadas por el propio sistema de
+//     marcación, ver guardarFilasHorasExtra/HORAS_EXTRA_YA_CALCULADA).
+//   - cantidad de marcas: un entero suelto justo después.
+//   - observación: lo que quede de la línea (opcional, se ignora — es solo
+//     una nota del propio sistema de origen, ej. "Marcas incompletas").
+// El resultado usa las MISMAS llaves que ya reconoce detectarColumnasHorasExtra
+// para un Excel de este mismo reporte (id, nombre, fecha, horas_extra...),
+// así que las filas entran a guardarFilasHorasExtra sin ningún cambio aparte.
+function parsearLineaMarcacionTabla(linea){
+  const m = /^(\d{6,10})\s+(.+?)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+((?:\d{1,2}:\d{2}\s*)*)(\d+\.\d{2})\s+(\d+\.\d{2})\s+(\d+\.\d{2})\s+(\d+)(?:\s+(.+))?$/.exec(String(linea || "").trim());
+  if (!m) return null;
+  return {
+    id: m[1],
+    nombre: m[2].trim(),
+    fecha: m[3],
+    horas_trabajadas: m[5],
+    horas_regulares: m[6],
+    horas_extra: m[7],
+    cantidad_marcas: m[8],
+    observacion: (m[9] || "").trim(),
+  };
+}
+
+async function leerInformeRegistrosTablaPDF(file){
+  const texto = await extraerTextoPDF(file);
+  const filas = [];
+  texto.split("\n").forEach(linea => {
+    const fila = parsearLineaMarcacionTabla(linea);
+    if (fila) filas.push(fila);
+  });
+  return filas;
+}
+
 // Convierte el PDF de marcas sueltas en filas "por día" listas para
 // guardarFilasHorasExtra. Las marcas se emparejan de dos en dos POR
 // EMPLEADO en orden cronológico (sin cortar por fecha civil): un turno
@@ -8310,10 +8383,17 @@ async function importarHorasExtraArchivo(inputEl){
   let rows, sinPar = 0, turnosSinMarcar = 0;
   try{
     if (esPDF){
-      const leido = await leerRegistrosMarcacionPDF(file);
-      rows = leido.filas;
-      sinPar = leido.sinPar;
-      turnosSinMarcar = leido.turnosSinMarcar;
+      // Se prueba primero como tabla de SmartPSS Lite (fila por
+      // empleado/día, con horas ya calculadas) — si no encuentra ninguna
+      // fila reconocible, se cae al lector de "una marca suelta por línea"
+      // de siempre, por si el PDF viene de otra máquina/formato.
+      rows = await leerInformeRegistrosTablaPDF(file);
+      if (!rows.length){
+        const leido = await leerRegistrosMarcacionPDF(file);
+        rows = leido.filas;
+        sinPar = leido.sinPar;
+        turnosSinMarcar = leido.turnosSinMarcar;
+      }
     } else {
       rows = await leerFilasArchivo(file, esCSV);
     }
