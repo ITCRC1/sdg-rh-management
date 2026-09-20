@@ -5257,6 +5257,19 @@ async function guardarMapeoOcupacionDesdeColilla(idx){
   renderColillasPreview();
 }
 
+// Lista compartida entre renderColillasPreview y las acciones en bloque
+// (aplicarTodasLasSospechosas/cancelarTodasLasSospechosas) — para que las dos
+// vean exactamente las mismas filas, nunca una versión desincronizada.
+function filasSospechosasColillas(){
+  const todosEncontrados = colillasResultadosCache.filter(r => r.match);
+  const usdTodos = todosEncontrados.filter(r => r.moneda === "USD");
+  const resto = todosEncontrados.filter(r => r.moneda !== "USD");
+  return [
+    ...resto.filter(r => r.salarioSospechoso || r.nombreSospechoso || tienePuestoDistinto(r)),
+    ...usdTodos.filter(r => r.nombreSospechoso || tienePuestoDistinto(r)),
+  ];
+}
+
 function renderColillasPreview(){
   const wrap = document.getElementById("colillas-resultados");
   const todosEncontrados = colillasResultadosCache.filter(r => r.match);
@@ -5264,10 +5277,7 @@ function renderColillasPreview(){
   const usd = usdTodos.filter(r => !r.nombreSospechoso && !tienePuestoDistinto(r));
   const resto = todosEncontrados.filter(r => r.moneda !== "USD");
   const encontrados = resto.filter(r => !r.salarioSospechoso && !r.nombreSospechoso && !tienePuestoDistinto(r));
-  const sospechosos = [
-    ...resto.filter(r => r.salarioSospechoso || r.nombreSospechoso || tienePuestoDistinto(r)),
-    ...usdTodos.filter(r => r.nombreSospechoso || tienePuestoDistinto(r)),
-  ];
+  const sospechosos = filasSospechosasColillas();
   const noEncontrados = colillasResultadosCache.filter(r => !r.match);
   const puestosSinMapear = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "sin_mapear").length;
   const puestosDistintos = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "distinto").length;
@@ -5296,25 +5306,41 @@ function renderColillasPreview(){
   }
 
   if (sospechosos.length){
+    // Cuántas de estas se pueden aplicar en bloque (identidad en duda —
+    // nombreSospechoso — queda SIEMPRE fuera de "Aplicar todas": esas se
+    // deciden una por una, nunca a ciegas en conjunto).
+    const aplicablesEnBloque = sospechosos.filter(r => !r.nombreSospechoso).length;
     html += `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
       <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🚫 Revisar antes de aplicar — no se aplican solos</div>
-      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Un salario muy distinto al guardado (típico de una colilla en dólares leída como si fueran colones), un número de empleado/cédula que coincide pero con un nombre que no tiene nada que ver, o un cambio de puesto/departamento, casi nunca deben aplicarse a ciegas. Verifícalo antes de confirmar — si de verdad es correcto, "Aplicar de todas formas" lo guarda (salario y puesto juntos, si ambos cambiaron).</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Un salario muy distinto al guardado (típico de una colilla en dólares leída como si fueran colones), un número de empleado/cédula que coincide pero con un nombre que no tiene nada que ver, o un cambio de puesto/departamento, casi nunca deben aplicarse a ciegas. Marca abajo cuál(es) de esos cambios quieres confirmar por persona — puedes aplicar solo el salario, solo el puesto, o ambos.</div>
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        ${aplicablesEnBloque ? `<button class="btn primary" style="flex:1; min-width:160px;" onclick="aplicarTodasLasSospechosas();">✅ Aplicar todas según lo marcado (${aplicablesEnBloque})</button>` : ""}
+        <button class="btn" style="flex:1; min-width:160px;" onclick="cancelarTodasLasSospechosas();">❌ Cancelar todas (${sospechosos.length})</button>
+      </div>
+      ${aplicablesEnBloque < sospechosos.length ? `<div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">"Aplicar todas" no incluye los casos de nombre que no coincide (identidad en duda) — esos se confirman uno por uno.</div>` : ""}
       ${sospechosos.map(r => {
         const idx = colillasResultadosCache.indexOf(r);
         const esUSD = r.moneda === "USD";
+        const puestoDisponible = tienePuestoDistinto(r);
         const razon = r.nombreSospechoso
           ? `Coincidió por <b>${escapeHtml(r.matchedBy)}</b> con la ficha de <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b>, pero la colilla trae el nombre <b>${escapeHtml(r.nombre)}</b> — no parecen la misma persona (puede ser un número repetido entre dos planillas distintas).`
           : r.salarioSospechoso
             ? `Salario guardado: ₡${Number(r.match.SALARIO_EMP).toLocaleString("es-CR")} → colilla dice: <b style="color:#B3261E;">${r.salario.toLocaleString("es-CR")}</b> (¿colones o dólares?)`
             : `🔁 Cambio de puesto: el catálogo tiene guardado "<b>${escapeHtml(r.match.DEPARTAMENTO_EMP||"—")}</b>" y esta colilla corresponde a "<b>${escapeHtml(r.puestoInfo.puestoNombre)}</b>" — confírmalo antes de aplicar (puede ser un ascenso real, o que el sistema de origen todavía no está sincronizado con el catálogo de Puestos).`;
+        const salarioTxt = `${esUSD ? "$" : "₡"}${r.salario.toLocaleString(esUSD ? "en-US" : "es-CR")}`;
+        const acciones = r.nombreSospechoso
+          ? `<button class="btn" style="padding:4px 10px; font-size:11px;" onclick="aplicarColillaIndividual(${idx})">Aplicar de todas formas</button>
+             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="cancelarFilaColilla(${idx})">❌ Cancelar esta fila</button>`
+          : `<div style="margin:4px 0 6px;">
+               <label style="display:block; font-size:11.5px;"><input type="checkbox" id="chk-salario-${idx}" ${r.salarioSospechoso ? "" : "checked"}> Actualizar salario a ${salarioTxt}</label>
+               ${puestoDisponible ? `<label style="display:block; font-size:11.5px;"><input type="checkbox" id="chk-puesto-${idx}" checked> Actualizar puesto a "${escapeHtml(r.puestoInfo.puestoNombre)}"</label>` : ""}
+             </div>
+             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="aplicarColillaIndividualDesdeCasillas(${idx})">✅ Aplicar seleccionado</button>
+             <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="cancelarFilaColilla(${idx})">❌ Cancelar esta fila</button>`;
         return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
           <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)}${esUSD ? " (dólares)" : ""}<br>
           ${razon}
-          ${renderPuestoAvisoHtml(r)}
-          <div style="margin-top:4px;">
-            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="aplicarColillaIndividual(${idx})">Aplicar de todas formas</button>
-            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="colillasResultadosCache[${idx}].match=null; renderColillasPreview();">Ignorar esta fila</button>
-          </div>
+          <div style="margin-top:4px;">${acciones}</div>
         </div>`;
       }).join("")}
     </div></div>`;
@@ -5347,58 +5373,117 @@ function renderColillasPreview(){
   wrap.innerHTML = html;
 }
 
-// Aplica UNA sola fila de la lista de "revisar antes de aplicar" (salario
-// sospechoso o nombre que no calza con el número/cédula emparejado), tras
-// confirmarla a mano — usa la misma lógica que aplicarColillas()/
-// aplicarColillasUSD() pero para un solo registro, en la moneda que le
-// corresponda a esa fila.
-async function aplicarColillaIndividual(idx){
+// Aplica UNA sola fila de la lista de "revisar antes de aplicar", tras
+// confirmarla a mano. `opts` deja elegir EXACTAMENTE qué de lo que cambió se
+// confirma — salario, puesto, o ambos — en vez de todo o nada:
+//   aplicarSalario (default true), aplicarPuesto (default true, solo cuenta
+//   si de verdad hay un puesto distinto que aplicar), skipConfirm (para las
+//   acciones en bloque, que ya avisan una sola vez por todo el grupo en vez
+//   de un confirm() por fila), noRender (idem, para no repintar N veces).
+async function aplicarColillaIndividual(idx, opts){
   const r = colillasResultadosCache[idx];
   if (!r || !r.match) return;
-  // Última confirmación explícita antes de escribir — este es el único camino
-  // por el que puede pasar un cambio de puesto (ver tienePuestoDistinto), así
-  // que el mensaje lo deja clarísimo en vez de asumir que ya se leyó arriba.
-  const cambios = [`salario → ${r.moneda === "USD" ? "$" : "₡"}${r.salario.toLocaleString(r.moneda === "USD" ? "en-US" : "es-CR")}`];
-  if (tienePuestoDistinto(r)) cambios.push(`puesto → "${r.puestoInfo.puestoNombre}"`);
-  if (!confirm(`Vas a aplicarle a ${nombreCompletoEmpleado(r.match)}: ${cambios.join(", ")}. ¿Confirmas?`)) return;
-  const fullKey = CATALOGS.empleados.prefix + r.match.key;
-  const motivo = r.nombreSospechoso ? "confirmado a mano tras aviso de nombre que no coincidía" : "confirmado a mano tras aviso de monto sospechoso";
-  if (r.moneda === "USD"){
-    const anteriorUsd = r.match.SALARIO_USD_EMP || "—";
-    r.match.SALARIO_USD_EMP = String(r.salario);
-    r.match.MONEDA_SALARIO_EMP = "USD";
-    registrarSalarioHistorial(r.match, r.salario, "USD", "colilla");
-    r.match.SALARIO_USD_EMP_LETRAS = salarioEnLetras(r.salario, "dólares", "es");
-    const netoUsd = r.salario * (1 - DEDUCCION_CCSS);
-    r.match.SALARIO_USD_EMP_NETO = netoUsd.toFixed(2);
-    r.match.SALARIO_USD_EMP_NETO_LETRAS = salarioEnLetras(netoUsd, "dólares", "es");
-    if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
-    if (r.nombreCorregido){
-      const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
-      r.match.NOMBRE_EMP = formatearNombrePropio(partido.nombre);
-      r.match.APELLIDOS_EMP = formatearNombrePropio(partido.apellidos);
-    }
-    const notaPuesto = aplicarPuestoDesdeColilla(r);
-    await window.storage.set(fullKey, JSON.stringify(r.match), false);
-    await agregarBitacora(r.match.key, `Salario en dólares actualizado desde colilla de pago (${motivo}): ${anteriorUsd} → ${r.salario} (№ empleado ${r.numero}).`);
-    if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
-  } else {
-    const salarioAnterior = r.match.SALARIO_EMP || "—";
-    r.match.SALARIO_EMP = String(r.salario);
-    registrarSalarioHistorial(r.match, r.salario, "CRC", "colilla");
-    if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
-    if (r.nombreCorregido){
-      const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
-      r.match.NOMBRE_EMP = formatearNombrePropio(partido.nombre);
-      r.match.APELLIDOS_EMP = formatearNombrePropio(partido.apellidos);
-    }
-    const notaPuesto = aplicarPuestoDesdeColilla(r);
-    await window.storage.set(fullKey, JSON.stringify(r.match), false);
-    await agregarBitacora(r.match.key, `Salario actualizado desde colilla de pago (${motivo}): ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`);
-    if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
+  opts = opts || {};
+  const aplicarSalario = opts.aplicarSalario !== false;
+  const aplicarPuesto = tienePuestoDistinto(r) && opts.aplicarPuesto !== false;
+  if (!aplicarSalario && !aplicarPuesto){ statusMsg("Elegí al menos un cambio para aplicar (salario y/o puesto).", false); return; }
+
+  if (!opts.skipConfirm){
+    const cambios = [];
+    if (aplicarSalario) cambios.push(`salario → ${r.moneda === "USD" ? "$" : "₡"}${r.salario.toLocaleString(r.moneda === "USD" ? "en-US" : "es-CR")}`);
+    if (aplicarPuesto) cambios.push(`puesto → "${r.puestoInfo.puestoNombre}"`);
+    if (!confirm(`Vas a aplicarle a ${nombreCompletoEmpleado(r.match)}: ${cambios.join(", ")}. ¿Confirmas?`)) return;
   }
-  statusMsg(`Salario de ${nombreCompletoEmpleado(r.match)} actualizado.`);
+
+  const fullKey = CATALOGS.empleados.prefix + r.match.key;
+  const motivo = r.nombreSospechoso ? "confirmado a mano tras aviso de nombre que no coincidía"
+    : r.salarioSospechoso ? "confirmado a mano tras aviso de monto sospechoso"
+    : "confirmado a mano tras revisar cambio de puesto";
+  let notaSalario = null;
+  if (aplicarSalario){
+    if (r.moneda === "USD"){
+      const anteriorUsd = r.match.SALARIO_USD_EMP || "—";
+      r.match.SALARIO_USD_EMP = String(r.salario);
+      r.match.MONEDA_SALARIO_EMP = "USD";
+      registrarSalarioHistorial(r.match, r.salario, "USD", "colilla");
+      r.match.SALARIO_USD_EMP_LETRAS = salarioEnLetras(r.salario, "dólares", "es");
+      const netoUsd = r.salario * (1 - DEDUCCION_CCSS);
+      r.match.SALARIO_USD_EMP_NETO = netoUsd.toFixed(2);
+      r.match.SALARIO_USD_EMP_NETO_LETRAS = salarioEnLetras(netoUsd, "dólares", "es");
+      notaSalario = `Salario en dólares actualizado desde colilla de pago (${motivo}): ${anteriorUsd} → ${r.salario} (№ empleado ${r.numero}).`;
+    } else {
+      const salarioAnterior = r.match.SALARIO_EMP || "—";
+      r.match.SALARIO_EMP = String(r.salario);
+      registrarSalarioHistorial(r.match, r.salario, "CRC", "colilla");
+      notaSalario = `Salario actualizado desde colilla de pago (${motivo}): ${salarioAnterior} → ${r.salario} (№ empleado ${r.numero}).`;
+    }
+  }
+  if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
+  if (r.nombreCorregido){
+    const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
+    r.match.NOMBRE_EMP = formatearNombrePropio(partido.nombre);
+    r.match.APELLIDOS_EMP = formatearNombrePropio(partido.apellidos);
+  }
+  const notaPuesto = aplicarPuesto ? aplicarPuestoDesdeColilla(r) : null;
+  await window.storage.set(fullKey, JSON.stringify(r.match), false);
+  if (notaSalario) await agregarBitacora(r.match.key, notaSalario);
+  if (notaPuesto) await agregarBitacora(r.match.key, notaPuesto);
+
+  const queSeAplico = aplicarSalario && aplicarPuesto ? "Salario y puesto actualizados" : aplicarSalario ? "Salario actualizado" : "Puesto actualizado";
+  statusMsg(`${queSeAplico} para ${nombreCompletoEmpleado(r.match)}.`);
   colillasResultadosCache[idx] = Object.assign({}, r, { match: null }); // ya aplicado, se quita de la lista de pendientes
+  if (!opts.noRender) renderColillasPreview();
+}
+
+// Botón "❌ Cancelar esta fila" (antes "Ignorar esta fila" — mismo efecto,
+// nombre más claro): la saca de la lista sin escribir nada.
+function cancelarFilaColilla(idx){
+  const r = colillasResultadosCache[idx];
+  if (!r) return;
+  r.match = null;
+  renderColillasPreview();
+}
+
+// Lee las casillas de esa fila (salario/puesto) y aplica solo lo marcado.
+function aplicarColillaIndividualDesdeCasillas(idx){
+  const chkSalario = document.getElementById(`chk-salario-${idx}`);
+  const chkPuesto = document.getElementById(`chk-puesto-${idx}`);
+  aplicarColillaIndividual(idx, {
+    aplicarSalario: chkSalario ? chkSalario.checked : true,
+    aplicarPuesto: chkPuesto ? chkPuesto.checked : false,
+  });
+}
+
+// "Aplicar todas según lo marcado": respeta la casilla de cada fila tal como
+// esté en pantalla en ese momento — no fuerza a marcar todo. Los casos de
+// nombre que no coincide (identidad en duda) quedan SIEMPRE afuera: esos se
+// deciden uno por uno, nunca en bloque, sin importar cuántos haya.
+async function aplicarTodasLasSospechosas(){
+  const filas = filasSospechosasColillas().filter(r => !r.nombreSospechoso);
+  if (!filas.length) return;
+  if (!confirm(`Vas a aplicar los cambios marcados de ${filas.length} empleado(s) (los casos de nombre que no coincide quedan afuera, esos se confirman uno por uno). ¿Continuar?`)) return;
+  let aplicadas = 0, sinNadaMarcado = 0;
+  for (const r of filas){
+    const idx = colillasResultadosCache.indexOf(r);
+    const chkSalario = document.getElementById(`chk-salario-${idx}`);
+    const chkPuesto = document.getElementById(`chk-puesto-${idx}`);
+    const aplicarSalario = chkSalario ? chkSalario.checked : true;
+    const aplicarPuesto = chkPuesto ? chkPuesto.checked : false;
+    if (!aplicarSalario && !aplicarPuesto){ sinNadaMarcado++; continue; }
+    await aplicarColillaIndividual(idx, { aplicarSalario, aplicarPuesto, skipConfirm: true, noRender: true });
+    aplicadas++;
+  }
+  statusMsg(`${aplicadas} colilla(s) aplicada(s).${sinNadaMarcado ? ` ${sinNadaMarcado} sin ninguna casilla marcada, se dejaron pendientes.` : ""}`, true);
+  renderColillasPreview();
+}
+
+// "Cancelar todas": a diferencia de aplicar, cancelar nunca escribe nada, así
+// que sí incluye TODAS las filas de esta sección, identidad en duda incluida.
+function cancelarTodasLasSospechosas(){
+  const filas = filasSospechosasColillas();
+  if (!filas.length) return;
+  if (!confirm(`¿Cancelar las ${filas.length} fila(s) de "Revisar antes de aplicar"? Ninguna se guarda — solo se quitan de la lista.`)) return;
+  filas.forEach(r => { r.match = null; });
   renderColillasPreview();
 }
 
