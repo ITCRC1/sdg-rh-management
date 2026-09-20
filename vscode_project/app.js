@@ -7929,6 +7929,7 @@ const TIPOS_DIA_HORARIO = {
   vacaciones: { label: "Vacaciones", emoji: "🏖️" },
   ausencia_medica: { label: "Ausencia médica (cita)", emoji: "🩺" },
   cumpleanos: { label: "Día de cumpleaños", emoji: "🎂" },
+  dia_viaje: { label: "Día de viaje", emoji: "✈️" },
   ausencia: { label: "Ausencia", emoji: "⚠️" },
 };
 
@@ -11503,14 +11504,24 @@ function renderAccionVacaciones(){
 }
 
 // Crea un registro horas_extra: para un día ya justificado por otra fuente
-// (permiso sin goce, vacaciones, día libre marcado a mano) — mismo prefijo y
-// mismo flujo pendiente→aprobada que usa jefatura para todo lo demás, así
-// que ya aparece solo en el reporte de planilla sin que nadie lo repita a
-// mano. Si ya hay un registro real para ese día (marca, ya aprobado o
-// rechazado, u otro tipo ya justificado) no se toca. La única excepción es
-// una "ausencia" que el propio sistema adivinó sola al no ver marcas
-// (todavía pendiente, origen "ausencia_detectada") — esa sí se reemplaza,
-// porque era solo un supuesto y esto es información real que lo corrige.
+// (permiso sin goce, vacaciones, día libre, día de viaje, incapacidad,
+// cumpleaños — ver todos los llamadores) — mismo prefijo que usa jefatura
+// para la marcación, pero SIN pasar por el flujo pendiente→aprobada_jefatura
+// →aprobada: la decisión sobre este día ya se tomó al aprobar la solicitud
+// (o al registrar la incapacidad, u otorgar el cumpleaños, etc.), así que se
+// guarda ESTADO "aprobada" de una vez. Antes se guardaba "pendiente" bajo el
+// supuesto de que alguien lo iba a terminar de aprobar desde Horas Extra —
+// en la práctica nadie sabía que hacía falta ese paso aparte, así que estos
+// días nunca llegaban a "aprobada" y por eso no aparecían ni en "Días
+// libres por fecha" del propio empleado ni en el conteo de días
+// libres/laborados del reporte de planilla (ambos filtran por
+// ESTADO === "aprobada", ver renderSeccionDiasLibresEmpleado/
+// calcularResumenQuincena). Si ya hay un registro real para ese día (marca,
+// ya aprobado o rechazado, u otro tipo ya justificado) no se toca. La única
+// excepción es una "ausencia" que el propio sistema adivinó sola al no ver
+// marcas (todavía pendiente, origen "ausencia_detectada") — esa sí se
+// reemplaza, porque era solo un supuesto y esto es información real que lo
+// corrige.
 async function crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, camposExtra){
   const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
   try{
@@ -11518,6 +11529,8 @@ async function crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, cam
     const existente = r && r.value ? JSON.parse(r.value) : null;
     const esAusenciaAdivinada = existente && existente.TIPO_DIA === "ausencia" && existente.ESTADO === "pendiente" && existente.ORIGEN === "ausencia_detectada";
     if (existente && !esAusenciaAdivinada) return false;
+    const quienDecide = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    const ahora = new Date().toISOString();
     await window.storage.set(key, JSON.stringify({
       EMPLEADO_KEY: empKey,
       FECHA: fecha,
@@ -11526,10 +11539,14 @@ async function crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, cam
       INCOMPLETO: false,
       MARCA_SUELTA: null,
       TIPO_DIA: tipoDia,
-      ESTADO: "pendiente",
+      ESTADO: "aprobada",
       ORIGEN: origen,
-      CREADO_POR: (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "",
-      CREADO_EN: new Date().toISOString(),
+      CREADO_POR: quienDecide,
+      CREADO_EN: ahora,
+      APROBADO_POR: quienDecide,
+      APROBADO_FINAL_POR: quienDecide,
+      FECHA_DECISION: ahora,
+      FECHA_DECISION_FINAL: ahora,
       ...(camposExtra || {}),
     }), false);
     return true;
@@ -11790,6 +11807,15 @@ const TIPOS_SOLICITUD_AUSENCIA = {
   dia_libre: { label: "Día libre", emoji: "🛌", consumeSaldo: false, requiereComprobante: false, colorHex: "FFB3E6B3" },
   permiso_sin_goce: { label: "Permiso sin goce", emoji: "📄", consumeSaldo: false, requiereComprobante: false, colorHex: "FF8FD3E8" },
   ausencia_medica: { label: "Ausencia médica (cita)", emoji: "🩺", consumeSaldo: false, requiereComprobante: true, colorHex: "FFE68A8A" },
+  // Día LABORAL (se paga normal, no resta del saldo de vacaciones ni cuenta
+  // como el "día libre" del mes) que se le asigna a un empleado que viaja
+  // desde un lugar lejano, típicamente el día antes de salir a vacaciones —
+  // no es un descanso ni una ausencia, solo queda marcado en el calendario
+  // (azul) para que quede registro de que ese día no se le puede exigir
+  // llegar a trabajar. A propósito NO entra a TIPOS_DIA_DESCUENTA_QUINCENA
+  // (ver calcularResumenQuincena) ni al conteo de "días libres" del mes —
+  // ninguno de los dos aplica, cuenta como día laborado normal.
+  dia_viaje: { label: "Día de viaje", emoji: "✈️", consumeSaldo: false, requiereComprobante: false, colorHex: "FF9FC5E8" },
 };
 
 function isoDeHoy(){ return isoDeFechaLocal(new Date()); }
@@ -13005,7 +13031,7 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
 function detectarCoincidencias(solicitudes, empleadosPorKey, departamentoDeEmpleado){
   const porDeptoFecha = {};
   solicitudes
-    .filter(s => (s.ESTADO === "aprobada" || s.ESTADO === "pendiente") && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "permiso_sin_goce"))
+    .filter(s => (s.ESTADO === "aprobada" || s.ESTADO === "pendiente") && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "permiso_sin_goce" || s.TIPO === "dia_viaje"))
     .forEach(s => {
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
       const depto = departamentoDeEmpleado(emp);
@@ -13356,19 +13382,19 @@ function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departam
   </div></div>`;
 }
 
-// Vacaciones/días libres YA OTORGADOS (aprobados) — antes, una vez aprobada
-// una solicitud, no había ninguna acción disponible sobre ella (ni siquiera
-// para gerencia/master): si la fecha había quedado mal puesta, no se podía
-// corregir. Se limita a "vacaciones"/"dia_libre" a propósito — permiso sin
-// goce y ausencia médica se tramitan con su propio documento (acción de
-// personal / comprobante) y no se editan desde acá. Exclusivo de gerencia/
-// master, igual que aprobar/rechazar — jefatura no puede reescribir una
-// decisión ya tomada. Se limita a las últimas 30 para no crecer sin límite
-// con los años.
+// Vacaciones/días libres/días de viaje YA OTORGADOS (aprobados) — antes, una
+// vez aprobada una solicitud, no había ninguna acción disponible sobre ella
+// (ni siquiera para gerencia/master): si la fecha había quedado mal puesta,
+// no se podía corregir. Se limita a "vacaciones"/"dia_libre"/"dia_viaje" a
+// propósito — permiso sin goce y ausencia médica se tramitan con su propio
+// documento (acción de personal / comprobante) y no se editan desde acá.
+// Exclusivo de gerencia/master, igual que aprobar/rechazar — jefatura no
+// puede reescribir una decisión ya tomada. Se limita a las últimas 30 para
+// no crecer sin límite con los años.
 function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeAprobar){
   if (!puedeAprobar) return "";
   const todasOtorgadas = solicitudes
-    .filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre"))
+    .filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "dia_viaje"))
     .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""));
   if (!todasOtorgadas.length) return "";
   const otorgadas = todasOtorgadas.slice(0, 30);
@@ -13419,6 +13445,7 @@ async function abrirModalCorregirSolicitud(key){
         <select id="corregir-solicitud-tipo">
           <option value="vacaciones"${s.TIPO === "vacaciones" ? " selected" : ""}>🏖️ Vacaciones</option>
           <option value="dia_libre"${s.TIPO === "dia_libre" ? " selected" : ""}>🛌 Día libre</option>
+          <option value="dia_viaje"${s.TIPO === "dia_viaje" ? " selected" : ""}>✈️ Día de viaje</option>
         </select>
       </div>
       <div class="field">
@@ -13445,7 +13472,7 @@ async function guardarCorreccionSolicitud(){
   const nuevaDesde = (document.getElementById("corregir-solicitud-desde")||{}).value;
   const nuevaHasta = (document.getElementById("corregir-solicitud-hasta")||{}).value;
   if (!key) return;
-  if (nuevoTipo !== "vacaciones" && nuevoTipo !== "dia_libre"){ if (status) status.textContent = "Elegí el tipo."; return; }
+  if (nuevoTipo !== "vacaciones" && nuevoTipo !== "dia_libre" && nuevoTipo !== "dia_viaje"){ if (status) status.textContent = "Elegí el tipo."; return; }
   if (!nuevaDesde || !nuevaHasta){ if (status) status.textContent = "Elegí ambas fechas."; return; }
   if (nuevaHasta < nuevaDesde){ if (status) status.textContent = "La fecha de fin no puede ser anterior a la de inicio."; return; }
   if (status) status.textContent = "Guardando…";
@@ -13586,6 +13613,7 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
       if (s.TIPO === "dia_libre") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.dia_libre.colorHex };
       if (s.TIPO === "permiso_sin_goce") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.permiso_sin_goce.colorHex };
       if (s.TIPO === "ausencia_medica") return { texto: "CITA", color: TIPOS_SOLICITUD_AUSENCIA.ausencia_medica.colorHex };
+      if (s.TIPO === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
     }
   }
   // "SALE"/"ENTRA" marcan el día de salida/regreso del día libre PAGADO que
@@ -13616,6 +13644,10 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
     if (isoDeFechaLocal(diaDespues) === fechaISO) return { texto: "ENTRA", color: "FFD9D9D9" };
   }
   if (horasDia && horasDia.TIPO_DIA === "cumpleanos") return { texto: "🎂", color: "FFE0C4F0" };
+  // Un día de viaje también puede llegar sin una solicitud detrás (se
+  // reclasificó directo desde Horas Extra, ver TIPOS_DIA_HORARIO) — mismo
+  // trato que el cumpleaños de arriba.
+  if (horasDia && horasDia.TIPO_DIA === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
   return null;
 }
 

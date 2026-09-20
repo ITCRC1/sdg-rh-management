@@ -139,9 +139,26 @@ async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departam
 //
 // La aprobación FINAL de horas_extra: (ESTADO "aprobada", la que hace que un
 // día cuente para el reporte de planilla) ya NO está restringida a un rol
-// aparte — master y gerente pueden dar los dos pasos (primera instancia y
-// final) por igual, como el resto de escrituras sobre horas_extra:.
+// aparte dentro de master/gerente — los dos pueden dar los dos pasos
+// (primera instancia y final) por igual. jefatura sigue completamente fuera
+// de ese paso final, aunque el registro sea de su propio equipo: su acceso
+// de escritura a horas_extra: (más abajo) es para aprobar en primera
+// instancia, rechazar, editar horas o reclasificar tipo de día — nunca para
+// dar la palabra final sobre lo que se paga.
 async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
+  if (clave.startsWith(HORAS_EXTRA_PREFIX) && usuario.rol === "jefatura" && typeof valorNuevo === "string") {
+    let nuevo = null;
+    try {
+      nuevo = JSON.parse(valorNuevo);
+    } catch (e) {
+      /* no es JSON válido — se rechaza más abajo en la ruta, no aquí */
+    }
+    if (nuevo && nuevo.ESTADO === "aprobada") {
+      const actual = await valorDeClave(propiedad, clave);
+      const yaEraFinal = actual && actual.ESTADO === "aprobada";
+      if (!yaEraFinal) return false;
+    }
+  }
   if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
     return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);
