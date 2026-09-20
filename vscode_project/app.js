@@ -7806,10 +7806,30 @@ function aplicarToleranciaCortesia(excedenteHoras){
   return minutos > 20 ? excedenteHoras : 0;
 }
 
-// Excel puede traer la fecha como texto (DD/MM/AAAA o AAAA-MM-DD) o como
-// número de serie de la celda (si viene con formato de fecha) — se cubren
-// los 3 casos.
-function normalizarFechaMarcacion(v){
+// "8/27/2026" (día 27) solo puede ser mes/día — algunos sistemas de
+// marcación (ej. el de Corcovado) exportan la fecha en ese orden americano
+// en vez del día/mes de siempre. Revisa TODAS las fechas del archivo antes
+// de decidir: si en cualquiera el segundo número pasa de 12, ese archivo es
+// mes/día; si es el primero el que pasa de 12, es día/mes. Si nunca se puede
+// saber (todos los días del archivo caen entre 1 y 12), se asume día/mes,
+// que sigue siendo lo más común — igual que se comportaba siempre esto.
+function detectarOrdenFechaMarcacion(valores){
+  let segundoMayor12 = false, primeroMayor12 = false;
+  for (const v of valores){
+    const m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-]\d{4}$/.exec(String(v == null ? "" : v).trim());
+    if (!m) continue;
+    if (parseInt(m[2], 10) > 12) segundoMayor12 = true;
+    if (parseInt(m[1], 10) > 12) primeroMayor12 = true;
+  }
+  if (segundoMayor12) return "MDY";
+  if (primeroMayor12) return "DMY";
+  return "DMY";
+}
+
+// Excel puede traer la fecha como texto (DD/MM/AAAA, MM/DD/AAAA según
+// `orden` — ver detectarOrdenFechaMarcacion — o AAAA-MM-DD) o como número de
+// serie de la celda (si viene con formato de fecha) — se cubren los 3 casos.
+function normalizarFechaMarcacion(v, orden){
   if (v === null || v === undefined || v === "") return "";
   if (typeof v === "number"){
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
@@ -7819,7 +7839,12 @@ function normalizarFechaMarcacion(v){
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(s);
-  if (m) return `${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+  if (m){
+    const esMDY = orden === "MDY";
+    const dia = esMDY ? m[2] : m[1];
+    const mes = esMDY ? m[1] : m[2];
+    return `${m[3]}-${String(mes).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+  }
   return s;
 }
 // Muestra "AAAA-MM-DD" como "DD/MM/AAAA" sin pasar por Date — un Date de una
@@ -7983,8 +8008,13 @@ function detectarColumnasHorasExtra(rows){
     nombre: detectarColumnaMarcacion(headers, [/nombre/i, /^trabajador$/i, /^colaborador$/i, /^empleado$/i]),
     cedula: detectarColumnaMarcacion(headers, [/c[eé]dula/i, /identificaci[oó]n/i]),
     fecha: detectarColumnaMarcacion(headers, [/fecha/i, /^date$/i]),
-    horasExtra: detectarColumnaMarcacion(headers, [/horas?\s*extras?/i, /^extra/i]),
-    horasTrabajadas: detectarColumnaMarcacion(headers, [/horas?\s*trabajadas?/i]),
+    // [\s_]* en vez de \s* — "horas_extra"/"horas_trabajadas" con guion bajo
+    // (como exporta el sistema de marcación de Corcovado) no calzaban con un
+    // \s* que solo esperaba espacios, así que esas dos columnas nunca se
+    // detectaban y el archivo entero se rechazaba con "no se encontró una
+    // columna de horas extra, horas trabajadas, ni de entrada/salida".
+    horasExtra: detectarColumnaMarcacion(headers, [/horas?[\s_]*extras?/i, /^extra/i]),
+    horasTrabajadas: detectarColumnaMarcacion(headers, [/horas?[\s_]*trabajadas?/i]),
     entrada: detectarColumnaMarcacion(headers, [/entrada/i, /^in$/i]),
     salida: detectarColumnaMarcacion(headers, [/salida/i, /^out$/i]),
   };
@@ -8106,6 +8136,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   // de horas cuando ya vienen filas INCOMPLETO armadas por el PDF.
   const tieneIncompletos = rows.some(r => r.INCOMPLETO);
   if (!cols.horasExtra && !cols.horasTrabajadas && !(cols.entrada && cols.salida) && !tieneIncompletos) throw new Error("No se encontró una columna de horas extra, horas trabajadas, ni de entrada/salida para calcularlas.");
+  const ordenFecha = cols.fecha ? detectarOrdenFechaMarcacion(rows.map(r => r[cols.fecha])) : "DMY";
 
   const { porCedula, porNumero, porNombre } = await construirIndicesEmpleadosPorFila();
   const cachePuestos = {};
@@ -8123,17 +8154,26 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     const codigoRaw = cols.codigo ? String(row[cols.codigo] || "").trim() : "";
     const nombreRaw = cols.nombre ? String(row[cols.nombre] || "").trim() : "";
     const cedulaRaw = cols.cedula ? String(row[cols.cedula] || "").trim() : "";
-    const fecha = normalizarFechaMarcacion(row[cols.fecha]);
+    const fecha = normalizarFechaMarcacion(row[cols.fecha], ordenFecha);
     if (!fecha) continue;
 
     const esIncompleto = !!row.INCOMPLETO;
-    let horasExtraDirecta = 0, horasTrabajadas = 0;
+    let horasExtraDirecta = 0, horasTrabajadas = 0, horasExtraYaCalculada = false;
     let marcasFila = Array.isArray(row.MARCAS) ? row.MARCAS : null; // ya vienen armadas (PDF de marcación)
+    // horasExtra y horasTrabajadas ya NO son mutuamente excluyentes: algunos
+    // sistemas de marcación (ej. el de Corcovado) entregan ambas columnas a
+    // la vez por día — horas_trabajadas para saber si hubo jornada completa
+    // (para "Días Laborados"), y horas_extra ya calculada aparte. Si se leyera
+    // solo una, un día trabajado completo con 0 horas extra se perdía (no
+    // contaba como día laborado); si se sumaran las dos sin cuidado, la hora
+    // extra se contaba doble más abajo (ver HORAS_EXTRA_YA_CALCULADA).
     if (cols.horasExtra){
       horasExtraDirecta = parsearHorasDecimal(row[cols.horasExtra]);
-    } else if (cols.horasTrabajadas){
+      horasExtraYaCalculada = true;
+    }
+    if (cols.horasTrabajadas){
       horasTrabajadas = parsearHorasDecimal(row[cols.horasTrabajadas]);
-    } else if (cols.entrada && cols.salida){
+    } else if (!cols.horasExtra && cols.entrada && cols.salida){
       const entradaRaw = String(row[cols.entrada] ?? "").trim();
       const salidaRaw = String(row[cols.salida] ?? "").trim();
       horasTrabajadas = parsearHorasDecimal(salidaRaw) - parsearHorasDecimal(entradaRaw);
@@ -8166,6 +8206,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
         FECHA: fecha,
         HORAS_EXTRA_DIRECTA: 0,
         HORAS_TRABAJADAS: 0,
+        HORAS_EXTRA_YA_CALCULADA: false,
         MARCAS: [],
         INCOMPLETO: false,
         MARCA_SUELTA: null,
@@ -8173,6 +8214,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     }
     acumulado[accKey].HORAS_EXTRA_DIRECTA += horasExtraDirecta;
     acumulado[accKey].HORAS_TRABAJADAS += horasTrabajadas;
+    if (horasExtraYaCalculada) acumulado[accKey].HORAS_EXTRA_YA_CALCULADA = true;
     if (marcasFila) acumulado[accKey].MARCAS.push(...marcasFila);
     if (esIncompleto){
       acumulado[accKey].INCOMPLETO = true;
@@ -8198,8 +8240,12 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // mixto o nocturno) — sin match todavía, se usa la jornada por defecto,
     // así que esa fila queda visible en "Sin identificar" en vez de perderse.
     const jornada = await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
+    // Si el archivo ya trajo "horas extra" calculada para este día, se usa
+    // tal cual — NUNCA se le suma además el excedente de horas_trabajadas
+    // sobre la jornada, porque esa cuenta ya viene incluida en la columna
+    // de origen (sumarla de nuevo la duplicaría).
     const excedenteMarcado = info.HORAS_TRABAJADAS > jornada ? info.HORAS_TRABAJADAS - jornada : 0;
-    const horasExtraCalculadas = aplicarToleranciaCortesia(excedenteMarcado);
+    const horasExtraCalculadas = info.HORAS_EXTRA_YA_CALCULADA ? 0 : aplicarToleranciaCortesia(excedenteMarcado);
     const horasExtraFinal = info.HORAS_EXTRA_DIRECTA + horasExtraCalculadas;
     // Antes esto solo dejaba pasar días con horas EXTRA (>0) o turnos sin
     // marcar — un día normal de jornada completa sin excedente no generaba
