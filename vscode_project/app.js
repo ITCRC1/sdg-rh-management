@@ -5772,9 +5772,13 @@ async function onColillasPdfSelected(inputEl){
   }
   for (const file of files){
     statusEl.textContent = `Leyendo ${file.name} (${leidos.length + 1} de ${files.length})…`;
+    // Declarado fuera de los dos try de abajo a propósito: el segundo (que
+    // archiva) también lo necesita, y un const dentro del primer try no le
+    // quedaba visible ahí — eso disparaba "moneda is not defined" apenas se
+    // subía un PDF.
+    const moneda = detectarMonedaArchivo(file.name);
     try{
       const texto = await extraerTextoPDF(file);
-      const moneda = detectarMonedaArchivo(file.name);
       textoCombinado += `\n[[MONEDA:${moneda}]]\n` + texto + "\n";
       leidos.push(file.name + (moneda === "USD" ? " (dólares)" : ""));
     }catch(e){
