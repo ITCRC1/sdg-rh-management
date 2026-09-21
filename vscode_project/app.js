@@ -15646,7 +15646,7 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
   const mesesOrdenados = [...meses].sort().reverse().slice(0, 12);
 
   const filas = mesesOrdenados.map(mes => {
-    const otorgados = (porMes[mes] || []).length;
+    const fechasDelMes = (porMes[mes] || []).slice().sort();
     const [anio, mesNum] = mes.split("-").map(Number);
     // Saldo acumulado (con arrastre) al FINAL de ese mes — para un mes YA
     // TERMINADO usa su propio último día (fijo, no se mueve con el tiempo);
@@ -15664,7 +15664,7 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
     // queda negativo y se muestra así, no se oculta en un falso "0". Se
     // recupera solo con la acumulación de los meses siguientes.
     const saldo = calcularSaldoDiasLibres(emp, todasLasFechasOtorgadas, fechaCorte);
-    return { mes, etiqueta: `${MESES[mesNum - 1]} ${anio}`, otorgados, saldo };
+    return { mes, etiqueta: `${MESES[mesNum - 1]} ${anio}`, fechasDelMes, saldo };
   });
 
   return `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--paper-line);">
@@ -15677,16 +15677,22 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
       </label>
     </div>
     <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es el saldo acumulado a esa fecha, CON ARRASTRE — si un mes no se asignan todos, el sobrante se suma al siguiente en vez de perderse. Igual que el saldo de vacaciones: si se otorgó más de lo acumulado, queda en negativo (🔻 adelanto) y se recupera solo con la acumulación de los meses siguientes. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
-    <div style="display:grid; grid-template-columns:1fr auto auto; gap:2px 10px; align-items:center; font-size:12px;">
-      <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px;">Mes</div>
-      <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Otorgados</div>
-      <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Pendientes</div>
-      ${filas.map(f => `
-        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); ${f.mes === mesElegido ? "font-weight:700;" : ""}">${escapeHtml(f.etiqueta)}${f.mes === mesActual ? " (actual)" : ""}${f.mes === mesElegido && f.mes !== mesActual ? " (elegido)" : ""}</div>
-        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; font-weight:700;">${f.otorgados}/${cupoMes}</div>
-        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; ${f.saldo < 0 ? "color:#b2703b; font-weight:700;" : (f.saldo > 0 ? "color:#8a6d1f; font-weight:700;" : "color:var(--ink-soft);")}">${f.saldo < 0 ? `🔻 ${Math.abs(f.saldo)} adelanto` : (f.saldo > 0 ? `⏳ ${f.saldo}` : "✅ 0")}</div>
-      `).join("")}
-    </div>
+    ${filas.map(f => {
+      const gruposFechas = agruparFechasConsecutivas(f.fechasDelMes);
+      const fechasTexto = gruposFechas.length
+        ? gruposFechas.map(g => g.inicio === g.fin ? fmtFechaSimple(g.inicio) : `${fmtFechaSimple(g.inicio)} al ${fmtFechaSimple(g.fin)}`).join(", ")
+        : "sin fechas otorgadas todavía";
+      const notaSaldo = f.saldo < 0
+        ? `<span style="color:#b2703b; font-weight:700;">🔻 ${Math.abs(f.saldo)} día(s) en adelanto</span>`
+        : (f.saldo > 0
+          ? `<span style="color:#8a6d1f; font-weight:700;">⏳ ${f.saldo} día(s) pendientes de asignar</span>`
+          : `<span style="color:var(--ink-soft);">✅ Al día, sin pendientes</span>`);
+      return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line); ${f.mes === mesElegido ? "font-weight:700;" : ""}">
+        <div style="font-size:12px;">${escapeHtml(f.etiqueta)}${f.mes === mesActual ? " (actual)" : ""}${f.mes === mesElegido && f.mes !== mesActual ? " (elegido)" : ""}</div>
+        <div style="font-size:11.5px; color:var(--ink-soft); font-weight:400;">Fechas otorgadas: ${escapeHtml(fechasTexto)}</div>
+        <div style="font-size:11.5px; margin-top:2px;">${notaSaldo}</div>
+      </div>`;
+    }).join("")}
   </div>`;
 }
 
@@ -15863,7 +15869,7 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
       });
     }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
-    let saldoVacaciones = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 },
+    let saldoVacaciones = 0, saldoDiasLibres = 0, resumenHorasExtra = { pendientes: 0, aprobadaJefatura: 0, horasAprobadas: 0 },
         diasIncapacidad = [], registrosDeEsteEmpleado = [], solicitudesPendientes = [],
         registrosEnRangoMiInfo = [], pendientesEnRangoMiInfo = 0;
     try{
@@ -15877,6 +15883,16 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
       const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, empKey);
       saldoVacaciones = calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidadPausan, new Date());
       registrosDeEsteEmpleado = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === empKey);
+      // Días libres disponibles del mes en curso (cupo de ley/contrato + lo
+      // que se haya arrastrado sin otorgar de meses anteriores — ver
+      // calcularSaldoDiasLibres) — mismo número que ya se ve en la tabla
+      // "Días libres otorgados por mes" de más abajo para el mes actual,
+      // pero destacado arriba como KPI para que se note de un vistazo, igual
+      // que ya pasa con el saldo de vacaciones.
+      const diasOtorgadosLibres = registrosDeEsteEmpleado
+        .filter(r => r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
+        .map(r => r.FECHA);
+      saldoDiasLibres = calcularSaldoDiasLibres(emp, diasOtorgadosLibres, new Date());
       resumenHorasExtra = {
         pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
         aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
@@ -15930,8 +15946,9 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr); margin-top:10px;">
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr); margin-top:10px;">
         <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
+        <div class="kpi-card ${saldoDiasLibres < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoDiasLibres < 0 ? "🔻" : "🗓️"}</div><div class="val">${saldoDiasLibres < 0 ? Math.abs(saldoDiasLibres) : saldoDiasLibres}</div><div class="lbl">${saldoDiasLibres < 0 ? "Día(s) libres en adelanto (a recuperar)" : "Día(s) libres disponibles (mes actual)"}</div></div>
         <div class="kpi-card c-warn"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
         <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (rango elegido)</div></div>
       </div>
