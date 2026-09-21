@@ -14032,41 +14032,44 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
       if (s.TIPO === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
     }
   }
-  // "SALE"/"ENTRA" marcan el día de salida/regreso del día libre o vacación
-  // PAGADA que brinda el hotel — no aplican cuando ese mismo día el empleado
-  // ya está fuera (o marcado) por otro motivo real: incapacidad, cumpleaños
-  // otorgado, o un día de viaje reclasificado directo desde Horas Extra (sin
-  // solicitud detrás — con solicitud ya se resuelve arriba, en el primer
-  // bucle). En cualquiera de esos casos el día debe mostrar esa ausencia
-  // real, no la marca de salida/entrada del día libre — por eso las 3
-  // revisiones van ANTES del bucle de "SALE"/"ENTRA" de abajo, igual que ya
-  // pasaba con incapacidad. (permiso_sin_goce/ausencia_medica ya quedan
-  // resueltos arriba, en el primer bucle, así que tampoco llegan nunca a
-  // "SALE"/"ENTRA".)
+  // "SALE"/"ENTRA" marcan el día de salida/regreso de un bloque de día
+  // libre, vacación o permiso sin goce — no aplican cuando ese mismo día el
+  // empleado ya está fuera (o marcado) por otro motivo real: incapacidad,
+  // cumpleaños otorgado, o un día de viaje reclasificado directo desde
+  // Horas Extra (sin solicitud detrás — con solicitud ya se resuelve
+  // arriba, en el primer bucle). En cualquiera de esos casos el día debe
+  // mostrar esa ausencia real, no la marca de salida/entrada — por eso las
+  // 3 revisiones van ANTES del bucle de "SALE"/"ENTRA" de abajo, igual que
+  // ya pasaba con incapacidad. (ausencia_medica ya queda resuelta arriba,
+  // en el primer bucle, así que nunca llega a "SALE"/"ENTRA".)
   const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
   if (horasDia && horasDia.TIPO_DIA === "incapacidad") return { texto: "INCAP", color: "FFE68A8A" };
   if (horasDia && horasDia.TIPO_DIA === "cumpleanos") return { texto: "🎂", color: "FFE0C4F0" };
   if (horasDia && horasDia.TIPO_DIA === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
 
-  // El día ANTES de que arranque un bloque de "Día libre" o "Vacaciones" es
-  // cuando el empleado sale (su último día trabajado antes de salir libre) —
-  // se marca "SALE". El día DESPUÉS de que termina es cuando vuelve a
-  // trabajar — se marca "ENTRA". Un "Día de viaje" no tiene su propio "día de
-  // entrada" para elegir aparte (a propósito — no se selecciona como otro
-  // tipo, ver TIPOS_SOLICITUD_AUSENCIA.dia_viaje): el día siguiente a CUALQUIER
-  // día de viaje ya aprobado se marca "ENTRA" solo, automático, igual que
-  // "SALE"/"ENTRA" de día libre/vacaciones. Se revisan en un segundo bucle,
-  // después del de arriba, para que un día que además cae DENTRO de otro
-  // tramo de ausencia (ej. entra directo a otro bloque libre, o está
-  // incapacitado) siempre gane esa etiqueta en vez de "SALE"/"ENTRA".
+  // El día ANTES de que arranque un bloque de "Día libre", "Vacaciones" o
+  // "Permiso sin goce" es cuando el empleado sale (su último día trabajado
+  // antes de salir) — se marca "SALE". El día DESPUÉS de que termina
+  // cualquiera de los tres es cuando vuelve a trabajar — se marca "ENTRA".
+  // Un "Día de viaje" no tiene su propio "día de entrada" para elegir aparte
+  // (a propósito — no se selecciona como otro tipo, ver
+  // TIPOS_SOLICITUD_AUSENCIA.dia_viaje): el día siguiente a CUALQUIER día de
+  // viaje ya aprobado se marca "ENTRA" solo, automático, igual que estos
+  // otros tres. Se revisan en un segundo bucle, después del de arriba, para
+  // que un día que además cae DENTRO de otro tramo de ausencia (ej. entra
+  // directo a otro bloque libre, o está incapacitado) siempre gane esa
+  // etiqueta en vez de "SALE"/"ENTRA".
   for (const s of solicitudesEmp){
     if (s.ESTADO !== "aprobada") continue;
-    if (s.TIPO === "dia_libre" || s.TIPO === "vacaciones"){
+    if (s.TIPO === "dia_libre" || s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce"){
       const diaAntes = new Date(s.FECHA_INICIO + "T00:00:00");
       diaAntes.setDate(diaAntes.getDate() - 1);
       if (isoDeFechaLocal(diaAntes) === fechaISO) return { texto: "SALE", color: "FFD9D9D9" };
-    }
-    if (s.TIPO === "dia_libre" || s.TIPO === "vacaciones" || s.TIPO === "dia_viaje"){
+
+      const diaDespues = new Date(s.FECHA_FIN + "T00:00:00");
+      diaDespues.setDate(diaDespues.getDate() + 1);
+      if (isoDeFechaLocal(diaDespues) === fechaISO) return { texto: "ENTRA", color: "FFD9D9D9" };
+    } else if (s.TIPO === "dia_viaje"){
       const diaDespues = new Date(s.FECHA_FIN + "T00:00:00");
       diaDespues.setDate(diaDespues.getDate() + 1);
       if (isoDeFechaLocal(diaDespues) === fechaISO) return { texto: "ENTRA", color: "FFD9D9D9" };
