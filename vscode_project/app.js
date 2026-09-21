@@ -8972,7 +8972,7 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
   const anioMes = `${rango.inicio.getFullYear()}-${String(rango.inicio.getMonth() + 1).padStart(2, "0")}`;
   return empleados.map(emp => {
     const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
-    if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0, diasArrastrados: 0 };
+    if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasVacacionesQuincena: 0, diasLibresMes: 0, diasArrastrados: 0 };
     const diasArrastrados = diasArrastradosPorIngresoSinColilla(emp, rango, clavesColillasArchivadas);
     const inicioISO = datosDesdeISO || isoDeFechaLocal(activo.inicioEfectivo);
     const finISO = datosHastaISO || isoDeFechaLocal(activo.finEfectivo);
@@ -8992,9 +8992,19 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     const descPorTipo = {};
     let totalDescuento = 0;
     let diasLibresQuincena = 0;
+    let diasVacacionesQuincena = 0;
     delEmpleadoEnRango.forEach(r => {
       if (!esDiaBaseDePago(r.FECHA)) return; // día 31 "extra": no resta ni suma días base
-      if (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"){ diasLibresQuincena++; return; } // día libre (programado por solicitud, o reclasificado a mano desde Horas Extra): no resta, se muestra aparte
+      // Vacaciones y día libre NO se descuentan de los días laborados (los
+      // dos son días pagados) — eso es lo único que tienen en común, así
+      // que ambos salen de este mismo "return" temprano. Pero se cuentan en
+      // contadores SEPARADOS: son dos beneficios legales distintos, cada
+      // uno con su propio cupo/saldo (ver calcularSaldoVacaciones vs.
+      // calcularSaldoDiasLibres), y mezclarlos en un solo número de
+      // "días libres" fue justo el bug que hizo ver cifras como "13" o "10"
+      // en la columna de la quincena — eran vacaciones, no días libres.
+      if (r.TIPO_DIA === "vacaciones"){ diasVacacionesQuincena++; return; }
+      if (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"){ diasLibresQuincena++; return; } // día libre (programado por solicitud, o reclasificado a mano desde Horas Extra): no resta, se muestra aparte
       if (feriadoLeyEnFecha(r.FECHA)){
         if (r.TIPO_DIA === "laboral") diasFeriadosTrabajados++; // se paga doble, no se descuenta (ver calcularColillaEmpleado)
         if (r.TIPO_DIA === "laboral" || r.TIPO_DIA === "ausencia") return; // trabajado o simplemente no marcado: ninguno de los dos se descuenta — el feriado se paga se trabaje o no
@@ -9018,20 +9028,18 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     // de esta quincena y recortaría por error días libres de días anteriores
     // del mismo mes. Esto se compara más abajo contra topeMes
     // (diasLibresMesDeEmpleado) para el "X/tope ✅/⏳" de la columna "Días
-    // libres (mes)" — por eso NO lleva "vacaciones" (a diferencia de
-    // diasLibresQuincena arriba, que sí junta los dos porque ahí solo
-    // importa "no se descontó de días laborados", no compararlo contra un
-    // cupo). Vacaciones tiene su propio cupo legal aparte (Art. 153 CT) y
-    // su propio saldo — mezclarla acá hacía que un mes con vacaciones
-    // tomadas se viera "pasado" del cupo de días libres sin haberlo estado
-    // de verdad (ver calcularSaldoDiasLibres).
+    // libres (mes)" — por eso NO lleva "vacaciones". Vacaciones tiene su
+    // propio cupo legal aparte (Art. 153 CT) y su propio saldo — mezclarla
+    // acá hacía que un mes con vacaciones tomadas se viera "pasado" del
+    // cupo de días libres sin haberlo estado de verdad (ver
+    // calcularSaldoDiasLibres).
     const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada"
       && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
       && r.FECHA.startsWith(anioMes)
       && (!datosHastaISO || r.FECHA <= datosHastaISO)
     ).length;
 
-    return { emp, activo: true, confianza, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: diasBaseConArrastre, diasLaborados, diasLibresQuincena, diasLibresMes, diasArrastrados };
+    return { emp, activo: true, confianza, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: diasBaseConArrastre, diasLaborados, diasLibresQuincena, diasVacacionesQuincena, diasLibresMes, diasArrastrados };
   }).filter(f => f.activo);
 }
 
@@ -9257,13 +9265,14 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
       <button id="resumen-quincena-toggle" class="btn" style="padding:2px 10px; font-size:14px; line-height:1.4; flex-shrink:0;" onclick="toggleResumenQuincena()" title="${resumenQuincenaColapsado ? "Mostrar" : "Ocultar"} la tabla">${resumenQuincenaColapsado ? "➕" : "➖"}</button>
     </div>
     <div id="resumen-quincena-cuerpo" style="${resumenQuincenaColapsado ? "display:none;" : ""}">
-    <p style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Días libres = TIPO_DIA "vacaciones" del módulo de Días Libres y Vacaciones, no resta de los días laborados. Horas extra = lo ya aprobado en definitiva en todo el rango. Feriados trabajados = feriados de ley (Art. 147-148 CT) con marca real ese día — se pagan doble (y sus horas extra, triple); si el feriado cae y NO se trabajó, tampoco se descuenta, se paga sencillo igual.${notaDia31}</p>
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Vacaciones y Días libres son dos beneficios separados (cada uno con su propio cupo/saldo) y ninguno de los dos resta de los días laborados — se muestran en columnas aparte para no confundirlos. Horas extra = lo ya aprobado en definitiva en todo el rango. Feriados trabajados = feriados de ley (Art. 147-148 CT) con marca real ese día — se pagan doble (y sus horas extra, triple); si el feriado cae y NO se trabajó, tampoco se descuenta, se paga sencillo igual.${notaDia31}</p>
     <div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
       <thead><tr style="border-bottom:2px solid #ccc; text-align:left;">
         <th style="padding:4px 8px;">Empleado</th>
         <th style="padding:4px 8px; text-align:center;">Días laborados</th>
         ${cols.map(c => `<th style="padding:4px 8px; text-align:center;">${escapeHtml(TIPOS_DIA_DESCUENTA_QUINCENA[c])}</th>`).join("")}
+        <th style="padding:4px 8px; text-align:center;">Vacaciones (quincena)</th>
         <th style="padding:4px 8px; text-align:center;">Días libres (quincena)</th>
         <th style="padding:4px 8px; text-align:center;">Días libres (mes)</th>
         <th style="padding:4px 8px; text-align:center;">Horas extra</th>
@@ -9280,6 +9289,7 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
           <td style="padding:4px 8px;">${escapeHtml(nombreCompletoEmpleado(f.emp) || f.emp.key)}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700; color:${f.diasLaborados < f.diasBase ? '#b23b3b' : 'var(--navy-deep)'};">${f.diasLaborados}${f.diasBase !== DIAS_BASE_QUINCENA ? ` / ${f.diasBase}` : ""}</td>
           ${cols.map(c => `<td style="padding:4px 8px; text-align:center;">${f.descPorTipo[c] || ""}</td>`).join("")}
+          <td style="padding:4px 8px; text-align:center;">${f.diasVacacionesQuincena || ""}</td>
           <td style="padding:4px 8px; text-align:center;">${f.diasLibresQuincena || ""}</td>
           <td style="padding:4px 8px; text-align:center; font-size:11px;">${f.diasLibresMes}/${topeMes} ${notaMes}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700;">${f.horasExtra ? f.horasExtra.toFixed(1) : ""}</td>
