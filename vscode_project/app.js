@@ -510,7 +510,7 @@ if (!_rawStorage.__esApi){
   };
 }
 
-const TITULO_BASE = "Generador de Contratos — SDG RH Management";
+const TITULO_BASE = "Portal de RRHH — SDG RH Management";
 
 function setPropiedadActual(id){
   currentPropiedadId = id;
