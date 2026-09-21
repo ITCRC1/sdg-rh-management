@@ -13062,9 +13062,16 @@ function construirHtmlAccionPersonalAuto({ tipo, nombre, cedula, puesto, depto, 
 // termina. Necesario para generar documentos en segundo plano (ej. al
 // aprobar una solicitud desde Días Libres y Vacaciones) sin depender de que
 // el admin tenga abierta la pantalla del editor manual de ese documento.
+// Antes esta función se tragaba cualquier error (red, permisos, lo que
+// fuera) y devolvía null en silencio — así que cuando algo fallaba, lo único
+// que quedaba era el aviso genérico "no se pudo generar el documento", sin
+// forma de saber POR QUÉ. Ahora deja que la excepción suba (la captura
+// generarDocumentoAccionPersonalDeSolicitud, que guarda el motivo en la
+// propia solicitud — ver DOCUMENTO_ERROR — para poder verlo en pantalla en
+// vez de tener que adivinar.
 async function archivarDocumentoDesdeHtml(htmlContenido, meta){
-  if (!CON_BACKEND) return null;
-  if (window.sdgApi && !window.sdgApi.puedeEditar()) return null;
+  if (!CON_BACKEND) throw new Error("la app está corriendo sin conexión al servidor");
+  if (window.sdgApi && !window.sdgApi.puedeEditar()) throw new Error("esta cuenta no tiene permiso para archivar documentos");
   const contenedorTmp = document.createElement("div");
   contenedorTmp.id = "doc-autogenerado-tmp-" + Date.now();
   contenedorTmp.style.display = "none";
@@ -13072,7 +13079,7 @@ async function archivarDocumentoDesdeHtml(htmlContenido, meta){
   document.body.appendChild(contenedorTmp);
   try{
     const html = await documentoAutocontenido(contenedorTmp.id, meta.titulo);
-    if (!html) return null;
+    if (!html) throw new Error("no se pudo armar el HTML del documento (contenido vacío)");
     // A diferencia del resto de documentos (que el admin ya vio en pantalla
     // e imprimió/exportó a PDF de forma interactiva ANTES de archivarse, ver
     // congelarEmitido/descargarVacacionesPDF), este se genera en segundo
@@ -13092,7 +13099,7 @@ async function archivarDocumentoDesdeHtml(htmlContenido, meta){
       empleadoCedula: meta.empleadoCedula || null,
       empleadoNombre: meta.empleadoNombre || null,
     });
-  }catch(e){ return null; }
+  }
   finally{ contenedorTmp.remove(); }
 }
 
@@ -13177,13 +13184,39 @@ async function generarDocumentoAccionPersonalDeSolicitud(solicitudKey){
     const s2 = r2 && r2.value ? JSON.parse(r2.value) : s;
     s2.DOC_NUMERO_ACCION = s.DOC_NUMERO_ACCION;
     s2.DOCUMENTO_DESACTUALIZADO = false;
+    s2.DOCUMENTO_ERROR = null;
     if (doc){
       s2.DOCUMENTO_ID = doc.id;
       s2.DOCUMENTO_SHA256 = doc.sha256 || null;
       s2.DOCUMENTO_GENERADO_EN = new Date().toISOString();
     }
     await window.storage.set(solicitudKey, JSON.stringify(s2), false);
-  }catch(e){ /* best effort — la solicitud ya quedó otorgada/corregida igual; el documento se puede generar luego a mano desde Acción de Personal si esto falla */ }
+  }catch(e){
+    // Best effort — la solicitud ya quedó otorgada/corregida igual; el
+    // documento se puede generar luego a mano desde Acción de Personal si
+    // esto falla. Antes el motivo se perdía en silencio (el aviso en
+    // pantalla solo decía "no se pudo generar", sin decir por qué) — ahora
+    // queda guardado en la propia solicitud para poder verlo (ver
+    // DOCUMENTO_ERROR en renderListaSolicitudesOtorgadas).
+    try{
+      const r3 = await window.storage.get(solicitudKey, false);
+      const s3 = r3 && r3.value ? JSON.parse(r3.value) : null;
+      if (s3){
+        s3.DOCUMENTO_ERROR = (e && e.message) || "error desconocido";
+        s3.DOCUMENTO_ERROR_EN = new Date().toISOString();
+        await window.storage.set(solicitudKey, JSON.stringify(s3), false);
+      }
+    }catch(e2){ /* ni esto se pudo guardar — no hay más que intentar */ }
+  }
+}
+
+// Reintenta generar el documento de una solicitud que falló (ver
+// DOCUMENTO_ERROR en generarDocumentoAccionPersonalDeSolicitud) — evita
+// tener que ir hasta Documentos → Acción de Personal a armarlo a mano.
+async function reintentarDocumentoSolicitud(key){
+  statusMsg("Generando el documento…");
+  await generarDocumentoAccionPersonalDeSolicitud(key);
+  if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
 }
 
 // Bloquea el documento contra futuras regeneraciones automáticas — a partir
@@ -13749,7 +13782,10 @@ function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeApro
             ${s.DOCUMENTO_DESACTUALIZADO ? `<span class="meta" style="color:#B3261E;">⚠️ Desactualizado por una corrección posterior</span>` : ""}
           </div>`;
         } else {
-          bloqueDocumento = `<div style="margin-top:4px;"><span class="meta" style="color:#B3261E;">⚠️ No se pudo generar el documento — generalo a mano desde Documentos → Acción de Personal.</span></div>`;
+          bloqueDocumento = `<div style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <span class="meta" style="color:#B3261E;">⚠️ No se pudo generar el documento${s.DOCUMENTO_ERROR ? ` (${escapeHtml(s.DOCUMENTO_ERROR)})` : ""}.</span>
+            <button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="reintentarDocumentoSolicitud('${keyEsc}')">🔄 Reintentar</button>
+          </div>`;
         }
       }
       return `<div class="catalog-item">
