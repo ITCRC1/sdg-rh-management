@@ -13437,7 +13437,7 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
   try{
     const fullKey = CATALOGS.empleados.prefix + empKey;
     const res = await window.storage.get(fullKey, false);
-    if (!res || !res.value) return;
+    if (!res || !res.value) return false;
     const emp = JSON.parse(res.value);
     const anio = fechaISO.slice(0,4);
     if (!emp.CUMPLEANOS_OTORGADO_ANIOS) emp.CUMPLEANOS_OTORGADO_ANIOS = {};
@@ -13452,7 +13452,8 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
     if (typeof perfilActualKey !== "undefined" && perfilActualKey === empKey && typeof renderPerfilEmpleado === "function"){
       renderPerfilEmpleado();
     }
-  }catch(e){ statusMsg("No se pudo otorgar: " + e.message, false); }
+    return true;
+  }catch(e){ statusMsg("No se pudo otorgar: " + e.message, false); return false; }
 }
 
 let diasLibresFiltroDepto = "todos";
@@ -13651,19 +13652,36 @@ async function confirmarCrearSolicitudAusencia(){
 // del mes, o permisos de distinto tipo — ej. 2 días libres sueltos y una
 // incapacidad) — todas se asignan con un solo clic en "Asignar". Una línea
 // se ignora si no tiene ninguna fecha cargada; no hace falta llenar las 3.
+// Cumpleaños es un tipo especial dentro de esta misma grilla — no viene de
+// TIPOS_SOLICITUD_AUSENCIA (no es una solicitud, no genera un
+// solicitud_ausencia: — ver otorgarDiaCumpleanos) y es de UN SOLO DÍA, no un
+// rango, así que al elegirlo se oculta "Hasta" y "Desde" pasa a llamarse
+// "Fecha" (ver actualizarFilaAsignacionDirecta).
+function actualizarFilaAsignacionDirecta(i){
+  const tipo = (document.getElementById(`asignacion-directa-tipo-${i}`)||{}).value;
+  const comprobanteWrap = document.getElementById(`asignacion-directa-comprobante-wrap-${i}`);
+  if (comprobanteWrap) comprobanteWrap.style.display = tipo === "ausencia_medica" ? "flex" : "none";
+  const esCumpleanos = tipo === "cumpleanos";
+  const hastaWrap = document.getElementById(`asignacion-directa-hasta-wrap-${i}`);
+  const labelDesde = document.getElementById(`asignacion-directa-desde-label-${i}`);
+  if (hastaWrap) hastaWrap.style.display = esCumpleanos ? "none" : "flex";
+  if (labelDesde) labelDesde.textContent = esCumpleanos ? "Fecha" : "Desde";
+}
+
 function renderFormularioAsignacionDirecta(empleadosDisponibles){
   const ordenados = empleadosDisponibles.slice().sort(compararPorApellido);
   const filaHtml = (i) => `
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; padding:6px 0;${i > 0 ? " border-top:1px dashed var(--paper-line); margin-top:4px;" : ""}">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
-        <select id="asignacion-directa-tipo-${i}" onchange="document.getElementById('asignacion-directa-comprobante-wrap-${i}').style.display = this.value === 'ausencia_medica' ? 'flex' : 'none';">
+        <select id="asignacion-directa-tipo-${i}" onchange="actualizarFilaAsignacionDirecta(${i});">
           ${Object.keys(TIPOS_SOLICITUD_AUSENCIA).map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
+          <option value="cumpleanos">🎂 Cumpleaños</option>
         </select>
       </label>
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;"><span id="asignacion-directa-desde-label-${i}">Desde</span>
         <input type="date" id="asignacion-directa-desde-${i}">
       </label>
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+      <label id="asignacion-directa-hasta-wrap-${i}" style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
         <input type="date" id="asignacion-directa-hasta-${i}">
       </label>
       <label id="asignacion-directa-comprobante-wrap-${i}" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
@@ -13672,7 +13690,7 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
     </div>`;
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Asignar directamente</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar). Podés cargar hasta 3 rangos distintos para el mismo empleado (varias salidas del mes, o permisos de distinto tipo) y asignarlos todos de una vez.</p>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar). Podés cargar hasta 3 rangos distintos para el mismo empleado (varias salidas del mes, permisos de distinto tipo, o un cumpleaños — de un solo día) y asignarlos todos de una vez.</p>
     <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:320px; margin-bottom:4px;">Empleado
       <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
       <select id="asignacion-directa-empleado">
@@ -13693,22 +13711,31 @@ async function confirmarAsignacionDirecta(){
 
   const filas = [];
   for (let i = 0; i < 3; i++){
-    const fechaInicio = (document.getElementById(`asignacion-directa-desde-${i}`)||{}).value;
-    const fechaFin = (document.getElementById(`asignacion-directa-hasta-${i}`)||{}).value;
-    if (!fechaInicio && !fechaFin) continue; // línea sin usar — se ignora, no hace falta llenar las 3
     const tipo = (document.getElementById(`asignacion-directa-tipo-${i}`)||{}).value;
+    const esCumpleanos = tipo === "cumpleanos";
+    const fechaInicio = (document.getElementById(`asignacion-directa-desde-${i}`)||{}).value;
+    // Cumpleaños es de un solo día — no tiene "Hasta" en pantalla (queda
+    // oculto, ver actualizarFilaAsignacionDirecta), así que la fecha única
+    // hace de inicio y fin para el resto de la validación de abajo.
+    const fechaFin = esCumpleanos ? fechaInicio : (document.getElementById(`asignacion-directa-hasta-${i}`)||{}).value;
+    if (!fechaInicio && !fechaFin) continue; // línea sin usar — se ignora, no hace falta llenar las 3
     const inputComprobante = document.getElementById(`asignacion-directa-comprobante-${i}`);
     const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
     filas.push({ linea: i + 1, tipo, fechaInicio, fechaFin, archivo });
   }
-  if (!filas.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá al menos un rango de fechas.</span>`; return; }
+  if (!filas.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá al menos una fecha.</span>`; return; }
 
   if (status) status.textContent = "Asignando…";
   let ok = 0;
   const errores = [];
   for (const f of filas){
     try{
-      if (!f.fechaInicio || !f.fechaFin) throw new Error("faltó una de las dos fechas.");
+      if (!f.fechaInicio || !f.fechaFin) throw new Error("faltó la fecha.");
+      if (f.tipo === "cumpleanos"){
+        const otorgado = await otorgarDiaCumpleanos(empKey, f.fechaInicio);
+        if (otorgado) ok++; else errores.push(`Línea ${f.linea}: no se pudo otorgar el cumpleaños.`);
+        continue;
+      }
       if (f.tipo === "vacaciones" && f.fechaFin >= f.fechaInicio){
         const aviso = await advertenciaSaldoNegativoVacaciones(empKey, f.tipo, diasEntreFechasISO(f.fechaInicio, f.fechaFin));
         if (aviso && !confirm(`Línea ${f.linea}: ${aviso}`)){ errores.push(`Línea ${f.linea}: cancelada.`); continue; }
