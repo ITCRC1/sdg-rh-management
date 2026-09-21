@@ -132,6 +132,7 @@
     <button class="nav-dd-btn" id="navbtn-configuracion" onclick="toggleNavMenu('configuracion')">🔧 Configuración <span class="nav-caret">▾</span></button>
     <div class="nav-dd-menu" id="navmenu-configuracion">
       <button onclick="navCloseAndRun(function(){ showTab('faq'); })">❓ Preguntas de ley laboral</button>
+      <button onclick="navCloseAndRun(function(){ showTab('manual'); })">❓ Manual de uso</button>
       <div class="nav-dd-sep">Propiedad</div>
       <button id="nav-btn-cambiar-propiedad" onclick="navCloseAndRun(function(){ abrirPropiedadGate(); })">🏨 Cambiar de propiedad</button>
       <div class="nav-dd-sep" id="nav-sep-cuenta" style="display:none;">Cuenta</div>
@@ -306,6 +307,7 @@
   <div id="miperfil-panel" class="catalog-panel" style="display:none;"></div>
   <div id="reporte-panel" class="catalog-panel" style="display:none;"></div>
   <div id="faq-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="manual-panel" class="catalog-panel" style="display:none;"></div>
   <div id="datos-panel" class="catalog-panel" style="display:none;"></div>
   <div id="planilla-panel" class="catalog-panel" style="display:none;"></div>
   <div id="horasextras-panel" class="catalog-panel" style="display:none;"></div>

@@ -374,6 +374,17 @@ function aplicarModoSegunRol(rol){
       }
       cambiarClaveDirecto.style.display = "block";
 
+      let manualDirecto = document.getElementById("nav-btn-manual-empleado");
+      if (!manualDirecto){
+        manualDirecto = document.createElement("button");
+        manualDirecto.id = "nav-btn-manual-empleado";
+        manualDirecto.className = "nav-dd-btn";
+        manualDirecto.textContent = "❓ Manual de uso";
+        manualDirecto.onclick = function(){ showTab("manual"); };
+        nav.appendChild(manualDirecto);
+      }
+      manualDirecto.style.display = "block";
+
       let logoutDirecto = document.getElementById("nav-btn-logout-empleado");
       if (!logoutDirecto){
         logoutDirecto = document.createElement("button");
@@ -4585,7 +4596,7 @@ function showTab(which){
   // Esto es la comodidad visual (el servidor es quien de verdad bloquea el
   // resto de los datos): cubre el logo, "atrás" del navegador o cualquier
   // otro camino que intente llevarla a otra pestaña.
-  const TABS_PERMITIDAS_JEFATURA = ["horasextras", "vacaciones"];
+  const TABS_PERMITIDAS_JEFATURA = ["horasextras", "vacaciones", "manual"];
   if (!TABS_PERMITIDAS_JEFATURA.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
     which = "horasextras";
   }
@@ -4593,7 +4604,7 @@ function showTab(which){
   // Perfil". Cubre el logo, "atrás" del navegador o cualquier otro camino
   // que intente llevarlo a otra pestaña — el servidor bloquea el resto de
   // los datos aparte (ver rutas-datos.js).
-  const TABS_PERMITIDAS_EMPLEADO = ["miperfil"];
+  const TABS_PERMITIDAS_EMPLEADO = ["miperfil", "manual"];
   if (!TABS_PERMITIDAS_EMPLEADO.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "empleado"){
     which = "miperfil";
   }
@@ -4616,6 +4627,7 @@ function showTab(which){
   document.getElementById("miperfil-panel").style.display = which === "miperfil" ? "block" : "none";
   document.getElementById("reporte-panel").style.display = which === "reporte" ? "block" : "none";
   document.getElementById("faq-panel").style.display = which === "faq" ? "block" : "none";
+  document.getElementById("manual-panel").style.display = which === "manual" ? "block" : "none";
   document.getElementById("datos-panel").style.display = which === "datos" ? "block" : "none";
   document.getElementById("preview-wrap").style.display = which === "preview" ? "block" : "none";
   document.getElementById("constancia-wrap").style.display = which === "constancia" ? "block" : "none";
@@ -4647,7 +4659,7 @@ function showTab(which){
     planilla:"planilla",
     vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla",
     reporte:"reportes",
-    faq:"configuracion",
+    faq:"configuracion", manual:"configuracion",
   };
   ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","reportes","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
@@ -4668,6 +4680,7 @@ function showTab(which){
   if (which === "miperfil") renderMiPerfilEmpleado();
   if (which === "reporte") renderReporteMensual();
   if (which === "faq") renderFaqLaboral();
+  if (which === "manual") renderManualPanel();
   if (which === "datos") renderDatosTab();
   if (which === "planilla") renderPlanillaPanel();
   if (which === "horasextras") renderHorasExtrasPanel();
@@ -6531,6 +6544,79 @@ function renderFaqLaboral(){
     <div style="font-size:13px; color:var(--ink); text-align:justify;">${escapeHtml(p.a)}</div>
   </div></div>`).join("");
   panel.innerHTML = html;
+}
+
+// Manual de uso — a diferencia de la FAQ (referencia legal, igual para
+// todos), esto SÍ depende del rol: cada quien solo ve lo que de verdad le
+// toca usar. Colaborador (empleado) ve únicamente "Mi información" (su
+// propio expediente en modo lectura); jefatura ve además Horas Extra y Días
+// Libres y Vacaciones (los dos módulos donde de verdad opera); master y
+// gerente ven el manual completo, módulo por módulo. Contenido resumido a
+// propósito — el manual completo, con capturas anotadas, vive aparte.
+function renderManualPanel(){
+  const panel = document.getElementById("manual-panel");
+  if (!panel) return;
+  const rol = window.sdgApi ? window.sdgApi.rol() : null;
+
+  const SECCIONES = [
+    {
+      id: "miinformacion", roles: ["empleado","jefatura","gerente","master"],
+      titulo: "🙋 Mi información",
+      cuerpo: `Tu propio expediente en modo lectura: saldo de vacaciones y de días libres (con adelanto si se te otorgó de más), horas extra pendientes y aprobadas, tus documentos (colillas, contratos, Handbook), tus incapacidades, y la tabla de días libres otorgados por mes con las fechas exactas.`,
+    },
+    {
+      id: "horasextra", roles: ["jefatura","gerente","master"],
+      titulo: "⏱️ Horas Extra",
+      cuerpo: `Aprobación en dos pasos: primero jefatura aprueba las horas de su propio equipo, y luego gerencia/master da la aprobación final que cuenta para planilla. Se puede reclasificar el tipo de un día (laboral, día libre, incapacidad, permiso sin goce, ausencia) incluso después de la aprobación final, con una confirmación. El buscador de arriba filtra por nombre de empleado en todas las pestañas.`,
+    },
+    {
+      id: "diaslibres", roles: ["jefatura","gerente","master"],
+      titulo: "🌴 Días Libres y Vacaciones",
+      cuerpo: `Vacaciones y días libres son dos beneficios separados, cada uno con su propio cupo y saldo. Jefatura solicita ausencias para su equipo (con al menos 15 días de anticipación); gerencia/master aprueba, corrige fechas o asigna directamente sin cola de espera. El cupo mensual de días libres se acumula con arrastre — lo no otorgado un mes pasa al siguiente. El calendario marca SALE/ENTRA/VIAJE/CUMP solo para Corcovado Wilderness Lodge.`,
+    },
+    {
+      id: "dashboard", roles: ["gerente","master"],
+      titulo: "🏠 Dashboard (Inicio)",
+      cuerpo: `Pantalla de aterrizaje: alertas de acción pendiente (ej. colillas sin subir), KPIs de la propiedad activa (empleados activos, contratos, colillas pendientes, archivados), alertas de RR.HH., actividad reciente, solicitudes pendientes y próximos eventos.`,
+    },
+    {
+      id: "contratos", roles: ["gerente","master"],
+      titulo: "📄 Contratos",
+      cuerpo: `Lista y formulario de contratos, más sus catálogos de apoyo: Empresas (razón social que figura como patrono), Puestos (jefatura, jornada y salario de referencia) y Propiedades (portafolio del contrato). La vista previa arma el documento final con los datos ya aplicados; los campos en rojo entre corchetes son marcadores que faltan por completar. El Handbook genera su propia constancia de entrega y recibido.`,
+    },
+    {
+      id: "empleados", roles: ["gerente","master"],
+      titulo: "👥 Empleados",
+      cuerpo: `Catálogo de expedientes, con el filtro de 🎂 Cumpleaños por mes.`,
+    },
+    {
+      id: "expedientes", roles: ["gerente","master"],
+      titulo: "📁 Expedientes",
+      cuerpo: `El expediente completo de un empleado: ficha con KPIs, alertas de cumplimiento, estimados de prestaciones (vacaciones, aguinaldo, cesantía/preaviso hipotéticos — solo para presupuestar), deducciones recurrentes, checklist de ingreso, las acciones administrativas (carta de despido, liquidación, amonestación, crear contrato, designar jefatura, archivar, etc.), días libres, colillas, documentos y bitácora.`,
+    },
+    {
+      id: "planilla", roles: ["gerente","master"],
+      titulo: "📋 Resumen de quincena para planilla",
+      cuerpo: `Días laborados, incapacidad/permiso/cita/ausencia, Vacaciones y Días libres en columnas SEPARADAS (cada una con su propio conteo), días libres del mes contra su cupo, horas extra y feriados trabajados.`,
+    },
+    {
+      id: "roles", roles: ["master"],
+      titulo: "🔑 Roles y administración de usuarios",
+      cuerpo: `Master ve y administra todas las propiedades y usuarios; Gerente lee/edita/sube archivos solo en su propiedad; Jefatura además aprueba horas extra de su equipo; Colaborador (autoservicio) solo ve su propio expediente. Las cuentas de Colaborador se crean solas al guardar el empleado — el panel de Empleador (🏢 Administrar usuarios) es solo para casos manuales.`,
+    },
+  ];
+
+  const visibles = SECCIONES.filter(s => rol && s.roles.includes(rol));
+  panel.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">❓ Manual de uso</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Resumen de lo que podés ver y hacer con tu cuenta.</div>
+    </div>
+    ${visibles.map(s => `<div class="section-card" style="margin-bottom:8px;"><div class="section-body">
+      <div style="font-weight:700; margin-bottom:4px;">${s.titulo}</div>
+      <div style="font-size:13px; color:var(--ink); text-align:justify;">${s.cuerpo}</div>
+    </div></div>`).join("")}
+  `;
 }
 
 // Traduce el prefijo de una clave guardada ("contrato:...", "empleados:...")
