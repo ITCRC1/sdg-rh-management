@@ -14133,7 +14133,7 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
   if (horasDia && horasDia.TIPO_DIA === "incapacidad") return { texto: "INCAP", color: "FFE68A8A" };
   if (!esCorcovado) return null;
 
-  if (horasDia && horasDia.TIPO_DIA === "cumpleanos") return { texto: "🎂", color: "FFE0C4F0" };
+  if (horasDia && horasDia.TIPO_DIA === "cumpleanos") return { texto: "CUMP", color: "FFE0C4F0" };
   if (horasDia && horasDia.TIPO_DIA === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
 
   // El día ANTES de que arranque un bloque de "Día libre", "Vacaciones" o
