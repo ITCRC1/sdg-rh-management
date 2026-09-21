@@ -9016,9 +9016,17 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     // no solo este rango de datos — por eso solo respeta el tope superior
     // (datosHastaISO), nunca el inferior (datosDesdeISO), que es específico
     // de esta quincena y recortaría por error días libres de días anteriores
-    // del mismo mes.
+    // del mismo mes. Esto se compara más abajo contra topeMes
+    // (diasLibresMesDeEmpleado) para el "X/tope ✅/⏳" de la columna "Días
+    // libres (mes)" — por eso NO lleva "vacaciones" (a diferencia de
+    // diasLibresQuincena arriba, que sí junta los dos porque ahí solo
+    // importa "no se descontó de días laborados", no compararlo contra un
+    // cupo). Vacaciones tiene su propio cupo legal aparte (Art. 153 CT) y
+    // su propio saldo — mezclarla acá hacía que un mes con vacaciones
+    // tomadas se viera "pasado" del cupo de días libres sin haberlo estado
+    // de verdad (ver calcularSaldoDiasLibres).
     const diasLibresMes = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada"
-      && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
+      && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
       && r.FECHA.startsWith(anioMes)
       && (!datosHastaISO || r.FECHA <= datosHastaISO)
     ).length;
@@ -9520,7 +9528,7 @@ async function renderHorasExtrasPanel(){
         ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
         : (tipoDia === "laboral"
           ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}`
-          : `${etiquetaTipo}${puesto ? " · " + escapeHtml(puesto) : ""}${r.ORIGEN === "permiso_sin_goce" ? " · generado desde la acción de personal" : ""}`);
+          : `${etiquetaTipo}${puesto ? " · " + escapeHtml(puesto) : ""}${r.ORIGEN === "permiso_sin_goce" ? " · generado desde la acción de personal" : ""}${r.ORIGEN_ARCHIVO ? ` · reclasificado desde marcación (${escapeHtml(r.ORIGEN_ARCHIVO)})` : ""}`);
       return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">
           <div class="info">
