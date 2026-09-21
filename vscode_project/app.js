@@ -7047,11 +7047,12 @@ async function calcularVistaPreviaColillasGeneradas(){
       return;
     }
 
-    const [registros, empleados, puestosDB, empresasKeys] = await Promise.all([
+    const [registros, empleados, puestosDB, empresasKeys, clavesColillasArchivadas] = await Promise.all([
       listarRegistrosHorasExtra(),
       cargarEmpleadosDB(),
       cargarPuestosDB(),
       window.storage.list(CATALOGS.empresas.prefix, false),
+      cargarClavesColillasArchivadas(),
     ]);
     const puestosPorKey = {};
     puestosDB.forEach(p => { puestosPorKey[p.key] = p; });
@@ -7065,7 +7066,7 @@ async function calcularVistaPreviaColillasGeneradas(){
       empresa = r && r.value ? JSON.parse(r.value) : null;
     }
 
-    const filas = calcularResumenQuincena(registros, empleados, rango, datosDesdeStr || null, datosHastaStr || null).sort((a,b) => compararPorApellido(a.emp, b.emp));
+    const filas = calcularResumenQuincena(registros, empleados, rango, datosDesdeStr || null, datosHastaStr || null, clavesColillasArchivadas).sort((a,b) => compararPorApellido(a.emp, b.emp));
     if (!filas.length){
       if (status) status.innerHTML = "No hay ningún empleado activo dentro de esa quincena.";
       return;
@@ -7491,12 +7492,16 @@ async function generarReporteHorarioPlanilla(){
     const puestosDB = await cargarPuestosDB();
     const puestosPorKey = {};
     puestosDB.forEach(p => { puestosPorKey[p.key] = p; });
+    // Para arrastrar a esta quincena los días de un ingreso a mitad de la
+    // anterior que nunca tuvo su propia colilla (ver
+    // diasArrastradosPorIngresoSinColilla/calcularResumenQuincena).
+    const clavesColillasArchivadas = await cargarClavesColillasArchivadas();
 
     // Orden alfabético por apellido — mismo criterio que usa el resto de
     // listas de empleados del sistema (compararPorApellido). Antes ordenaba
     // primero por departamento y el apellido solo desempataba dentro de
     // cada uno, así que de un vistazo no se veía alfabético.
-    const filas = calcularResumenQuincena(registros, empleados, rango, datosDesdeStr || null, datosHastaStr || null)
+    const filas = calcularResumenQuincena(registros, empleados, rango, datosDesdeStr || null, datosHastaStr || null, clavesColillasArchivadas)
       .sort((a, b) => compararPorApellido(a.emp, b.emp));
 
     if (!filas.length){
@@ -8986,11 +8991,54 @@ function textoRangoDatos(desdeStr, hastaStr){
   return ` — datos tomados desde el ${f(desdeStr)}`;
 }
 
-function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, datosHastaISO){
+// Quincena INMEDIATAMENTE ANTERIOR a la dada (mismo criterio 1-15/16-fin de
+// mes que rangoQuincena) — para poder revisar si el ingreso de un empleado
+// cayó ahí.
+function quincenaAnterior(rango){
+  if (rango.esPrimeraQuincena){
+    const mesPrevio = new Date(rango.inicio.getFullYear(), rango.inicio.getMonth() - 1, 1);
+    return rangoQuincena(mesPrevio.getFullYear(), mesPrevio.getMonth(), false);
+  }
+  return rangoQuincena(rango.inicio.getFullYear(), rango.inicio.getMonth(), true);
+}
+
+// Cuando alguien ingresa a mitad de una quincena y esa primera quincena
+// parcial NUNCA llegó a tener su propia colilla de pago (ni subida desde el
+// proveedor externo ni generada acá) — típicamente porque son muy pocos
+// días y no se armó una planilla aparte solo para eso —, esos días no deben
+// perderse: se suman a la SIGUIENTE quincena para que terminen pagándose
+// ahí (ver el pedido: "el primer mes puede que la fecha de ingreso no sea
+// quincenal y se deba pagar menos o más de 15 días si no está en colillas").
+// Solo mira la quincena INMEDIATAMENTE ANTERIOR a la que se está calculando
+// — el caso real es siempre "el primer mes", nunca un arrastre de varias
+// quincenas atrás — y solo si el ingreso cayó DENTRO de esa quincena
+// anterior a mitad de camino (si entró justo el día 1 o 16, esa quincena ya
+// fue completa para él/ella, no hay nada parcial que arrastrar). Si esa
+// quincena anterior SÍ tiene una colilla archivada a su nombre, no se suma
+// nada — ya se le pagó aparte.
+function diasArrastradosPorIngresoSinColilla(empleado, rango, clavesColillasArchivadas){
+  const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
+  if (!ingreso) return 0;
+  const anterior = quincenaAnterior(rango);
+  if (ingreso < anterior.inicio || ingreso > anterior.fin) return 0;
+  if (ingreso.getTime() === anterior.inicio.getTime()) return 0; // entró justo el día 1 o 16 — esa quincena ya fue completa
+
+  const infoAnterior = diasBaseParaEmpleadoEnQuincena(empleado, anterior);
+  if (!infoAnterior || infoAnterior.diasBase <= 0) return 0;
+
+  const periodoInicioDDMMYYYY = `${String(anterior.inicio.getDate()).padStart(2,"0")}/${String(anterior.inicio.getMonth()+1).padStart(2,"0")}/${anterior.inicio.getFullYear()}`;
+  const clave = claveColillaArchivada(empleado.IDENTIFICACION_EMP || "", nombreCompletoEmpleado(empleado), periodoInicioDDMMYYYY);
+  if ((clavesColillasArchivadas || new Set()).has(clave)) return 0; // ya se pagó aparte esa quincena parcial
+
+  return infoAnterior.diasBase;
+}
+
+function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, datosHastaISO, clavesColillasArchivadas){
   const anioMes = `${rango.inicio.getFullYear()}-${String(rango.inicio.getMonth() + 1).padStart(2, "0")}`;
   return empleados.map(emp => {
     const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
-    if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0 };
+    if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasLibresMes: 0, diasArrastrados: 0 };
+    const diasArrastrados = diasArrastradosPorIngresoSinColilla(emp, rango, clavesColillasArchivadas);
     const inicioISO = datosDesdeISO || isoDeFechaLocal(activo.inicioEfectivo);
     const finISO = datosHastaISO || isoDeFechaLocal(activo.finEfectivo);
 
@@ -9020,7 +9068,14 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
       descPorTipo[r.TIPO_DIA] = (descPorTipo[r.TIPO_DIA] || 0) + 1;
       totalDescuento++;
     });
-    const diasLaborados = Math.max(0, activo.diasBase - totalDescuento);
+    // Los días arrastrados de una primera quincena parcial sin colilla (ver
+    // diasArrastradosPorIngresoSinColilla) se suman de una vez, ya
+    // "laborados" — esa quincena mini nunca tuvo su propio descuento por
+    // incapacidad/permiso/etc. calculado aparte acá, así que no tendría
+    // sentido restarles nada ahora; se tratan como un bloque fijo que
+    // faltaba pagar.
+    const diasBaseConArrastre = activo.diasBase + diasArrastrados;
+    const diasLaborados = Math.max(0, diasBaseConArrastre - totalDescuento);
 
     // diasLibresMes cuenta el MES calendario completo (las dos quincenas),
     // no solo este rango de datos — por eso solo respeta el tope superior
@@ -9033,7 +9088,7 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
       && (!datosHastaISO || r.FECHA <= datosHastaISO)
     ).length;
 
-    return { emp, activo: true, confianza, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: activo.diasBase, diasLaborados, diasLibresQuincena, diasLibresMes };
+    return { emp, activo: true, confianza, horasExtra, horasExtraFeriado, diasFeriadosTrabajados, descPorTipo, totalDescuento, diasBase: diasBaseConArrastre, diasLaborados, diasLibresQuincena, diasLibresMes, diasArrastrados };
   }).filter(f => f.activo);
 }
 
@@ -9235,11 +9290,15 @@ function toggleHerramientasHorasExtra(){
   if (btn) btn.textContent = herramientasHorasExtraColapsado ? "➕" : "➖";
 }
 
-function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado){
+async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado){
   const rango = rangoQuincenaActual();
   let visibles = empleados.filter(e => !e.ARCHIVADO);
   if (esJefatura) visibles = visibles.filter(e => departamentoDeEmpleado(e) === deptoJefatura);
-  const filas = calcularResumenQuincena(registros, visibles, rango)
+  // Para arrastrar a esta quincena los días de un ingreso a mitad de la
+  // anterior que nunca tuvo su propia colilla (ver
+  // diasArrastradosPorIngresoSinColilla/calcularResumenQuincena).
+  const clavesColillasArchivadas = await cargarClavesColillasArchivadas();
+  const filas = calcularResumenQuincena(registros, visibles, rango, null, null, clavesColillasArchivadas)
     .sort((a, b) => compararPorApellido(a.emp, b.emp));
   if (!filas.length) return "";
 
@@ -9416,7 +9475,7 @@ async function renderHorasExtrasPanel(){
       }
     }
 
-    html += renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado);
+    html += await renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado);
 
     html += esJefatura
       ? `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
@@ -14195,7 +14254,10 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
       <span style="background:#B3E6B3; padding:1px 6px; border-radius:3px; margin-left:6px;">LIBRE (día libre)</span>
       <span style="background:#8FD3E8; padding:1px 6px; border-radius:3px; margin-left:6px;">LIBRE (permiso sin goce)</span>
       <span style="background:#E68A8A; padding:1px 6px; border-radius:3px; margin-left:6px;">CITA / INCAP</span>
+      ${currentPropiedadId === "corcovado" ? `
       <span style="background:#D9D9D9; padding:1px 6px; border-radius:3px; margin-left:6px;">SALE / ENTRA</span>
+      <span style="background:#9FC5E8; padding:1px 6px; border-radius:3px; margin-left:6px;">VIAJE</span>
+      <span style="background:#E0C4F0; padding:1px 6px; border-radius:3px; margin-left:6px;">CUMP</span>` : ""}
     </div>
     <div style="overflow-x:auto;">
     <table style="border-collapse:collapse; font-size:10.5px; white-space:nowrap;">
@@ -16026,6 +16088,8 @@ async function renderPerfilEmpleado(){
         ${emp.ARCHIVADO && emp.SALIDA_PDF_FIRMADO ? `<button class="btn" style="width:100%; margin-top:6px;" onclick="descargarSalidaFirmada('${perfilActualKey}')">📎 Ver carta de salida firmada (${escapeHtml(emp.SALIDA_PDF_NOMBRE||'PDF')})</button>` : ""}
         ${emp.ARCHIVADO && emp.TIPO_SALIDA ? `<div class="hint" style="margin-top:6px;">Tipo de salida: <b>${escapeHtml(emp.TIPO_SALIDA)}</b>${!emp.SALIDA_PDF_FIRMADO ? " — sin carta firmada adjunta todavía." : ""}</div>` : ""}
       </div></div>
+
+      ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesDeEsteEmpleado.filter(s => s.ESTADO === "pendiente"), emp)}
 
       ${renderSeccionColillasEmpleado(documentosEmpleado, perfilActualKey)}
 
