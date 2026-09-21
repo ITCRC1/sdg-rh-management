@@ -13548,20 +13548,38 @@ async function renderDiasLibresVacacionesPanel(){
   }
 }
 
+// Colapsado a los próximos 30 días por defecto; "Ver todos los del año"
+// despliega el año completo (hasta 366 días) para poder otorgar por
+// adelantado a alguien que cumple más adelante, no solo a quien ya está por
+// cumplir. El filtro por departamento no se repite acá — ya lo aplica el
+// selector de arriba del panel (renderDiasLibresVacacionesPanel), así que
+// `empleados` llega acotado a "todos" o al departamento elegido.
+let cumpleanosMostrarTodos = false;
+
+function toggleCumpleanosMostrarTodos(){
+  cumpleanosMostrarTodos = !cumpleanosMostrarTodos;
+  if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+}
+
 function renderSeccionCumpleanos(empleados, puedeOtorgar){
   const hoy = new Date();
+  const ventanaDias = cumpleanosMostrarTodos ? 366 : 30;
   const proximos = empleados
     .map(e => {
-      const prox = proximoCumpleanosEn(e.FECHA_NACIMIENTO_EMP, hoy, 30);
+      const prox = proximoCumpleanosEn(e.FECHA_NACIMIENTO_EMP, hoy, ventanaDias);
       if (!prox) return null;
       if (otorgadoEsteAnio(e, prox.fecha.getFullYear())) return null;
       return { emp: e, ...prox };
     })
     .filter(Boolean)
     .sort((a,b) => a.diasFaltan - b.diasFaltan);
-  if (!proximos.length) return "";
+  if (!proximos.length && !cumpleanosMostrarTodos) return "";
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🎂 Cumpleaños próximos — 1 día pagado, se pierde si no se otorga en el año</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+      <div style="font-weight:700; color:var(--navy-deep);">🎂 Cumpleaños ${cumpleanosMostrarTodos ? "del año" : "próximos"} — 1 día pagado, se pierde si no se otorga en el año</div>
+      <button class="btn" style="padding:3px 9px; font-size:10.5px;" onclick="toggleCumpleanosMostrarTodos()">${cumpleanosMostrarTodos ? "Ver solo próximos (30 días)" : "📅 Ver todos los del año"}</button>
+    </div>
+    ${!proximos.length ? `<div class="empty-state" style="padding:8px 0;">Nadie pendiente de otorgar este año.</div>` : ""}
     ${proximos.map(p => `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
         <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(p.emp))}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : `en ${p.diasFaltan} día(s)`})</div>
