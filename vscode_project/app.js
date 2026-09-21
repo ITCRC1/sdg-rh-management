@@ -13843,7 +13843,7 @@ async function actualizarDisponibilidadAsignacionDirecta(){
     if (!emp){ cont.textContent = ""; return; }
     const cupoMes = diasLibresMesDeEmpleado(emp);
     const diasOtorgados = registros
-      .filter(r => r.EMPLEADO_KEY === empKey && r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
+      .filter(r => r.EMPLEADO_KEY === empKey && r.ESTADO === "aprobada" && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
       .map(r => r.FECHA);
     const saldo = calcularSaldoDiasLibres(emp, diasOtorgados, finDeMes);
     const etiquetaMes = `${MESES[mesNum - 1][0].toUpperCase()}${MESES[mesNum - 1].slice(1)} ${anio}`;
@@ -13982,6 +13982,41 @@ async function repararDiasDeSolicitud(key){
   }catch(e){ statusMsg("No se pudo reparar: " + e.message, false); }
 }
 
+// Igual que repararDiasDeSolicitud pero para TODAS las solicitudes aprobadas
+// de una sola pasada — pensado para el bug de fondo que hizo que crear un
+// día NUEVO (uno que nunca se hubiera tocado) fallara en silencio en
+// cualquier solicitud, no solo en la de un empleado puntual (ver
+// crearOJustificarDiaHorasExtra): en vez de ir solicitud por solicitud a
+// mano, esto las revisa todas y arregla las que hagan falta. Secuencial (una
+// solicitud a la vez, un día a la vez) a propósito — es un botón de
+// mantenimiento, no algo que se dispare seguido, así que no vale la pena la
+// complejidad de paralelizarlo.
+async function repararTodosLosDias(){
+  if (!confirm("Esto revisa TODAS las solicitudes de vacaciones/días libres/permisos ya aprobadas y crea en Horas Extra cualquier día que se haya quedado sin registrar. Puede tardar si hay muchas. ¿Continuar?")) return;
+  statusMsg("Reparando todo — esto puede tardar un momento…", true);
+  try{
+    const solicitudesTodas = await listarSolicitudesAusencia();
+    const aprobadas = solicitudesTodas.filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "dia_viaje" || s.TIPO === "permiso_sin_goce"));
+    let totalCreados = 0, solicitudesConCreados = 0, totalBloqueados = 0, solicitudesConBloqueos = 0;
+    for (const s of aprobadas){
+      if (!s.FECHA_INICIO || !s.FECHA_FIN) continue;
+      const cursor = new Date(s.FECHA_INICIO + "T00:00:00");
+      const fin = new Date(s.FECHA_FIN + "T00:00:00");
+      let creadosDeEsta = 0, bloqueadosDeEsta = 0;
+      while (cursor <= fin){
+        const fecha = isoDeFechaLocal(cursor);
+        const r = await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, s.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: s.key });
+        if (r.creado) creadosDeEsta++; else bloqueadosDeEsta++;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      if (creadosDeEsta){ totalCreados += creadosDeEsta; solicitudesConCreados++; }
+      if (bloqueadosDeEsta){ totalBloqueados += bloqueadosDeEsta; solicitudesConBloqueos++; }
+    }
+    statusMsg(`Listo. ${aprobadas.length} solicitud(es) revisada(s) — ${totalCreados} día(s) creado(s) en ${solicitudesConCreados} solicitud(es).${totalBloqueados ? ` ${totalBloqueados} día(s) en ${solicitudesConBloqueos} solicitud(es) ya tenían algo guardado y no se tocaron — usá "🔧 Reparar días" en cada una para ver el detalle.` : ""}`, true);
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo reparar todo: " + e.message, false); }
+}
+
 // Vacaciones/días libres/días de viaje YA OTORGADOS (aprobados) — antes, una
 // vez aprobada una solicitud, no había ninguna acción disponible sobre ella
 // (ni siquiera para gerencia/master): si la fecha había quedado mal puesta,
@@ -14019,8 +14054,11 @@ function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeApro
   if (!todasOtorgadas.length && !filtroOtorgadosNombre) return "";
   const otorgadas = todasOtorgadas.slice(0, 30);
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">✅ Días libres y vacaciones otorgados</div>
-    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si una fecha quedó mal puesta, corrígela acá — el calendario, el saldo de vacaciones y el reporte de planilla se ajustan solos. Vacaciones y permiso sin goce generan solos su Acción de Personal — descargala y confirmala una vez firmada; mientras no se confirme, corregir la fecha/tipo la vuelve a generar sola.${todasOtorgadas.length > otorgadas.length ? ` Mostrando ${otorgadas.length} de ${todasOtorgadas.length}, las más recientes.` : ""}</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+      <div style="font-weight:700; color:var(--navy-deep);">✅ Días libres y vacaciones otorgados</div>
+      <button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="repararTodosLosDias()">🔧 Reparar todos</button>
+    </div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si una fecha quedó mal puesta, corrígela acá — el calendario, el saldo de vacaciones y el reporte de planilla se ajustan solos. Vacaciones y permiso sin goce generan solos su Acción de Personal — descargala y confirmala una vez firmada; mientras no se confirme, corregir la fecha/tipo la vuelve a generar sola. "🔧 Reparar todos" revisa TODAS las solicitudes ya aprobadas (no solo las que se ven acá) y crea en Horas Extra cualquier día que se haya quedado sin registrar.${todasOtorgadas.length > otorgadas.length ? ` Mostrando ${otorgadas.length} de ${todasOtorgadas.length}, las más recientes.` : ""}</div>
     <div class="field" style="margin-bottom:8px;">
       <input type="text" id="otorgados-search" placeholder="🔎 Buscar empleado…" value="${escapeHtml(filtroOtorgadosNombre)}" oninput="filtrarOtorgadosInput(this.value)">
     </div>
@@ -15647,9 +15685,12 @@ function etiquetaTipoDia(tipo){
 // agruparFechasConsecutivas), y suma aparte las solicitudes todavía
 // pendientes de aprobación — esas no tienen fila en horas_extra: hasta que
 // se aprueban, así que se muestran desde la propia solicitud.
-// Cupo mensual de días libres (vacaciones o día libre, lo que se haya usado
-// para cubrirlo — ver diasLibresMesDeEmpleado) contra lo que de verdad ya se
-// otorgó cada mes, MÁS el saldo acumulado con arrastre (ver
+// Cupo mensual de días libres (SOLO tipo "día libre" — vacaciones es un
+// beneficio legal aparte, Art. 153 CT, con su propio saldo y su propia
+// tarjeta KPI, y no debe restar de este cupo aunque las dos cosas se
+// otorguen desde el mismo formulario — ver diasLibresMesDeEmpleado) contra
+// lo que de verdad ya se otorgó cada mes, MÁS el saldo acumulado con
+// arrastre (ver
 // calcularSaldoDiasLibres): si un mes no se otorgan todos los que tocan, el
 // sobrante no se pierde — pasa a "pendientes" del mes siguiente, sumado a lo
 // propio de ese mes. El mes en curso siempre se muestra, aunque todavía
@@ -15662,7 +15703,7 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
   const porMes = {};
   const todasLasFechasOtorgadas = [];
   confirmados
-    .filter(r => r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
+    .filter(r => r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre")
     .forEach(r => {
       if (!r.FECHA) return;
       todasLasFechasOtorgadas.push(r.FECHA);
@@ -15725,7 +15766,7 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
         </select>
       </label>
     </div>
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es el saldo acumulado a esa fecha, CON ARRASTRE — si un mes no se asignan todos, el sobrante se suma al siguiente en vez de perderse. Igual que el saldo de vacaciones: si se otorgó más de lo acumulado, queda en negativo (🔻 adelanto) y se recupera solo con la acumulación de los meses siguientes. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) libre(s) (esto NO incluye vacaciones — las vacaciones tienen su propio saldo aparte, arriba). "Pendientes" es el saldo acumulado a esa fecha, CON ARRASTRE — si un mes no se asignan todos, el sobrante se suma al siguiente en vez de perderse. Igual que el saldo de vacaciones: si se otorgó más de lo acumulado, queda en negativo (🔻 adelanto) y se recupera solo con la acumulación de los meses siguientes. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
     ${filas.map(f => {
       const gruposFechas = agruparFechasConsecutivas(f.fechasDelMes);
       const fechasTexto = gruposFechas.length
@@ -15939,7 +15980,7 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
       // pero destacado arriba como KPI para que se note de un vistazo, igual
       // que ya pasa con el saldo de vacaciones.
       const diasOtorgadosLibres = registrosDeEsteEmpleado
-        .filter(r => r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
+        .filter(r => r.ESTADO === "aprobada" && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
         .map(r => r.FECHA);
       saldoDiasLibres = calcularSaldoDiasLibres(emp, diasOtorgadosLibres, new Date());
       resumenHorasExtra = {
