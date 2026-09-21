@@ -13847,10 +13847,24 @@ async function actualizarDisponibilidadAsignacionDirecta(){
       .map(r => r.FECHA);
     const saldo = calcularSaldoDiasLibres(emp, diasOtorgados, finDeMes);
     const etiquetaMes = `${MESES[mesNum - 1][0].toUpperCase()}${MESES[mesNum - 1].slice(1)} ${anio}`;
+
+    // Desglose para que quede claro DE DÓNDE sale el número — antes solo se
+    // mostraba el resultado final, y si no calzaba con el cupo de ley/
+    // contrato (ej. 3 en vez de 4) no había forma de saber, sin ir a buscar
+    // aparte, si era porque ya le habían otorgado algo este mes o por otra
+    // razón. finDeMesAnterior usa día 0 del mes elegido = último día del mes
+    // de antes (misma fórmula que ya usa el resto de este cálculo).
+    const finDeMesAnterior = new Date(anio, mesNum - 1, 0);
+    const arrastre = calcularSaldoDiasLibres(emp, diasOtorgados, finDeMesAnterior);
+    const otorgadosEsteMes = diasOtorgados.filter(f => f.slice(0, 7) === mesValor).length;
+    const detalle = `Cupo de ese mes: ${cupoMes} día(s)`
+      + (arrastre !== 0 ? ` ${arrastre > 0 ? "+" : "−"} ${Math.abs(arrastre)} día(s) de arrastre de meses anteriores` : "")
+      + (otorgadosEsteMes > 0 ? ` − ${otorgadosEsteMes} día(s) ya otorgado(s) ese mes` : "");
+
     if (saldo < 0){
-      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: cupo mensual ${cupoMes} día(s) por ley/contrato, pero ya tiene <b style="color:#b2703b;">🔻 ${Math.abs(saldo)} día(s) en adelanto</b> (se le otorgó de más).`;
+      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: <b style="color:#b2703b;">🔻 ${Math.abs(saldo)} día(s) en adelanto</b> (se le otorgó de más).<br><span style="font-size:11px; color:var(--ink-soft);">${detalle} = ${saldo} día(s).</span>`;
     } else {
-      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: cupo mensual ${cupoMes} día(s)${saldo > cupoMes ? ` — <b>tiene ${saldo} día(s) disponibles</b> en total (incluye arrastre acumulado de meses anteriores sin otorgar)` : ` — <b>${saldo} día(s) disponibles</b> para asignarle.`}`;
+      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: <b>${saldo} día(s) disponibles</b> para asignarle.<br><span style="font-size:11px; color:var(--ink-soft);">${detalle} = ${saldo} día(s).</span>`;
     }
   }catch(e){ cont.textContent = "No se pudo calcular la disponibilidad."; }
 }
