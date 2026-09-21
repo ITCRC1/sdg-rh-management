@@ -7532,6 +7532,20 @@ async function generarReporteHorarioPlanilla(){
 const HORAS_EXTRA_PREFIX = "horas_extra:";
 let horasExtraFiltro = "pendiente"; // pendiente | sinmatch | aprobada | rechazada
 let horasExtraEmpleadoSeleccionado = null; // key del empleado abierto en el detalle de "Pendientes" (vista lista → detalle)
+let horasExtraFiltroNombre = ""; // buscador por nombre de empleado — aplica a todas las pestañas, incluida "Pendientes"
+
+// Debounce + restaurar foco: el mismo patrón que ya usa el buscador de
+// "Días libres y vacaciones otorgados" (filtrarOtorgadosInput) — sin esto,
+// cada letra tecleada vuelve a pintar el panel entero y el cursor/foco del
+// input se pierde a mitad de escribir.
+const _renderHorasExtraBuscadoDebounced = debounce(async function(){
+  await renderHorasExtrasPanel();
+  restaurarFocoBusqueda("horasextra-buscar-nombre");
+}, 350);
+function filtrarHorasExtraNombre(valor){
+  horasExtraFiltroNombre = String(valor || "").trim().toLowerCase();
+  _renderHorasExtraBuscadoDebounced();
+}
 
 // Rango de fechas LIBRE (no una quincena fija) para los reportes/totales del
 // panel de Horas Extra — null,null hasta que se toque por primera vez, en
@@ -9348,11 +9362,22 @@ async function renderHorasExtrasPanel(){
     // (aprobadas/rechazadas), que es lo que hoy se veía como un total
     // histórico de toda la vida en vez de por período.
     asegurarRangoHorasExtraPorDefecto();
-    const pendientes = registros.filter(r => r.ESTADO === "pendiente" && r.EMPLEADO_KEY);
-    const sinMatch = registros.filter(r => r.ESTADO === "pendiente" && !r.EMPLEADO_KEY);
-    const aprobadasJefatura = registros.filter(r => r.ESTADO === "aprobada_jefatura");
-    const aprobadas = registros.filter(r => r.ESTADO === "aprobada" && enRangoHorasExtra(r.FECHA));
-    const rechazadas = registros.filter(r => r.ESTADO === "rechazada" && enRangoHorasExtra(r.FECHA));
+    // Buscador por nombre — aplica ANTES de separar por estado, así filtra
+    // igual el roster de "Pendientes" (agrupado por persona) que las listas
+    // planas de las demás pestañas. Para "Sin identificar" (sin
+    // EMPLEADO_KEY) compara contra lo que trajo el archivo de marcación en
+    // vez de un expediente, que es lo único que hay para esos registros.
+    const coincideNombreHorasExtra = r => {
+      if (!horasExtraFiltroNombre) return true;
+      const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
+      const nombre = (emp ? nombreCompletoEmpleado(emp) : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "")) || "";
+      return nombre.toLowerCase().includes(horasExtraFiltroNombre);
+    };
+    const pendientes = registros.filter(r => r.ESTADO === "pendiente" && r.EMPLEADO_KEY && coincideNombreHorasExtra(r));
+    const sinMatch = registros.filter(r => r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && coincideNombreHorasExtra(r));
+    const aprobadasJefatura = registros.filter(r => r.ESTADO === "aprobada_jefatura" && coincideNombreHorasExtra(r));
+    const aprobadas = registros.filter(r => r.ESTADO === "aprobada" && enRangoHorasExtra(r.FECHA) && coincideNombreHorasExtra(r));
+    const rechazadas = registros.filter(r => r.ESTADO === "rechazada" && enRangoHorasExtra(r.FECHA) && coincideNombreHorasExtra(r));
     const horasAprobadasTotal = aprobadas.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
 
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
@@ -9474,6 +9499,9 @@ async function renderHorasExtrasPanel(){
       ["rechazada", `Rechazadas (${rechazadas.length})`],
     ];
     if (esJefatura && horasExtraFiltro === "sinmatch") horasExtraFiltro = "pendiente";
+    html += `<div class="field" style="margin-bottom:8px; max-width:320px;">
+      <input type="text" id="horasextra-buscar-nombre" placeholder="🔎 Buscar empleado…" value="${escapeHtml(horasExtraFiltroNombre)}" oninput="filtrarHorasExtraNombre(this.value)">
+    </div>`;
     html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
       ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
     </div>`;
