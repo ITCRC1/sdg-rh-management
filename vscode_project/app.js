@@ -8764,22 +8764,24 @@ function diasLibresMesDeEmpleado(emp){
 // Saldo ACUMULADO (con arrastre) del cupo de "días libres al mes" — a
 // diferencia del saldo de vacaciones (Art. 153 CT, con su propio ciclo legal
 // de aniversario/diciembre — ver calcularSaldoVacaciones), este es un
-// beneficio interno de la empresa que sigue la regla real de descanso
-// semanal (Art. 152 CT): 1 día libre por cada 6 días laborados, es decir,
-// 1 por cada CICLO DE 7 DÍAS CORRIDOS desde el ingreso — NUNCA por mes
-// calendario completo. Acreditar el mes entero desde el día 1 sobrestimaría
-// a quien ingresa a mitad de mes (ej. entra el 14/09: hasta el 26/10 lleva
-// 42 días corridos → 42/7 = 6 días libres ganados, NO 8 como daría "2 meses
-// completos × 4"). El cupo mensual (diasLibresMesDeEmpleado) es solo la
-// forma "por mes" de expresar esta misma tasa (30 días ÷ 7 ≈ 4.3, redondeado
-// a 4) — para un empleado con más cupo por contrato (5 o 6 al mes), el ciclo
-// se acorta en la misma proporción (ej. cupo 6 → 1 día libre cada 4.67 días).
+// beneficio interno de la empresa: se acredita el cupo FIJO por MES
+// CALENDARIO completo (4/5/6, según diasLibresMesDeEmpleado) — simple, sin
+// contar ciclos de días corridos. La única excepción es el propio MES DE
+// INGRESO, que se prorratea según cuántos días de ese mes trabajó de verdad
+// (proporcional a su fecha real de entrada, no el cupo completo por haber
+// entrado a mitad de mes) — ej. entra el 14/09 (17 de los 30 días del mes):
+// 4 × 17/30 ≈ 2 días ese primer mes, no los 4 completos.
 // Cada día de vacaciones/día libre YA OTORGADO (por su fecha real, sin
 // importar cuándo se asignó — asignarlo con un mes de anticipo es lo normal)
-// se resta del acreditado a esa fecha. Si en un ciclo no se otorgan todos
+// se resta de lo acreditado a esa fecha. Si en un mes no se otorgan todos
 // los que tocan, el sobrante queda de saldo y se arrastra solo (sin límite)
-// — el caso de "en septiembre no tomó los días libres, que quede pendiente
-// para octubre".
+// al siguiente — el caso de "en septiembre no tomó los días libres, que
+// quede pendiente para octubre". Al revés, si gerencia directamente NO
+// otorga nada por varios meses y después otorga un bloque grande de una
+// sola vez (ej. 8 días en una sola solicitud), eso ya sale solo de este
+// mismo arrastre — no hace falta ninguna configuración aparte de
+// "acumular cada 2/3 meses": es lo mismo mecanismo, solo que gerencia
+// decide no usarlo mes a mes.
 // `diasOtorgados` es un arreglo plano de fechas ISO (una por cada día ya
 // otorgado de tipo vacaciones/dia_libre/libre — ver renderDiasLibresPorMesEmpleado).
 // El seguimiento CON ARRASTRE recién se implementó — aplicarlo retroactivo
@@ -8787,12 +8789,12 @@ function diasLibresMesDeEmpleado(emp){
 // artificial de años acumulados que nunca se prometió ni se llevó control
 // de antes: a los empleados ANTIGUOS (que ya ingresaron antes de esta
 // fecha) ya se les vienen generando sus días libres "a mano" con el cupo
-// fijo de siempre, así que para ellos el cálculo preciso por ciclos de 7
-// días arranca acá, no en su ingreso real — sin tocar FECHA_INGRESO_EMP
-// (que sigue rigiendo antigüedad, vacaciones, planilla, etc. tal cual está
-// en la ficha). Un empleado NUEVO que ingresa en o después de esta fecha sí
-// acumula desde su propio día de ingreso real (ver el ejemplo de arriba),
-// para que lo otorgado siempre calce con lo pendiente desde su primer día.
+// fijo de siempre, así que para ellos este cálculo arranca acá, no en su
+// ingreso real — sin tocar FECHA_INGRESO_EMP (que sigue rigiendo
+// antigüedad, vacaciones, planilla, etc. tal cual está en la ficha). Un
+// empleado NUEVO que ingresa en o después de esta fecha sí acumula desde su
+// propio día de ingreso real, para que lo otorgado siempre calce con lo
+// pendiente desde su primer día.
 const INICIO_ACUMULACION_DIAS_LIBRES = new Date(2026, 7, 1); // 1° de agosto de 2026
 
 function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
@@ -8802,10 +8804,23 @@ function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
   if (ingreso > fechaCorte) return 0;
 
   const cupoMes = diasLibresMesDeEmpleado(empleado);
-  const diasPorCiclo = (7 * DIAS_LIBRES_POR_MES) / cupoMes; // 7 días para el cupo estándar (4)
-  const MS_POR_DIA = 86400000;
-  const diasTranscurridos = Math.round((fechaCorte - ingreso) / MS_POR_DIA);
-  const acreditados = Math.floor(diasTranscurridos / diasPorCiclo);
+  let acreditado = 0;
+  let inicioMes = new Date(ingreso.getFullYear(), ingreso.getMonth(), 1);
+  while (inicioMes <= fechaCorte){
+    const esMesDeIngreso = inicioMes.getFullYear() === ingreso.getFullYear() && inicioMes.getMonth() === ingreso.getMonth();
+    if (esMesDeIngreso){
+      const finMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 0);
+      const diasEnElMes = finMes.getDate();
+      const diasTrabajadosDelMes = diasEnElMes - ingreso.getDate() + 1;
+      acreditado += Math.round(cupoMes * (diasTrabajadosDelMes / diasEnElMes));
+    } else {
+      // Cualquier otro mes (completo, incluido el mes en curso aunque
+      // todavía no haya terminado) acredita el cupo fijo entero — simple,
+      // sin prorratear día por día.
+      acreditado += cupoMes;
+    }
+    inicioMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 1);
+  }
 
   let usados = 0;
   (diasOtorgados || []).forEach(fechaISO => {
@@ -8813,7 +8828,7 @@ function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
     if (fecha >= ingreso && fecha <= fechaCorte) usados++;
   });
 
-  return acreditados - usados;
+  return acreditado - usados;
 }
 
 const TIPOS_DIA_DESCUENTA_QUINCENA = {
@@ -13552,34 +13567,71 @@ async function renderDiasLibresVacacionesPanel(){
 // selector de arriba del panel (renderDiasLibresVacacionesPanel), así que
 // `empleados` llega acotado a "todos" o al departamento elegido.
 let cumpleanosMostrarTodos = false;
+// "todos" o un índice de mes (0=enero...11=diciembre, como Date#getMonth) en
+// texto — filtra por MES DE CUMPLEAÑOS específico, sin importar cuán lejos
+// esté esa fecha de hoy (a diferencia del toggle de arriba, que es una
+// ventana de días desde hoy). Un mes elegido tiene prioridad sobre el toggle.
+let cumpleanosFiltroMes = "todos";
 
 function toggleCumpleanosMostrarTodos(){
   cumpleanosMostrarTodos = !cumpleanosMostrarTodos;
   if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
 }
 
+function cambiarCumpleanosFiltroMes(val){
+  cumpleanosFiltroMes = val;
+  if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+}
+
+// Cumpleaños de este empleado si cae en el mes dado (0-11), en el año que
+// corresponda — el próximo que caiga en ese mes (este año si ese mes de
+// este año todavía no pasó del todo, si no el del año que viene), para que
+// elegir un mes ya pasado del calendario no muestre puras fechas negativas.
+function cumpleanosEnMes(fechaNacStr, mes, hoy){
+  const nacimiento = parsearFechaDDMMYYYY(fechaNacStr);
+  if (!nacimiento || nacimiento.getMonth() !== mes) return null;
+  let fecha = new Date(hoy.getFullYear(), mes, nacimiento.getDate());
+  const hoySinHora = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  // Ya pasó este año Y no es el mes en curso (ese si se deja en el año
+  // actual, aunque el día ya haya pasado, para no saltarlo al año próximo
+  // apenas se pasa la fecha exacta dentro del mismo mes elegido).
+  if (fecha < hoySinHora && mes !== hoy.getMonth()) fecha = new Date(hoy.getFullYear() + 1, mes, nacimiento.getDate());
+  const diasFaltan = Math.round((fecha - hoySinHora) / 86400000);
+  return { fecha, diasFaltan };
+}
+
 function renderSeccionCumpleanos(empleados, puedeOtorgar){
   const hoy = new Date();
+  const mesElegido = cumpleanosFiltroMes === "todos" ? null : parseInt(cumpleanosFiltroMes, 10);
   const ventanaDias = cumpleanosMostrarTodos ? 366 : 30;
   const proximos = empleados
     .map(e => {
-      const prox = proximoCumpleanosEn(e.FECHA_NACIMIENTO_EMP, hoy, ventanaDias);
+      const prox = mesElegido === null
+        ? proximoCumpleanosEn(e.FECHA_NACIMIENTO_EMP, hoy, ventanaDias)
+        : cumpleanosEnMes(e.FECHA_NACIMIENTO_EMP, mesElegido, hoy);
       if (!prox) return null;
       if (otorgadoEsteAnio(e, prox.fecha.getFullYear())) return null;
       return { emp: e, ...prox };
     })
     .filter(Boolean)
     .sort((a,b) => a.diasFaltan - b.diasFaltan);
-  if (!proximos.length && !cumpleanosMostrarTodos) return "";
+  if (!proximos.length && !cumpleanosMostrarTodos && mesElegido === null) return "";
+  const opcionesMes = MESES.map((nombreMes, i) => `<option value="${i}"${mesElegido === i ? " selected" : ""}>${nombreMes[0].toUpperCase()}${nombreMes.slice(1)}</option>`).join("");
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-      <div style="font-weight:700; color:var(--navy-deep);">🎂 Cumpleaños ${cumpleanosMostrarTodos ? "del año" : "próximos"} — 1 día pagado, se pierde si no se otorga en el año</div>
-      <button class="btn" style="padding:3px 9px; font-size:10.5px;" onclick="toggleCumpleanosMostrarTodos()">${cumpleanosMostrarTodos ? "Ver solo próximos (30 días)" : "📅 Ver todos los del año"}</button>
+      <div style="font-weight:700; color:var(--navy-deep);">🎂 Cumpleaños ${mesElegido !== null ? `de ${MESES[mesElegido].toLowerCase()}` : (cumpleanosMostrarTodos ? "del año" : "próximos")} — 1 día pagado, se pierde si no se otorga en el año</div>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <select style="font-size:10.5px; padding:3px 6px;" onchange="cambiarCumpleanosFiltroMes(this.value)">
+          <option value="todos"${mesElegido === null ? " selected" : ""}>Cualquier mes</option>
+          ${opcionesMes}
+        </select>
+        ${mesElegido === null ? `<button class="btn" style="padding:3px 9px; font-size:10.5px;" onclick="toggleCumpleanosMostrarTodos()">${cumpleanosMostrarTodos ? "Ver solo próximos (30 días)" : "📅 Ver todos los del año"}</button>` : ""}
+      </div>
     </div>
-    ${!proximos.length ? `<div class="empty-state" style="padding:8px 0;">Nadie pendiente de otorgar este año.</div>` : ""}
+    ${!proximos.length ? `<div class="empty-state" style="padding:8px 0;">Nadie pendiente de otorgar${mesElegido !== null ? ` en ${MESES[mesElegido].toLowerCase()}` : " este año"}.</div>` : ""}
     ${proximos.map(p => `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
-        <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(p.emp))}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : `en ${p.diasFaltan} día(s)`})</div>
+        <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(p.emp))}</b> — ${fmtFechaDesdeDate(p.fecha)} (${p.diasFaltan === 0 ? "hoy" : (p.diasFaltan > 0 ? `en ${p.diasFaltan} día(s)` : `hace ${Math.abs(p.diasFaltan)} día(s)`)})</div>
         ${puedeOtorgar ? `<button class="btn primary" style="padding:5px 10px; font-size:11px;" onclick="abrirModalOtorgarCumpleanos('${p.emp.key}', '${nombreCompletoEmpleado(p.emp).replace(/'/g,"\\'")}', '${isoDeFechaLocal(p.fecha)}')">🎁 Otorgar día</button>` : `<span class="meta">Pendiente — lo otorga gerencia/master</span>`}
       </div>`).join("")}
   </div></div>`;
@@ -13792,6 +13844,37 @@ function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departam
   </div></div>`;
 }
 
+// Reintenta crear los días individuales (horas_extra:) de una solicitud YA
+// APROBADA que por algún motivo se quedaron sin generar — pasó con casos
+// reales donde la solicitud y hasta su documento quedaron bien, pero
+// ninguno de sus días llegó a existir en horas_extra: (ver diagnóstico con
+// "Ver registro de un día específico"). Nunca pisa un día que YA tenga un
+// registro real (de esta misma solicitud, de otra, o de la marcación) — si
+// dos solicitudes se pisan en las mismas fechas con tipos distintos, esto
+// NO decide cuál gana: la primera que se repare se queda con esos días, y
+// hay que resolver el conflicto a mano (Corregir fechas/Eliminar) en la
+// otra.
+async function repararDiasDeSolicitud(key){
+  try{
+    const res = await window.storage.get(key, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s){ statusMsg("Esa solicitud ya no existe.", false); return; }
+    if (s.ESTADO !== "aprobada"){ statusMsg("Esa solicitud no está aprobada — no hay nada que reparar.", false); return; }
+
+    const cursor = new Date(s.FECHA_INICIO + "T00:00:00");
+    const fin = new Date(s.FECHA_FIN + "T00:00:00");
+    let creados = 0, yaExistian = 0;
+    while (cursor <= fin){
+      const fecha = isoDeFechaLocal(cursor);
+      const ok = await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, s.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
+      if (ok) creados++; else yaExistian++;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    statusMsg(`${creados} día(s) creado(s).${yaExistian ? ` ${yaExistian} día(s) ya tenían algo guardado y no se tocaron (revisá si hay otra solicitud pisando las mismas fechas).` : ""}`, true);
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo reparar: " + e.message, false); }
+}
+
 // Vacaciones/días libres/días de viaje YA OTORGADOS (aprobados) — antes, una
 // vez aprobada una solicitud, no había ninguna acción disponible sobre ella
 // (ni siquiera para gerencia/master): si la fecha había quedado mal puesta,
@@ -13867,6 +13950,7 @@ function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeApro
           </div>
           <div class="actions">
             <button class="use" onclick="abrirModalCorregirSolicitud('${keyEsc}')">✏️ Corregir fechas</button>
+            <button class="btn" onclick="repararDiasDeSolicitud('${keyEsc}')">🔧 Reparar días</button>
             <button class="del" onclick="eliminarSolicitudOtorgada('${keyEsc}')">🗑️ Eliminar</button>
           </div>
         </div>
