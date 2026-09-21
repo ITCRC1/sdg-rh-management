@@ -14,8 +14,6 @@ const { query } = require("./db");
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 const DURACION_SESION_HORAS = Number(process.env.SESION_HORAS) || 12;
-const MAX_INTENTOS = 8;
-const BLOQUEO_MINUTOS = 15;
 
 // --------------------------------------------------------------------------
 // Contraseñas
@@ -232,16 +230,16 @@ async function archivarUsuariosDeEmpleadosVencidos() {
   }
 }
 
+// Sin bloqueo temporal a propósito (se quitó a pedido) — solo cuenta los
+// intentos fallidos para la bitácora, nunca pone bloqueado_hasta ni impide
+// el siguiente intento.
 async function marcarIntentoFallido(usuarioId) {
   const { rows } = await query(
     `UPDATE usuarios
-        SET intentos_fallidos = intentos_fallidos + 1,
-            bloqueado_hasta = CASE
-              WHEN intentos_fallidos + 1 >= $2 THEN now() + ($3 || ' minutes')::interval
-              ELSE bloqueado_hasta END
+        SET intentos_fallidos = intentos_fallidos + 1
       WHERE id = $1
       RETURNING intentos_fallidos, bloqueado_hasta`,
-    [usuarioId, MAX_INTENTOS, String(BLOQUEO_MINUTOS)]
+    [usuarioId]
   );
   return rows[0];
 }
@@ -421,5 +419,4 @@ module.exports = {
   rolValido,
   ROLES,
   PUEDEN_ESCRIBIR,
-  MAX_INTENTOS,
 };

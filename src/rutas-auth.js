@@ -58,22 +58,10 @@ router.post("/login", async (req, res, next) => {
       return res.status(401).json({ error: generico });
     }
 
-    if (u.bloqueado_hasta && new Date(u.bloqueado_hasta) > new Date()) {
-      await A.registrarAcceso({ email, usuarioId: u.id, evento: "login", exito: false, detalle: "cuenta bloqueada", ip, userAgent: ua });
-      return res.status(429).json({
-        error: "Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.",
-      });
-    }
-
     if (!A.verificarPassword(password, u.password_hash)) {
-      const estado = await A.marcarIntentoFallido(u.id);
+      await A.marcarIntentoFallido(u.id);
       await A.registrarAcceso({ email, usuarioId: u.id, evento: "login", exito: false, detalle: "contraseña incorrecta", ip, userAgent: ua });
-      const restantes = Math.max(0, A.MAX_INTENTOS - (estado?.intentos_fallidos || 0));
-      return res.status(401).json({
-        error: restantes > 0 && restantes <= 3
-          ? generico + " Te quedan " + restantes + " intento(s) antes del bloqueo temporal."
-          : generico,
-      });
+      return res.status(401).json({ error: generico });
     }
 
     // Se valida DESPUÉS de la contraseña: así una cuenta desactivada no se
