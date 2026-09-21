@@ -13739,17 +13739,77 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Asignar directamente</div>
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar). Podés cargar hasta 3 rangos distintos para el mismo empleado (varias salidas del mes, permisos de distinto tipo, o un cumpleaños — de un solo día) y asignarlos todos de una vez.</p>
-    <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:320px; margin-bottom:4px;">Empleado
-      <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
-      <select id="asignacion-directa-empleado">
-        <option value="">— Elegí —</option>
-        ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
-      </select>
-    </label>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:4px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1 1 260px;">Empleado
+        <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
+        <select id="asignacion-directa-empleado" onchange="actualizarDisponibilidadAsignacionDirecta()">
+          <option value="">— Elegí —</option>
+          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">¿Cuántos días libres tiene disponibles? — Mes a consultar
+        <select id="asignacion-directa-mes-consulta" onchange="actualizarDisponibilidadAsignacionDirecta()">
+          ${mesesConsultaAsignacionDirecta().map(o => `<option value="${o.valor}"${o.esActual ? " selected" : ""}>${o.etiqueta}${o.esActual ? " (actual)" : ""}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div id="asignacion-directa-disponibilidad" style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
     ${[0, 1, 2].map(filaHtml).join("")}
     <button class="btn primary" style="margin-top:8px;" onclick="confirmarAsignacionDirecta();">✅ Asignar</button>
     <div id="asignacion-directa-status" style="font-size:12px; margin-top:6px;"></div>
   </div></div>`;
+}
+
+// Opciones del selector "Mes a consultar" de Asignar directamente — 2 meses
+// hacia atrás y 4 hacia adelante, mismo criterio que el selector de "Días
+// libres otorgados por mes" en Mi información.
+function mesesConsultaAsignacionDirecta(){
+  const hoy = new Date();
+  const opciones = [];
+  for (let delta = -2; delta <= 4; delta++){
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() + delta, 1);
+    opciones.push({ valor: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, etiqueta: `${MESES[d.getMonth()][0].toUpperCase()}${MESES[d.getMonth()].slice(1)} ${d.getFullYear()}`, esActual: delta === 0 });
+  }
+  return opciones;
+}
+
+// Muestra, al elegir empleado + mes, cuántos días libres tiene disponibles
+// ese empleado para ese mes — su cupo de ley (o el de su contrato, ver
+// diasLibresMesDeEmpleado) MÁS cualquier saldo acumulado de meses
+// anteriores que no se le hayan otorgado (ver calcularSaldoDiasLibres) — así
+// quien asigna sabe de una vez cuántos puede darle sin tener que ir a
+// revisar Mi información aparte. Se proyecta siempre al ÚLTIMO día del mes
+// elegido (no al día de hoy si es el mes en curso): acá lo que importa es
+// cuánto le corresponde POR ESE MES para decidir la asignación, no un
+// estado "a la fecha" como en el resto del módulo.
+async function actualizarDisponibilidadAsignacionDirecta(){
+  const cont = document.getElementById("asignacion-directa-disponibilidad");
+  if (!cont) return;
+  const empKey = (document.getElementById("asignacion-directa-empleado")||{}).value;
+  const mesValor = (document.getElementById("asignacion-directa-mes-consulta")||{}).value;
+  if (!empKey || !mesValor){ cont.textContent = ""; return; }
+  cont.textContent = "Consultando…";
+  try{
+    const [anio, mesNum] = mesValor.split("-").map(Number);
+    const finDeMes = new Date(anio, mesNum, 0);
+    const [empRes, registros] = await Promise.all([
+      window.storage.get(CATALOGS.empleados.prefix + empKey, false),
+      listarRegistrosHorasExtra(),
+    ]);
+    const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+    if (!emp){ cont.textContent = ""; return; }
+    const cupoMes = diasLibresMesDeEmpleado(emp);
+    const diasOtorgados = registros
+      .filter(r => r.EMPLEADO_KEY === empKey && r.ESTADO === "aprobada" && (r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
+      .map(r => r.FECHA);
+    const saldo = calcularSaldoDiasLibres(emp, diasOtorgados, finDeMes);
+    const etiquetaMes = `${MESES[mesNum - 1][0].toUpperCase()}${MESES[mesNum - 1].slice(1)} ${anio}`;
+    if (saldo < 0){
+      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: cupo mensual ${cupoMes} día(s) por ley/contrato, pero ya tiene <b style="color:#b2703b;">🔻 ${Math.abs(saldo)} día(s) en adelanto</b> (se le otorgó de más).`;
+    } else {
+      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: cupo mensual ${cupoMes} día(s)${saldo > cupoMes ? ` — <b>tiene ${saldo} día(s) disponibles</b> en total (incluye arrastre acumulado de meses anteriores sin otorgar)` : ` — <b>${saldo} día(s) disponibles</b> para asignarle.`}`;
+    }
+  }catch(e){ cont.textContent = "No se pudo calcular la disponibilidad."; }
 }
 
 async function confirmarAsignacionDirecta(){
