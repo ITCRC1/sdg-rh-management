@@ -3959,6 +3959,15 @@ async function renderCatalogTab(type){
             <option value="archivo">Archivados</option>
           </select>
         </div>
+        <div class="field" style="flex:1 1 200px; margin-bottom:0;">
+          <label style="font-size:10.5px;">Documento pendiente de confirmar</label>
+          <select onchange="filtrarEmpleadosPorDocPendiente(this.value)">
+            <option value="todos" ${empleadosFiltroDocPendiente==="todos"?"selected":""}>Todos</option>
+            <option value="cualquiera" ${empleadosFiltroDocPendiente==="cualquiera"?"selected":""}>Cualquiera pendiente</option>
+            <option value="vacaciones" ${empleadosFiltroDocPendiente==="vacaciones"?"selected":""}>🏖️ Vacaciones pendientes</option>
+            <option value="permiso_sin_goce" ${empleadosFiltroDocPendiente==="permiso_sin_goce"?"selected":""}>📄 Permiso sin goce pendiente</option>
+          </select>
+        </div>
       </div>`;
   }
   if (type === "puestos" && !(catalogEditing && catalogEditing.type === "puestos")){
@@ -4053,6 +4062,25 @@ async function renderCatalogTab(type){
           const contratosDeEste = contratosPorCedulaCache[cedula] || [];
           return contratosDeEste.some(c => c.tipoContrato === empleadosFiltroTipoContrato);
         });
+      }
+
+      // Filtro 6: documento de Acción de Personal (vacaciones/permiso sin
+      // goce) generado pero SIN CONFIRMAR todavía — ver
+      // generarDocumentoAccionPersonalDeSolicitud/confirmarDocumentoSolicitud.
+      // Es el único tipo con este seguimiento de "pendiente de revisión y
+      // firma" por ahora; amonestaciones/cartas de despido/recomendaciones
+      // no lo tienen (se archivan directo, sin un estado aparte que
+      // filtrar).
+      if (empleadosFiltroDocPendiente !== "todos"){
+        const solicitudesTodas = await listarSolicitudesAusencia();
+        const empKeysConDocPendiente = new Set(
+          solicitudesTodas
+            .filter(s => s.DOCUMENTO_ID && !s.DOCUMENTO_CONFIRMADO
+              && (s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce")
+              && (empleadosFiltroDocPendiente === "cualquiera" || s.TIPO === empleadosFiltroDocPendiente))
+            .map(s => s.EMPLEADO_KEY)
+        );
+        activos = activos.filter(it => empKeysConDocPendiente.has(it.key));
       }
 
       // Filtros 1 y 2: orden por nombre o por fecha de ingreso
@@ -10308,6 +10336,13 @@ let empleadosOrden = "nombre_asc"; // nombre_asc | nombre_desc | fecha_reciente 
 let empleadosFiltroContrato = "todos"; // todos | con | sin
 let empleadosFiltroDepartamento = "todos"; // "todos" o un valor exacto de DEPARTAMENTO_EMP
 let empleadosFiltroTipoContrato = "todos"; // todos | indeterminado | determinado
+// Documento de Acción de Personal (vacaciones/permiso sin goce — ver
+// generarDocumentoAccionPersonalDeSolicitud/confirmarDocumentoSolicitud)
+// generado pero TODAVÍA sin confirmar (pendiente de revisión y firma). Por
+// ahora solo esos dos tipos tienen este seguimiento — amonestaciones,
+// cartas de despido, recomendaciones, etc. se archivan directo sin un
+// estado "pendiente de confirmar" aparte.
+let empleadosFiltroDocPendiente = "todos"; // todos | vacaciones | permiso_sin_goce | cualquiera
 // El <select> de departamento se dibuja ANTES de que termine de cargar la
 // lista (para no atrasar el resto de los filtros), así que usa esta caché
 // del render anterior; se actualiza en cuanto los datos llegan.
@@ -10375,6 +10410,7 @@ function ordenarEmpleadosPor(val){ empleadosOrden = val; renderCatalogTab("emple
 function filtrarEmpleadosPorContrato(val){ empleadosFiltroContrato = val; renderCatalogTab("empleados"); }
 function filtrarEmpleadosPorDepartamento(val){ empleadosFiltroDepartamento = val; renderCatalogTab("empleados"); }
 function filtrarEmpleadosPorTipoContrato(val){ empleadosFiltroTipoContrato = val; renderCatalogTab("empleados"); }
+function filtrarEmpleadosPorDocPendiente(val){ empleadosFiltroDocPendiente = val; renderCatalogTab("empleados"); }
 
 async function renderSolicitudesList(){
   const el = document.getElementById("solicitudes-list");
