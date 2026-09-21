@@ -782,9 +782,7 @@ const CATALOGS = {
       // "Apellido1 Apellido2 Nombre(s)" en ese orden — pedirlo en el mismo
       // orden que trae el documento evita que alguien tipee sin pensar el
       // primer pedazo de texto en la primera caja que ve y termine
-      // guardando el apellido como si fuera el nombre (así se armó buena
-      // parte de la data existente cuya corrección se ofrece en "🔍 Revisar
-      // Nombre/Apellidos" — ver posibleNombreApellidoInvertido).
+      // guardando el apellido como si fuera el nombre.
       ["APELLIDOS_EMP","text_nombre_emp","1. Apellidos","Ej. QUIROS MORA","mayus"],
       ["NOMBRE_EMP","text_nombre_emp","2. Nombre","Ej. ISAAC","mayus"],
       ["TIPO_IDENTIFICACION_EMP","select_tipo_identificacion_emp","Tipo de identidad",""],
@@ -3901,7 +3899,7 @@ async function renderCatalogTab(type){
         <button class="btn" onclick="closeCatalogForm('${type}')">Cancelar</button>
       </div>`;
   } else {
-    html += `<div class="catalog-toolbar"><button class="btn primary" onclick="openCatalogForm('${type}', null)">➕ Agregar ${cfg.label}</button>${type === "empleados" ? `<button class="btn" onclick="mostrarModalNombresInvertidos()">🔍 Revisar Nombre/Apellidos</button>` : ""}</div>`;
+    html += `<div class="catalog-toolbar"><button class="btn primary" onclick="openCatalogForm('${type}', null)">➕ Agregar ${cfg.label}</button></div>`;
   }
 
   if (type === "propiedades"){
@@ -5038,112 +5036,6 @@ function dividirNombreCompleto(nombreCompleto){
   if (palabras.length <= 1) return { nombre: palabras.join(" "), apellidos: "" };
   if (palabras.length === 2) return { apellidos: palabras[0], nombre: palabras[1] };
   return { apellidos: palabras.slice(0, 2).join(" "), nombre: palabras.slice(2).join(" ") };
-}
-
-// ---------- Revisar Nombre/Apellidos posiblemente invertidos ----------
-// Antes de que se corrigiera dividirNombreCompleto (ver arriba), una carga
-// masiva por CSV o una corrección automática desde colilla podía guardar el
-// apellido en NOMBRE_EMP y el nombre en APELLIDOS_EMP — invertido. Como
-// nombreCompletoEmpleado ahora muestra Apellidos primero, esos registros
-// (probablemente la mayoría de los que vinieron por esos dos caminos) se
-// van a ver con el orden cambiado hasta que se corrijan a mano. No hay
-// forma de saber con certeza cuál campo es cuál sin conocer los apellidos
-// reales de cada persona, así que esto es solo un heurístico de apoyo —
-// nunca decide solo, siempre lo confirma una persona antes de tocar nada.
-// normalizarNombre le quita tildes y vuelve Ñ→N (NFD + strip de ̀-ͯ)
-// antes de comparar, así que la lista se normaliza igual al construirla —
-// si no, "ACUÑA" (con Ñ) nunca calzaría contra "ACUNA" (ya sin tilde).
-const APELLIDOS_CR_COMUNES = new Set([
-  "ABARCA","ACOSTA","ACUÑA","AGUILAR","AGUIRRE","ALAN","ALEMAN","ALFARO","ALPIZAR","ALVARADO",
-  "ALVARENGA","ALVAREZ","AMADOR","AMAYA","ANCHIA","ANGULO","ARAUZ","ARAYA","ARCE","ARGUEDAS",
-  "ARIAS","ARROYO","ARTAVIA","AZOFEIFA","BADILLA","BARBOZA","BARQUERO","BARRANTES","BARRIOS",
-  "BENAVIDES","BERMUDEZ","BLANCO","BOGANTES","BOGARIN","BOLAÑOS","BONILLA","BRENES","BRIONES",
-  "CABEZAS","CALDERON","CALVO","CAMACHO","CAMBRONERO","CAMPOS","CARBALLO","CARDENAS","CARMONA",
-  "CARRANZA","CARRILLO","CARVAJAL","CASCANTE","CASTILLO","CASTRO","CENTENO","CERDAS","CESPEDES",
-  "CHACON","CHAVARRIA","CHAVES","CHINCHILLA","CHAVARRÍA","CONEJO","CONTRERAS","CORDERO","CORDOBA",
-  "CORRALES","CORTES","CRUZ","CUBERO","CUBILLO","CUBILLOS","DELGADO","DIAZ","DUARTE","DURAN",
-  "ELIZONDO","ESCOBAR","ESPINOZA","ESQUIVEL","ESTRADA","FALLAS","FERNANDEZ","FLORES","FONSECA",
-  "FRANCO","FUENTES","GAMBOA","GARCIA","GARITA","GOMEZ","GONZALEZ","GRANADOS","GUERRERO","GUEVARA",
-  "GUTIERREZ","GUZMAN","HERNANDEZ","HERRERA","HIDALGO","HERNADEZ","JARQUIN","JIMENEZ","JINESTA",
-  "LEANDRO","LEITON","LEON","LOAICIGA","LOPEZ","LORIA","MADRIGAL","MADRIZ","MAROTO","MARIN",
-  "MARTINEZ","MASIS","MATA","MATAMOROS","MAYORGA","MEJIA","MENA","MENDEZ","MENDOZA","MIRANDA",
-  "MOLINA","MONGE","MONTERO","MONTERO","MONTOYA","MORA","MORALES","MOREIRA","MORERA","MOYA",
-  "MURILLO","NARANJO","NAVARRO","NUÑEZ","OBANDO","OCAMPO","ORDOÑEZ","OREAMUNO","OROZCO","ORTEGA",
-  "ORTIZ","OVIEDO","PACHECO","PADILLA","PANIAGUA","PEREIRA","PEREZ","PICADO","PIEDRA","PIZARRO",
-  "PORRAS","PRENDAS","PORTUGUEZ","QUESADA","QUIROS","QUIRÓS","RAMIREZ","RAMOS","REDONDO","RETANA",
-  "REYES","RIVAS","RIVERA","ROBLES","RODRIGUEZ","ROJAS","ROMERO","RUGAMA","RUIZ","SALAS","SALAZAR",
-  "SANABRIA","SANCHEZ","SANDI","SANDOVAL","SEGURA","SEQUEIRA","SERRANO","SIBAJA","SIBAJA","SIRIAS",
-  "SOLANO","SOLIS","SOLORZANO","SOTO","TABASH","TENCIO","TENORIO","TORRES","TREJOS","UGALDE",
-  "UMAÑA","VALVERDE","VARELA","VARGAS","VASQUEZ","VÁSQUEZ","VEGA","VENEGAS","VILLALOBOS","VILLEGAS",
-  "VINDAS","VIQUEZ","VÍQUEZ","YAÑEZ","ZAMORA","ZAMBRANA","ZELEDON","ZUÑIGA","ZUMBADO",
-].map(normalizarNombre));
-
-// Cuenta cuántas palabras de un texto (Nombre o Apellidos) coinciden con la
-// lista de apellidos comunes de arriba. normalizarNombre (ya usado por el
-// emparejado de colillas) deja cada palabra en mayúsculas y sin tildes.
-function puntajeApellido(texto){
-  return String(texto || "").trim().split(/\s+/).filter(Boolean)
-    .filter(p => APELLIDOS_CR_COMUNES.has(normalizarNombre(p))).length;
-}
-
-// Candidato a tener Nombre/Apellidos invertidos: las palabras de NOMBRE_EMP
-// "tienen más cara de apellido" (según la lista de arriba) que las de
-// APELLIDOS_EMP. Es una señal, no una certeza — por eso la herramienta de
-// revisión siempre pide confirmación antes de intercambiar nada.
-function posibleNombreApellidoInvertido(emp){
-  if (!emp || !emp.NOMBRE_EMP || !emp.APELLIDOS_EMP) return false;
-  const scoreNombre = puntajeApellido(emp.NOMBRE_EMP);
-  const scoreApellidos = puntajeApellido(emp.APELLIDOS_EMP);
-  return scoreNombre > scoreApellidos;
-}
-
-// Reutiliza el mismo modal genérico que "Colillas duplicadas" (index.html:
-// #modal-incompletos) — mismo patrón de revisar antes de confirmar.
-async function mostrarModalNombresInvertidos(){
-  const body = document.getElementById("modal-incompletos-body");
-  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔍 Nombre/Apellidos posiblemente invertidos";
-  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
-  document.getElementById("modal-incompletos").classList.add("open");
-  try{
-    const empleadosDB = await cargarEmpleadosDB();
-    const activos = empleadosDB.filter(e => !e.ARCHIVADO);
-    const candidatos = activos.filter(posibleNombreApellidoInvertido);
-    window._candidatosNombreInvertidoCache = candidatos;
-    if (!candidatos.length){
-      body.innerHTML = `<div class="empty-state">✅ No se encontró ningún caso probable entre los ${activos.length} empleado(s) activo(s).</div>`;
-      return;
-    }
-    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
-        ${candidatos.length} de ${activos.length} empleado(s) activo(s) parecen tener Nombre y Apellidos invertidos (comparado contra una lista de apellidos costarricenses comunes) — esto es solo una sugerencia, revisá cada caso antes de intercambiar.
-      </div>` +
-      candidatos.map(emp => `
-        <div id="nombre-invertido-${escapeHtml(emp.key)}" style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--paper-line);">
-          <div style="font-size:12px;">Hoy — Nombre: <b>${escapeHtml(emp.NOMBRE_EMP||"—")}</b> · Apellidos: <b>${escapeHtml(emp.APELLIDOS_EMP||"—")}</b></div>
-          <div style="font-size:12px; color:var(--leaf);">Propuesta — Nombre: <b>${escapeHtml(emp.APELLIDOS_EMP||"—")}</b> · Apellidos: <b>${escapeHtml(emp.NOMBRE_EMP||"—")}</b></div>
-          <div style="margin-top:4px; display:flex; gap:6px;">
-            <button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="confirmarIntercambiarNombreApellidos('${emp.key.replace(/'/g,"\\'")}')">🔁 Intercambiar</button>
-            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="document.getElementById('nombre-invertido-${escapeHtml(emp.key)}').remove();">✅ Está bien así</button>
-          </div>
-        </div>`).join("");
-  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista: ${escapeHtml(e.message)}</div>`; }
-}
-
-async function confirmarIntercambiarNombreApellidos(key){
-  const candidatos = window._candidatosNombreInvertidoCache || [];
-  const emp = candidatos.find(e => e.key === key);
-  if (!emp) return;
-  const fullKey = CATALOGS.empleados.prefix + emp.key;
-  const nombreAnterior = emp.NOMBRE_EMP || "";
-  const apellidosAnterior = emp.APELLIDOS_EMP || "";
-  emp.NOMBRE_EMP = apellidosAnterior;
-  emp.APELLIDOS_EMP = nombreAnterior;
-  try{
-    await window.storage.set(fullKey, JSON.stringify(emp), false);
-    await agregarBitacora(emp.key, `Nombre y apellidos intercambiados manualmente tras revisión: "${nombreAnterior} ${apellidosAnterior}" → "${apellidosAnterior} ${nombreAnterior}".`);
-    statusMsg(`Corregido: ahora es ${nombreCompletoEmpleado(emp)}.`);
-    const fila = document.getElementById(`nombre-invertido-${emp.key}`);
-    if (fila) fila.remove();
-  }catch(e){ statusMsg("No se pudo guardar el cambio: " + e.message, false); }
 }
 
 // Filtro de búsqueda para un <select> largo de empleados: oculta (no
