@@ -6558,51 +6558,226 @@ function renderManualPanel(){
   if (!panel) return;
   const rol = window.sdgApi ? window.sdgApi.rol() : null;
 
+  const img = (archivo, alt) => `<img src="manual-img/${archivo}" alt="${escapeHtml(alt)}" style="max-width:100%; border:1px solid var(--paper-line); border-radius:8px; margin:10px 0;">`;
+
   const SECCIONES = [
-    {
-      id: "miinformacion", roles: ["empleado","jefatura","gerente","master"],
-      titulo: "🙋 Mi información",
-      cuerpo: `Tu propio expediente en modo lectura: saldo de vacaciones y de días libres (con adelanto si se te otorgó de más), horas extra pendientes y aprobadas, tus documentos (colillas, contratos, Handbook), tus incapacidades, y la tabla de días libres otorgados por mes con las fechas exactas.`,
-    },
-    {
-      id: "horasextra", roles: ["jefatura","gerente","master"],
-      titulo: "⏱️ Horas Extra",
-      cuerpo: `Aprobación en dos pasos: primero jefatura aprueba las horas de su propio equipo, y luego gerencia/master da la aprobación final que cuenta para planilla. Se puede reclasificar el tipo de un día (laboral, día libre, incapacidad, permiso sin goce, ausencia) incluso después de la aprobación final, con una confirmación. El buscador de arriba filtra por nombre de empleado en todas las pestañas.`,
-    },
-    {
-      id: "diaslibres", roles: ["jefatura","gerente","master"],
-      titulo: "🌴 Días Libres y Vacaciones",
-      cuerpo: `Vacaciones y días libres son dos beneficios separados, cada uno con su propio cupo y saldo. Jefatura solicita ausencias para su equipo (con al menos 15 días de anticipación); gerencia/master aprueba, corrige fechas o asigna directamente sin cola de espera. El cupo mensual de días libres se acumula con arrastre — lo no otorgado un mes pasa al siguiente. El calendario marca SALE/ENTRA/VIAJE/CUMP solo para Corcovado Wilderness Lodge.`,
-    },
     {
       id: "dashboard", roles: ["gerente","master"],
       titulo: "🏠 Dashboard (Inicio)",
-      cuerpo: `Pantalla de aterrizaje: alertas de acción pendiente (ej. colillas sin subir), KPIs de la propiedad activa (empleados activos, contratos, colillas pendientes, archivados), alertas de RR.HH., actividad reciente, solicitudes pendientes y próximos eventos.`,
+      cuerpo: `<p>Pantalla de aterrizaje al entrar al sistema.</p>
+        ${img("dashboard-anotado.svg", "Dashboard anotado con 14 elementos numerados")}
+        <ol style="padding-left:18px;">
+          <li><b>Propiedad activa</b> — en cuál de las 4 propiedades estás trabajando. Solo master puede cambiarla; los demás roles quedan fijos en la suya.</li>
+          <li><b>Campana de notificaciones</b> — avisos pendientes de revisar.</li>
+          <li><b>Usuario y rol</b> — quién tiene la sesión abierta y con qué nivel de acceso.</li>
+          <li><b>Alerta de acción pendiente</b> — banner rojo cliqueable que avisa de algo urgente (ej. colillas sin subir).</li>
+          <li><b>Saludo y contexto</b> — confirma usuario y propiedad activa.</li>
+          <li><b>Empleados activos</b> — total de expedientes activos.</li>
+          <li><b>Contratos guardados</b> — cuántos contratos hay generados/archivados.</li>
+          <li><b>Colillas pendientes</b> — empleados a los que falta subirles la colilla del período actual.</li>
+          <li><b>Empleados archivados</b> — expedientes de personal que ya no está activo.</li>
+          <li><b>Alertas de RR.HH.</b> — pendientes del sistema, cada uno con su "Ver →".</li>
+          <li><b>Actividad reciente</b> — bitácora de las últimas acciones de cualquier usuario.</li>
+          <li><b>Solicitudes pendientes</b> — resumen de lo que espera aprobación en Días Libres y Vacaciones.</li>
+          <li><b>Próximos eventos</b> — según el calendario de Vacaciones/Incapacidades.</li>
+          <li><b>Crear contrato nuevo</b> — acceso directo para arrancar un contrato desde cero.</li>
+        </ol>`,
     },
     {
       id: "contratos", roles: ["gerente","master"],
       titulo: "📄 Contratos",
-      cuerpo: `Lista y formulario de contratos, más sus catálogos de apoyo: Empresas (razón social que figura como patrono), Puestos (jefatura, jornada y salario de referencia) y Propiedades (portafolio del contrato). La vista previa arma el documento final con los datos ya aplicados; los campos en rojo entre corchetes son marcadores que faltan por completar. El Handbook genera su propia constancia de entrega y recibido.`,
+      cuerpo: `<p><b>Lista de contratos</b></p>
+        ${img("contratos-lista-anotado.svg", "Lista de contratos anotada")}
+        <ol style="padding-left:18px;">
+          <li>Si la persona ya está en Empleados, conviene crear su contrato desde ahí (Acciones → Crear contrato). El botón de esta pantalla es solo para contratos que deben firmarse ANTES de que alguien ingrese como empleado activo.</li>
+          <li><b>Crear contrato nuevo (sin empleado previo)</b>.</li>
+          <li><b>Buscador</b> — filtra por nombre, puesto o empresa.</li>
+          <li><b>Fila de un contrato</b> — nombre, puesto/empresa y última actualización.</li>
+          <li><b>Abrir</b> — verlo/editarlo.</li>
+          <li><b>Descargar</b> — baja el contrato como archivo.</li>
+          <li><b>Actualizar</b> — refresca los datos con lo que haya cambiado en el expediente.</li>
+          <li><b>Duplicar</b> — crea una copia como punto de partida.</li>
+          <li><b>HB Firma</b> — genera/gestiona el acuse de recibido del Handbook.</li>
+          <li><b>Despido</b> — inicia el proceso de finalización.</li>
+          <li><b>Eliminar</b> — borra el contrato.</li>
+        </ol>
+        <p><b>Formulario de contrato</b></p>
+        ${img("contratos-formulario-anotado.svg", "Formulario de contrato anotado")}
+        <ol style="padding-left:18px;">
+          <li><b>Guardar como…</b></li>
+          <li><b>Descargar PDF</b>.</li>
+          <li><b>Sin empresa aplicada</b> — al elegirla en Empresas, sus datos se completan solos.</li>
+          <li><b>Sin puesto aplicado</b> — igual, con jefatura/jornada/tareas.</li>
+          <li><b>Lugar de firma: automático</b> — según la propiedad aplicada.</li>
+          <li><b>Idioma del contrato</b> — Español / English.</li>
+          <li><b>Tipo de contrato</b> — Tiempo indeterminado / determinado.</li>
+          <li><b>Datos del trabajador</b> — apellidos, nombre, identificación, nacionalidad, estado civil, dirección, etc.</li>
+          <li><b>Fecha de ingreso</b>.</li>
+          <li><b>Portafolio y exclusividad</b>.</li>
+          <li><b>Salario</b> — base, bruto, neto en letras (auto: bruto − 10.83% CCSS), moneda.</li>
+          <li><b>Comisiones</b>.</li>
+          <li><b>Teletrabajo</b>.</li>
+        </ol>
+        <p><b>Empresas</b> — catálogo de razones sociales que pueden figurar como "EL PATRONO".</p>
+        ${img("empresas-anotado.svg", "Empresas anotado")}
+        <ol style="padding-left:18px;">
+          <li><b>Agregar empresa</b>.</li>
+          <li><b>Usar</b> — aplica esta empresa al contrato.</li>
+          <li><b>Editar</b> / <b>Eliminar</b>.</li>
+          <li>Nombre de la empresa.</li>
+          <li>Dirección de oficinas centrales.</li>
+          <li>Actividad de la empresa.</li>
+          <li>Propiedades en el portafolio.</li>
+          <li>Tipo y número de cédula.</li>
+          <li>Representante legal (nombre, nacionalidad, identificación, dirección, puesto) — de referencia: se sobrescribe solo al usar la empresa en un contrato.</li>
+          <li>Guardar / Cancelar.</li>
+        </ol>
+        <p><b>Puestos</b> — catálogo con jefatura, jornada y salario de referencia.</p>
+        ${img("puestos-anotado.svg", "Puestos anotado")}
+        <ol style="padding-left:18px;">
+          <li>Director del Proyecto — fijo en todo contrato: "Gerente General en Turno".</li>
+          <li>Lista oficial de puestos hoteleros (MTSS) — "Usar como base para nuevo puesto".</li>
+          <li>Para la escala salarial oficial, importarla primero en Datos.</li>
+          <li>Buscador por nombre o jefatura.</li>
+          <li>Agregar puesto.</li>
+          <li>Fila de un puesto — jefatura, jornada, salario de referencia.</li>
+          <li>Usar / Editar / Eliminar.</li>
+        </ol>
+        <p><b>Propiedades</b> — arma el portafolio del contrato.</p>
+        ${img("propiedades-anotado.svg", "Propiedades anotado")}
+        <ol style="padding-left:18px;">
+          <li>Agregar propiedad.</li>
+          <li>Marcá las propiedades para armar el portafolio.</li>
+          <li>Aplicar selección al contrato.</li>
+          <li>Casilla + nombre/ubicación de la propiedad.</li>
+          <li>Editar / Eliminar.</li>
+        </ol>
+        <p><b>Vista previa del contrato</b> — "Sobre la firma digital": en Costa Rica una firma con validez legal (Ley N.° 8454) requiere un certificado digital en tarjeta inteligente o token USB; el PDF deja el espacio reservado y se firma desde Adobe Acrobat Reader. Los campos en rojo entre corchetes (ej. <code>[REPRESENTANTE_LEGAL]</code>) son marcadores que faltan por completar desde Empresas/Puestos/Propiedades.</p>
+        <p><b>Handbook — Constancia de entrega y recibido</b> (botón "HB Firma"): trae los mismos datos del contrato — mientras no se apliquen, se ven como <code>[pendiente]</code> — con espacio de firma para colaborador y representante. "Descargar Constancia PDF" genera el documento.</p>`,
     },
     {
       id: "empleados", roles: ["gerente","master"],
       titulo: "👥 Empleados",
-      cuerpo: `Catálogo de expedientes, con el filtro de 🎂 Cumpleaños por mes.`,
+      cuerpo: `<p>Catálogo de expedientes, con el filtro de 🎂 Cumpleaños por mes específico (además de "ver todos los del año").</p>`,
     },
     {
       id: "expedientes", roles: ["gerente","master"],
       titulo: "📁 Expedientes",
-      cuerpo: `El expediente completo de un empleado: ficha con KPIs, alertas de cumplimiento, estimados de prestaciones (vacaciones, aguinaldo, cesantía/preaviso hipotéticos — solo para presupuestar), deducciones recurrentes, checklist de ingreso, las acciones administrativas (carta de despido, liquidación, amonestación, crear contrato, designar jefatura, archivar, etc.), días libres, colillas, documentos y bitácora.`,
+      cuerpo: `<p><b>Lista y búsqueda</b></p>
+        ${img("expedientes-lista-anotado.svg", "Lista de expedientes anotada")}
+        <ol style="padding-left:18px;">
+          <li>Expedientes — acceso a cualquier empleado, activo o archivado.</li>
+          <li>Buscador por nombre, puesto o cédula.</li>
+          <li>Fila de un empleado — tocá para abrir su expediente.</li>
+        </ol>
+        <p><b>Ficha del empleado</b></p>
+        ${img("expediente-ficha-anotado.svg", "Ficha del empleado anotada")}
+        <ol style="padding-left:18px;">
+          <li>Buscar otro empleado.</li>
+          <li>Volver a Empleados.</li>
+          <li>Encabezado — nombre, puesto, cédula, salario, ingreso.</li>
+          <li>Días de vacaciones disponibles.</li>
+          <li>Horas extra por aprobar.</li>
+          <li>Horas extra aprobadas (histórico).</li>
+          <li>Alertas de cumplimiento — pendientes administrativos de esta persona.</li>
+        </ol>
+        <p><b>Estimados de prestaciones</b> — sobre el salario actual de la ficha, <b>solo para presupuestar, no reemplaza el cálculo oficial de planilla ni el criterio de un contador</b>: vacaciones pendientes valorizadas, aguinaldo proporcional, y si se le despidiera HOY (hipotético) cesantía + preaviso, con el total estimado.</p>
+        <p><b>Deducciones recurrentes</b> — montos fijos que se aplican solos cada vez que se genera una colilla (ej. plan dental); se pueden saltar puntualmente desde Planilla sin desactivarlas aquí.</p>
+        <p><b>Checklist de ingreso</b> — confirma de un vistazo si falta contrato registrado, Handbook firmado o correo/contacto registrado.</p>
+        <p><b>Acciones</b></p>
+        <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Carta de despido</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Genera el documento de finalización laboral</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Calcular liquidación</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Calcula lo que corresponde pagar al salir</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Amonestación</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Registra una llamada de atención formal</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Crear contrato</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Abre el formulario con sus datos precargados</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Permiso sin goce salarial</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Registra un permiso sin goce</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Vacaciones</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Otorga o gestiona sus vacaciones</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Editar datos</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Corrige puesto, salario, contacto…</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Confirmar handbook</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Marca el Handbook como recibido y firmado</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Subir contrato firmado (PDF)</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Archiva el contrato ya firmado</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Descargar datos CCSS (Excel)</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Exporta sus datos en el formato de la CCSS</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Constancia salarial</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Genera una constancia de salario</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Designar como jefatura</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Crea una cuenta de acceso con rol Jefatura</td></tr>
+          <tr><td style="padding:4px 8px;">Archivar</td><td style="padding:4px 8px; color:var(--ink-soft);">Da de baja el expediente (salida de la empresa)</td></tr>
+        </table>
+        <p style="margin-top:8px;">La <b>Recomendación laboral</b> se habilita recién cuando el empleado pasa a Archivo.</p>
+        <p><b>Días libres, colillas y documentos</b> — "Días libres por fecha" y "otorgados por mes" son la misma información que ve el propio empleado en Mi información, vista desde el expediente. Además: colillas de pago (con descarga individual o "Descargar todas"), todos los documentos archivados (Ver/Anular), y el próximo día de cumpleaños.</p>
+        <p><b>Bitácora</b> — historial cronológico de todo lo hecho a este expediente, con fecha exacta.</p>`,
+    },
+    {
+      id: "diaslibres", roles: ["jefatura","gerente","master"],
+      titulo: "🌴 Días Libres y Vacaciones",
+      cuerpo: `<p><b>Vacaciones</b> (Art. 153 CT) y <b>Días libres</b> son dos beneficios separados, cada uno con su propio cupo y saldo — nunca se mezclan en ningún cálculo ni columna.</p>
+        <p><b>Cupo mensual de días libres</b> — por defecto 4 al día al mes; algunos empleados tienen cupo distinto por contrato (ej. 5 o 6 días), configurable en su ficha.</p>
+        <p><b>Cómo se calcula el saldo</b> — cupo fijo por mes calendario completo, <b>con arrastre automático</b>: lo no otorgado un mes se suma al siguiente (sin límite). El mes de ingreso se prorratea según los días trabajados. El saldo puede quedar negativo (un "adelanto") si se otorgó de más — se recupera solo con la acumulación de los meses siguientes, igual que vacaciones.</p>
+        <p><b>Solicitudes</b> — se crean con al menos 15 días de anticipación; gerencia/master las aprueba o rechaza; "✏️ Corregir fechas" ajusta una ya aprobada (el calendario, saldo de vacaciones y planilla se ajustan solos); "🗑️ Eliminar" la borra.</p>
+        <p><b>Asignar directamente</b> — aprueba de inmediato, sin cola de pendientes ni anticipación mínima, hasta 3 rangos por envío. El selector "Mes a consultar" muestra el desglose completo antes de asignar: cupo del mes + arrastre de meses anteriores − ya otorgado ese mes = disponibles.</p>
+        <p><b>Reparar días / Reparar todos</b> — herramientas de mantenimiento para cuando una solicitud quedó "aprobada" pero sus días no se reflejaron en Horas Extra; informan si algún día no se pudo tocar por chocar con otro registro, y por qué.</p>
+        <p><b>Calendario mensual</b> — VAC/LIBRE/CITA para cualquier propiedad. SALE/ENTRA/VIAJE/CUMP son exclusivas de Corcovado Wilderness Lodge.</p>`,
+    },
+    {
+      id: "miinformacion", roles: ["empleado","jefatura","gerente","master"],
+      titulo: "🙋 Mi información",
+      cuerpo: `<p>Tu propio expediente en modo lectura.</p>
+        <p><b>4 tarjetas KPI</b>: 🏖️ vacaciones disponibles/adelanto, 🗓️ días libres disponibles/adelanto (mes actual), ⏳ horas extra por aprobar, ✅ horas extra aprobadas.</p>
+        <p><b>📆 Días libres otorgados por mes</b> — selector de mes (12 atrás, 4 adelante) con las fechas exactas otorgadas cada mes y el saldo: ⏳ pendientes por asignar, 🔻 en adelanto, o ✅ al día.</p>
+        <p><b>🗓️ Días libres por fecha</b> — todos tus días ya confirmados, agrupados por tipo en rangos consecutivos.</p>
+        <p>También tus documentos (colillas, contratos, Handbook) e incapacidades.</p>`,
+    },
+    {
+      id: "horasextra", roles: ["jefatura","gerente","master"],
+      titulo: "⏱️ Horas Extra",
+      cuerpo: `<p><b>Flujo de aprobación</b>: Pendiente → Aprobación de jefatura ("aprobada_jefatura") → Aprobación final de gerencia/master ("aprobada").</p>
+        <p><b>Reclasificar el tipo de un día</b> (laboral / día libre / incapacidad / permiso sin goce / ausencia) — se puede hacer en Pendientes, en Aprobación final, y también en un día que YA tiene aprobación final (con una confirmación, ya que corrige una decisión finalizada).</p>
+        <p><b>🔍 Ver registro de un día específico</b> — busca, para un empleado y fecha exacta, qué hay guardado en Horas Extra (o si no hay nada) y qué solicitud de Días Libres/Vacaciones cubre esa fecha.</p>
+        <p>Un día reclasificado a mano muestra también de qué archivo de marcación se importó originalmente.</p>
+        <p>El buscador de arriba filtra por nombre en todas las pestañas, incluida Pendientes. El rango de fechas solo filtra lo ya resuelto (aprobado/rechazado) — "Ver todo (sin filtro)" lo quita.</p>`,
     },
     {
       id: "planilla", roles: ["gerente","master"],
       titulo: "📋 Resumen de quincena para planilla",
-      cuerpo: `Días laborados, incapacidad/permiso/cita/ausencia, Vacaciones y Días libres en columnas SEPARADAS (cada una con su propio conteo), días libres del mes contra su cupo, horas extra y feriados trabajados.`,
+      cuerpo: `<table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Días laborados</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Días base menos incapacidad/permiso/cita/ausencia aprobados</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Vacaciones (quincena)</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Solo tipo "vacaciones" en esa quincena</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Días libres (quincena)</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Solo tipo "día libre" en esa quincena</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Días libres (mes)</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Días libres del mes completo contra el cupo mensual (✅/⏳)</td></tr>
+          <tr><td style="padding:4px 8px; font-weight:600;">Horas extra / Feriados</td><td style="padding:4px 8px; color:var(--ink-soft);">Igual que siempre</td></tr>
+        </table>
+        <p style="margin-top:8px;"><b>Vacaciones y Días libres van en columnas separadas</b> — ninguna de las dos resta de los días laborados: ambas son días pagados.</p>`,
     },
     {
       id: "roles", roles: ["master"],
       titulo: "🔑 Roles y administración de usuarios",
-      cuerpo: `Master ve y administra todas las propiedades y usuarios; Gerente lee/edita/sube archivos solo en su propiedad; Jefatura además aprueba horas extra de su equipo; Colaborador (autoservicio) solo ve su propio expediente. Las cuentas de Colaborador se crean solas al guardar el empleado — el panel de Empleador (🏢 Administrar usuarios) es solo para casos manuales.`,
+      cuerpo: `<table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Master</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Lee, edita, sube archivos, administra usuarios — ve todas las propiedades</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Gerente</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Lee, edita y sube archivos. No administra usuarios — solo su propiedad</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Jefatura</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Solo lectura, más aprobar/corregir/rechazar horas extra de su equipo</td></tr>
+          <tr><td style="padding:4px 8px; font-weight:600;">Colaborador (autoservicio)</td><td style="padding:4px 8px; color:var(--ink-soft);">Solo lectura de su PROPIO expediente</td></tr>
+        </table>
+        <p style="margin-top:8px;">La cuenta de Colaborador normalmente se crea sola al guardar el empleado — no hace falta crearla a mano salvo casos puntuales.</p>
+        <p><b>Selector de propiedad</b> (solo Master, al entrar):</p>
+        ${img("propiedad-selector-anotado.svg", "Selector de propiedad anotado")}
+        <p><b>Panel de Empleador — Crear nuevo usuario</b> (🏢 Administrar usuarios):</p>
+        ${img("crear-usuario-anotado.svg", "Panel de crear nuevo usuario anotado")}
+        <ol style="padding-left:18px;">
+          <li>Sesión activa — quién está conectado.</li>
+          <li>Volver a propiedad.</li>
+          <li>Cerrar sesión.</li>
+          <li>Nombre completo.</li>
+          <li>Correo — será su usuario.</li>
+          <li>Cédula — debe coincidir con el expediente si ya existe.</li>
+          <li>Contraseña temporal — mínimo 10 caracteres, letras y números.</li>
+          <li>Rol — según la tabla de arriba.</li>
+          <li>Propiedad asignada — deshabilitado si el rol es Master.</li>
+          <li>Puesto / Rol — cambia a "Departamento que lidera" si el rol es Jefatura.</li>
+          <li>Aviso — la cuenta de Colaborador normalmente se crea sola.</li>
+          <li>Crear usuario — compartir la contraseña por un canal seguro.</li>
+        </ol>`,
+    },
+    {
+      id: "seguridad", roles: ["master"],
+      titulo: "🔒 Seguridad de acceso",
+      cuerpo: `<p>Los intentos fallidos de inicio de sesión se registran en la bitácora, pero ya no bloquean la cuenta temporalmente — no hay límite de intentos actualmente.</p>`,
     },
   ];
 
@@ -6610,11 +6785,11 @@ function renderManualPanel(){
   panel.innerHTML = `
     <div style="margin-bottom:12px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">❓ Manual de uso</div>
-      <div style="font-size:12px; color:var(--ink-soft);">Resumen de lo que podés ver y hacer con tu cuenta.</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Solo se muestran los módulos que tu cuenta puede usar.</div>
     </div>
-    ${visibles.map(s => `<div class="section-card" style="margin-bottom:8px;"><div class="section-body">
-      <div style="font-weight:700; margin-bottom:4px;">${s.titulo}</div>
-      <div style="font-size:13px; color:var(--ink); text-align:justify;">${s.cuerpo}</div>
+    ${visibles.map(s => `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; font-size:15px; margin-bottom:8px; color:var(--navy-deep);">${s.titulo}</div>
+      <div style="font-size:13px; color:var(--ink); line-height:1.55;">${s.cuerpo}</div>
     </div></div>`).join("")}
   `;
 }

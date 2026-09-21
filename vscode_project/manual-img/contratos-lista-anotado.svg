@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#B3261E"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="800" height="560" fill="#F5F1E6"/>
+
+  <!-- Tip box -->
+  <rect x="16" y="40" width="768" height="88" rx="8" fill="#FFFBEA" stroke="#D9A54A"/>
+  <text x="32" y="62" font-size="11" fill="#7a5a1a">Si la persona ya está en Empleados, es más rápido crear su contrato desde ahí</text>
+  <text x="32" y="78" font-size="11" fill="#7a5a1a">(Acciones → Crear contrato) — ya trae nombre, cédula y puesto listos.</text>
+  <text x="32" y="94" font-size="11" fill="#7a5a1a">Usa el botón de aquí abajo solo para contratos que deben firmarse ANTES</text>
+  <text x="32" y="110" font-size="11" fill="#7a5a1a">de que alguien ingrese como empleado activo (ej. una oferta laboral).</text>
+  <circle cx="775" cy="34" r="11" fill="#1f2d3d"/><text x="775" y="38" font-size="11" text-anchor="middle" fill="#fff">1</text>
+  <line x1="775" y1="45" x2="770" y2="56" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Crear contrato nuevo -->
+  <rect x="16" y="140" width="500" height="42" rx="21" fill="#3f4a2b"/>
+  <text x="266" y="166" font-size="12" font-weight="bold" text-anchor="middle" fill="#fff">Crear contrato nuevo (sin empleado previo)</text>
+  <circle cx="530" cy="161" r="11" fill="#1f2d3d"/><text x="530" y="165" font-size="11" text-anchor="middle" fill="#fff">2</text>
+  <line x1="519" y1="161" x2="518" y2="161" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Buscador -->
+  <rect x="16" y="196" width="500" height="34" rx="6" fill="#fff" stroke="#e2ddd0"/>
+  <text x="30" y="218" font-size="11" fill="#888">🔎 Buscar por nombre, puesto o empresa…</text>
+  <circle cx="530" cy="213" r="11" fill="#1f2d3d"/><text x="530" y="217" font-size="11" text-anchor="middle" fill="#fff">3</text>
+  <line x1="519" y1="213" x2="518" y2="213" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Fila de contrato -->
+  <rect x="16" y="248" width="768" height="80" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <text x="32" y="272" font-size="12" font-weight="bold">Acosta Barquero María José</text>
+  <text x="32" y="288" font-size="10" fill="#666">Guía Naturista · SDG Tours S.A.</text>
+  <text x="32" y="304" font-size="9" fill="#999">Última actualización: hace 3 días</text>
+  <circle cx="26" cy="256" r="11" fill="#1f2d3d"/><text x="26" y="260" font-size="11" text-anchor="middle" fill="#fff">4</text>
+
+  <!-- Botones de la fila -->
+  <g font-size="9.5">
+    <rect x="330" y="262" width="58" height="26" rx="13" fill="#fff" stroke="#3f4a2b"/><text x="359" y="279" text-anchor="middle">Abrir</text>
+    <rect x="392" y="262" width="70" height="26" rx="13" fill="#fff" stroke="#3f4a2b"/><text x="427" y="279" text-anchor="middle">Descargar</text>
+    <rect x="466" y="262" width="66" height="26" rx="13" fill="#fff" stroke="#3f4a2b"/><text x="499" y="279" text-anchor="middle">Actualizar</text>
+    <rect x="536" y="262" width="62" height="26" rx="13" fill="#fff" stroke="#3f4a2b"/><text x="567" y="279" text-anchor="middle">Duplicar</text>
+    <rect x="602" y="262" width="62" height="26" rx="13" fill="#fff" stroke="#3f4a2b"/><text x="633" y="279" text-anchor="middle">HB Firma</text>
+    <rect x="668" y="262" width="58" height="26" rx="13" fill="#fff" stroke="#B3261E"/><text x="697" y="279" text-anchor="middle" fill="#B3261E">Despido</text>
+    <rect x="330" y="296" width="62" height="26" rx="13" fill="#fff" stroke="#B3261E"/><text x="361" y="313" text-anchor="middle" fill="#B3261E">Eliminar</text>
+  </g>
+  <circle cx="359" cy="255" r="10" fill="#1f2d3d"/><text x="359" y="259" font-size="10" text-anchor="middle" fill="#fff">5</text>
+  <circle cx="427" cy="255" r="10" fill="#1f2d3d"/><text x="427" y="259" font-size="10" text-anchor="middle" fill="#fff">6</text>
+  <circle cx="499" cy="255" r="10" fill="#1f2d3d"/><text x="499" y="259" font-size="10" text-anchor="middle" fill="#fff">7</text>
+  <circle cx="567" cy="255" r="10" fill="#1f2d3d"/><text x="567" y="259" font-size="10" text-anchor="middle" fill="#fff">8</text>
+  <circle cx="633" cy="255" r="10" fill="#1f2d3d"/><text x="633" y="259" font-size="10" text-anchor="middle" fill="#fff">9</text>
+  <circle cx="697" cy="255" r="10" fill="#1f2d3d"/><text x="697" y="259" font-size="9" text-anchor="middle" fill="#fff">10</text>
+  <circle cx="361" cy="330" r="10" fill="#1f2d3d"/><text x="361" y="334" font-size="9" text-anchor="middle" fill="#fff">11</text>
+</svg>

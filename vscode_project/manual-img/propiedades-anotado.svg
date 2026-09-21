@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 260" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="700" height="260" fill="#F5F1E6"/>
+
+  <rect x="16" y="16" width="170" height="34" rx="17" fill="#3f4a2b"/><text x="101" y="38" font-size="10" text-anchor="middle" fill="#fff">+ Agregar propiedad</text>
+  <circle cx="26" cy="10" r="9" fill="#1f2d3d"/><text x="26" y="14" font-size="9" text-anchor="middle" fill="#fff">1</text>
+
+  <rect x="16" y="58" width="668" height="30" rx="6" fill="#fff" stroke="#e2ddd0"/>
+  <text x="30" y="77" font-size="9.5" fill="#555">Selecciona propiedades abajo para armar el portafolio del contrato.</text>
+  <circle cx="662" cy="52" r="9" fill="#1f2d3d"/><text x="662" y="56" font-size="9" text-anchor="middle" fill="#fff">2</text>
+
+  <rect x="16" y="98" width="220" height="34" rx="17" fill="#3f4a2b"/><text x="126" y="120" font-size="10" text-anchor="middle" fill="#fff">✅ Aplicar selección al contrato</text>
+  <circle cx="26" cy="92" r="9" fill="#1f2d3d"/><text x="26" y="96" font-size="9" text-anchor="middle" fill="#fff">3</text>
+
+  <rect x="16" y="146" width="668" height="60" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <rect x="32" y="168" width="16" height="16" fill="#fff" stroke="#3f4a2b"/>
+  <text x="58" y="182" font-size="11" font-weight="bold">SCP CORCOVADO WILDERNESS LODGE</text>
+  <text x="58" y="198" font-size="9.5" fill="#777">Drake · Puntarenas</text>
+  <rect x="533" y="164" width="55" height="24" rx="12" fill="#fff" stroke="#3f4a2b"/><text x="560" y="180" font-size="9" text-anchor="middle">Editar</text>
+  <rect x="595" y="164" width="65" height="24" rx="12" fill="#fff" stroke="#B3261E"/><text x="627" y="180" font-size="9" text-anchor="middle" fill="#B3261E">Eliminar</text>
+  <circle cx="40" cy="160" r="9" fill="#1f2d3d"/><text x="40" y="164" font-size="9" text-anchor="middle" fill="#fff">4</text>
+  <circle cx="560" cy="158" r="9" fill="#1f2d3d"/><text x="560" y="162" font-size="9" text-anchor="middle" fill="#fff">5</text>
+  <circle cx="627" cy="158" r="9" fill="#1f2d3d"/><text x="627" y="162" font-size="9" text-anchor="middle" fill="#fff">6</text>
+</svg>

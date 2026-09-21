@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 540" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#B3261E"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="600" height="540" fill="#F5F1E6"/>
+
+  <text x="300" y="50" font-size="20" font-weight="bold" text-anchor="middle" fill="#2b2b2b">🏨 Escoge tu propiedad</text>
+  <circle cx="470" cy="30" r="11" fill="#1f2d3d"/><text x="470" y="34" font-size="11" text-anchor="middle" fill="#fff">1</text>
+  <line x1="459" y1="30" x2="420" y2="42" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Tarjeta centrada -->
+  <rect x="200" y="80" width="200" height="140" rx="10" fill="#fff" stroke="#ddd"/>
+  <circle cx="300" cy="130" r="35" fill="#fff" stroke="#ccc"/>
+  <text x="300" y="190" font-size="12" font-weight="bold" text-anchor="middle">SCP Corcovado</text>
+  <text x="300" y="205" font-size="12" font-weight="bold" text-anchor="middle">Wilderness Lodge</text>
+  <circle cx="390" cy="90" r="11" fill="#1f2d3d"/><text x="390" y="94" font-size="11" text-anchor="middle" fill="#fff">2</text>
+
+  <!-- Fila media -->
+  <rect x="40" y="240" width="180" height="140" rx="10" fill="#fff" stroke="#ddd"/>
+  <circle cx="130" cy="290" r="35" fill="#fff" stroke="#ccc"/>
+  <text x="130" y="345" font-size="12" font-weight="bold" text-anchor="middle">The Costa Rica</text>
+  <text x="130" y="360" font-size="12" font-weight="bold" text-anchor="middle">Collections</text>
+
+  <rect x="380" y="240" width="180" height="140" rx="10" fill="#fff" stroke="#ddd"/>
+  <circle cx="470" cy="290" r="35" fill="#fff" stroke="#ccc"/>
+  <text x="470" y="350" font-size="12" font-weight="bold" text-anchor="middle">Oxygen Jungle</text>
+  <text x="470" y="365" font-size="12" font-weight="bold" text-anchor="middle">Villas</text>
+
+  <!-- Fila inferior -->
+  <rect x="120" y="400" width="180" height="130" rx="10" fill="#fff" stroke="#ddd"/>
+  <circle cx="210" cy="440" r="30" fill="#4a2a2a"/>
+  <text x="210" y="500" font-size="12" font-weight="bold" text-anchor="middle">Amarena Canvas</text>
+  <text x="210" y="515" font-size="12" font-weight="bold" text-anchor="middle">Beach Hotel</text>
+
+  <rect x="320" y="400" width="180" height="130" rx="10" fill="#fff" stroke="#ddd"/>
+  <circle cx="410" cy="440" r="30" fill="#fff" stroke="#ccc"/>
+  <text x="410" y="500" font-size="12" font-weight="bold" text-anchor="middle">Ojochal Garden</text>
+  <text x="410" y="515" font-size="12" font-weight="bold" text-anchor="middle">Villas</text>
+</svg>

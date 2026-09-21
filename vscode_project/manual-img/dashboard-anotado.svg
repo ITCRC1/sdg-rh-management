@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 660" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#B3261E"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="800" height="660" fill="#F5F1E6"/>
+
+  <!-- Barra superior -->
+  <rect x="0" y="40" width="800" height="44" fill="#FFFFFF" stroke="#DDD"/>
+  <text x="16" y="66" font-size="13" fill="#333">Trabajando en: SCP Corcovado Wilderness Lodge</text>
+  <circle cx="635" cy="62" r="10" fill="#FFFFFF" stroke="#999"/>
+  <text x="635" y="66" font-size="10" text-anchor="middle" fill="#B3261E">2</text>
+  <circle cx="700" cy="62" r="10" fill="#3f4a2b"/>
+  <text x="700" y="66" font-size="10" text-anchor="middle" fill="#fff">A</text>
+  <text x="716" y="59" font-size="10" fill="#333">Andrey Flores</text>
+  <text x="716" y="71" font-size="9" fill="#888">Master</text>
+
+  <!-- Callouts 1,2,3 -->
+  <line x1="175" y1="20" x2="175" y2="38" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+  <circle cx="175" cy="14" r="11" fill="#1f2d3d"/><text x="175" y="18" font-size="11" text-anchor="middle" fill="#fff">1</text>
+  <line x1="635" y1="20" x2="635" y2="50" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+  <circle cx="635" cy="14" r="11" fill="#1f2d3d"/><text x="635" y="18" font-size="11" text-anchor="middle" fill="#fff">2</text>
+  <line x1="716" y1="20" x2="705" y2="52" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+  <circle cx="716" cy="14" r="11" fill="#1f2d3d"/><text x="716" y="18" font-size="11" text-anchor="middle" fill="#fff">3</text>
+
+  <!-- Alerta roja -->
+  <rect x="16" y="96" width="768" height="56" rx="8" fill="#FFF5F5" stroke="#B3261E" stroke-width="1.5"/>
+  <text x="32" y="118" font-size="13" font-weight="bold" fill="#B3261E">Toca subir las colillas de pago del período 1/9/2026 al 15/9/2026</text>
+  <text x="32" y="136" font-size="11" fill="#946" >2 empleado(s) todavía sin colilla archivada de este período. Toca para ver quién falta.</text>
+  <circle cx="775" cy="90" r="11" fill="#1f2d3d"/><text x="775" y="94" font-size="11" text-anchor="middle" fill="#fff">4</text>
+  <line x1="775" y1="101" x2="770" y2="112" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Saludo -->
+  <text x="16" y="182" font-size="18" font-weight="bold" fill="#2b2b2b">Buenos días, Andrey</text>
+  <text x="16" y="200" font-size="11" fill="#888">Centro de control de Recursos Humanos — SCP Corcovado Wilderness Lodge</text>
+  <circle cx="330" cy="176" r="11" fill="#1f2d3d"/><text x="330" y="180" font-size="11" text-anchor="middle" fill="#fff">5</text>
+  <line x1="319" y1="176" x2="270" y2="180" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- KPI cards -->
+  <g font-size="11">
+    <rect x="16" y="214" width="182" height="80" rx="8" fill="#fff" stroke="#e2ddd0"/>
+    <text x="107" y="255" font-size="20" font-weight="bold" text-anchor="middle">82</text>
+    <text x="107" y="275" text-anchor="middle" fill="#666">Empleados activos</text>
+    <circle cx="26" cy="222" r="11" fill="#1f2d3d"/><text x="26" y="226" font-size="11" text-anchor="middle" fill="#fff">6</text>
+
+    <rect x="206" y="214" width="182" height="80" rx="8" fill="#fff" stroke="#e2ddd0"/>
+    <text x="297" y="255" font-size="20" font-weight="bold" text-anchor="middle">10</text>
+    <text x="297" y="275" text-anchor="middle" fill="#666">Contratos guardados</text>
+    <circle cx="216" cy="222" r="11" fill="#1f2d3d"/><text x="216" y="226" font-size="11" text-anchor="middle" fill="#fff">7</text>
+
+    <rect x="396" y="214" width="182" height="80" rx="8" fill="#fff" stroke="#e2ddd0"/>
+    <text x="487" y="255" font-size="20" font-weight="bold" text-anchor="middle">2</text>
+    <text x="487" y="275" text-anchor="middle" fill="#666">Colillas pendientes</text>
+    <circle cx="406" cy="222" r="11" fill="#1f2d3d"/><text x="406" y="226" font-size="11" text-anchor="middle" fill="#fff">8</text>
+
+    <rect x="586" y="214" width="198" height="80" rx="8" fill="#fff" stroke="#e2ddd0"/>
+    <text x="685" y="255" font-size="20" font-weight="bold" text-anchor="middle">8</text>
+    <text x="685" y="275" text-anchor="middle" fill="#666">Empleados archivados</text>
+    <circle cx="596" cy="222" r="11" fill="#1f2d3d"/><text x="596" y="226" font-size="11" text-anchor="middle" fill="#fff">9</text>
+  </g>
+
+  <!-- Alertas RRHH / Actividad reciente -->
+  <rect x="16" y="310" width="378" height="150" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <text x="32" y="332" font-size="12" font-weight="bold" fill="#a8781f">Alertas de RR.HH.</text>
+  <text x="32" y="354" font-size="10" fill="#555">• 82 empleado(s) sin firmar el Handbook</text>
+  <text x="32" y="374" font-size="10" fill="#555">• 2 empleado(s) sin colilla del período actual</text>
+  <text x="32" y="394" font-size="10" fill="#555">• 109 registro(s) de horas extra por aprobar</text>
+  <circle cx="26" cy="318" r="11" fill="#1f2d3d"/><text x="26" y="322" font-size="11" text-anchor="middle" fill="#fff">10</text>
+
+  <rect x="406" y="310" width="378" height="150" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <text x="422" y="332" font-size="12" font-weight="bold" fill="#333">Actividad reciente</text>
+  <text x="422" y="354" font-size="10" fill="#555">Andrey Flores actualizó un registro de horas extra — hace 14 min</text>
+  <text x="422" y="372" font-size="10" fill="#555">Andrey Flores creó un documento — hace 14 min</text>
+  <text x="422" y="390" font-size="10" fill="#555">Andrey Flores creó un registro de horas extra — hace 27 min</text>
+  <circle cx="416" cy="318" r="11" fill="#1f2d3d"/><text x="416" y="322" font-size="11" text-anchor="middle" fill="#fff">11</text>
+
+  <!-- Solicitudes pendientes / Próximos eventos -->
+  <rect x="16" y="472" width="378" height="80" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <text x="32" y="494" font-size="12" font-weight="bold" fill="#333">Solicitudes pendientes</text>
+  <text x="32" y="514" font-size="10" fill="#555">Pendiente — depende de los módulos de Vacaciones y Días libres.</text>
+  <circle cx="26" cy="480" r="11" fill="#1f2d3d"/><text x="26" y="484" font-size="11" text-anchor="middle" fill="#fff">12</text>
+
+  <rect x="406" y="472" width="378" height="80" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <text x="422" y="494" font-size="12" font-weight="bold" fill="#333">Próximos eventos</text>
+  <text x="422" y="514" font-size="10" fill="#555">Pendiente — depende del calendario de Vacaciones/Incapacidades.</text>
+  <circle cx="416" cy="480" r="11" fill="#1f2d3d"/><text x="416" y="484" font-size="11" text-anchor="middle" fill="#fff">13</text>
+
+  <!-- Botón -->
+  <rect x="16" y="574" width="230" height="40" rx="20" fill="#3f4a2b"/>
+  <text x="131" y="599" font-size="12" font-weight="bold" text-anchor="middle" fill="#fff">Crear contrato nuevo</text>
+  <circle cx="256" cy="582" r="11" fill="#1f2d3d"/><text x="256" y="586" font-size="11" text-anchor="middle" fill="#fff">14</text>
+  <line x1="245" y1="582" x2="230" y2="588" stroke="#B3261E" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>
