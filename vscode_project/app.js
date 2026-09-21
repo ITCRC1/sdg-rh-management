@@ -9520,6 +9520,18 @@ async function renderHorasExtrasPanel(){
           <button class="del" onclick="rechazarHoraExtraFinal('${keyEsc}')">🚫 Rechazar</button>`;
       } else if (r.ESTADO === "aprobada_jefatura"){
         acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")} · esperando aprobación final de gerencia</span>`;
+      } else if (r.ESTADO === "aprobada" && puedeEditar){
+        // Corrige el tipo de un día YA con aprobación final — antes, una vez
+        // llegado acá, no había forma de arreglar un error (ej. un hueco de
+        // marcación que se clasificó como "Día libre" y en realidad era un
+        // día que sí se trabajó): quedaba atrapado sin ningún control para
+        // cambiarlo. No toca ESTADO — sigue "aprobada", solo corrige
+        // TIPO_DIA (y las horas si se reclasifica a laboral).
+        acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}</span>
+          <select class="btn" style="padding:5px 6px;" onchange="if(confirm('Este día ya tiene aprobación final. ¿Corregir su tipo de todas formas?')) cambiarTipoDiaHoraExtra('${keyEsc}', this.value); else this.value='${tipoDia}';">
+            ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
+          </select>
+          ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}`;
       } else if (r.ESTADO === "aprobada"){
         acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}</span>`;
       } else if (r.ESTADO === "rechazada"){
