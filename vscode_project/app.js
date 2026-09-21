@@ -8795,7 +8795,7 @@ function diasLibresMesDeEmpleado(emp){
 // empleado NUEVO que ingresa en o después de esta fecha sí acumula desde su
 // propio día de ingreso real, para que lo otorgado siempre calce con lo
 // pendiente desde su primer día.
-const INICIO_ACUMULACION_DIAS_LIBRES = new Date(2026, 7, 1); // 1° de agosto de 2026
+const INICIO_ACUMULACION_DIAS_LIBRES = new Date(2026, 8, 1); // 1° de setiembre de 2026
 
 function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
   let ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
