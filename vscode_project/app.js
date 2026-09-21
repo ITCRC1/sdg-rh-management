@@ -11982,6 +11982,15 @@ const TIPOS_SOLICITUD_AUSENCIA = {
   dia_viaje: { label: "Día de viaje", emoji: "✈️", consumeSaldo: false, requiereComprobante: false, colorHex: "FF9FC5E8" },
 };
 
+// "Día de viaje" es propio del reglamento de SCP Corcovado Wilderness Lodge
+// (personal que viaja lejos para trabajar ahí) — en las demás propiedades no
+// aplica (su gente vive en la zona), así que no se ofrece como opción al
+// crear/asignar/corregir una solicitud. El resto de tipos son universales.
+function tiposSolicitudAusenciaDisponibles(){
+  const esCorcovado = currentPropiedadId === "corcovado";
+  return Object.keys(TIPOS_SOLICITUD_AUSENCIA).filter(t => t !== "dia_viaje" || esCorcovado);
+}
+
 function isoDeHoy(){ return isoDeFechaLocal(new Date()); }
 
 // ---------- Incapacidades (CCSS/INS) ----------
@@ -13604,7 +13613,7 @@ function renderFormularioSolicitud(empleadosDisponibles){
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
         <select id="solicitud-ausencia-tipo" onchange="document.getElementById('solicitud-ausencia-comprobante-wrap').style.display = this.value === 'ausencia_medica' ? 'flex' : 'none';">
-          ${Object.keys(TIPOS_SOLICITUD_AUSENCIA).map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
+          ${tiposSolicitudAusenciaDisponibles().map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
@@ -13674,8 +13683,8 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; padding:6px 0;${i > 0 ? " border-top:1px dashed var(--paper-line); margin-top:4px;" : ""}">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
         <select id="asignacion-directa-tipo-${i}" onchange="actualizarFilaAsignacionDirecta(${i});">
-          ${Object.keys(TIPOS_SOLICITUD_AUSENCIA).map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
-          <option value="cumpleanos">🎂 Cumpleaños</option>
+          ${tiposSolicitudAusenciaDisponibles().map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
+          ${currentPropiedadId === "corcovado" ? `<option value="cumpleanos">🎂 Cumpleaños</option>` : ""}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;"><span id="asignacion-directa-desde-label-${i}">Desde</span>
@@ -13902,7 +13911,7 @@ async function abrirModalCorregirSolicitud(key){
         <select id="corregir-solicitud-tipo">
           <option value="vacaciones"${s.TIPO === "vacaciones" ? " selected" : ""}>🏖️ Vacaciones</option>
           <option value="dia_libre"${s.TIPO === "dia_libre" ? " selected" : ""}>🛌 Día libre</option>
-          <option value="dia_viaje"${s.TIPO === "dia_viaje" ? " selected" : ""}>✈️ Día de viaje</option>
+          ${(currentPropiedadId === "corcovado" || s.TIPO === "dia_viaje") ? `<option value="dia_viaje"${s.TIPO === "dia_viaje" ? " selected" : ""}>✈️ Día de viaje</option>` : ""}
           <option value="permiso_sin_goce"${s.TIPO === "permiso_sin_goce" ? " selected" : ""}>📄 Permiso sin goce</option>
         </select>
       </div>
@@ -14095,7 +14104,16 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
   </div></div>`;
 }
 
+// "SALE"/"ENTRA", "Día de viaje" y "🎂 Cumpleaños" son marcas propias del
+// reglamento interno de SCP Corcovado Wilderness Lodge — pensadas para un
+// personal que viaja lejos de casa para trabajar ahí. Las demás propiedades
+// (Oxygen, Ojochal, Amarena) no las usan: su gente vive en la zona, así que
+// los días libres/vacaciones/permisos se ven PLANOS ahí (solo "VAC"/"LIBRE"/
+// "CITA", sin salida/entrada de viaje ni cumpleaños pagado). Por eso todo lo
+// que sigue después del primer bucle (que sí es universal: el tipo base de
+// cada solicitud, más incapacidad) queda condicionado a currentPropiedadId.
 function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtraEmp){
+  const esCorcovado = currentPropiedadId === "corcovado";
   for (const s of solicitudesEmp){
     if (s.ESTADO !== "aprobada") continue;
     if (fechaISO >= s.FECHA_INICIO && fechaISO <= s.FECHA_FIN){
@@ -14103,21 +14121,18 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
       if (s.TIPO === "dia_libre") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.dia_libre.colorHex };
       if (s.TIPO === "permiso_sin_goce") return { texto: "LIBRE", color: TIPOS_SOLICITUD_AUSENCIA.permiso_sin_goce.colorHex };
       if (s.TIPO === "ausencia_medica") return { texto: "CITA", color: TIPOS_SOLICITUD_AUSENCIA.ausencia_medica.colorHex };
-      if (s.TIPO === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
+      if (esCorcovado && s.TIPO === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
     }
   }
-  // "SALE"/"ENTRA" marcan el día de salida/regreso de un bloque de día
-  // libre, vacación o permiso sin goce — no aplican cuando ese mismo día el
-  // empleado ya está fuera (o marcado) por otro motivo real: incapacidad,
-  // cumpleaños otorgado, o un día de viaje reclasificado directo desde
-  // Horas Extra (sin solicitud detrás — con solicitud ya se resuelve
-  // arriba, en el primer bucle). En cualquiera de esos casos el día debe
-  // mostrar esa ausencia real, no la marca de salida/entrada — por eso las
-  // 3 revisiones van ANTES del bucle de "SALE"/"ENTRA" de abajo, igual que
-  // ya pasaba con incapacidad. (ausencia_medica ya queda resuelta arriba,
-  // en el primer bucle, así que nunca llega a "SALE"/"ENTRA".)
+  // Incapacidad es universal (aplica a cualquier propiedad) — por eso queda
+  // FUERA del if de Corcovado de abajo, aunque se revise en el mismo lugar
+  // (antes de "SALE"/"ENTRA") por la misma razón que ya se explicaba acá:
+  // un día que además cae DENTRO de una incapacidad real debe mostrar esa
+  // ausencia, no una marca de salida/entrada.
   const horasDia = registrosHorasExtraEmp.find(r => r.FECHA === fechaISO && r.ESTADO === "aprobada");
   if (horasDia && horasDia.TIPO_DIA === "incapacidad") return { texto: "INCAP", color: "FFE68A8A" };
+  if (!esCorcovado) return null;
+
   if (horasDia && horasDia.TIPO_DIA === "cumpleanos") return { texto: "🎂", color: "FFE0C4F0" };
   if (horasDia && horasDia.TIPO_DIA === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
 
