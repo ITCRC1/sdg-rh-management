@@ -15514,13 +15514,23 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
   const filas = mesesOrdenados.map(mes => {
     const otorgados = (porMes[mes] || []).length;
     const [anio, mesNum] = mes.split("-").map(Number);
-    // Saldo acumulado (con arrastre) al FINAL de ese mes — nunca al día de
-    // hoy si el mes ya terminó, para que un mes viejo no se vea influido por
-    // días otorgados después de que ese mes ya cerró.
+    // Saldo acumulado (con arrastre) al FINAL de ese mes — para un mes YA
+    // TERMINADO usa su propio último día (fijo, no se mueve con el tiempo);
+    // para el mes EN CURSO usa hoy (todavía no terminó, no se puede acreditar
+    // lo que falta); para un mes FUTURO también usa su propio último día —
+    // proyectando cuánto se deberá acumular PARA ENTONCES si no se otorga
+    // nada más antes. Antes esto SIEMPRE topaba en "hoy" para el mes en curso
+    // Y para cualquier futuro, así que octubre y noviembre (por ejemplo)
+    // mostraban el mismo número que el mes actual — sin diferenciarse entre
+    // sí ni reflejar lo que de verdad les toca a cada uno más adelante.
     const finDeMes = new Date(anio, mesNum, 0); // día 0 del mes siguiente = último día de "mes"
-    const fechaCorte = finDeMes < hoy ? finDeMes : hoy;
-    const pendientes = Math.max(0, calcularSaldoDiasLibres(emp, todasLasFechasOtorgadas, fechaCorte));
-    return { mes, etiqueta: `${MESES[mesNum - 1]} ${anio}`, otorgados, pendientes };
+    const fechaCorte = mes === mesActual ? hoy : finDeMes;
+    // Sin Math.max(0, ...) a propósito — igual que el saldo de vacaciones:
+    // si se otorgó más de lo acumulado a esa fecha (un adelanto), el saldo
+    // queda negativo y se muestra así, no se oculta en un falso "0". Se
+    // recupera solo con la acumulación de los meses siguientes.
+    const saldo = calcularSaldoDiasLibres(emp, todasLasFechasOtorgadas, fechaCorte);
+    return { mes, etiqueta: `${MESES[mesNum - 1]} ${anio}`, otorgados, saldo };
   });
 
   return `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--paper-line);">
@@ -15532,7 +15542,7 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
         </select>
       </label>
     </div>
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es el saldo acumulado a esa fecha, CON ARRASTRE — si un mes no se asignan todos, el sobrante se suma al siguiente en vez de perderse. No es un derecho garantizado por adelantado, depende de que gerencia/master los otorgue. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual: ${cupoMes} día(s) (vacaciones o día libre). "Pendientes" es el saldo acumulado a esa fecha, CON ARRASTRE — si un mes no se asignan todos, el sobrante se suma al siguiente en vez de perderse. Igual que el saldo de vacaciones: si se otorgó más de lo acumulado, queda en negativo (🔻 adelanto) y se recupera solo con la acumulación de los meses siguientes. Podés elegir hasta 4 meses hacia adelante para ver si ya te otorgaron algo por anticipado.</div>
     <div style="display:grid; grid-template-columns:1fr auto auto; gap:2px 10px; align-items:center; font-size:12px;">
       <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px;">Mes</div>
       <div style="font-weight:600; color:var(--ink-soft); font-size:10.5px; text-align:center;">Otorgados</div>
@@ -15540,7 +15550,7 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
       ${filas.map(f => `
         <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); ${f.mes === mesElegido ? "font-weight:700;" : ""}">${escapeHtml(f.etiqueta)}${f.mes === mesActual ? " (actual)" : ""}${f.mes === mesElegido && f.mes !== mesActual ? " (elegido)" : ""}</div>
         <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; font-weight:700;">${f.otorgados}/${cupoMes}</div>
-        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; ${f.pendientes > 0 ? "color:#8a6d1f; font-weight:700;" : "color:var(--ink-soft);"}">${f.pendientes > 0 ? `⏳ ${f.pendientes}` : "✅ 0"}</div>
+        <div style="padding:3px 0; border-bottom:1px solid var(--paper-line); text-align:center; ${f.saldo < 0 ? "color:#b2703b; font-weight:700;" : (f.saldo > 0 ? "color:#8a6d1f; font-weight:700;" : "color:var(--ink-soft);")}">${f.saldo < 0 ? `🔻 ${Math.abs(f.saldo)} adelanto` : (f.saldo > 0 ? `⏳ ${f.saldo}` : "✅ 0")}</div>
       `).join("")}
     </div>
   </div>`;
