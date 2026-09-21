@@ -8836,54 +8836,59 @@ function diasLibresMesDeEmpleado(emp){
   return n > 0 ? n : DIAS_LIBRES_POR_MES;
 }
 
-// Saldo ACUMULADO (con arrastre entre meses) del cupo de "días libres al
-// mes" — a diferencia del saldo de vacaciones (Art. 153 CT, con su propio
-// ciclo legal de aniversario/diciembre — ver calcularSaldoVacaciones), este
-// es un beneficio interno de la empresa: se acredita el cupo mensual del
-// empleado (diasLibresMesDeEmpleado) el día 1 de cada mes desde su ingreso,
-// y cada día de vacaciones/día libre YA OTORGADO (por su fecha real, sin
-// importar cuándo se asignó — asignarlo con un mes de anticipo es lo
-// normal) lo va consumiendo, en orden cronológico. Si un mes no se usan
-// todos los que tocan, el sobrante queda de saldo y se arrastra solo al mes
-// siguiente (y al que sigue, sin límite) — el caso de "en septiembre no
-// tomó los días libres, que quede pendiente para octubre".
+// Saldo ACUMULADO (con arrastre) del cupo de "días libres al mes" — a
+// diferencia del saldo de vacaciones (Art. 153 CT, con su propio ciclo legal
+// de aniversario/diciembre — ver calcularSaldoVacaciones), este es un
+// beneficio interno de la empresa que sigue la regla real de descanso
+// semanal (Art. 152 CT): 1 día libre por cada 6 días laborados, es decir,
+// 1 por cada CICLO DE 7 DÍAS CORRIDOS desde el ingreso — NUNCA por mes
+// calendario completo. Acreditar el mes entero desde el día 1 sobrestimaría
+// a quien ingresa a mitad de mes (ej. entra el 14/09: hasta el 26/10 lleva
+// 42 días corridos → 42/7 = 6 días libres ganados, NO 8 como daría "2 meses
+// completos × 4"). El cupo mensual (diasLibresMesDeEmpleado) es solo la
+// forma "por mes" de expresar esta misma tasa (30 días ÷ 7 ≈ 4.3, redondeado
+// a 4) — para un empleado con más cupo por contrato (5 o 6 al mes), el ciclo
+// se acorta en la misma proporción (ej. cupo 6 → 1 día libre cada 4.67 días).
+// Cada día de vacaciones/día libre YA OTORGADO (por su fecha real, sin
+// importar cuándo se asignó — asignarlo con un mes de anticipo es lo normal)
+// se resta del acreditado a esa fecha. Si en un ciclo no se otorgan todos
+// los que tocan, el sobrante queda de saldo y se arrastra solo (sin límite)
+// — el caso de "en septiembre no tomó los días libres, que quede pendiente
+// para octubre".
 // `diasOtorgados` es un arreglo plano de fechas ISO (una por cada día ya
 // otorgado de tipo vacaciones/dia_libre/libre — ver renderDiasLibresPorMesEmpleado).
-// El seguimiento de "días libres al mes" CON ARRASTRE recién se implementó
-// — aplicarlo retroactivo hasta la fecha de ingreso real de cada quien
-// generaría una deuda artificial de años acumulados que nunca se prometió
-// ni se llevó control de antes. Por pedido de gerencia, para TODOS los
-// empleados el arranque de este cálculo se adelanta al más tardío entre su
-// ingreso real y esta fecha — sin tocar FECHA_INGRESO_EMP (que sigue
-// rigiendo antigüedad, vacaciones, planilla, etc. tal cual está en la
-// ficha). A quien ingresó DESPUÉS de esta fecha no se le adelanta nada,
-// sigue acumulando desde su propio ingreso real.
-const INICIO_ACUMULACION_DIAS_LIBRES = new Date(2026, 8, 1); // 1° de setiembre de 2026
+// El seguimiento CON ARRASTRE recién se implementó — aplicarlo retroactivo
+// hasta la fecha de ingreso real de cada quien generaría una deuda
+// artificial de años acumulados que nunca se prometió ni se llevó control
+// de antes: a los empleados ANTIGUOS (que ya ingresaron antes de esta
+// fecha) ya se les vienen generando sus días libres "a mano" con el cupo
+// fijo de siempre, así que para ellos el cálculo preciso por ciclos de 7
+// días arranca acá, no en su ingreso real — sin tocar FECHA_INGRESO_EMP
+// (que sigue rigiendo antigüedad, vacaciones, planilla, etc. tal cual está
+// en la ficha). Un empleado NUEVO que ingresa en o después de esta fecha sí
+// acumula desde su propio día de ingreso real (ver el ejemplo de arriba),
+// para que lo otorgado siempre calce con lo pendiente desde su primer día.
+const INICIO_ACUMULACION_DIAS_LIBRES = new Date(2026, 7, 1); // 1° de agosto de 2026
 
 function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
   let ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   if (!ingreso || ingreso > fechaCorte) return 0;
   if (ingreso < INICIO_ACUMULACION_DIAS_LIBRES) ingreso = INICIO_ACUMULACION_DIAS_LIBRES;
   if (ingreso > fechaCorte) return 0;
-  const cupoMes = diasLibresMesDeEmpleado(empleado);
 
-  const eventos = [];
-  let inicioMes = new Date(ingreso.getFullYear(), ingreso.getMonth(), 1);
-  while (inicioMes <= fechaCorte){
-    eventos.push({ fecha: inicioMes, tipo: "acredita", dias: cupoMes });
-    inicioMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 1);
-  }
+  const cupoMes = diasLibresMesDeEmpleado(empleado);
+  const diasPorCiclo = (7 * DIAS_LIBRES_POR_MES) / cupoMes; // 7 días para el cupo estándar (4)
+  const MS_POR_DIA = 86400000;
+  const diasTranscurridos = Math.round((fechaCorte - ingreso) / MS_POR_DIA);
+  const acreditados = Math.floor(diasTranscurridos / diasPorCiclo);
+
+  let usados = 0;
   (diasOtorgados || []).forEach(fechaISO => {
     const fecha = new Date(fechaISO + "T00:00:00");
-    if (fecha >= ingreso && fecha <= fechaCorte) eventos.push({ fecha, tipo: "usa", dias: 1 });
+    if (fecha >= ingreso && fecha <= fechaCorte) usados++;
   });
-  // Un día otorgado justo el día 1 de un mes debe poder consumir el cupo
-  // que se acredita ESE MISMO día 1 — de ahí el desempate.
-  eventos.sort((a, b) => a.fecha - b.fecha || (a.tipo === "acredita" ? -1 : 1));
 
-  let saldo = 0;
-  eventos.forEach(ev => { saldo += ev.tipo === "acredita" ? ev.dias : -ev.dias; });
-  return saldo;
+  return acreditados - usados;
 }
 
 const TIPOS_DIA_DESCUENTA_QUINCENA = {
@@ -13755,16 +13760,40 @@ function renderListaSolicitudesPendientes(solicitudes, empleadosPorKey, departam
 // Exclusivo de gerencia/master, igual que aprobar/rechazar — jefatura no
 // puede reescribir una decisión ya tomada. Se limita a las últimas 30 para
 // no crecer sin límite con los años.
+let filtroOtorgadosNombre = "";
+const _renderOtorgadosBuscadoDebounced = debounce(async function(){
+  await renderDiasLibresVacacionesPanel();
+  restaurarFocoBusqueda("otorgados-search");
+}, 350);
+function filtrarOtorgadosInput(val){
+  filtroOtorgadosNombre = val.toLowerCase();
+  _renderOtorgadosBuscadoDebounced();
+}
+
 function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeAprobar){
   if (!puedeAprobar) return "";
-  const todasOtorgadas = solicitudes
+  let todasOtorgadas = solicitudes
     .filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "dia_viaje" || s.TIPO === "permiso_sin_goce"))
     .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""));
-  if (!todasOtorgadas.length) return "";
+  // El buscador filtra ANTES de topar a 30 — si solo filtrara la tanda ya
+  // recortada, una fecha vieja fuera de las 30 más recientes nunca
+  // aparecería por más que coincidiera el nombre.
+  if (filtroOtorgadosNombre){
+    todasOtorgadas = todasOtorgadas.filter(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const nombre = (emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY) || "";
+      return nombre.toLowerCase().includes(filtroOtorgadosNombre);
+    });
+  }
+  if (!todasOtorgadas.length && !filtroOtorgadosNombre) return "";
   const otorgadas = todasOtorgadas.slice(0, 30);
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">✅ Días libres y vacaciones otorgados</div>
     <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si una fecha quedó mal puesta, corrígela acá — el calendario, el saldo de vacaciones y el reporte de planilla se ajustan solos. Vacaciones y permiso sin goce generan solos su Acción de Personal — descargala y confirmala una vez firmada; mientras no se confirme, corregir la fecha/tipo la vuelve a generar sola.${todasOtorgadas.length > otorgadas.length ? ` Mostrando ${otorgadas.length} de ${todasOtorgadas.length}, las más recientes.` : ""}</div>
+    <div class="field" style="margin-bottom:8px;">
+      <input type="text" id="otorgados-search" placeholder="🔎 Buscar empleado…" value="${escapeHtml(filtroOtorgadosNombre)}" oninput="filtrarOtorgadosInput(this.value)">
+    </div>
+    ${!todasOtorgadas.length ? `<div class="empty-state" style="padding:10px 0;">Ningún empleado coincide con la búsqueda.</div>` : ""}
     <div style="max-height:320px; overflow-y:auto;">
     ${otorgadas.map(s => {
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
