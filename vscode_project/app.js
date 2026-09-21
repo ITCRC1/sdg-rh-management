@@ -11688,13 +11688,42 @@ function renderAccionVacaciones(){
 // marcas (todavía pendiente, origen "ausencia_detectada") — esa sí se
 // reemplaza, porque era solo un supuesto y esto es información real que lo
 // corrige.
+// Devuelve { creado: true } si guardó el día, o { creado: false, motivo }
+// cuando NO lo tocó — ya sea porque ya había otro registro ahí (ej. un día
+// "trabajado" importado de la marcación, u otra solicitud que ya reclamó esa
+// misma fecha) o por un error al guardar. Antes esto devolvía solo
+// true/false y el motivo se perdía — eso fue lo que hizo invisible, en más
+// de un caso real, que una solicitud quedara "aprobada" sin que sus días se
+// reflejaran de verdad en Horas Extra (el llamador nunca se enteraba de
+// que el día había chocado con algo existente).
 async function crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, camposExtra){
   const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
+  // window.storage.get LANZA una excepción a propósito cuando la clave no
+  // existe todavía (ver storage-api.js: "app.js espera una excepción cuando
+  // la clave no existe") — y ese es justo el caso NORMAL acá: un día que
+  // nunca se ha tocado (lo más común, sobre todo para fechas futuras que
+  // todavía no tienen marcación importada). Antes esa excepción caía en el
+  // mismo try/catch que envolvía toda la función, así que ese día terminaba
+  // devolviendo "no se pudo" SIN LLEGAR NUNCA al storage.set() de abajo —
+  // esa fue la causa real de que solicitudes "aprobadas" nunca dejaran
+  // registro en horas_extra:. Por eso la lectura va en su propio try/catch,
+  // separado de la escritura: "clave no existe" no es un error, es
+  // exactamente la señal de que hay que crear el día.
+  let existente = null;
   try{
     const r = await window.storage.get(key, false);
-    const existente = r && r.value ? JSON.parse(r.value) : null;
+    existente = r && r.value ? JSON.parse(r.value) : null;
+  }catch(e){
+    if (!/key not found/i.test(e.message || "")){
+      return { creado: false, motivo: `${fecha}: ${e.message || "error al leer"}.` };
+    }
+  }
+  try{
     const esAusenciaAdivinada = existente && existente.TIPO_DIA === "ausencia" && existente.ESTADO === "pendiente" && existente.ORIGEN === "ausencia_detectada";
-    if (existente && !esAusenciaAdivinada) return false;
+    if (existente && !esAusenciaAdivinada){
+      const etiqueta = typeof etiquetaTipoDia === "function" ? etiquetaTipoDia(existente.TIPO_DIA) : (existente.TIPO_DIA || "otro");
+      return { creado: false, motivo: `${fecha}: ya tenía guardado "${etiqueta}" (${existente.ESTADO || "sin estado"}).` };
+    }
     const quienDecide = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     const ahora = new Date().toISOString();
     await window.storage.set(key, JSON.stringify({
@@ -11715,8 +11744,8 @@ async function crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, cam
       FECHA_DECISION_FINAL: ahora,
       ...(camposExtra || {}),
     }), false);
-    return true;
-  }catch(e){ return false; } // best effort — la carta ya salió; un día suelto se puede resolver después desde horas extra
+    return { creado: true };
+  }catch(e){ return { creado: false, motivo: `${fecha}: ${e.message || "error al guardar"}.` }; } // best effort — la carta ya salió; un día suelto se puede resolver después desde horas extra
 }
 
 // Recorre un rango de fechas inclusivo (mismo cálculo que calcularDiasPermiso/
@@ -11724,16 +11753,19 @@ async function crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, cam
 async function justificarRangoDeFechas(empKey, dia1, mes1, anio1, dia2, mes2, anio2, tipoDia, origen, camposExtra){
   const di = parseInt(dia1, 10), mi = MESES.indexOf(mes1), ai = parseInt(anio1, 10);
   const df = parseInt(dia2, 10), mf = MESES.indexOf(mes2), af = parseInt(anio2, 10);
-  if (!di || mi < 0 || !ai || !df || mf < 0 || !af) return;
+  if (!di || mi < 0 || !ai || !df || mf < 0 || !af) return [];
   const inicio = new Date(ai, mi, di);
   const fin = new Date(af, mf, df);
-  if (fin < inicio) return;
+  if (fin < inicio) return [];
   const cursor = new Date(inicio);
+  const bloqueados = [];
   while (cursor <= fin){
     const fecha = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,"0")}-${String(cursor.getDate()).padStart(2,"0")}`;
-    await crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, camposExtra);
+    const r = await crearOJustificarDiaHorasExtra(empKey, fecha, tipoDia, origen, camposExtra);
+    if (!r.creado) bloqueados.push(r.motivo);
     cursor.setDate(cursor.getDate() + 1);
   }
+  return bloqueados;
 }
 
 async function crearDiasPermisoSinGoceParaPlanilla(empKey){
@@ -12948,13 +12980,20 @@ async function listarSolicitudesAusencia(propiedadOverride){
 // versión de justificarRangoDeFechas que trabaja directo con fechas ISO en
 // vez de día/mes(nombre)/año, porque esta solicitud usa <input type=date>
 // en vez del selector de mes en español que usan las cartas.
+// Devuelve la lista de motivos de los días que NO se pudieron registrar
+// (choque con otro registro existente, o error al guardar) — antes esto se
+// descartaba en silencio, así que una solicitud podía quedar "aprobada" sin
+// que sus días de verdad aparecieran en Horas Extra, sin ningún aviso.
 async function justificarRangoISO(empKey, fechaInicioISO, fechaFinISO, tipoDia, origen, camposExtra){
   const cursor = new Date(fechaInicioISO + "T00:00:00");
   const fin = new Date(fechaFinISO + "T00:00:00");
+  const bloqueados = [];
   while (cursor <= fin){
-    await crearOJustificarDiaHorasExtra(empKey, isoDeFechaLocal(cursor), tipoDia, origen, camposExtra);
+    const r = await crearOJustificarDiaHorasExtra(empKey, isoDeFechaLocal(cursor), tipoDia, origen, camposExtra);
+    if (!r.creado) bloqueados.push(r.motivo);
     cursor.setDate(cursor.getDate() + 1);
   }
+  return bloqueados;
 }
 
 // Crea una solicitud de ausencia (vacaciones / permiso sin goce / ausencia
@@ -13293,9 +13332,9 @@ async function asignarAusenciaDirecta({ empKey, tipo, fechaInicio, fechaFin, com
     ORIGEN: "asignacion_directa",
   };
   await window.storage.set(key, JSON.stringify(value), false);
-  await justificarRangoISO(empKey, fechaInicio, fechaFin, tipo, "asignacion_directa", { SOLICITUD_KEY: key });
+  const diasBloqueados = await justificarRangoISO(empKey, fechaInicio, fechaFin, tipo, "asignacion_directa", { SOLICITUD_KEY: key });
   await generarDocumentoAccionPersonalDeSolicitud(key);
-  return key;
+  return { key, diasBloqueados };
 }
 
 // Antes de aprobar/asignar vacaciones, avisa si esto va a dejar el saldo en
@@ -13340,10 +13379,14 @@ async function aprobarSolicitudAusencia(key){
     v.FECHA_DECISION = new Date().toISOString();
     await window.storage.set(key, JSON.stringify(v), false);
 
-    await justificarRangoISO(v.EMPLEADO_KEY, v.FECHA_INICIO, v.FECHA_FIN, v.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
+    const diasBloqueados = await justificarRangoISO(v.EMPLEADO_KEY, v.FECHA_INICIO, v.FECHA_FIN, v.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
     await generarDocumentoAccionPersonalDeSolicitud(key);
 
-    statusMsg("Solicitud aprobada.");
+    let msg = "Solicitud aprobada.";
+    if (diasBloqueados.length){
+      msg += ` ⚠️ ${diasBloqueados.length} día(s) no se pudieron registrar en Horas Extra — ${diasBloqueados.join(" ")} Usá "🔧 Reparar días" en esta solicitud para reintentarlo.`;
+    }
+    statusMsg(msg, diasBloqueados.length === 0);
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
   }catch(e){ statusMsg("No se pudo aprobar: " + e.message, false); }
 }
@@ -13854,8 +13897,11 @@ async function confirmarAsignacionDirecta(){
         comprobanteDataUrl = await leerArchivoComoDataUrl(f.archivo);
         comprobanteNombre = f.archivo.name;
       }
-      await asignarAusenciaDirecta({ empKey, tipo: f.tipo, fechaInicio: f.fechaInicio, fechaFin: f.fechaFin, comprobanteDataUrl, comprobanteNombre });
+      const resultado = await asignarAusenciaDirecta({ empKey, tipo: f.tipo, fechaInicio: f.fechaInicio, fechaFin: f.fechaFin, comprobanteDataUrl, comprobanteNombre });
       ok++;
+      if (resultado.diasBloqueados && resultado.diasBloqueados.length){
+        errores.push(`Línea ${f.linea}: se aprobó, pero ${resultado.diasBloqueados.length} día(s) no se pudieron registrar en Horas Extra — ${resultado.diasBloqueados.join(" ")} Usá "🔧 Reparar días" en esa solicitud para reintentarlo.`);
+      }
     }catch(e){ errores.push(`Línea ${f.linea}: ${e.message}`); }
   }
 
@@ -13923,14 +13969,15 @@ async function repararDiasDeSolicitud(key){
 
     const cursor = new Date(s.FECHA_INICIO + "T00:00:00");
     const fin = new Date(s.FECHA_FIN + "T00:00:00");
-    let creados = 0, yaExistian = 0;
+    let creados = 0;
+    const bloqueados = [];
     while (cursor <= fin){
       const fecha = isoDeFechaLocal(cursor);
-      const ok = await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, s.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
-      if (ok) creados++; else yaExistian++;
+      const r = await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, s.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
+      if (r.creado) creados++; else bloqueados.push(r.motivo);
       cursor.setDate(cursor.getDate() + 1);
     }
-    statusMsg(`${creados} día(s) creado(s).${yaExistian ? ` ${yaExistian} día(s) ya tenían algo guardado y no se tocaron (revisá si hay otra solicitud pisando las mismas fechas).` : ""}`, true);
+    statusMsg(`${creados} día(s) creado(s).${bloqueados.length ? ` ${bloqueados.length} día(s) ya tenían algo guardado y no se tocaron — ${bloqueados.join(" ")} (revisá si hay otra solicitud pisando las mismas fechas).` : ""}`, true);
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
   }catch(e){ statusMsg("No se pudo reparar: " + e.message, false); }
 }
@@ -14113,9 +14160,11 @@ async function guardarCorreccionSolicitud(){
     }
 
     const diasYaJustificados = new Set(diasDeEstaSolicitud.filter(d => diasNuevoSet.has(d.FECHA)).map(d => d.FECHA));
+    const diasBloqueados = [];
     for (const fecha of diasNuevoSet){
       if (diasYaJustificados.has(fecha)) continue;
-      await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, nuevoTipo, "solicitud_ausencia", { SOLICITUD_KEY: key });
+      const r = await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, nuevoTipo, "solicitud_ausencia", { SOLICITUD_KEY: key });
+      if (!r.creado) diasBloqueados.push(r.motivo);
     }
 
     s.TIPO = nuevoTipo;
@@ -14164,7 +14213,7 @@ async function guardarCorreccionSolicitud(){
 
     corregirSolicitudPendienteKey = null;
     cerrarModalIncompletos();
-    statusMsg(`Corregido.${noTocados ? ` ${noTocados} día(s) fuera del nuevo rango ya se habían procesado aparte y no se tocaron.` : ""}${avisoDocumento}`, true);
+    statusMsg(`Corregido.${noTocados ? ` ${noTocados} día(s) fuera del nuevo rango ya se habían procesado aparte y no se tocaron.` : ""}${diasBloqueados.length ? ` ⚠️ ${diasBloqueados.length} día(s) no se pudieron registrar en Horas Extra — ${diasBloqueados.join(" ")} Usá "🔧 Reparar días" para reintentarlo.` : ""}${avisoDocumento}`, true);
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
   }catch(e){
     if (status) status.textContent = e.message || "No se pudo guardar.";
