@@ -10498,12 +10498,30 @@ async function confirmarCompletarTurno(key){
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) return;
     let jornada = JORNADA_DIARIA_POR_DEFECTO;
+    let modalidad = null;
     if (v.EMPLEADO_KEY){
       try{
         const re = await window.storage.get(CATALOGS.empleados.prefix + v.EMPLEADO_KEY, false);
         const emp = re && re.value ? JSON.parse(re.value) : null;
-        jornada = await jornadaDiariaDeEmpleado(emp, {});
+        if (emp && emp.PUESTO_KEY){
+          const rp = await window.storage.get(CATALOGS.puestos.prefix + emp.PUESTO_KEY, false);
+          const puesto = rp && rp.value ? JSON.parse(rp.value) : null;
+          modalidad = (puesto && puesto.MODALIDAD_JORNADA) || null;
+          jornada = jornadaDiariaDePuesto(puesto);
+        }
       }catch(e){ /* usa la jornada por defecto */ }
+    }
+    // Un turno que cruza al día calendario siguiente solo es normal en
+    // jornada nocturna o mixta (Art. 136 CT — ver MODALIDADES_JORNADA). Para
+    // el resto de puestos (turno diurno, o sin modalidad asignada), que la
+    // salida caiga un día después casi siempre es la fecha mal digitada en
+    // el modal, no un turno real de 16+ horas — se bloquea para que la
+    // jefatura revise en vez de aprobar horas extra que en realidad son un
+    // error de captura (ver caso reportado: empleado de construcción con
+    // turno diurno al que se le completó un "turno" de un día para el otro).
+    if (salidaStr.slice(0, 10) !== entradaStr.slice(0, 10) && modalidad !== "turno_nocturno" && modalidad !== "turno_mixto"){
+      statusMsg("La salida cae en el día siguiente, pero el puesto de este empleado no es de turno nocturno ni mixto — revisa las fechas antes de guardar.", false);
+      return;
     }
     v.HORAS_EXTRA = Math.round(aplicarToleranciaCortesia(Math.max(0, horas - jornada)) * 100) / 100;
     v.MARCAS = [{ entrada: mostrarFechaHoraCorta(entradaStr), salida: mostrarFechaHoraCorta(salidaStr) }];
