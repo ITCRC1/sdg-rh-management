@@ -14296,10 +14296,11 @@ async function actualizarDisponibilidadAsignacionDirecta(){
       + (arrastre !== 0 ? ` ${arrastre > 0 ? "+" : "−"} ${Math.abs(arrastre)} día(s) de arrastre de meses anteriores` : "")
       + (otorgadosEsteMes > 0 ? ` − ${otorgadosEsteMes} día(s) ya otorgado(s) ese mes` : "");
 
+    const ingresoTexto = emp.FECHA_INGRESO_EMP ? ` (ingreso: ${escapeHtml(emp.FECHA_INGRESO_EMP)})` : "";
     if (saldo < 0){
-      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: <b style="color:#b2703b;">🔻 ${Math.abs(saldo)} día(s) en adelanto</b> (se le otorgó de más).<br><span style="font-size:11px; color:var(--ink-soft);">${detalle} = ${saldo} día(s).</span>`;
+      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))}${ingresoTexto} — ${etiquetaMes}: <b style="color:#b2703b;">🔻 ${Math.abs(saldo)} día(s) en adelanto</b> (se le otorgó de más).<br><span style="font-size:11px; color:var(--ink-soft);">${detalle} = ${saldo} día(s).</span>`;
     } else {
-      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))} — ${etiquetaMes}: <b>${saldo} día(s) disponibles</b> para asignarle.<br><span style="font-size:11px; color:var(--ink-soft);">${detalle} = ${saldo} día(s).</span>`;
+      cont.innerHTML = `📆 ${escapeHtml(nombreCompletoEmpleado(emp))}${ingresoTexto} — ${etiquetaMes}: <b>${saldo} día(s) disponibles</b> para asignarle.<br><span style="font-size:11px; color:var(--ink-soft);">${detalle} = ${saldo} día(s).</span>`;
     }
   }catch(e){ cont.textContent = "No se pudo calcular la disponibilidad."; }
 }
