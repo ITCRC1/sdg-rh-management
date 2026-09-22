@@ -8521,10 +8521,19 @@ function parsearHorasDecimal(v){
 
 // Reportes de marcación en PDF: una línea por marca ("Nº de Empleado
 // Nombre Completo Fecha Tipo grabación"), sin distinguir entrada de
-// salida — cada fila es solo "Ingreso/Salida". Ej.:
+// salida — cada fila es solo "Ingreso/Salida" o "Entrada/Salida" (dos
+// reportes distintos usan cada quien su propia palabra para lo mismo; el
+// nombre de la columna es "Tipo de grabación" en el segundo). Ej.:
 // "00000017 CARLOS MIGUEL ZUÑIGA MATA 15/8/2026 20:52 Ingreso/Salida"
+// "00000004 ALEJANDRO JOSE ABARCA TENCIO 18/9/2026 13:18 Entrada/salida"
 function parsearLineaMarcacionPDF(linea){
-  const m = /^(\d{4,12})\s+(.+?)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+Ingreso\/Salida\s*$/.exec(String(linea || "").trim());
+  // El número de empleado a veces sale SIN ceros a la izquierda en alguna
+  // fila suelta del mismo reporte (ej. "501" en vez de "00000501" para la
+  // misma persona que en el resto del archivo sí trae el número completo)
+  // — de ahí el mínimo de 1 dígito en vez de 4; el emparejamiento contra la
+  // ficha ya ignora ceros a la izquierda (ver normalizarCodigoEmpleado), así
+  // que esto no genera falsos positivos nuevos.
+  const m = /^(\d{1,12})\s+(.+?)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+(?:ingreso|entrada)\/salida\s*$/i.exec(String(linea || "").trim());
   if (!m) return null;
   const dia = parseInt(m[3], 10), mes = parseInt(m[4], 10), anio = parseInt(m[5], 10);
   const hh = parseInt(m[6], 10), mm = parseInt(m[7], 10);
@@ -9071,7 +9080,7 @@ async function importarHorasExtraArchivo(inputEl){
   }
   if (!rows.length){
     statusMsg(esPDF
-      ? "No se detectó ninguna fila válida en ese PDF con los formatos conocidos (tabla de SmartPSS Lite, o marcas sueltas de \"Ingreso/Salida\") — revisa el texto extraído abajo del botón de importar."
+      ? "No se detectó ninguna fila válida en ese PDF con los formatos conocidos (tabla de SmartPSS Lite, o marcas sueltas de \"Ingreso/Salida\" o \"Entrada/Salida\") — revisa el texto extraído abajo del botón de importar."
       : "Ese archivo no tiene filas.", false);
     // Deja ver el texto tal como lo extrajo el navegador, para poder ajustar
     // el lector al formato exacto sin tener que adivinar — mismo criterio
