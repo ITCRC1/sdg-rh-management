@@ -8971,7 +8971,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     }
   }
 
-  let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0;
+  let creadas = 0, actualizadas = 0, sinMatch = 0, omitidas = 0, autocompletados = 0;
   // Reimportar un archivo que se traslapa en fechas con uno anterior puede
   // pisar las horas de un día que seguía "pendiente" sin que nadie lo note
   // (el registro se sobrescribe abajo — eso es intencional, para poder
@@ -8989,6 +8989,30 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // mixto o nocturno) — sin match todavía, se usa la jornada por defecto,
     // así que esa fila queda visible en "Sin identificar" en vez de perderse.
     const jornada = await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
+    // Turno con una sola marca (entrada sin salida, o al revés) — a pedido
+    // del usuario, YA CON el empleado identificado (y por lo tanto su
+    // jornada conocida), se completa solo asumiendo la jornada completa del
+    // puesto, en vez de quedar pendiente de que alguien la complete a mano
+    // (ver antes mostrarModalCompletarTurno, que sigue existiendo para el
+    // caso "sin identificar" de abajo). La marca que falta se sintetiza como
+    // la registrada + la jornada del puesto — igual que asume por defecto
+    // ese modal ("lo más común es que haya olvidado marcar la salida") —
+    // sin horas extra, porque no hay forma de saber si de verdad las hubo.
+    // Sigue pasando por la aprobación normal (queda "pendiente" como
+    // cualquier día importado), así que jefatura/gerencia puede corregirlo
+    // si la suposición no calza con lo que en realidad pasó ese día.
+    if (info.INCOMPLETO && info.EMPLEADO_KEY && info.MARCA_SUELTA){
+      const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(info.MARCA_SUELTA);
+      if (m){
+        const entradaTs = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+        const salidaTs = entradaTs + Math.round(jornada * 60) * 60000;
+        info.MARCAS = [{ entrada: mostrarFechaHoraCorta(info.MARCA_SUELTA), salida: mostrarFechaHoraCorta(isoLocalDesdeTs(salidaTs)) }];
+        info.INCOMPLETO = false;
+        info.MARCA_SUELTA = null;
+        info.AUTOCOMPLETADO = true;
+        autocompletados++;
+      }
+    }
     // Si el archivo ya trajo "horas extra" calculada para este día, se usa
     // tal cual — NUNCA se le suma además el excedente de horas_trabajadas
     // sobre la jornada, porque esa cuenta ya viene incluida en la columna
@@ -9035,6 +9059,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
       MARCAS: info.MARCAS,
       INCOMPLETO: info.INCOMPLETO,
       MARCA_SUELTA: info.MARCA_SUELTA,
+      AUTOCOMPLETADO: info.AUTOCOMPLETADO || false,
       TIPO_DIA: info.INCOMPLETO ? null : "laboral",
       ESTADO: "pendiente",
       ORIGEN_ARCHIVO: nombreArchivo,
@@ -9048,7 +9073,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
 
   const ausenciasDetectadas = await detectarAusenciasDelArchivo(acumulado, nombreArchivo);
 
-  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols, cambiosDeHoras, confianzaOmitidos };
+  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols, cambiosDeHoras, confianzaOmitidos, autocompletados };
 }
 
 async function importarHorasExtraArchivo(inputEl){
@@ -9115,7 +9140,9 @@ async function importarHorasExtraArchivo(inputEl){
       const yMas = r.cambiosDeHoras.length > 5 ? ` y ${r.cambiosDeHoras.length - 5} más` : "";
       msg += ` ⚠️ ${r.cambiosDeHoras.length} registro(s) pendiente(s) cambiaron de horas respecto al valor que tenían antes de esta importación — revísalos: ${detalle}${yMas}.`;
     }
-    if (turnosSinMarcar) msg += ` ${turnosSinMarcar} turno(s) sin marcar quedaron para que la jefatura los complete o los descarte.`;
+    if (r.autocompletados) msg += ` ${r.autocompletados} turno(s) con una sola marca se completaron solos asumiendo la jornada completa del puesto (0h extra) — revísalos si alguno no calza.`;
+    const turnosSinCompletarTodavia = Math.max(0, turnosSinMarcar - (r.autocompletados || 0));
+    if (turnosSinCompletarTodavia) msg += ` ${turnosSinCompletarTodavia} turno(s) sin marcar (sin empleado identificado todavía) quedaron para que la jefatura los complete o los descarte.`;
     if (sinPar) msg += ` ${sinPar} marca(s) con duración imposible (par negativo o de más de 20h) se ignoraron.`;
     // Para poder revisar rápido si el archivo se leyó como se esperaba —
     // sobre todo cuál columna se usó como número de empleado, la fuente más
@@ -9988,7 +10015,7 @@ async function renderHorasExtrasPanel(){
       const infoLinea = (r.ESTADO === "pendiente" && r.INCOMPLETO)
         ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
         : (tipoDia === "laboral"
-          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}`
+          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}${r.AUTOCOMPLETADO ? ` · 🤖 autocompletado (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")}, se asumió la jornada completa)` : ""}`
           : `${etiquetaTipo}${puesto ? " · " + escapeHtml(puesto) : ""}${r.ORIGEN === "permiso_sin_goce" ? " · generado desde la acción de personal" : ""}${r.ORIGEN_ARCHIVO ? ` · reclasificado desde marcación (${escapeHtml(r.ORIGEN_ARCHIVO)})` : ""}`);
       return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">
