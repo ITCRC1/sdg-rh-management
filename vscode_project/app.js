@@ -9964,7 +9964,8 @@ async function renderHorasExtrasPanel(){
       const tipoDia = r.TIPO_DIA || "laboral";
       let acciones = "";
       if (r.ESTADO === "pendiente" && r.INCOMPLETO && r.EMPLEADO_KEY && puedeAprobar){
-        acciones = `<button class="use" onclick="mostrarModalCompletarTurno('${keyEsc}')">✏️ Completar</button>
+        acciones = `<button class="use" onclick="marcarJornadaCompletaTurno('${keyEsc}')">⚡ Marcar jornada completa</button>
+          <button class="use" onclick="mostrarModalCompletarTurno('${keyEsc}')">✏️ Completar</button>
           <button class="del" onclick="rechazarTurnoSinMarcar('${keyEsc}')">❌ No laboró</button>`;
       } else if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
         acciones = `<select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
@@ -10385,6 +10386,45 @@ async function rechazarVariasHorasExtra(keys){
   horasExtraEmpleadoSeleccionado = null;
   statusMsg(`${ok} de ${keys.length} día(s) rechazados.`, ok === keys.length);
   renderHorasExtrasPanel();
+}
+
+// Atajo de un clic para "Turno sin marcar": en vez de abrir el modal y
+// escribir la hora que falta a mano, asume la jornada completa del puesto
+// (misma lógica que ya aplica solo al importar un archivo nuevo — ver
+// guardarFilasHorasExtra) y guarda de una vez, sin horas extra. Sigue
+// quedando "aprobada_jefatura" (a la espera de la aprobación final de
+// gerencia), igual que si se hubiera completado a mano — no es una
+// aprobación final automática.
+async function marcarJornadaCompletaTurno(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v){ statusMsg("Ese registro ya no existe.", false); return; }
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v.MARCA_SUELTA || "");
+    if (!m){ statusMsg("No se pudo leer la hora marcada — usá \"✏️ Completar\" en su lugar.", false); return; }
+    let jornada = JORNADA_DIARIA_POR_DEFECTO;
+    if (v.EMPLEADO_KEY){
+      try{
+        const re = await window.storage.get(CATALOGS.empleados.prefix + v.EMPLEADO_KEY, false);
+        const emp = re && re.value ? JSON.parse(re.value) : null;
+        jornada = await jornadaDiariaDeEmpleado(emp, {});
+      }catch(e){ /* usa la jornada por defecto */ }
+    }
+    const entradaTs = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    const salidaTs = entradaTs + Math.round(jornada * 60) * 60000;
+    v.MARCAS = [{ entrada: mostrarFechaHoraCorta(v.MARCA_SUELTA), salida: mostrarFechaHoraCorta(isoLocalDesdeTs(salidaTs)) }];
+    v.HORAS_EXTRA = 0;
+    v.INCOMPLETO = false;
+    v.MARCA_SUELTA = null;
+    v.AUTOCOMPLETADO = true;
+    v.TIPO_DIA = "laboral";
+    v.ESTADO = "aprobada_jefatura";
+    v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_DECISION = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Jornada completa marcada — pendiente de la aprobación final de gerencia.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
 }
 
 // "Turno sin marcar": el reloj registró una sola marca ese día (falta el
