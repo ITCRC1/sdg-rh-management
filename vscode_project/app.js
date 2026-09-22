@@ -14686,19 +14686,31 @@ async function guardarCorreccionSolicitud(){
     while (cursor <= finCursor){ diasNuevoSet.add(isoDeFechaLocal(cursor)); cursor.setDate(cursor.getDate() + 1); }
 
     let noTocados = 0;
+    // Los días de una solicitud de días libres/vacaciones/permiso sin goce
+    // se crean YA "aprobada" (ver crearOJustificarDiaHorasExtra) — nunca
+    // pasan por "pendiente". Comprobar ESTADO !== "pendiente" acá (tanto
+    // para sincronizar el tipo como para borrar lo que quedó fuera del
+    // nuevo rango) los dejaba SIEMPRE sin tocar: al corregir fechas, los
+    // días de ANTES de la corrección nunca se borraban y quedaban
+    // huérfanos contando de más (el bug real detrás de "sigue guardando
+    // las fechas anteriores"), y un cambio de tipo tampoco se reflejaba en
+    // los días que seguían dentro del rango. Lo que de verdad hay que
+    // respetar es si alguien reclasificó el día a mano a un tipo distinto
+    // del que tenía la solicitud ANTES de esta corrección — eso sí
+    // significa que se procesó aparte y no hay que revertirlo solo.
     for (const dia of diasDeEstaSolicitud){
       if (diasNuevoSet.has(dia.FECHA)){
         // Sigue dentro del rango corregido — no se recrea, pero si cambió el
         // tipo (vacaciones ↔ día libre) sí hay que reflejarlo en el día ya
         // guardado, o quedaría con el tipo viejo aunque la solicitud diga
         // otra cosa (afecta el saldo de vacaciones y el reporte de planilla).
-        if (cambioTipo && dia.ESTADO === "pendiente" && dia.TIPO_DIA !== nuevoTipo){
+        if (cambioTipo && dia.TIPO_DIA === tipoAnterior){
           dia.TIPO_DIA = nuevoTipo;
           await window.storage.set(dia.key, JSON.stringify(dia), false);
         }
         continue;
       }
-      if (dia.ESTADO !== "pendiente"){ noTocados++; continue; } // ya se procesó aparte — no se revierte solo
+      if (dia.TIPO_DIA !== tipoAnterior){ noTocados++; continue; }
       await window.storage.delete(dia.key, false);
     }
 
