@@ -6567,7 +6567,7 @@ function renderManualPanel(){
       cuerpo: `<p>Pantalla de aterrizaje al entrar al sistema.</p>
         ${img("dashboard-anotado.svg", "Dashboard anotado con 14 elementos numerados")}
         <ol style="padding-left:18px;">
-          <li><b>Propiedad activa</b> — en cuál de las 4 propiedades estás trabajando. Solo master puede cambiarla; los demás roles quedan fijos en la suya.</li>
+          <li><b>Propiedad activa</b> — en cuál de las 5 propiedades (Corcovado, Oxygen, Ojochal, Amarena, o The Costa Rica Collections como entidad corporativa) estás trabajando. Solo master puede cambiarla; los demás roles quedan fijos en la suya.</li>
           <li><b>Campana de notificaciones</b> — avisos pendientes de revisar.</li>
           <li><b>Usuario y rol</b> — quién tiene la sesión abierta y con qué nivel de acceso.</li>
           <li><b>Alerta de acción pendiente</b> — banner rojo cliqueable que avisa de algo urgente (ej. colillas sin subir).</li>
@@ -6715,7 +6715,7 @@ function renderManualPanel(){
         <ol style="padding-left:18px;">
           <li>Encabezado — resume la regla de acumulación de vacaciones (1 día/mes, primer año por aniversario de ingreso, luego ciclo fijo 1° dic al 30 nov, tope 12).</li>
           <li>Filtro por departamento.</li>
-          <li>Cumpleaños próximos — 1 día pagado, se pierde si no se otorga en el año; selector de mes.</li>
+          <li>Cumpleaños próximos (exclusivo de Corcovado — las demás propiedades no lo ven; su descanso es solo día(s) libre(s) semanal/mensual) — 1 día pagado, se pierde si no se otorga en el año; selector de mes.</li>
           <li>Ver todos del año.</li>
           <li>Otorgar día — registra el cumpleaños de esa persona.</li>
           <li>Asignar directamente — buscador de empleado.</li>
@@ -6727,7 +6727,7 @@ function renderManualPanel(){
         <ol style="padding-left:18px;">
           <li>🔧 Reparar todos — revisa TODAS las solicitudes aprobadas y crea en Horas Extra cualquier día sin registrar.</li>
           <li>Buscador por nombre.</li>
-          <li>Fila de una solicitud — Corregir fechas / Reparar días / Eliminar; vacaciones y permiso sin goce muestran además su documento.</li>
+          <li>Fila de una solicitud — tipo (🏖️ Vacaciones, 🚩 Día libre, 📄 Permiso sin goce, ✈️ Día de viaje — solo Corcovado); Corregir fechas / Reparar días / Eliminar; vacaciones y permiso sin goce muestran además su documento.</li>
           <li>Calendario mensual — mes anterior/siguiente.</li>
           <li>Leyenda — VAC/LIBRE/CITA·INCAP para cualquier propiedad; SALE/ENTRA/VIAJE/CUMP solo Corcovado.</li>
           <li>Celda del calendario — tipo de ausencia de cada persona ese día.</li>
@@ -6767,7 +6767,7 @@ function renderManualPanel(){
       cuerpo: `<p>Colillas de pago archivadas por trabajador, más las herramientas para mantenerlas al día.</p>
         ${img("planilla-anotado.svg", "Planilla anotado")}
         <ol style="padding-left:18px;">
-          <li><b>Importar y Actualizar Salarios</b> — subís las colillas (PDF) de cada quincena, en colones y/o dólares; se empareja por número de empleado, cédula o nombre y actualiza el salario real de cada quien.</li>
+          <li><b>Importar y Actualizar Salarios</b> (solo Corcovado — única propiedad que migra desde un proveedor externo) — subís las colillas (PDF) de cada quincena, en colones y/o dólares; se empareja por número de empleado, cédula o nombre y actualiza el salario real de cada quien. Las demás propiedades no ven esta tarjeta — usan directo "Generar colillas de pago (nuevo)" de abajo.</li>
           <li>Última actualización aplicada — fecha y cuántos empleados se actualizaron.</li>
           <li>Subir PDF(s) de colillas — uno o varios a la vez.</li>
           <li>Ver colillas archivadas.</li>
@@ -6782,7 +6782,26 @@ function renderManualPanel(){
         <ol style="padding-left:18px;">
           <li><b>Reporte de incidencias por fechas</b> — Excel con ingresos y salidas de personal entre dos fechas.</li>
           <li><b>Reporte de horarios para pago de planilla</b> — por empleado: días laborados, incapacidad/PSG/cita/ausencia, horas extra y días libres/vacaciones, para el mes y quincena elegidos (con rango de datos real aparte, si la marcación no calza con el calendario de la quincena).</li>
-          <li><b>Generar colillas de pago (nuevo)</b> — arma la colilla ahí mismo (Ordinario + feriado doble + horas extra − CCSS 10.83% = Neto) en vez de subir un PDF externo. No incluye deducciones aparte de CCSS — esas se agregan a mano por persona (ver Deducciones recurrentes en Expedientes).</li>
+          <li><b>Generar colillas de pago (nuevo)</b> — arma la colilla ahí mismo (Ordinario + feriado doble + horas extra − CCSS 10.83% = Neto). Para Corcovado es una alternativa a subir un PDF externo (migración gradual); para las demás propiedades es LA única forma de generar colillas. No incluye deducciones aparte de CCSS — esas se agregan a mano por persona (ver Deducciones recurrentes en Expedientes).</li>
+        </ol>`,
+    },
+    {
+      id: "incapacidades", roles: ["gerente","master"],
+      titulo: "🤒 Incapacidades",
+      cuerpo: `<p>Registro con boleta CCSS/INS, incapacidades activas y alerta al acercarse la fecha de regreso. Pausa la acumulación de vacaciones automáticamente (Art. 160 CT) mientras está activa. Universal para las 5 propiedades.</p>
+        ${img("incapacidades-anotado.svg", "Incapacidades anotado")}
+        <ol style="padding-left:18px;">
+          <li>Encabezado.</li>
+          <li>Registrar incapacidad — registro DIRECTO para colillas: no pasa por aprobación ni se puede anular. El salario diario se toma automático de la ficha.</li>
+          <li>Empleado.</li>
+          <li>Tipo.</li>
+          <li>Desde / Hasta.</li>
+          <li>N° de boleta (CCSS/INS).</li>
+          <li>Comprobante (PDF/imagen) — opcional.</li>
+          <li>Es prórroga de una incapacidad anterior — vincula con la incapacidad original.</li>
+          <li>Registrar incapacidad — guarda el registro.</li>
+          <li>Incapacidades activas — quién está incapacitado hoy.</li>
+          <li>Historial reciente — registros cerrados, con días totales, boleta y pago patronal estimado.</li>
         </ol>`,
     },
     {
