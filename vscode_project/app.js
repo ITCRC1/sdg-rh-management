@@ -8640,19 +8640,34 @@ async function leerInformeRegistrosTablaPDF(file){
 }
 
 // Convierte el PDF de marcas sueltas en filas "por día" listas para
-// guardarFilasHorasExtra. Las marcas se emparejan de dos en dos POR
-// EMPLEADO en orden cronológico (sin cortar por fecha civil): un turno
-// nocturno entra un día y sale al siguiente, y cortar por fecha lo
-// partiría mal en dos. El total de horas de cada par se suma al día de SU
-// entrada, y si un empleado tiene varios pares ese mismo día (turno con
-// salida a almorzar, por ejemplo) se suman entre sí. Todavía NO se resta la
-// jornada aquí — eso lo hace guardarFilasHorasExtra una vez que sabe con
-// qué empleado (y por lo tanto con qué modalidad de jornada) hizo match.
+// guardarFilasHorasExtra. Las marcas se agrupan PRIMERO por su propia
+// fecha (columna "Fecha" del reporte) y recién ahí se emparejan de dos en
+// dos dentro de ESA fecha — nunca cruzando al día siguiente. A propósito:
+// antes se emparejaba en orden cronológico sin cortar por fecha civil
+// (pensado para que un turno nocturno que cruza la medianoche calzara
+// bien), pero eso hacía que una marca suelta de un día (ej. entró a un
+// evento a las 19:05 y no volvió a marcar) se uniera con la primera marca
+// del día SIGUIENTE (ej. entrada normal del otro turno) como si fuera un
+// solo turno de 16 horas — un caso real detectado a pedido del usuario. Con
+// el corte por fecha, cada una de esas dos marcas queda en su propio día:
+// la del primer día quída sola (turno sin marcar), y las del segundo día se
+// emparejan entre sí si hay 2 o más. El costo de este cambio es que un
+// turno nocturno REAL que sí cruza la medianoche ahora se ve como dos días
+// con una marca suelta cada uno en vez de un solo turno — se prefirió así
+// porque en la operación real de esta propiedad los turnos que cruzan
+// medianoche son la excepción, no la regla, y esos casos sueltos igual
+// quedan visibles para completarlos a mano (ver mostrarModalCompletarTurno).
+// El total de horas de cada par se suma al día que le corresponde, y si un
+// empleado tiene varios pares ese mismo día (turno con salida a almorzar,
+// por ejemplo) se suman entre sí. Todavía NO se resta la jornada aquí — eso
+// lo hace guardarFilasHorasExtra una vez que sabe con qué empleado (y por
+// lo tanto con qué modalidad de jornada) hizo match.
 //
-// Una marca que se queda sin pareja (turno sin marcar: falta el check-in o
-// el check-out) ya no se descarta en silencio — se manda como su propia
-// fila "incompleta", para que la jefatura la complete o la rechace en el
-// panel en vez de perder esa marca sin que nadie se entere.
+// Una marca que se queda sin pareja en su propia fecha (turno sin marcar:
+// falta el check-in o el check-out) ya no se descarta en silencio — se
+// manda como su propia fila "incompleta", para que la jefatura la complete
+// o la rechace en el panel en vez de perder esa marca sin que nadie se
+// entere.
 async function leerRegistrosMarcacionPDF(file){
   const texto = await extraerTextoPDF(file);
   const vistos = new Set();
@@ -8677,26 +8692,29 @@ async function leerRegistrosMarcacionPDF(file){
   let sinPar = 0; // marcas descartadas de verdad (par con duración imposible)
   let turnosSinMarcar = 0; // marcas sueltas que SÍ quedan como fila para revisar
   Object.entries(porEmpleado).forEach(([codigo, info]) => {
-    const marcas = info.marcas.slice().sort((a, b) => a.ts - b.ts);
-    for (let i = 0; i + 1 < marcas.length; i += 2){
-      const horas = (marcas[i + 1].ts - marcas[i].ts) / 3600000;
-      // Turno negativo (marcas fuera de orden) o de más de 20h (probable
-      // marca faltante en medio, que desalinea el emparejamiento): se
-      // ignora ese par en vez de inventar un turno absurdo.
-      if (horas <= 0 || horas > 20){ sinPar += 2; continue; }
-      const key = codigo + "|" + marcas[i].fecha;
-      if (!porDia[key]) porDia[key] = { codigo, nombre: info.nombre, fecha: marcas[i].fecha, horas: 0, marcas: [] };
-      porDia[key].horas += horas;
-      porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcas[i].ts), salida: formatoFechaHoraCortaUTC(marcas[i + 1].ts) });
-    }
-    if (marcas.length % 2 === 1){
-      const suelta = marcas[marcas.length - 1];
-      filasIncompletas.push({
-        CODIGO: codigo, NOMBRE: info.nombre, FECHA: suelta.fecha,
-        MARCA_SUELTA: isoLocalDesdeTs(suelta.ts), INCOMPLETO: true,
-      });
-      turnosSinMarcar += 1;
-    }
+    const porFecha = {};
+    info.marcas.forEach(ev => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
+    Object.entries(porFecha).forEach(([fecha, marcasDelDia]) => {
+      const marcas = marcasDelDia.slice().sort((a, b) => a.ts - b.ts);
+      for (let i = 0; i + 1 < marcas.length; i += 2){
+        const horas = (marcas[i + 1].ts - marcas[i].ts) / 3600000;
+        // Negativo (marcas fuera de orden) o absurdamente largo: se ignora
+        // ese par en vez de inventar un turno que no calza.
+        if (horas <= 0 || horas > 20){ sinPar += 2; continue; }
+        const key = codigo + "|" + fecha;
+        if (!porDia[key]) porDia[key] = { codigo, nombre: info.nombre, fecha, horas: 0, marcas: [] };
+        porDia[key].horas += horas;
+        porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcas[i].ts), salida: formatoFechaHoraCortaUTC(marcas[i + 1].ts) });
+      }
+      if (marcas.length % 2 === 1){
+        const suelta = marcas[marcas.length - 1];
+        filasIncompletas.push({
+          CODIGO: codigo, NOMBRE: info.nombre, FECHA: fecha,
+          MARCA_SUELTA: isoLocalDesdeTs(suelta.ts), INCOMPLETO: true,
+        });
+        turnosSinMarcar += 1;
+      }
+    });
   });
 
   const filas = Object.values(porDia)
