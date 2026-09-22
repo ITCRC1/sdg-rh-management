@@ -6658,7 +6658,7 @@ function renderManualPanel(){
     {
       id: "empleados", roles: ["gerente","master"],
       titulo: "👥 Empleados",
-      cuerpo: `<p>Catálogo de expedientes, con el filtro de 🎂 Cumpleaños por mes específico (además de "ver todos los del año").</p>`,
+      cuerpo: `<p>Catálogo de expedientes. La sección 🎂 Cumpleaños próximos (con filtro por mes) vive dentro de Días Libres y Vacaciones, no acá.</p>`,
     },
     {
       id: "expedientes", roles: ["gerente","master"],
@@ -6710,10 +6710,36 @@ function renderManualPanel(){
       cuerpo: `<p><b>Vacaciones</b> (Art. 153 CT) y <b>Días libres</b> son dos beneficios separados, cada uno con su propio cupo y saldo — nunca se mezclan en ningún cálculo ni columna.</p>
         <p><b>Cupo mensual de días libres</b> — por defecto 4 al día al mes; algunos empleados tienen cupo distinto por contrato (ej. 5 o 6 días), configurable en su ficha.</p>
         <p><b>Cómo se calcula el saldo</b> — cupo fijo por mes calendario completo, <b>con arrastre automático</b>: lo no otorgado un mes se suma al siguiente (sin límite). El mes de ingreso se prorratea según los días trabajados. El saldo puede quedar negativo (un "adelanto") si se otorgó de más — se recupera solo con la acumulación de los meses siguientes, igual que vacaciones.</p>
-        <p><b>Solicitudes</b> — se crean con al menos 15 días de anticipación; gerencia/master las aprueba o rechaza; "✏️ Corregir fechas" ajusta una ya aprobada (el calendario, saldo de vacaciones y planilla se ajustan solos); "🗑️ Eliminar" la borra.</p>
-        <p><b>Asignar directamente</b> — aprueba de inmediato, sin cola de pendientes ni anticipación mínima, hasta 3 rangos por envío. El selector "Mes a consultar" muestra el desglose completo antes de asignar: cupo del mes + arrastre de meses anteriores − ya otorgado ese mes = disponibles.</p>
-        <p><b>Reparar días / Reparar todos</b> — herramientas de mantenimiento para cuando una solicitud quedó "aprobada" pero sus días no se reflejaron en Horas Extra; informan si algún día no se pudo tocar por chocar con otro registro, y por qué.</p>
-        <p><b>Calendario mensual</b> — VAC/LIBRE/CITA para cualquier propiedad. SALE/ENTRA/VIAJE/CUMP son exclusivas de Corcovado Wilderness Lodge.</p>`,
+        <p><b>Cabecera, Cumpleaños y Asignar directamente</b></p>
+        ${img("diaslibres-cabecera-anotado.svg", "Cabecera de Días Libres y Vacaciones anotada")}
+        <ol style="padding-left:18px;">
+          <li>Encabezado — resume la regla de acumulación de vacaciones (1 día/mes, primer año por aniversario de ingreso, luego ciclo fijo 1° dic al 30 nov, tope 12).</li>
+          <li>Filtro por departamento.</li>
+          <li>Cumpleaños próximos — 1 día pagado, se pierde si no se otorga en el año; selector de mes.</li>
+          <li>Ver todos del año.</li>
+          <li>Otorgar día — registra el cumpleaños de esa persona.</li>
+          <li>Asignar directamente — buscador de empleado.</li>
+          <li>Mes a consultar — cupo + arrastre − ya otorgado, antes de asignar.</li>
+          <li>Tipo / Desde / Hasta — hasta 3 filas por envío.</li>
+        </ol>
+        <p><b>Días libres otorgados y Calendario</b></p>
+        ${img("diaslibres-calendario-anotado.svg", "Días libres otorgados y calendario anotado")}
+        <ol style="padding-left:18px;">
+          <li>🔧 Reparar todos — revisa TODAS las solicitudes aprobadas y crea en Horas Extra cualquier día sin registrar.</li>
+          <li>Buscador por nombre.</li>
+          <li>Fila de una solicitud — Corregir fechas / Reparar días / Eliminar; vacaciones y permiso sin goce muestran además su documento.</li>
+          <li>Calendario mensual — mes anterior/siguiente.</li>
+          <li>Leyenda — VAC/LIBRE/CITA·INCAP para cualquier propiedad; SALE/ENTRA/VIAJE/CUMP solo Corcovado.</li>
+          <li>Celda del calendario — tipo de ausencia de cada persona ese día.</li>
+        </ol>
+        <p><b>Saldo de vacaciones (hoy)</b> — lista de todos los empleados con su saldo acumulado a la fecha.</p>
+        ${img("saldo-vacaciones-anotado.svg", "Saldo de vacaciones anotado")}
+        <ol style="padding-left:18px;">
+          <li>Lista completa, ordenada alfabéticamente.</li>
+          <li>Saldo en días — negativo se marca 🔻 adelanto.</li>
+          <li>Ajustar — corrige a mano el saldo de una persona.</li>
+        </ol>
+        <p><b>Reparar días / Reparar todos</b> — informan si algún día no se pudo tocar por chocar con otro registro, y por qué.</p>`,
     },
     {
       id: "miinformacion", roles: ["empleado","jefatura","gerente","master"],
@@ -6731,7 +6757,33 @@ function renderManualPanel(){
         <p><b>Reclasificar el tipo de un día</b> (laboral / día libre / incapacidad / permiso sin goce / ausencia) — se puede hacer en Pendientes, en Aprobación final, y también en un día que YA tiene aprobación final (con una confirmación, ya que corrige una decisión finalizada).</p>
         <p><b>🔍 Ver registro de un día específico</b> — busca, para un empleado y fecha exacta, qué hay guardado en Horas Extra (o si no hay nada) y qué solicitud de Días Libres/Vacaciones cubre esa fecha.</p>
         <p>Un día reclasificado a mano muestra también de qué archivo de marcación se importó originalmente.</p>
-        <p>El buscador de arriba filtra por nombre en todas las pestañas, incluida Pendientes. El rango de fechas solo filtra lo ya resuelto (aprobado/rechazado) — "Ver todo (sin filtro)" lo quita.</p>`,
+        <p>El buscador de arriba filtra por nombre en todas las pestañas, incluida Pendientes. El rango de fechas solo filtra lo ya resuelto (aprobado/rechazado) — "Ver todo (sin filtro)" lo quita.</p>
+        <p><b>🧹 Herramientas de limpieza</b> — panel expandible con utilidades de mantenimiento ("🔧 Corregir días atascados", el diagnóstico de un día específico).</p>
+        <p><b>Alerta de empleados sin registrar</b> — si alguien activo no tiene NINGÚN día registrado en el rango elegido, aparece un aviso rojo ("N empleado(s) sin ningún día registrado en este rango") — señal de que su marcación de ese período todavía no se importó.</p>`,
+    },
+    {
+      id: "planilla_menu", roles: ["gerente","master"],
+      titulo: "💰 Planilla",
+      cuerpo: `<p>Colillas de pago archivadas por trabajador, más las herramientas para mantenerlas al día.</p>
+        ${img("planilla-anotado.svg", "Planilla anotado")}
+        <ol style="padding-left:18px;">
+          <li><b>Importar y Actualizar Salarios</b> — subís las colillas (PDF) de cada quincena, en colones y/o dólares; se empareja por número de empleado, cédula o nombre y actualiza el salario real de cada quien.</li>
+          <li>Última actualización aplicada — fecha y cuántos empleados se actualizaron.</li>
+          <li>Subir PDF(s) de colillas — uno o varios a la vez.</li>
+          <li>Ver colillas archivadas.</li>
+          <li>Ver faltantes — quién no tiene colilla de este período.</li>
+          <li>¿No tienes el PDF a mano? Pega el texto manualmente.</li>
+          <li>Acciones — "Ver todas las colillas archivadas" y "Ver quién falta del período actual".</li>
+          <li>Tipo de cambio de referencia (USD → ₡) — se guarda a mano (no consulta ningún servicio externo), para convertir a colones el salario de quienes ganan en dólares al descargar datos para planilla CCSS.</li>
+          <li>Nuevo tipo de cambio + Guardar.</li>
+        </ol>
+        <p><b>Reportes y generación de colillas</b></p>
+        ${img("planilla-reportes-anotado.svg", "Reportes de planilla anotado")}
+        <ol style="padding-left:18px;">
+          <li><b>Reporte de incidencias por fechas</b> — Excel con ingresos y salidas de personal entre dos fechas.</li>
+          <li><b>Reporte de horarios para pago de planilla</b> — por empleado: días laborados, incapacidad/PSG/cita/ausencia, horas extra y días libres/vacaciones, para el mes y quincena elegidos (con rango de datos real aparte, si la marcación no calza con el calendario de la quincena).</li>
+          <li><b>Generar colillas de pago (nuevo)</b> — arma la colilla ahí mismo (Ordinario + feriado doble + horas extra − CCSS 10.83% = Neto) en vez de subir un PDF externo. No incluye deducciones aparte de CCSS — esas se agregan a mano por persona (ver Deducciones recurrentes en Expedientes).</li>
+        </ol>`,
     },
     {
       id: "planilla", roles: ["gerente","master"],

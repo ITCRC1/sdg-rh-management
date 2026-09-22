@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 460" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="700" height="460" fill="#F5F1E6"/>
+  <text x="16" y="26" font-size="16" font-weight="bold">🍂 Días Libres y Vacaciones</text>
+  <text x="16" y="44" font-size="9.5" fill="#777">Saldo acumulado (1 día/mes — primer año por aniversario, luego ciclo 1° dic al 30 nov, tope 12).</text>
+  <circle cx="400" cy="20" r="9" fill="#1f2d3d"/><text x="400" y="24" font-size="9" text-anchor="middle" fill="#fff">1</text>
+
+  <rect x="16" y="56" width="220" height="28" rx="4" fill="#fff" stroke="#ddd"/><text x="30" y="74" font-size="9.5">Todos los departamentos</text>
+  <circle cx="242" cy="50" r="9" fill="#1f2d3d"/><text x="242" y="54" font-size="9" text-anchor="middle" fill="#fff">2</text>
+
+  <rect x="16" y="96" width="668" height="150" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <text x="32" y="120" font-size="12" font-weight="bold">🎂 Cumpleaños próximos — 1 día pagado, se pierde si no se otorga en el año</text>
+  <rect x="32" y="130" width="120" height="24" rx="12" fill="#fff" stroke="#999"/><text x="92" y="146" font-size="9" text-anchor="middle">Cualquier mes</text>
+  <rect x="158" y="130" width="140" height="24" rx="12" fill="#fff" stroke="#999"/><text x="228" y="146" font-size="9" text-anchor="middle">📅 Ver todos del año</text>
+  <circle cx="42" cy="124" r="9" fill="#1f2d3d"/><text x="42" y="128" font-size="9" text-anchor="middle" fill="#fff">3</text>
+  <circle cx="92" cy="124" r="9" fill="#1f2d3d"/><text x="92" y="128" font-size="9" text-anchor="middle" fill="#fff">4</text>
+
+  <text x="32" y="182" font-size="10.5" font-weight="bold">QUESADA SUAREZ MARISOL JUANITA</text>
+  <text x="32" y="196" font-size="9" fill="#777">27/09/2026 (en 5 día(s))</text>
+  <rect x="560" y="172" width="100" height="26" rx="13" fill="#3f4a2b"/><text x="610" y="189" font-size="9" text-anchor="middle" fill="#fff">🎁 Otorgar día</text>
+  <circle cx="610" cy="166" r="9" fill="#1f2d3d"/><text x="610" y="170" font-size="9" text-anchor="middle" fill="#fff">5</text>
+
+  <text x="32" y="222" font-size="10.5" font-weight="bold">ABARCA TENCIO FRANCISCO ANTONIO</text>
+  <text x="32" y="236" font-size="9" fill="#777">04/10/2026 (en 12 día(s))</text>
+
+  <rect x="16" y="266" width="668" height="180" rx="8" fill="#fff" stroke="#e2ddd0"/>
+  <text x="32" y="288" font-size="12" font-weight="bold">📅 Asignar directamente</text>
+  <text x="32" y="304" font-size="9" fill="#777">Aprobado de inmediato — hasta 3 rangos por envío.</text>
+  <text x="32" y="322" font-size="9" fill="#888">Empleado</text>
+  <rect x="32" y="328" width="300" height="26" rx="4" fill="#fbfaf6" stroke="#ddd"/><text x="42" y="345" font-size="9" fill="#999">🔎 Buscar…</text>
+  <circle cx="662" cy="260" r="9" fill="#1f2d3d"/><text x="662" y="264" font-size="9" text-anchor="middle" fill="#fff">6</text>
+
+  <text x="360" y="322" font-size="9" fill="#888">¿Cuántos días libres tiene disponibles? — Mes a consultar</text>
+  <rect x="360" y="328" width="300" height="26" rx="4" fill="#fbfaf6" stroke="#ddd"/><text x="370" y="345" font-size="9">Septiembre 2026 (actual)</text>
+  <circle cx="662" cy="322" r="9" fill="#1f2d3d"/><text x="662" y="326" font-size="9" text-anchor="middle" fill="#fff">7</text>
+
+  <text x="32" y="378" font-size="9" fill="#888">Tipo</text>
+  <rect x="32" y="384" width="180" height="26" rx="4" fill="#fbfaf6" stroke="#ddd"/><text x="42" y="401" font-size="9">🏖️ Vacaciones</text>
+  <text x="222" y="378" font-size="9" fill="#888">Desde</text>
+  <rect x="222" y="384" width="130" height="26" rx="4" fill="#fbfaf6" stroke="#ddd"/>
+  <text x="362" y="378" font-size="9" fill="#888">Hasta</text>
+  <rect x="362" y="384" width="130" height="26" rx="4" fill="#fbfaf6" stroke="#ddd"/>
+  <circle cx="42" cy="378" r="9" fill="#1f2d3d"/><text x="42" y="382" font-size="9" text-anchor="middle" fill="#fff">8</text>
+  <text x="32" y="430" font-size="8.5" fill="#888">Hasta 3 filas — varias salidas del mes, permisos de distinto tipo, o un cumpleaños de un solo día.</text>
+</svg>
