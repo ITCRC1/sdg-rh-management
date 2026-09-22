@@ -7912,6 +7912,59 @@ function cambiarRangoHorasExtra(campo, valor){
   renderHorasExtrasPanel();
 }
 
+// Días SUELTOS sin ningún registro en horas_extra:, día por día — a
+// diferencia de "sin ningún día registrado en este rango" (que solo agarra
+// a quien no tiene NADA de nada en todo el rango), esto también encuentra
+// huecos puntuales en medio de un período que sí tiene marcas para otros
+// días (ej. el dispositivo falló un día suelto, o a alguien de confianza —
+// esos se excluyen a propósito, no marcan — se le olvidó justificar un
+// permiso). Respeta la fecha de ingreso real de cada quien, para no marcar
+// como "falta" un día antes de que la persona existiera en la empresa.
+function diasSinMarcarPorEmpleado(empleados, registros, desdeISO, hastaISO){
+  const fechasPorEmpleado = {};
+  registros.forEach(r => {
+    if (!r.EMPLEADO_KEY || !r.FECHA) return;
+    (fechasPorEmpleado[r.EMPLEADO_KEY] = fechasPorEmpleado[r.EMPLEADO_KEY] || new Set()).add(r.FECHA);
+  });
+  const resultado = [];
+  empleados.filter(e => !e.ARCHIVADO && !esEmpleadoConfianza(e)).forEach(emp => {
+    const ingreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+    const ingresoISO = ingreso ? isoDeFechaLocal(ingreso) : null;
+    const yaTiene = fechasPorEmpleado[emp.key] || new Set();
+    const fechasFaltantes = [];
+    const cursor = new Date(desdeISO + "T00:00:00");
+    const fin = new Date(hastaISO + "T00:00:00");
+    while (cursor <= fin){
+      const fecha = isoDeFechaLocal(cursor);
+      if ((!ingresoISO || fecha >= ingresoISO) && !yaTiene.has(fecha)) fechasFaltantes.push(fecha);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (fechasFaltantes.length) resultado.push({ emp, fechasFaltantes });
+  });
+  return resultado;
+}
+
+// Aprueba de una vez, como día laboral normal (0h extra), todos los días
+// sueltos que le faltan a un empleado dentro del rango revisado — pensado
+// para quien no tiene marcas y no es de confianza: antes no había ninguna
+// acción posible sobre esos huecos, solo el aviso de que faltaban. Ya
+// aprobados como "laboral", si alguno sí tuvo horas extra ese día en
+// particular, se le pueden agregar desde la fila en la pestaña "Aprobadas"
+// (el campo de horas aparece ahí apenas el tipo es "laboral").
+async function aprobarDiasSinMarcarComoLaboral(empKey){
+  const grupo = (horasExtraSinRegistroCache || []).find(g => g.emp.key === empKey);
+  if (!grupo || !grupo.fechasFaltantes.length){ statusMsg("No hay días pendientes para esa persona.", false); return; }
+  if (!confirm(`¿Aprobar los ${grupo.fechasFaltantes.length} día(s) sin marcar de ${nombreCompletoEmpleado(grupo.emp)} como día laboral normal? Si alguno tuvo horas extra, se agregan después desde Horas Extra.`)) return;
+  let creados = 0;
+  for (const fecha of grupo.fechasFaltantes){
+    const r = await crearOJustificarDiaHorasExtra(empKey, fecha, "laboral", "asignacion_manual_sin_marca", {});
+    if (r.creado) creados++;
+  }
+  statusMsg(`${creados} día(s) aprobado(s) como laboral para ${nombreCompletoEmpleado(grupo.emp)}.`);
+  cerrarModalIncompletos();
+  await renderHorasExtrasPanel();
+}
+
 function limpiarRangoHorasExtra(){
   horasExtraRangoDesde = null;
   horasExtraRangoHasta = null;
@@ -8264,22 +8317,23 @@ let horasExtraSinRegistroCache = [];
 function mostrarModalHorasExtraSinRegistro(){
   const modal = document.getElementById("modal-incompletos");
   const body = document.getElementById("modal-incompletos-body");
-  modal.querySelector(".modal-head span").textContent = "⏱️ Sin horas extra registradas en el rango";
-  const lista = horasExtraSinRegistroCache.slice().sort(compararPorApellido);
-  body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${lista.length} empleado(s) sin ningún día registrado (de ningún tipo) en el rango de fechas elegido en Horas Extras.</div>` +
-    lista.map(e => `
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-        <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</b></div>
-        <button class="btn" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="irAAprobacionHorasExtraDe('${String(e.key).replace(/'/g,"\\'")}')">Ver →</button>
-      </div>`).join("");
+  modal.querySelector(".modal-head span").textContent = "⏱️ Días sin marcar en el rango";
+  const lista = horasExtraSinRegistroCache.slice().sort((a, b) => compararPorApellido(a.emp, b.emp));
+  body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Empleados sin marca de asistencia para uno o más días de este rango — puede que el dispositivo no los captó, o que todavía no se les importó nada. "✅ Aprobar como laboral" los deja como día trabajado normal (0h extra); si alguno sí tuvo horas extra, se agregan después desde la fila en la pestaña "Aprobadas".</div>` +
+    lista.map(g => {
+      const keyEsc = String(g.emp.key).replace(/'/g,"\\'");
+      const gruposFechas = agruparFechasConsecutivas(g.fechasFaltantes);
+      const fechasTexto = gruposFechas.map(r => r.inicio === r.fin ? fmtFechaSimple(r.inicio) : `${fmtFechaSimple(r.inicio)} al ${fmtFechaSimple(r.fin)}`).join(", ");
+      return `
+      <div style="padding:8px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(g.emp) || g.emp.key)}</b> — ${g.fechasFaltantes.length} día(s)</div>
+          <button class="btn primary" style="padding:4px 10px; font-size:11px; flex-shrink:0;" onclick="aprobarDiasSinMarcarComoLaboral('${keyEsc}')">✅ Aprobar como laboral</button>
+        </div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-top:2px;">${escapeHtml(fechasTexto)}</div>
+      </div>`;
+    }).join("");
   modal.classList.add("open");
-}
-
-function irAAprobacionHorasExtraDe(empKey){
-  cerrarModalIncompletos();
-  horasExtraFiltro = "pendiente";
-  horasExtraEmpleadoSeleccionado = empKey;
-  showTab("horasextras");
 }
 
 // Cada registro de horas_extra: es un "día" (con o sin marca) al que
@@ -9776,23 +9830,24 @@ async function renderHorasExtrasPanel(){
       </div></div>`;
     }
 
-    // Empleados activos sin NINGÚN registro — de ningún estado — dentro del
-    // rango elegido: señal de que a esa persona no se le importó/marcó nada
-    // en ese período, antes de que alguien note la ausencia hasta la hora de
-    // armar la planilla. Solo master/gerente (igual que "colillas
-    // pendientes" en Inicio) — jefatura no administra planilla ni marcación.
+    // Empleados activos (no de confianza — esos no marcan) con al menos UN
+    // día suelto sin ningún registro en horas_extra: dentro del rango
+    // elegido — día por día, no solo "sin nada de nada en todo el rango",
+    // así que también agarra un hueco puntual en medio de un período que sí
+    // tiene marcas para otros días. Solo master/gerente (igual que
+    // "colillas pendientes" en Inicio) — jefatura no administra planilla ni
+    // marcación.
     if (puedeEditar && horasExtraRangoDesde && horasExtraRangoHasta){
-      const sinNingunRegistro = empleados.filter(e => !e.ARCHIVADO).filter(e =>
-        !registros.some(r => r.EMPLEADO_KEY === e.key && enRangoHorasExtra(r.FECHA))
-      );
-      horasExtraSinRegistroCache = sinNingunRegistro;
-      if (sinNingunRegistro.length){
+      const sinMarcar = diasSinMarcarPorEmpleado(empleados, registros, horasExtraRangoDesde, horasExtraRangoHasta);
+      horasExtraSinRegistroCache = sinMarcar;
+      if (sinMarcar.length){
+        const totalDias = sinMarcar.reduce((s, g) => s + g.fechasFaltantes.length, 0);
         html += `<div class="section-card" style="border-color:#B3261E; margin-bottom:14px; cursor:pointer;" onclick="mostrarModalHorasExtraSinRegistro();">
           <div class="section-body" style="padding:14px; display:flex; align-items:center; gap:12px;">
             <div style="font-size:26px;">⏱️</div>
             <div>
-              <div style="font-weight:800; color:#B3261E;">${sinNingunRegistro.length} empleado(s) sin ningún día registrado en este rango</div>
-              <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">Puede que la marcación de ese período todavía no se les haya importado. Toca para ver quién falta.</div>
+              <div style="font-weight:800; color:#B3261E;">${sinMarcar.length} empleado(s) con ${totalDias} día(s) sin marcar en este rango</div>
+              <div style="font-size:12px; color:var(--ink-soft); margin-top:2px;">Puede que la marcación de esos días todavía no se haya importado. Toca para verlos y aprobarlos como día laboral.</div>
             </div>
           </div>
         </div>`;
