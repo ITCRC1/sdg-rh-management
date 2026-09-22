@@ -6928,6 +6928,10 @@ function renderModuloPendiente(clave){
 // acumulados de aguinaldo/cesantía/preaviso) todavía no existe. ----------
 async function renderPlanillaPanel(){
   const panel = document.getElementById("planilla-panel");
+  // Mismo motivo que renderHorasExtrasPanel/renderDiasLibresVacacionesPanel:
+  // preserva el scroll para que una acción (guardar tipo de cambio, generar
+  // un reporte, etc.) no devuelva a la persona al inicio de la página.
+  const _scrollY = window.scrollY;
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const tipoCambioActual = await cargarTipoCambio();
@@ -7069,6 +7073,8 @@ async function renderPlanillaPanel(){
     await renderBuzonColillasPendientes();
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
+  }finally{
+    requestAnimationFrame(() => window.scrollTo(0, _scrollY));
   }
 }
 
@@ -9652,6 +9658,14 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
 async function renderHorasExtrasPanel(){
   const panel = document.getElementById("horasextras-panel");
   if (!panel) return;
+  // Se guarda la posición de scroll ANTES de pintar el "Cargando…" — ese
+  // marcador es mucho más corto que la lista real, así que si no se hace
+  // esto el documento se encoge por un instante, el navegador recorta el
+  // scroll (normalmente a 0), y aunque el contenido real vuelva a su alto
+  // de siempre, el scroll se queda arriba — obligando a buscar de nuevo
+  // cada vez que una acción (aprobar/rechazar/eliminar/etc.) repinta este
+  // panel. Restaurada al final, tras un frame, para ganarle a ese recorte.
+  const _scrollY = window.scrollY;
   // Si el panel se va a recargar de todos modos (por esta llamada o por
   // cualquier otra acción), primero se guarda cualquier edición de horas que
   // haya quedado en el borrador — así nunca se pierde en silencio, aunque
@@ -9891,7 +9905,8 @@ async function renderHorasExtrasPanel(){
           <select class="btn" style="padding:5px 6px;" onchange="if(confirm('Este día ya tiene aprobación final. ¿Corregir su tipo de todas formas?')) cambiarTipoDiaHoraExtra('${keyEsc}', this.value); else this.value='${tipoDia}';">
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
-          ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}`;
+          ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}
+          <button class="del" onclick="eliminarRegistroHorasExtra('${keyEsc}')">🗑️ Eliminar</button>`;
       } else if (r.ESTADO === "aprobada"){
         acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}</span>`;
       } else if (r.ESTADO === "rechazada"){
@@ -10027,6 +10042,8 @@ async function renderHorasExtrasPanel(){
     panel.innerHTML = html;
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo de horas extra: ${escapeHtml(e.message || "")}</div>`;
+  }finally{
+    requestAnimationFrame(() => window.scrollTo(0, _scrollY));
   }
 }
 
@@ -10104,6 +10121,22 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
     // había forma de que apareciera el campo para cargarlas.
     await renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
+}
+
+// Borra un registro de horas_extra: ya con aprobación final — pensado para
+// días "huérfanos" que quedaron contando de más (ej. una solicitud de
+// prueba que se eliminó desde "Días libres y vacaciones otorgados": esa
+// eliminación NUNCA borraba el día real de Horas Extra si ya estaba
+// "aprobada" — ver el fix en eliminarSolicitudOtorgada — así que puede
+// haber quedado más de uno suelto de antes de ese fix). Master/gerente
+// solamente, con confirmación explícita.
+async function eliminarRegistroHorasExtra(key){
+  if (!confirm("¿Eliminar este registro de Horas Extra por completo? No se puede deshacer.")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Registro eliminado.");
+    await renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + e.message, false); }
 }
 
 // Corrige el número de horas de un registro pendiente (o aprobado por
@@ -12873,6 +12906,9 @@ function renderFilaIncapacidad(i, empleadosPorKey){
 async function renderIncapacidadesPanel(){
   const panel = document.getElementById("incapacidades-panel");
   if (!panel) return;
+  // Mismo motivo que en los demás paneles principales: preserva el scroll
+  // para que registrar una incapacidad no devuelva a la persona al inicio.
+  const _scrollY = window.scrollY;
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const puedeRegistrar = !!(window.sdgApi && window.sdgApi.puedeEditar());
@@ -12928,6 +12964,8 @@ async function renderIncapacidadesPanel(){
     panel.innerHTML = html;
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo: ${escapeHtml(e.message || "")}</div>`;
+  }finally{
+    requestAnimationFrame(() => window.scrollTo(0, _scrollY));
   }
 }
 
@@ -13906,6 +13944,11 @@ let diasLibresMesCalendario = null; // "AAAA-MM" — se fija al mes actual la pr
 async function renderDiasLibresVacacionesPanel(){
   const panel = document.getElementById("diaslibresvacaciones-panel");
   if (!panel) return;
+  // Mismo motivo que en renderHorasExtrasPanel: el "Cargando…" es mucho más
+  // corto que la lista real, el navegador recorta el scroll al encogerse el
+  // documento, y sin restaurarlo después cada acción (aprobar/corregir/
+  // reparar/eliminar) devolvía a la persona al inicio de la página.
+  const _scrollY = window.scrollY;
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
@@ -13990,6 +14033,8 @@ async function renderDiasLibresVacacionesPanel(){
     panel.innerHTML = html;
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo: ${escapeHtml(e.message || "")}</div>`;
+  }finally{
+    requestAnimationFrame(() => window.scrollTo(0, _scrollY));
   }
 }
 
@@ -14683,8 +14728,17 @@ async function eliminarSolicitudOtorgada(key){
     const todosLosRegistros = await listarRegistrosHorasExtra();
     const diasDeEstaSolicitud = todosLosRegistros.filter(r => r.SOLICITUD_KEY === key);
     let noTocados = 0;
+    // Los días de una solicitud de días libres/vacaciones/permiso sin goce
+    // se crean YA "aprobada" (ver crearOJustificarDiaHorasExtra) — nunca
+    // pasan por "pendiente". Comprobar ESTADO !== "pendiente" acá los
+    // dejaba SIEMPRE sin tocar, así que "Eliminar" nunca borraba los días
+    // reales de Horas Extra y quedaban huérfanos contando para el saldo
+    // (el bug real detrás de los "días en adelanto" fantasma). Lo que de
+    // verdad hay que respetar es si alguien reclasificó el día a otro tipo
+    // distinto del que dice la solicitud — eso sí significa que se procesó
+    // aparte y no hay que revertirlo solo.
     for (const dia of diasDeEstaSolicitud){
-      if (dia.ESTADO !== "pendiente"){ noTocados++; continue; }
+      if (dia.TIPO_DIA !== s.TIPO){ noTocados++; continue; }
       await window.storage.delete(dia.key, false);
     }
     // El documento de Acción de Personal solo se anula solo mientras no se
@@ -16497,6 +16551,10 @@ async function renderMiPerfilEmpleado(){
 async function renderPerfilEmpleado(){
   const panel = document.getElementById("perfil-panel");
   if (!perfilActualKey){ renderSelectorPerfilEmpleado(); return; }
+  // Mismo motivo que en los demás paneles principales: preserva el scroll
+  // para que una acción dentro del expediente (aprobar, corregir, agregar
+  // una deducción, etc.) no devuelva a la persona al inicio de la página.
+  const _scrollY = window.scrollY;
   panel.innerHTML = `<div class="empty-state">Cargando perfil…</div>`;
   try{
     const fullKey = CATALOGS.empleados.prefix + perfilActualKey;
@@ -16719,6 +16777,7 @@ async function renderPerfilEmpleado(){
       </div></div>
     `;
   }catch(e){ panel.innerHTML = `<div class="empty-state">No se pudo cargar el perfil.</div>`; }
+  finally{ requestAnimationFrame(() => window.scrollTo(0, _scrollY)); }
 }
 
 function toggleEmpAcciones(key){
@@ -17130,6 +17189,7 @@ async function reactivarEmpleado(key){
 
 async function renderArchivoList(){
   const panel = document.getElementById("archivo-panel");
+  const _scrollY = window.scrollY;
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const res = await window.storage.list(CATALOGS.empleados.prefix, false);
@@ -17164,6 +17224,7 @@ async function renderArchivoList(){
       </div>`;
     }).join("");
   }catch(e){ panel.innerHTML = `<div class="empty-state">No hay empleados archivados todavía.</div>`; }
+  finally{ requestAnimationFrame(() => window.scrollTo(0, _scrollY)); }
 }
 
 async function descargarContrato(key){
