@@ -698,3 +698,129 @@ body.solo-lectura select{
 }
 .dash-activity-row .who2{ font-weight:700; color:var(--ink); }
 .dash-activity-row .when{ margin-left:auto; color:var(--ink-soft); font-size:10.5px; white-space:nowrap; }
+
+/* ---------------------------------------------------------------------
+   RELOJ MARCADOR (app.js: renderRelojPanel)
+   Las marcas son "fichas" de hora: se escanean por día, y el estado
+   (manual / anulada / por revisar) se lee por la forma, no solo por color.
+   --------------------------------------------------------------------- */
+.reloj-cabecera{ padding:16px 18px; display:flex; flex-direction:column; gap:12px; }
+.reloj-titulo-fila{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.reloj-titulo{ margin:0; font-family:Georgia,"Times New Roman",serif; font-size:19px; color:var(--navy-deep); }
+.reloj-estado{
+  display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:600;
+  padding:5px 11px; border-radius:20px; background:#E7F0E2; color:#3F5030;
+}
+.reloj-estado i{ width:8px; height:8px; border-radius:50%; background:#4C8A3F; }
+.reloj-estado.warn{ background:#FBEFD9; color:#7A5410; }
+.reloj-estado.warn i{ background:#C98A1B; }
+
+.reloj-dispositivos{ display:flex; flex-wrap:wrap; gap:6px; }
+.reloj-disp{
+  font-size:11px; letter-spacing:.3px; color:var(--ink-soft); background:var(--paper);
+  border:1px solid var(--paper-line); border-radius:6px; padding:3px 8px;
+}
+.reloj-disp b{ color:var(--ink); font-variant-numeric:tabular-nums; margin-left:3px; }
+
+.reloj-filtros{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; }
+.reloj-filtros .field{ margin:0; min-width:140px; }
+.reloj-filtros .reloj-buscar{ flex:1; min-width:180px; }
+.reloj-acciones{ display:flex; flex-wrap:wrap; gap:8px; }
+
+.reloj-resumen{
+  display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12.5px; color:var(--ink-soft);
+  padding-top:10px; border-top:1px solid var(--paper-line);
+}
+.reloj-resumen b{ color:var(--ink); font-variant-numeric:tabular-nums; }
+.reloj-resumen .alerta, .reloj-resumen .alerta b{ color:#963527; }
+
+.reloj-aviso{
+  font-size:13px; line-height:1.5; color:var(--ink); background:#fff;
+  border:1px solid var(--paper-line); border-left:3px solid var(--gold);
+  border-radius:0 10px 10px 0; padding:12px 14px; margin-bottom:14px;
+}
+.reloj-aviso.warn{ background:#FBF3E4; border-left-color:#C98A1B; margin-bottom:0; }
+.reloj-aviso.err{ background:#F7E3DF; border-left-color:#963527; }
+.modal-body .reloj-aviso{ margin-bottom:12px; }
+
+.reloj-tenue{ font-size:11.5px; color:var(--ink-soft); font-weight:400; }
+.reloj-nota{ font-size:11.5px; line-height:1.5; color:var(--ink-soft); margin:10px 0 0; }
+.reloj-alerta{ font-size:11.5px; font-weight:700; color:#963527; }
+.reloj-badge{
+  font-size:10.5px; font-weight:700; letter-spacing:.3px; border-radius:6px; padding:2px 7px;
+  background:var(--paper); color:var(--ink-soft);
+}
+.reloj-badge.warn{ background:#FBEFD9; color:#7A5410; }
+
+/* Persona: resumen siempre visible, tabla de días al abrir. */
+.reloj-persona > summary, .reloj-sinficha > summary{
+  list-style:none; cursor:pointer; padding:12px 16px;
+  display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px;
+}
+.reloj-persona > summary::-webkit-details-marker,
+.reloj-sinficha > summary::-webkit-details-marker{ display:none; }
+.reloj-persona > summary::before, .reloj-sinficha > summary::before{
+  content:"▸"; color:var(--gold); font-size:11px; transition:transform .15s ease;
+}
+.reloj-persona[open] > summary::before, .reloj-sinficha[open] > summary::before{ transform:rotate(90deg); }
+.reloj-persona[open] > summary{ border-bottom:1px solid var(--paper-line); }
+.reloj-persona > summary:focus-visible, .reloj-sinficha > summary:focus-visible{ outline:2px solid var(--navy); outline-offset:-2px; }
+.reloj-persona-nombre{ font-weight:700; font-size:13.5px; color:var(--ink); }
+.reloj-persona-datos{
+  margin-left:auto; display:flex; gap:14px; font-size:12px; color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;
+}
+.reloj-persona-datos b{ color:var(--ink); }
+
+.reloj-sinficha{ border-color:#E8CFA0; }
+.reloj-sinficha > summary{ font-size:13px; color:#7A5410; background:#FBF3E4; }
+.reloj-sinficha > p{ padding:10px 16px 0; margin:0; }
+.reloj-vincular{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.reloj-vincular select{
+  font-size:12.5px; padding:6px 8px; border-radius:7px; border:1px solid var(--field-border);
+  background:var(--field-bg); color:var(--ink); max-width:280px;
+}
+
+.reloj-tabla-wrap{ overflow-x:auto; }
+.reloj-tabla{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.reloj-tabla th{
+  text-align:left; font-size:10.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+  color:var(--ink-soft); padding:8px 16px; border-bottom:1px solid var(--paper-line);
+}
+.reloj-tabla td{ padding:8px 16px; border-bottom:1px solid var(--paper-line); vertical-align:middle; }
+.reloj-tabla tr:last-child td{ border-bottom:none; }
+.reloj-tabla tr.revisar td{ background:#FDF6F4; }
+.reloj-tabla .num{ font-variant-numeric:tabular-nums; color:var(--ink-soft); white-space:nowrap; }
+.reloj-fecha{ white-space:nowrap; font-weight:600; color:var(--ink); width:1%; }
+.reloj-horas{ text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; width:1%; }
+
+.reloj-chips{ display:flex; flex-wrap:wrap; gap:5px; }
+.reloj-chip{
+  font-family:inherit; font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums;
+  color:var(--navy-deep); background:var(--paper); border:1px solid var(--paper-line);
+  border-radius:7px; padding:4px 9px; cursor:pointer; line-height:1.2;
+  display:inline-flex; align-items:center; gap:5px;
+  transition:border-color .12s ease, background-color .12s ease;
+}
+.reloj-chip:hover{ border-color:var(--navy); background:#fff; }
+.reloj-chip:focus-visible{ outline:2px solid var(--navy); outline-offset:1px; }
+/* Manual: borde punteado — se distingue sin depender del color. */
+.reloj-chip.manual{ border-style:dashed; border-color:var(--gold); background:#FBF6EA; }
+.reloj-chip-tag{ font-size:9.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:#8A6D2E; }
+/* Anulada: tachada y apagada, sigue visible para auditar. */
+.reloj-chip.anulada{ text-decoration:line-through; color:var(--ink-soft); background:#fff; opacity:.7; }
+.reloj-chip.agregar{ color:var(--ink-soft); border-style:dashed; background:#fff; padding:4px 10px; }
+.reloj-chip.agregar:hover{ color:var(--navy); }
+
+.reloj-detalle{ display:grid; grid-template-columns:auto 1fr; gap:8px 14px; margin:0 0 14px; font-size:13px; }
+.reloj-detalle dt{ font-size:10.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--ink-soft); padding-top:2px; }
+.reloj-detalle dd{ margin:0; color:var(--ink); }
+.reloj-fila-2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+@media (max-width:560px){
+  .reloj-persona-datos{ margin-left:0; width:100%; }
+  .reloj-tabla th, .reloj-tabla td{ padding:8px 10px; }
+}
+@media (prefers-reduced-motion:reduce){
+  .reloj-chip, .reloj-persona > summary::before, .reloj-sinficha > summary::before{ transition:none; }
+}

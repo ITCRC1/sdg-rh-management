@@ -88,7 +88,29 @@ con un CNAME.
 | `SESION_HORAS` | no | Duración de sesión (por defecto 12) |
 | `PG_POOL_MAX` | no | Conexiones del pool (por defecto 10) |
 | `PGSSL` | no | `require` si el Postgres es externo a Railway |
+| `RELOJ_MYSQL_URL` | para el reloj | Base MySQL de SmartPSS (Corcovado). Usuario de **solo lectura** — ver abajo |
+| `RELOJ_PROPIEDAD` | no | Propiedad dueña del reloj (por defecto `corcovado`) |
 | `PORT` | **no la definas** | La inyecta Railway |
+
+### Reloj marcador (Planilla → Reloj marcador)
+
+SDG lee las marcas directo de la tabla `AttendanceRecordInfo`, que es donde
+SmartPSS las escribe. **Nunca escribe en esa base.** Anulaciones y marcas
+manuales se guardan en el Postgres de SDG, con su histórico como el resto.
+
+Por eso el servicio Django anterior ya no hace falta: basta con que la base
+MySQL siga encendida y recibiendo marcas de SmartPSS.
+
+Usuario de solo lectura (correrlo una vez en la base MySQL):
+
+```sql
+CREATE USER 'sdg_lectura'@'%' IDENTIFIED BY '<clave-larga>';
+GRANT SELECT ON railway.AttendanceRecordInfo TO 'sdg_lectura'@'%';
+```
+
+Luego, en el servicio web: `RELOJ_MYSQL_URL=mysql://sdg_lectura:<clave-larga>@<host>:<puerto>/railway`.
+Si las dos bases están en el mismo proyecto de Railway, usa el host interno
+(`*.railway.internal`) en vez del proxy público.
 
 ---
 

@@ -348,7 +348,9 @@ function aplicarModoSegunRol(rol){
     // sí necesita llegar a Horas extras desde ahí); se esconden nada más
     // "Ver planilla y colillas" e "Ir al menú Datos", que sí siguen siendo
     // exclusivos de master/gerente.
-    ["navlink-planilla-ver","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
+    // El reloj trae las marcas de TODA la propiedad sin filtro por equipo —
+    // el servidor ya se lo niega a jefatura (rutas-reloj.js).
+    ["navlink-planilla-ver","navlink-planilla-reloj","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = "none";
     });
@@ -4741,6 +4743,7 @@ function showTab(which){
   document.getElementById("constancia-salarial-wrap").style.display = "none";
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
+  document.getElementById("reloj-panel").style.display = which === "reloj" ? "block" : "none";
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
   document.getElementById("diaslibresvacaciones-panel").style.display = which === "vacaciones" ? "block" : "none";
   document.getElementById("incapacidades-panel").style.display = which === "incapacidades" ? "block" : "none";
@@ -4759,7 +4762,7 @@ function showTab(which){
     despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos", constanciasalarialform:"documentos",
     datos:"datos",
     planilla:"planilla",
-    vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla",
+    vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla", reloj:"planilla",
     reporte:"reportes",
     faq:"configuracion", manual:"configuracion",
   };
@@ -4786,6 +4789,7 @@ function showTab(which){
   if (which === "datos") renderDatosTab();
   if (which === "planilla") renderPlanillaPanel();
   if (which === "horasextras") renderHorasExtrasPanel();
+  if (which === "reloj") renderRelojPanel();
   if (which === "despidoform") renderDespidoForm();
   if (which === "liquidacionform") renderLiquidacionForm();
   if (which === "amonestacionform") renderAmonestacionForm();
@@ -8782,6 +8786,16 @@ async function leerRegistrosMarcacionPDF(file){
     vistos.add(dedupeKey);
     eventos.push(ev);
   });
+  return filasDesdeEventosMarcacion(eventos);
+}
+
+// Marcas sueltas ({codigo, nombre, fecha "AAAA-MM-DD", ts con Date.UTC de la
+// hora de pared}) → filas por día para guardarFilasHorasExtra. Separada del
+// lector de PDF para que el reloj marcador (ver sección "Reloj marcador")
+// empareje con exactamente las mismas reglas — mismo corte por fecha civil,
+// mismo tope de 20h por par, mismas filas INCOMPLETO — en vez de una copia
+// que con el tiempo diverja.
+function filasDesdeEventosMarcacion(eventos){
   if (!eventos.length) return { filas: [], sinPar: 0, turnosSinMarcar: 0 };
 
   const porEmpleado = {};
@@ -9245,8 +9259,21 @@ async function importarHorasExtraArchivo(inputEl){
   }
   try{
     const r = await guardarFilasHorasExtra(rows, file.name);
+    statusMsg(mensajeResultadoHorasExtra(r, turnosSinMarcar, sinPar));
+    renderHorasExtrasPanel();
+  }catch(e){
+    statusMsg(e.message || "No se pudo procesar ese archivo.", false);
+  }
+  inputEl.value = "";
+}
+
+// Resumen de lo que hizo guardarFilasHorasExtra — compartido por la subida de
+// archivo y por "Enviar a Horas extras" del reloj marcador. `desdeReloj`
+// omite las columnas detectadas: sirven para diagnosticar un archivo con
+// encabezados raros, y las filas del reloj las arma la app misma.
+function mensajeResultadoHorasExtra(r, turnosSinMarcar, sinPar, desdeReloj){
     let msg = (r.creadas + r.actualizadas + r.sinMatch === 0)
-      ? `El archivo se leyó bien, pero no se encontró ningún día con marcas para registrar.`
+      ? `Las marcas se leyeron bien, pero no se encontró ningún día con marcas para registrar.`
       : `${r.creadas} día(s) nuevo(s) y ${r.actualizadas} actualizado(s) quedaron pendientes de revisar.`;
     if (r.ausenciasDetectadas) msg += ` ${r.ausenciasDetectadas} día(s) sin ninguna marca dentro del rango del archivo se marcaron como ausencia pendiente — revisalos, puede que en realidad fueran descanso.`;
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
@@ -9272,13 +9299,673 @@ async function importarHorasExtraArchivo(inputEl){
       r.cols.nombre ? `nombre = "${r.cols.nombre}"` : "",
       r.cols.cedula ? `cédula = "${r.cols.cedula}"` : "",
     ].filter(Boolean).join(", ");
-    if (colsUsadas) msg += ` (Columnas usadas para identificar: ${colsUsadas}.)`;
-    statusMsg(msg);
-    renderHorasExtrasPanel();
-  }catch(e){
-    statusMsg(e.message || "No se pudo procesar ese archivo.", false);
+    if (colsUsadas && !desdeReloj) msg += ` (Columnas usadas para identificar: ${colsUsadas}.)`;
+    return msg;
+}
+
+// ===========================================================================
+// Reloj marcador (SmartPSS de Corcovado)
+//
+// Reemplaza la interfaz del sistema de marcas anterior (Django). Las marcas
+// se leen directo de la base del reloj vía /api/reloj — nunca se escriben
+// ahí. Lo que ese sistema permitía hacer encima de las marcas vive aquí:
+//   - consultar marcas por rango y persona, con las horas de cada día
+//   - anular una marca con motivo (reloj_anulacion:<codigo>:<ts>)
+//   - agregar una marca manual con motivo (reloj_manual:<codigo>:<ts>)
+//   - vincular una persona del reloj con su ficha (NUMERO_EMPLEADO)
+//   - descargar el reporte en Excel
+//   - enviar el rango a Horas extras, con las mismas reglas que un PDF
+// Anular y agregar son claves normales del almacenamiento: quedan en el
+// histórico con autor, IP y fecha como cualquier otro cambio, y el servidor
+// ya limita la escritura a master/gerente sin tocar nada del backend.
+//
+// Tiempo: igual que el importador de PDF, un "ts" es Date.UTC() de la HORA
+// DE PARED de Costa Rica — por eso todo se lee con getters UTC y nunca con
+// los locales del navegador.
+// ===========================================================================
+const RELOJ_ANULACION_PREFIX = "reloj_anulacion:";
+const RELOJ_MANUAL_PREFIX = "reloj_manual:";
+const RELOJ_MOTIVOS_MANUAL = ["Olvidó marcar", "Falla del reloj", "Trabajo fuera del sitio", "Otro"];
+const RELOJ_DIAS_SEMANA = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const RELOJ_HORAS_SIN_MARCAS_ALERTA = 24;
+// Un par de marcas de más de esto casi nunca es un turno real en Corcovado:
+// suele ser la SALIDA de un turno nocturno (ej. 01:05) emparejada con la
+// ENTRADA del turno siguiente (17:00) del mismo día calendario. El cálculo
+// de horas no se toca (filasDesdeEventosMarcacion corta en 20 h y es la
+// misma regla que la importación de PDF) — esto solo lo señala para revisión.
+const RELOJ_TURNO_SOSPECHOSO_H = 12;
+
+let relojCtx = null;      // filtros y última vista calculada, entre renders
+let relojModalCtx = null; // qué está editando el modal abierto
+
+function relojTsDesdeFechaHora(fecha, hora){
+  const [a, m, d] = fecha.split("-").map(Number);
+  const [hh, mi] = hora.split(":").map(Number);
+  return Date.UTC(a, m - 1, d, hh, mi);
+}
+function relojFechaDeTs(ts){ return new Date(ts).toISOString().slice(0, 10); }
+function relojHoraDeTs(ts){ return new Date(ts).toISOString().slice(11, 16); }
+function relojSumarDias(fecha, n){
+  const d = new Date(fecha + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function relojFechaCorta(fecha){
+  const d = new Date(fecha + "T00:00:00Z");
+  return `${RELOJ_DIAS_SEMANA[d.getUTCDay()]} ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}`;
+}
+function relojFechaHoraCorta(ts){ return `${relojFechaCorta(relojFechaDeTs(ts))} ${relojHoraDeTs(ts)}`; }
+// "Ahora" en el mismo formato que las marcas: la hora de pared del navegador
+// codificada como UTC (los usuarios están en Costa Rica, igual que el reloj).
+function relojAhoraPared(){
+  const d = new Date();
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
+}
+function relojClaveMarca(codigo, ts){ return String(codigo) + ":" + String(ts); }
+function relojHoras(h){ return (Math.round(h * 100) / 100).toFixed(2).replace(/\.00$/, "") + " h"; }
+function relojNombreSesion(){
+  const s = window.sdgApi && window.sdgApi.sesionActual ? window.sdgApi.sesionActual() : null;
+  return (s && (s.nombre || s.email)) || "";
+}
+
+async function relojCargarCorrecciones(){
+  const leer = async prefijo => {
+    const r = await window.storage.list(prefijo, false);
+    const out = [];
+    for (const k of (r && r.keys) || []){
+      try{
+        const g = await window.storage.get(k, false);
+        out.push({ key: k, ...JSON.parse(g.value) });
+      }catch(e){ /* una fila ilegible no debe tumbar el panel entero */ }
+    }
+    return out;
+  };
+  const [anul, manuales] = await Promise.all([leer(RELOJ_ANULACION_PREFIX), leer(RELOJ_MANUAL_PREFIX)]);
+  const anulaciones = {};
+  anul.forEach(a => { anulaciones[relojClaveMarca(a.CODIGO, a.TS)] = a; });
+  return { anulaciones, manuales };
+}
+
+async function relojCargarEmpleados(){
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  const keys = (res && res.keys) || [];
+  return Promise.all(keys.map(async k => {
+    const r = await window.storage.get(k, false);
+    return { key: k.replace(CATALOGS.empleados.prefix, ""), ...(r && r.value ? JSON.parse(r.value) : {}) };
+  }));
+}
+
+// Mismo criterio de emparejado que Horas extras (normalizarCodigoEmpleado):
+// si aquí dice "sin ficha", al enviar a Horas extras también quedará en
+// "Sin identificar" — las dos pantallas nunca se contradicen.
+function relojIndiceFichas(empleados){
+  const porNumero = {};
+  empleados.forEach(e => {
+    if (!e.NUMERO_EMPLEADO) return;
+    const n = normalizarCodigoEmpleado(e.NUMERO_EMPLEADO);
+    if (n) (porNumero[n] = porNumero[n] || []).push(e);
+  });
+  return codigo => porNumero[normalizarCodigoEmpleado(codigo)] || [];
+}
+
+// Sugerencia para vincular. Estricta a propósito: una preselección errada es
+// un clic de distancia de atribuirle las marcas de una persona a otra. Por
+// eso NO basta con compartir palabras — "DOMINGUEZ AGUILAR FRANCISCA" y
+// "AGUILAR DOMINGUEZ ROQUE ANTONIO" comparten los dos apellidos y son dos
+// personas distintas (caso real de Corcovado). Se exige que TODAS las
+// palabras del nombre más corto estén en el otro (mínimo 3), que haya un
+// único candidato así, y solo entre fichas que todavía no estén vinculadas
+// a nadie del reloj. Si no, no se sugiere nada y la persona elige a mano.
+function relojSugerirFicha(nombreReloj, candidatosLibres){
+  const palabras = s => new Set(normalizarNombreParaMatch(s).split(" ").filter(t => t.length > 1));
+  const delReloj = palabras(nombreReloj);
+  const encajan = candidatosLibres.filter(e => {
+    const deFicha = palabras(nombreCompletoEmpleado(e));
+    const [corto, largo] = delReloj.size <= deFicha.size ? [delReloj, deFicha] : [deFicha, delReloj];
+    return corto.size >= 3 && [...corto].every(t => largo.has(t));
+  });
+  return encajan.length === 1 ? encajan[0] : null;
+}
+
+function relojHtmlError(e){
+  const reintentar = `<button class="btn" style="margin-top:12px;" onclick="renderRelojPanel()">↻ Reintentar</button>`;
+  if (e && e.codigo === "otra_propiedad"){
+    const id = e.cuerpo && e.cuerpo.propiedadReloj;
+    const prop = PROPIEDADES_MAESTRAS.find(p => p.id === id);
+    return `<div class="reloj-aviso">El reloj marcador está conectado solo a <b>${escapeHtml(prop ? prop.nombre : id || "otra propiedad")}</b>. Cambia a esa propiedad para ver sus marcas.</div>`;
   }
-  inputEl.value = "";
+  if (e && e.codigo === "sin_configurar"){
+    return `<div class="reloj-aviso">El reloj marcador todavía no está configurado en el servidor: falta la variable <code>RELOJ_MYSQL_URL</code> en Railway.</div>`;
+  }
+  if (e && e.codigo === "reloj_inaccesible"){
+    return `<div class="reloj-aviso err">No se pudo conectar con la base del reloj. Revisa en Railway que el servicio MySQL esté encendido.${reintentar}</div>`;
+  }
+  return `<div class="reloj-aviso err">${escapeHtml((e && e.message) || "No se pudo cargar el reloj marcador.")}${reintentar}</div>`;
+}
+
+function relojHtmlFiltros(){
+  const c = relojCtx;
+  return `
+    <div class="reloj-filtros">
+      <div class="field"><label for="reloj-desde">Desde</label><input type="date" id="reloj-desde" value="${c.desde}"></div>
+      <div class="field"><label for="reloj-hasta">Hasta</label><input type="date" id="reloj-hasta" value="${c.hasta}"></div>
+      <div class="field reloj-buscar"><label for="reloj-buscar">Buscar persona</label>
+        <input type="text" id="reloj-buscar" placeholder="Nombre o número" value="${escapeHtml(c.filtro)}"
+               oninput="relojCtx.filtro = this.value; relojPintarPersonas();"></div>
+      <button class="btn primary" onclick="relojAplicarRango()">Consultar</button>
+    </div>`;
+}
+
+function relojAplicarRango(){
+  const desde = document.getElementById("reloj-desde").value;
+  const hasta = document.getElementById("reloj-hasta").value;
+  if (!desde || !hasta){ statusMsg("Elige las dos fechas del rango.", false); return; }
+  if (hasta < desde){ statusMsg("La fecha final no puede ser anterior a la inicial.", false); return; }
+  relojCtx.desde = desde;
+  relojCtx.hasta = hasta;
+  renderRelojPanel();
+}
+
+async function renderRelojPanel(){
+  const panel = document.getElementById("reloj-panel");
+  if (!panel) return;
+  if (!relojCtx){
+    const hoy = isoDeFechaLocal(new Date());
+    relojCtx = { desde: relojSumarDias(hoy, -6), hasta: hoy, filtro: "", abiertos: new Set(), vista: null };
+  }
+  if (!window.sdgApi || !window.sdgApi.reloj){
+    panel.innerHTML = `<div class="reloj-aviso">El reloj marcador necesita el servidor de SDG.</div>`;
+    return;
+  }
+  const scrollY = window.scrollY;
+  panel.innerHTML = `<div class="empty-state">Cargando marcas del reloj…</div>`;
+
+  let estado, marcas, personas, correcciones, empleados;
+  try{
+    [estado, marcas, personas, correcciones, empleados] = await Promise.all([
+      window.sdgApi.reloj.estado(),
+      window.sdgApi.reloj.marcas(relojCtx.desde, relojCtx.hasta),
+      window.sdgApi.reloj.personas(),
+      relojCargarCorrecciones(),
+      relojCargarEmpleados(),
+    ]);
+  }catch(e){
+    // Un rango inválido (400) se corrige desde los mismos filtros; el resto
+    // de errores no depende del rango, así que no tiene sentido mostrarlos.
+    panel.innerHTML = `<div class="section-card reloj-cabecera"><h2 class="reloj-titulo">🕐 Reloj marcador</h2>${e && e.status === 400 ? relojHtmlFiltros() : ""}</div>${relojHtmlError(e)}`;
+    return;
+  }
+
+  relojCtx.vista = relojConstruirVista(marcas, personas, correcciones, empleados);
+  relojCtx.estado = estado;
+  const v = relojCtx.vista;
+  const puedeEditar = window.sdgApi.puedeEditar();
+
+  const ahora = relojAhoraPared();
+  const horasSinMarcas = estado.ultimaMarca ? (ahora - estado.ultimaMarca) / 3600000 : Infinity;
+  const relojAlDia = horasSinMarcas < RELOJ_HORAS_SIN_MARCAS_ALERTA;
+
+  panel.innerHTML = `
+    <div class="section-card reloj-cabecera">
+      <div class="reloj-titulo-fila">
+        <h2 class="reloj-titulo">🕐 Reloj marcador</h2>
+        <span class="reloj-estado ${relojAlDia ? "ok" : "warn"}">
+          <i></i>${estado.ultimaMarca ? `Última marca: ${escapeHtml(relojFechaHoraCorta(estado.ultimaMarca))}` : "Sin marcas registradas"}
+        </span>
+      </div>
+      ${relojAlDia ? "" : `<div class="reloj-aviso warn">No entran marcas nuevas hace más de ${RELOJ_HORAS_SIN_MARCAS_ALERTA} horas. Revisa que los relojes sigan sincronizando con SmartPSS.</div>`}
+      <div class="reloj-dispositivos">
+        ${estado.dispositivos.map(d => `<span class="reloj-disp" title="Última marca: ${escapeHtml(d.ultima ? relojFechaHoraCorta(d.ultima) : "—")}">${escapeHtml(d.nombre)} <b>${d.marcas.toLocaleString("es-CR")}</b></span>`).join("")}
+      </div>
+      ${relojHtmlFiltros()}
+      <div class="reloj-acciones">
+        ${puedeEditar ? `<button class="btn" onclick="relojAbrirManual(null, null)">✍️ Agregar marca manual</button>` : ""}
+        <button class="btn" onclick="relojDescargarExcel()">⬇️ Descargar Excel</button>
+        ${puedeEditar ? `<button class="btn gold" id="reloj-btn-enviar" onclick="relojEnviarAHorasExtras()">📤 Enviar a Horas extras</button>` : ""}
+      </div>
+      <div class="reloj-resumen">
+        <span><b>${v.todas.length.toLocaleString("es-CR")}</b> marcas</span>
+        <span><b>${v.personas.length}</b> personas</span>
+        ${v.totalManuales ? `<span><b>${v.totalManuales}</b> manuales</span>` : ""}
+        ${v.totalAnuladas ? `<span><b>${v.totalAnuladas}</b> anuladas</span>` : ""}
+        ${v.totalAlertas ? `<span class="alerta"><b>${v.totalAlertas}</b> día(s) por revisar</span>` : ""}
+        ${v.totalTurnosLargos ? `<span class="alerta">de ellos <b>${v.totalTurnosLargos}</b> con turno de más de ${RELOJ_TURNO_SOSPECHOSO_H} h</span>` : ""}
+      </div>
+    </div>
+    ${relojHtmlSinFicha(v, empleados, puedeEditar)}
+    <div id="reloj-personas"></div>`;
+
+  relojPintarPersonas();
+  requestAnimationFrame(() => window.scrollTo(0, scrollY));
+}
+
+// Junta marcas del reloj + manuales del rango, les pega su anulación y su
+// ficha, y calcula las horas por día con la misma función que Horas extras.
+function relojConstruirVista(marcas, personasReloj, correcciones, empleados){
+  const { desde, hasta } = relojCtx;
+  const fichasDe = relojIndiceFichas(empleados);
+  const clavesReloj = new Set();
+  const todas = [];
+
+  marcas.forEach(m => {
+    clavesReloj.add(relojClaveMarca(m.codigo, m.ts));
+    todas.push({ codigo: m.codigo, nombre: m.nombre, ts: m.ts, fecha: relojFechaDeTs(m.ts), origen: "reloj", dispositivo: m.dispositivo });
+  });
+  correcciones.manuales.forEach(mm => {
+    if (!mm.FECHA || mm.FECHA < desde || mm.FECHA > hasta) return;
+    if (clavesReloj.has(relojClaveMarca(mm.CODIGO, mm.TS))) return; // el reloj ya la tiene
+    todas.push({
+      codigo: String(mm.CODIGO), nombre: mm.NOMBRE || "", ts: Number(mm.TS), fecha: mm.FECHA, origen: "manual",
+      motivoManual: mm.MOTIVO || "", detalle: mm.DETALLE || "", creadaPor: mm.CREADA_POR || "", creadaEn: mm.CREADA_EN || "",
+    });
+  });
+  todas.forEach(m => { m.anulacion = correcciones.anulaciones[relojClaveMarca(m.codigo, m.ts)] || null; });
+  todas.sort((a, b) => a.ts - b.ts);
+
+  const porCodigo = {};
+  todas.forEach(m => {
+    if (!porCodigo[m.codigo]) porCodigo[m.codigo] = { codigo: m.codigo, nombreReloj: m.nombre, marcas: [] };
+    porCodigo[m.codigo].marcas.push(m);
+  });
+
+  let totalAlertas = 0, totalTurnosLargos = 0;
+  const personas = Object.values(porCodigo).map(p => {
+    const fichas = fichasDe(p.codigo);
+    p.ficha = fichas.length === 1 ? fichas[0] : null;
+    p.fichasAmbiguas = fichas.length > 1 ? fichas : null;
+    p.nombre = p.ficha ? nombreCompletoEmpleado(p.ficha) : (p.nombreReloj || "#" + p.codigo);
+
+    const validas = p.marcas.filter(m => !m.anulacion);
+    const { filas } = filasDesdeEventosMarcacion(validas.map(m => ({ codigo: m.codigo, nombre: m.nombre, fecha: m.fecha, ts: m.ts })));
+    const horasPorFecha = {}, sueltaPorFecha = {};
+    filas.forEach(f => {
+      if (f.INCOMPLETO) sueltaPorFecha[f.FECHA] = true;
+      else horasPorFecha[f.FECHA] = (horasPorFecha[f.FECHA] || 0) + (f["HORAS TRABAJADAS"] || 0);
+    });
+
+    const porFecha = {};
+    p.marcas.forEach(m => { (porFecha[m.fecha] = porFecha[m.fecha] || []).push(m); });
+    p.dias = Object.keys(porFecha).sort().map(fecha => {
+      const validasDia = porFecha[fecha].filter(m => !m.anulacion).map(m => m.ts).sort((a, b) => a - b);
+      const horas = horasPorFecha[fecha] || 0;
+      // Mismo emparejado que filasDesdeEventosMarcacion (consecutivas, de
+      // dos en dos, dentro del día) solo para detectar pares sospechosos.
+      let turnoLargo = false;
+      for (let i = 0; i + 1 < validasDia.length; i += 2){
+        if ((validasDia[i + 1] - validasDia[i]) / 3600000 > RELOJ_TURNO_SOSPECHOSO_H) turnoLargo = true;
+      }
+      // Hay marcas válidas pero ningún par sirvió (ej. dos marcas a más de
+      // 20h de distancia): se señala en vez de mostrar 0 h como si nada.
+      const revisar = validasDia.length > 0 && (sueltaPorFecha[fecha] || !horas || turnoLargo);
+      if (revisar) totalAlertas += 1;
+      if (turnoLargo) totalTurnosLargos += 1;
+      return { fecha, marcas: porFecha[fecha], horas, suelta: !!sueltaPorFecha[fecha], turnoLargo, revisar };
+    });
+    p.horasTotal = p.dias.reduce((s, d) => s + d.horas, 0);
+    p.alertas = p.dias.filter(d => d.revisar).length;
+    return p;
+  }).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+  return {
+    todas, personas, fichasDe,
+    // Para el modal de marca manual: cualquiera registrado en el reloj, no
+    // solo quien marcó en este rango (el caso típico es justo quien NO marcó).
+    personasReloj: relojOrdenarPersonasReloj(personasReloj, fichasDe),
+    totalManuales: todas.filter(m => m.origen === "manual").length,
+    totalAnuladas: todas.filter(m => m.anulacion).length,
+    totalAlertas,
+    totalTurnosLargos,
+  };
+}
+
+function relojOrdenarPersonasReloj(personasReloj, fichasDe){
+  return personasReloj.map(p => {
+    const fichas = fichasDe(p.codigo);
+    return { ...p, ficha: fichas.length === 1 ? fichas[0] : null, fichasAmbiguas: fichas.length > 1 ? fichas : null,
+             nombreMostrar: fichas.length === 1 ? nombreCompletoEmpleado(fichas[0]) : p.nombre };
+  }).sort((a, b) => a.nombreMostrar.localeCompare(b.nombreMostrar, "es"));
+}
+
+function relojHtmlSinFicha(v, empleados, puedeEditar){
+  const sinFicha = v.personasReloj.filter(p => !p.ficha);
+  if (!sinFicha.length) return "";
+  const candidatos = empleados
+    .filter(e => e.ARCHIVADO !== true && e.NOMBRE_EMP)
+    .sort((a, b) => nombreCompletoEmpleado(a).localeCompare(nombreCompletoEmpleado(b), "es"));
+  // Fichas cuyo número ya corresponde a alguien del reloj: siguen en la
+  // lista (puede hacer falta corregir un número mal puesto), pero nunca se
+  // sugieren.
+  const codigosReloj = new Set(v.personasReloj.map(p => normalizarCodigoEmpleado(p.codigo)));
+  const libres = candidatos.filter(e => !e.NUMERO_EMPLEADO || !codigosReloj.has(normalizarCodigoEmpleado(e.NUMERO_EMPLEADO)));
+  const filas = sinFicha.map((p, i) => {
+    const sugerida = puedeEditar && !p.fichasAmbiguas ? relojSugerirFicha(p.nombre, libres) : null;
+    const control = p.fichasAmbiguas
+      ? `<span class="reloj-alerta">⚠️ ${p.fichasAmbiguas.length} fichas tienen el número ${escapeHtml(p.codigo)}: ${p.fichasAmbiguas.map(e => escapeHtml(nombreCompletoEmpleado(e))).join(", ")}. Corrige el número en la que no corresponde.</span>`
+      : puedeEditar
+      ? `<select id="reloj-vinc-${i}">
+           <option value="">Elegir ficha…</option>
+           ${candidatos.map(e => `<option value="${escapeHtml(e.key)}"${sugerida && sugerida.key === e.key ? " selected" : ""}>${escapeHtml(nombreCompletoEmpleado(e))}${e.NUMERO_EMPLEADO ? " · #" + escapeHtml(e.NUMERO_EMPLEADO) : ""}</option>`).join("")}
+         </select>
+         <button class="btn" onclick="relojVincular(${i})">Vincular</button>`
+      : `<span class="reloj-tenue">Sin ficha</span>`;
+    return `<tr>
+      <td class="num">#${escapeHtml(p.codigo)}</td>
+      <td>${escapeHtml(p.nombre)}<div class="reloj-tenue">${p.marcas.toLocaleString("es-CR")} marcas · última ${escapeHtml(p.ultima ? relojFechaCorta(relojFechaDeTs(p.ultima)) : "—")}</div></td>
+      <td><div class="reloj-vincular">${control}</div></td>
+    </tr>`;
+  }).join("");
+  relojCtx.sinFicha = sinFicha;
+  return `
+    <details class="section-card reloj-sinficha" ${relojCtx.abiertos.has("__sinficha") ? "open" : ""}
+             ontoggle="relojRecordarAbierto('__sinficha', this.open)">
+      <summary>⚠️ <b>${sinFicha.length}</b> persona(s) del reloj sin ficha en SDG — sus marcas quedarán "Sin identificar" en Horas extras</summary>
+      <p class="reloj-tenue">Vincular guarda el número del reloj en la ficha (campo número de empleado). Si esa ficha ya tiene nombre, apellidos y cédula, el sistema le crea su cuenta de autoservicio como hace siempre al completar ese número.</p>
+      <div class="reloj-tabla-wrap"><table class="reloj-tabla"><tbody>${filas}</tbody></table></div>
+    </details>`;
+}
+
+// Por qué un día pide revisión — el más grave primero: un turno largo
+// infla horas extra en silencio, una marca suelta solo deja el día a medias.
+function relojMotivoRevision(d){
+  if (d.turnoLargo) return `Turno de más de ${RELOJ_TURNO_SOSPECHOSO_H} h`;
+  if (d.suelta) return "Marca sin pareja";
+  return "Revisar";
+}
+
+function relojRecordarAbierto(id, abierto){
+  if (!relojCtx) return;
+  if (abierto) relojCtx.abiertos.add(id); else relojCtx.abiertos.delete(id);
+}
+
+// Pinta solo la lista de personas — el buscador la repinta en cada tecla sin
+// volver a pedir nada al servidor.
+function relojPintarPersonas(){
+  const cont = document.getElementById("reloj-personas");
+  if (!cont || !relojCtx || !relojCtx.vista) return;
+  const v = relojCtx.vista;
+  const puedeEditar = window.sdgApi.puedeEditar();
+  const f = normalizarNombreParaMatch(relojCtx.filtro || "");
+  const visibles = v.personas.filter(p =>
+    !f || normalizarNombreParaMatch(p.nombre).includes(f) || normalizarNombreParaMatch(p.nombreReloj).includes(f) || p.codigo.includes(f));
+
+  relojCtx.indiceMarcas = [];
+  relojCtx.indicePersonas = [];
+  if (!visibles.length){
+    cont.innerHTML = `<div class="empty-state">${v.personas.length ? "Nadie coincide con esa búsqueda." : "No hay marcas en ese rango de fechas."}</div>`;
+    return;
+  }
+  const unaSola = visibles.length === 1;
+
+  cont.innerHTML = visibles.map(p => {
+    const pi = relojCtx.indicePersonas.push(p) - 1;
+    const filas = p.dias.map(d => {
+      const chips = d.marcas.map(m => {
+        const mi = relojCtx.indiceMarcas.push(m) - 1;
+        const clases = ["reloj-chip", m.origen === "manual" ? "manual" : "", m.anulacion ? "anulada" : ""].filter(Boolean).join(" ");
+        const titulo = m.anulacion
+          ? `Anulada: ${m.anulacion.MOTIVO || ""}`
+          : m.origen === "manual" ? `Manual: ${m.motivoManual}` : `Reloj: ${m.dispositivo}`;
+        return `<button type="button" class="${clases}" title="${escapeHtml(titulo)}" onclick="relojAbrirMarca(${mi})">${relojHoraDeTs(m.ts)}${m.origen === "manual" ? '<span class="reloj-chip-tag">manual</span>' : ""}</button>`;
+      }).join("");
+      const horas = d.revisar
+        ? `<span class="reloj-alerta">${relojMotivoRevision(d)}</span>${d.horas ? `<div class="reloj-tenue">${relojHoras(d.horas)}</div>` : ""}`
+        : `<b>${relojHoras(d.horas)}</b>`;
+      return `<tr${d.revisar ? ' class="revisar"' : ""}>
+        <td class="reloj-fecha">${escapeHtml(relojFechaCorta(d.fecha))}</td>
+        <td><div class="reloj-chips">${chips}${puedeEditar ? `<button type="button" class="reloj-chip agregar" title="Agregar marca manual este día" onclick="relojAbrirManual(${pi}, '${d.fecha}')">+</button>` : ""}</div></td>
+        <td class="reloj-horas">${horas}</td>
+      </tr>`;
+    }).join("");
+
+    const abierto = unaSola || relojCtx.abiertos.has(p.codigo);
+    const etiquetaFicha = p.ficha ? "" : p.fichasAmbiguas
+      ? `<span class="reloj-badge warn">Número repetido en ${p.fichasAmbiguas.length} fichas</span>`
+      : `<span class="reloj-badge warn">Sin ficha en SDG</span>`;
+    return `
+      <details class="section-card reloj-persona" ${abierto ? "open" : ""} ontoggle="relojRecordarAbierto('${escapeHtml(p.codigo)}', this.open)">
+        <summary>
+          <span class="reloj-persona-nombre">${escapeHtml(p.nombre)} <span class="reloj-tenue">#${escapeHtml(p.codigo)}</span></span>
+          ${etiquetaFicha}
+          <span class="reloj-persona-datos">
+            <span>${p.dias.length} día(s)</span>
+            <span><b>${relojHoras(p.horasTotal)}</b></span>
+            ${p.alertas ? `<span class="reloj-alerta">${p.alertas} por revisar</span>` : ""}
+          </span>
+        </summary>
+        <div class="reloj-tabla-wrap">
+          <table class="reloj-tabla">
+            <thead><tr><th>Día</th><th>Marcas</th><th class="reloj-horas">Horas</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </details>`;
+  }).join("");
+}
+
+// ---------- Modal: detalle de marca, anular / restaurar ----------
+function cerrarModalReloj(){
+  const modal = document.getElementById("modal-reloj");
+  if (modal) modal.classList.remove("open");
+  relojModalCtx = null;
+}
+
+function relojAbrirMarca(indice){
+  const m = relojCtx && relojCtx.indiceMarcas ? relojCtx.indiceMarcas[indice] : null;
+  if (!m) return;
+  relojModalCtx = { tipo: "marca", marca: m };
+  const puedeEditar = window.sdgApi.puedeEditar();
+  const persona = relojCtx.vista.personas.find(p => p.codigo === m.codigo);
+  const origen = m.origen === "manual"
+    ? `Manual — ${escapeHtml(m.motivoManual)}${m.detalle ? `<div class="reloj-tenue">${escapeHtml(m.detalle)}</div>` : ""}<div class="reloj-tenue">Creada por ${escapeHtml(m.creadaPor || "—")}${m.creadaEn ? " el " + escapeHtml(fmtFechaSimple(m.creadaEn.slice(0, 10))) : ""}</div>`
+    : `Reloj — ${escapeHtml(m.dispositivo || "sin dispositivo")}`;
+
+  let acciones = "";
+  if (m.anulacion){
+    acciones = `
+      <div class="reloj-aviso warn">Anulada por ${escapeHtml(m.anulacion.ANULADA_POR || "—")}${m.anulacion.ANULADA_EN ? " el " + escapeHtml(fmtFechaSimple(m.anulacion.ANULADA_EN.slice(0, 10))) : ""}.<br>Motivo: ${escapeHtml(m.anulacion.MOTIVO || "—")}</div>
+      ${puedeEditar ? `<button class="btn primary" style="width:100%;" onclick="relojRestaurarMarca()">↺ Restaurar marca</button>` : ""}`;
+  } else if (puedeEditar){
+    acciones = `
+      <div class="field">
+        <label for="reloj-anular-motivo">Motivo de la anulación</label>
+        <textarea id="reloj-anular-motivo" rows="3" placeholder="Ej. marcó dos veces seguidas por error"></textarea>
+      </div>
+      <button class="btn primary" style="width:100%;" onclick="relojAnularMarca()">Anular marca</button>
+      <p class="reloj-nota">La marca no se borra: deja de contar para las horas y queda registrado quién la anuló y por qué. Se puede restaurar.</p>`;
+  }
+
+  document.getElementById("modal-reloj-titulo").textContent = "Marca del " + relojFechaCorta(m.fecha) + " · " + relojHoraDeTs(m.ts);
+  document.getElementById("modal-reloj-body").innerHTML = `
+    <dl class="reloj-detalle">
+      <dt>Persona</dt><dd>${escapeHtml(persona ? persona.nombre : m.nombre)} <span class="reloj-tenue">#${escapeHtml(m.codigo)}</span></dd>
+      <dt>Fecha y hora</dt><dd>${escapeHtml(fmtFechaSimple(m.fecha))} · ${relojHoraDeTs(m.ts)}</dd>
+      <dt>Origen</dt><dd>${origen}</dd>
+    </dl>
+    ${acciones}`;
+  document.getElementById("modal-reloj").classList.add("open");
+}
+
+async function relojAnularMarca(){
+  const ctx = relojModalCtx;
+  if (!ctx || ctx.tipo !== "marca") return;
+  const motivo = document.getElementById("reloj-anular-motivo").value.trim();
+  if (!motivo){ statusMsg("Escribe el motivo de la anulación.", false); return; }
+  const m = ctx.marca;
+  try{
+    await window.storage.set(RELOJ_ANULACION_PREFIX + relojClaveMarca(m.codigo, m.ts), JSON.stringify({
+      CODIGO: m.codigo, TS: m.ts, FECHA: m.fecha, ORIGEN: m.origen,
+      MOTIVO: motivo, ANULADA_POR: relojNombreSesion(), ANULADA_EN: new Date().toISOString(),
+    }));
+    cerrarModalReloj();
+    statusMsg("Marca anulada. Si ese día ya estaba en Horas extras, vuelve a enviar el rango para recalcularlo.");
+    renderRelojPanel();
+  }catch(e){ /* storage.set ya avisó el motivo */ }
+}
+
+async function relojRestaurarMarca(){
+  const ctx = relojModalCtx;
+  if (!ctx || ctx.tipo !== "marca" || !ctx.marca.anulacion) return;
+  try{
+    await window.storage.delete(ctx.marca.anulacion.key);
+    cerrarModalReloj();
+    statusMsg("Marca restaurada.");
+    renderRelojPanel();
+  }catch(e){ statusMsg("No se pudo restaurar: " + e.message, false); }
+}
+
+// ---------- Modal: marca manual ----------
+function relojAbrirManual(indicePersona, fecha){
+  if (!relojCtx || !relojCtx.vista) return;
+  const persona = indicePersona === null ? null : relojCtx.indicePersonas[indicePersona];
+  relojModalCtx = { tipo: "manual" };
+  const opciones = relojCtx.vista.personasReloj.map(p =>
+    `<option value="${escapeHtml(p.codigo)}"${persona && persona.codigo === p.codigo ? " selected" : ""}>${escapeHtml(p.nombreMostrar)} · #${escapeHtml(p.codigo)}</option>`).join("");
+  document.getElementById("modal-reloj-titulo").textContent = "Agregar marca manual";
+  document.getElementById("modal-reloj-body").innerHTML = `
+    <div class="field">
+      <label for="reloj-m-persona">Persona</label>
+      <select id="reloj-m-persona"><option value="">Elegir…</option>${opciones}</select>
+    </div>
+    <div class="reloj-fila-2">
+      <div class="field"><label for="reloj-m-fecha">Fecha</label><input type="date" id="reloj-m-fecha" value="${fecha || relojCtx.hasta}"></div>
+      <div class="field"><label for="reloj-m-hora">Hora</label><input type="time" id="reloj-m-hora"></div>
+    </div>
+    <div class="field">
+      <label for="reloj-m-motivo">Motivo</label>
+      <select id="reloj-m-motivo">${RELOJ_MOTIVOS_MANUAL.map(m => `<option>${escapeHtml(m)}</option>`).join("")}</select>
+    </div>
+    <div class="field">
+      <label for="reloj-m-detalle">Detalle</label>
+      <textarea id="reloj-m-detalle" rows="3" placeholder="Qué pasó y quién lo confirma"></textarea>
+    </div>
+    <button class="btn primary" style="width:100%;" onclick="relojGuardarManual()">Guardar marca manual</button>
+    <p class="reloj-nota">Cuenta igual que una marca del reloj para las horas y al enviar a Horas extras. Queda registrado quién la creó.</p>`;
+  document.getElementById("modal-reloj").classList.add("open");
+  document.getElementById(persona ? "reloj-m-hora" : "reloj-m-persona").focus();
+}
+
+async function relojGuardarManual(){
+  if (!relojModalCtx || relojModalCtx.tipo !== "manual") return;
+  const codigo = document.getElementById("reloj-m-persona").value;
+  const fecha = document.getElementById("reloj-m-fecha").value;
+  const hora = document.getElementById("reloj-m-hora").value;
+  const motivo = document.getElementById("reloj-m-motivo").value;
+  const detalle = document.getElementById("reloj-m-detalle").value.trim();
+  if (!codigo || !fecha || !hora){ statusMsg("Completa persona, fecha y hora.", false); return; }
+  if (!detalle){ statusMsg("Escribe el detalle: queda como respaldo de por qué se agregó la marca.", false); return; }
+  const ts = relojTsDesdeFechaHora(fecha, hora);
+  if (ts > relojAhoraPared() + 5 * 60000){ statusMsg("No se puede registrar una marca en el futuro.", false); return; }
+
+  const clave = relojClaveMarca(codigo, ts);
+  const yaExiste = relojCtx.vista.todas.some(m => relojClaveMarca(m.codigo, m.ts) === clave);
+  if (yaExiste){ statusMsg("Esa persona ya tiene una marca exactamente a esa hora.", false); return; }
+
+  const persona = relojCtx.vista.personasReloj.find(p => p.codigo === codigo);
+  try{
+    await window.storage.set(RELOJ_MANUAL_PREFIX + clave, JSON.stringify({
+      CODIGO: codigo, NOMBRE: persona ? persona.nombre : "", TS: ts, FECHA: fecha,
+      MOTIVO: motivo, DETALLE: detalle, CREADA_POR: relojNombreSesion(), CREADA_EN: new Date().toISOString(),
+    }));
+    cerrarModalReloj();
+    // Si la fecha cae fuera del rango en pantalla, se amplía para que la
+    // persona vea la marca que acaba de crear en vez de creer que no se guardó.
+    if (fecha < relojCtx.desde) relojCtx.desde = fecha;
+    if (fecha > relojCtx.hasta) relojCtx.hasta = fecha;
+    relojCtx.abiertos.add(codigo);
+    statusMsg("Marca manual guardada.");
+    renderRelojPanel();
+  }catch(e){ /* storage.set ya avisó el motivo */ }
+}
+
+// ---------- Vincular persona del reloj con su ficha ----------
+async function relojVincular(indice){
+  const p = relojCtx && relojCtx.sinFicha ? relojCtx.sinFicha[indice] : null;
+  const sel = document.getElementById("reloj-vinc-" + indice);
+  if (!p || !sel) return;
+  if (!sel.value){ statusMsg("Elige la ficha que corresponde.", false); return; }
+  const fullKey = CATALOGS.empleados.prefix + sel.value;
+  try{
+    const r = await window.storage.get(fullKey, false);
+    const emp = JSON.parse(r.value);
+    const nombre = nombreCompletoEmpleado(emp);
+    if (emp.NUMERO_EMPLEADO && normalizarCodigoEmpleado(emp.NUMERO_EMPLEADO) !== normalizarCodigoEmpleado(p.codigo)){
+      if (!confirm(`${nombre} ya tiene el número de empleado ${emp.NUMERO_EMPLEADO}. ¿Reemplazarlo por ${p.codigo}, el del reloj?`)) return;
+    }
+    emp.NUMERO_EMPLEADO = p.codigo;
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    statusMsg(`${nombre} quedó vinculado con el número ${p.codigo} del reloj.`);
+    renderRelojPanel();
+  }catch(e){ statusMsg("No se pudo vincular: " + e.message, false); }
+}
+
+// ---------- Excel ----------
+function relojDescargarExcel(){
+  const v = relojCtx && relojCtx.vista;
+  if (!v || !v.todas.length){ statusMsg("No hay marcas en ese rango para descargar.", false); return; }
+  const nombrePorCodigo = {};
+  v.personas.forEach(p => { nombrePorCodigo[p.codigo] = p; });
+
+  const detalle = v.todas.map(m => {
+    const p = nombrePorCodigo[m.codigo];
+    return {
+      "Número": m.codigo,
+      "Nombre": p ? p.nombre : m.nombre,
+      "Ficha en SDG": p && p.ficha ? "Sí" : "No",
+      "Fecha": m.fecha,
+      "Hora": relojHoraDeTs(m.ts),
+      "Origen": m.origen === "manual" ? "Manual" : "Reloj",
+      "Dispositivo": m.origen === "manual" ? "" : m.dispositivo,
+      "Motivo marca manual": m.origen === "manual" ? [m.motivoManual, m.detalle].filter(Boolean).join(" — ") : "",
+      "Estado": m.anulacion ? "Anulada" : "Válida",
+      "Motivo anulación": m.anulacion ? m.anulacion.MOTIVO || "" : "",
+    };
+  });
+  const resumen = [];
+  v.personas.forEach(p => p.dias.forEach(d => {
+    resumen.push({
+      "Número": p.codigo,
+      "Nombre": p.nombre,
+      "Fecha": d.fecha,
+      "Marcas": d.marcas.filter(m => !m.anulacion).map(m => relojHoraDeTs(m.ts)).join(" · "),
+      "Horas": Math.round(d.horas * 100) / 100,
+      "Observación": d.revisar ? relojMotivoRevision(d) : "",
+    });
+  }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), "Resumen por día");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), "Marcas");
+  XLSX.writeFile(wb, `Reloj_Corcovado_${relojCtx.desde}_a_${relojCtx.hasta}.xlsx`);
+}
+
+// ---------- Enviar a Horas extras ----------
+// Siempre manda el rango COMPLETO, sin importar el buscador: filtrar a
+// medias haría que guardarFilasHorasExtra marcara como ausencia a quien
+// simplemente no estaba en pantalla.
+async function relojEnviarAHorasExtras(){
+  const v = relojCtx && relojCtx.vista;
+  if (!v || !window.sdgApi.puedeEditar()) return;
+  const eventos = v.todas.filter(m => !m.anulacion)
+    .map(m => ({ codigo: m.codigo, nombre: m.nombre, fecha: m.fecha, ts: m.ts }));
+  if (!eventos.length){ statusMsg("No hay marcas válidas en ese rango.", false); return; }
+  const sinFicha = v.personas.filter(p => !p.ficha).length;
+  const aviso = `Se enviarán ${eventos.length.toLocaleString("es-CR")} marcas del ${fmtFechaSimple(relojCtx.desde)} al ${fmtFechaSimple(relojCtx.hasta)} de las ${v.personas.length} personas del rango (el buscador no se aplica).`
+    + (v.totalTurnosLargos ? `\n\n⚠️ ${v.totalTurnosLargos} día(s) tienen un turno de más de ${RELOJ_TURNO_SOSPECHOSO_H} h — casi siempre es la salida de un turno nocturno emparejada con la entrada del siguiente. Esas horas llegarán infladas a Horas extras: revísalas allá antes de aprobar, o anula/completa las marcas aquí primero.` : "")
+    + (sinFicha ? `\n\n${sinFicha} persona(s) no tienen ficha en SDG y quedarán en "Sin identificar".` : "")
+    + `\n\nLos días que ya tienen una decisión (aprobada o rechazada) no se tocan. ¿Continuar?`;
+  if (!confirm(aviso)) return;
+
+  const btn = document.getElementById("reloj-btn-enviar");
+  if (btn){ btn.disabled = true; btn.textContent = "Enviando…"; }
+  try{
+    const { filas, sinPar, turnosSinMarcar } = filasDesdeEventosMarcacion(eventos);
+    const r = await guardarFilasHorasExtra(filas, `Reloj marcador ${relojCtx.desde} a ${relojCtx.hasta}`);
+    statusMsg(mensajeResultadoHorasExtra(r, turnosSinMarcar, sinPar, true) + " Revísalos en Planilla → Horas extras.");
+  }catch(e){
+    statusMsg(e.message || "No se pudo enviar a Horas extras.", false);
+  }finally{
+    if (btn){ btn.disabled = false; btn.textContent = "📤 Enviar a Horas extras"; }
+  }
 }
 
 // `propiedadOverride`: solo para "Mi información" de un master cuya propia

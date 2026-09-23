@@ -336,6 +336,17 @@
       });
     },
 
+    // Reloj marcador (SmartPSS de Corcovado) — lectura directa de su base.
+    // Las correcciones NO pasan por aquí: se guardan con window.storage
+    // (reloj_anulacion:/reloj_manual:) como cualquier otro dato.
+    reloj: {
+      estado: () => pedir("/reloj/estado"),
+      marcas: (desde, hasta) =>
+        pedir("/reloj/marcas?desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta))
+          .then((r) => r.marcas),
+      personas: () => pedir("/reloj/personas").then((r) => r.personas),
+    },
+
     // Administración (solo master)
     usuarios: {
       listar: () => pedir("/auth/usuarios").then((r) => r.usuarios),

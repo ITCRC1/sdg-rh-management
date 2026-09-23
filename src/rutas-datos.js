@@ -861,4 +861,4 @@ emitidos.patch("/:id/anular", A.requiereEscritura, async (req, res, next) => {
   }
 });
 
-module.exports = { datos: router, historial, emitidos };
+module.exports = { datos: router, historial, emitidos, propiedadDe };

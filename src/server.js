@@ -6,6 +6,7 @@ const { migrar, pool, query } = require("./db");
 const A = require("./auth");
 const rutasAuth = require("./rutas-auth");
 const { datos, historial, emitidos } = require("./rutas-datos");
+const { reloj } = require("./rutas-reloj");
 const estatico = require("./estatico");
 
 const PORT = Number(process.env.PORT) || 8000;
@@ -69,6 +70,7 @@ app.use("/api/auth", rutasAuth);
 app.use("/api/datos", datos);
 app.use("/api/historial", historial);
 app.use("/api/documentos", emitidos);
+app.use("/api/reloj", reloj);
 
 app.use("/api", (req, res) => res.status(404).json({ error: "Ruta de API no encontrada." }));
 
