@@ -9446,10 +9446,10 @@ function relojHtmlFiltros(){
       <div class="field"><label for="reloj-hasta">Hasta</label><input type="date" id="reloj-hasta" value="${c.hasta}"></div>
       <div class="field reloj-buscar"><label for="reloj-buscar">Persona</label>
         <input type="text" id="reloj-buscar" placeholder="Nombre o PersonID" value="${escapeHtml(c.filtro)}"
-               oninput="relojCtx.filtro = this.value; relojPintarPersonas();"></div>
+               oninput="relojCtx.filtro = this.value; relojCtx.pagina = 1; relojPintarPersonas();"></div>
       <label class="reloj-check">
         <input type="checkbox" id="reloj-solo-incompletos" ${c.soloIncompletos ? "checked" : ""}
-               onchange="relojCtx.soloIncompletos = this.checked; relojPintarPersonas();">
+               onchange="relojCtx.soloIncompletos = this.checked; relojCtx.pagina = 1; relojPintarPersonas();">
         Solo días incompletos
       </label>
       <button class="btn primary" onclick="relojAplicarRango()">Ver</button>
@@ -9463,6 +9463,7 @@ function relojAplicarRango(){
   if (hasta < desde){ statusMsg("La fecha final no puede ser anterior a la inicial.", false); return; }
   relojCtx.desde = desde;
   relojCtx.hasta = hasta;
+  relojCtx.pagina = 1;
   renderRelojPanel();
 }
 
@@ -9750,7 +9751,16 @@ function relojPintarPersonas(){
     ? `<td class="reloj-h">${relojHoraDeTs(m.ts)} <span class="reloj-manual" title="Marca manual: ${escapeHtml(m.motivoManual)}">✎</span></td>`
     : `<td class="reloj-h">${relojHoraDeTs(m.ts)}</td>`;
 
-  cont.innerHTML = visibles.map(p => {
+  // Paginado de a RELOJ_POR_PAGINA personas. Las tarjetas de arriba y las
+  // columnas E/S se calculan con TODAS (así no cambian de ancho al pasar de
+  // página); al imprimir se muestran todas las personas de una vez.
+  const totalPaginas = Math.max(1, Math.ceil(visibles.length / RELOJ_POR_PAGINA));
+  relojCtx.pagina = Math.min(Math.max(1, relojCtx.pagina || 1), totalPaginas);
+  const inicio = (relojCtx.pagina - 1) * RELOJ_POR_PAGINA;
+  const enPagina = relojCtx.imprimiendo ? visibles : visibles.slice(inicio, inicio + RELOJ_POR_PAGINA);
+  const paginador = relojCtx.imprimiendo ? "" : relojHtmlPaginador(relojCtx.pagina, totalPaginas, inicio, enPagina.length, visibles.length);
+
+  cont.innerHTML = paginador + enPagina.map(p => {
     const pi = relojCtx.indicePersonas.push(p) - 1;
     const filas = p.dias.map((d, di) => {
       const celdas = [];
@@ -9795,10 +9805,45 @@ function relojPintarPersonas(){
           </table>
         </div>
       </section>`;
-  }).join("") + `
+  }).join("") + paginador + `
     <p class="reloj-nota">El reloj no indica si una marca es entrada o salida: se toman en orden (E1, S1, E2, S2).
     Las horas cuentan solo los pares completos. Una marca a menos de ${RELOJ_VENTANA_DUPLICADO_MIN} minutos de la anterior
     se toma como repetida. ✎ = marca manual.</p>`;
+}
+
+const RELOJ_POR_PAGINA = 10;
+
+// "‹ Anterior 1 2 3 … Siguiente ›" con el rango de personas que se ve. Con
+// muchas páginas muestra la primera, la última y dos a cada lado de la actual.
+function relojHtmlPaginador(pagina, total, inicio, enPagina, totalPersonas){
+  const resumen = `<span class="reloj-pag-info">Personas ${inicio + 1}–${inicio + enPagina} de ${totalPersonas}</span>`;
+  if (total <= 1) return `<nav class="reloj-paginador reloj-no-imprimir">${resumen}</nav>`;
+  const numeros = [];
+  for (let n = 1; n <= total; n++){
+    if (total <= 9 || n === 1 || n === total || Math.abs(n - pagina) <= 2) numeros.push(n);
+    else if (numeros[numeros.length - 1] !== "…") numeros.push("…");
+  }
+  const boton = (texto, destino, extra) => destino
+    ? `<button type="button" class="reloj-pag-btn${extra || ""}" onclick="relojIrPagina(${destino})"${extra === " actual" ? ' aria-current="page"' : ""}>${texto}</button>`
+    : `<button type="button" class="reloj-pag-btn" disabled>${texto}</button>`;
+  return `
+    <nav class="reloj-paginador reloj-no-imprimir" aria-label="Páginas del reporte">
+      ${resumen}
+      <div class="reloj-pag-botones">
+        ${boton("‹ Anterior", pagina > 1 ? pagina - 1 : 0)}
+        ${numeros.map(n => n === "…" ? `<span class="reloj-pag-sep">…</span>` : boton(String(n), n, n === pagina ? " actual" : "")).join("")}
+        ${boton("Siguiente ›", pagina < total ? pagina + 1 : 0)}
+      </div>
+    </nav>`;
+}
+
+function relojIrPagina(n){
+  relojCtx.pagina = n;
+  relojPintarPersonas();
+  // Vuelve al inicio de la lista — si no, al pasar de página desde el
+  // paginador de abajo la persona queda mirando el final de la nueva página.
+  const cont = document.getElementById("reloj-personas");
+  if (cont) cont.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
 // ---------- Modal: detalle de un día ("ver" / "Corregir") ----------
@@ -10112,9 +10157,17 @@ async function relojDescargarExcel(){
 
 // Imprimir solo el reporte, sin el menú ni los botones — como el botón
 // "Imprimir" del sistema anterior.
+// Imprime a TODAS las personas del filtro, no solo la página que se ve.
 function relojImprimir(){
   document.body.classList.add("imprimiendo-reloj");
-  const limpiar = () => { document.body.classList.remove("imprimiendo-reloj"); window.removeEventListener("afterprint", limpiar); };
+  relojCtx.imprimiendo = true;
+  relojPintarPersonas();
+  const limpiar = () => {
+    document.body.classList.remove("imprimiendo-reloj");
+    relojCtx.imprimiendo = false;
+    relojPintarPersonas();
+    window.removeEventListener("afterprint", limpiar);
+  };
   window.addEventListener("afterprint", limpiar);
   window.print();
 }

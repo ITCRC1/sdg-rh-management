@@ -828,6 +828,25 @@ body.solo-lectura select{
 .reloj-btn-corregir:hover{ background:#A93226; border-color:#A93226; }
 .reloj-link:focus-visible, .reloj-btn-corregir:focus-visible{ outline:2px solid var(--navy); outline-offset:2px; }
 
+/* Paginador: de a 10 personas, arriba y abajo de la lista. */
+.reloj-paginador{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  margin:0 0 14px;
+}
+.reloj-paginador:last-of-type{ margin:4px 0 10px; }
+.reloj-pag-info{ font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+.reloj-pag-botones{ display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.reloj-pag-btn{
+  font-family:inherit; font-size:12.5px; font-weight:600; min-width:34px; padding:6px 10px;
+  color:var(--ink); background:#fff; border:1px solid var(--paper-line); border-radius:8px; cursor:pointer;
+  font-variant-numeric:tabular-nums;
+}
+.reloj-pag-btn:hover:not(:disabled){ border-color:var(--navy); color:var(--navy); }
+.reloj-pag-btn.actual{ background:var(--navy); border-color:var(--navy); color:#fff; }
+.reloj-pag-btn:disabled{ opacity:.45; cursor:default; }
+.reloj-pag-btn:focus-visible{ outline:2px solid var(--navy); outline-offset:1px; }
+.reloj-pag-sep{ color:var(--ink-soft); padding:0 2px; }
+
 /* Modal del día y de la marca. */
 .reloj-dia tr.anulada td{ color:var(--ink-soft); text-decoration:line-through; }
 .reloj-dia tr.anulada td:last-child{ text-decoration:none; }
