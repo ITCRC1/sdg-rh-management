@@ -786,12 +786,18 @@ async function descargarExcelEmpleadosSeleccionado(){
   try{
     const estadoFiltro = (document.getElementById("extraer-emp-estado") || {}).value || "activos";
     const empleados = await cargarEmpleadosDB();
-    const filtrados = empleados
-      .filter(e => estadoFiltro === "activos" ? !e.ARCHIVADO : estadoFiltro === "archivados" ? !!e.ARCHIVADO : true)
-      .sort(compararPorApellido);
+    // Un empleado específico elegido con el buscador reemplaza al filtro de
+    // arriba (activos/archivados/todos) — no tiene sentido combinarlos.
+    const filtrados = extraerEmpSeleccionado
+      ? empleados.filter(e => e.key === extraerEmpSeleccionado.key)
+      : empleados
+          .filter(e => estadoFiltro === "activos" ? !e.ARCHIVADO : estadoFiltro === "archivados" ? !!e.ARCHIVADO : true)
+          .sort(compararPorApellido);
 
     if (!filtrados.length){
-      status.textContent = "No hay ningún empleado que coincida con ese filtro.";
+      status.textContent = extraerEmpSeleccionado
+        ? "Ese empleado ya no existe — elegí otro."
+        : "No hay ningún empleado que coincida con ese filtro.";
       return;
     }
 
@@ -814,8 +820,13 @@ async function descargarExcelEmpleadosSeleccionado(){
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    descargarBlobComoArchivo(blob, `empleados_${estadoFiltro}_${new Date().toISOString().slice(0,10)}.xlsx`);
-    status.textContent = `Descargado: ${filtrados.length} empleado(s), ${seleccionados.length} columna(s).`;
+    const nombreArchivo = extraerEmpSeleccionado
+      ? `empleado_${extraerEmpSeleccionado.nombre.trim().replace(/\s+/g,"_")}_${new Date().toISOString().slice(0,10)}.xlsx`
+      : `empleados_${estadoFiltro}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    descargarBlobComoArchivo(blob, nombreArchivo);
+    status.textContent = extraerEmpSeleccionado
+      ? `Descargado: ${extraerEmpSeleccionado.nombre}, ${seleccionados.length} columna(s).`
+      : `Descargado: ${filtrados.length} empleado(s), ${seleccionados.length} columna(s).`;
   }catch(e){
     if (status) status.textContent = "No se pudo generar el Excel: " + (e.message || "");
   }
