@@ -643,9 +643,19 @@ const CAMPOS_EXPORTAR_EMPLEADOS_POR_DEFECTO = new Set(
   CAMPOS_EXPORTAR_EMPLEADOS.flatMap(g => g.campos.map(([campo]) => campo))
 );
 
+// Estado del buscador de "un empleado específico" del modal de extraer
+// datos — vive fuera de la función porque el modal se re-pinta entero cada
+// vez que se escribe o se elige a alguien (mismo motivo que gateBusquedaTexto
+// para renderElegirEmpleadoGate). Se reinicia cada vez que se abre el modal
+// para no arrastrar una selección de una vuelta anterior.
+let extraerEmpSeleccionado = null; // { key, nombre } | null
+let extraerEmpBusquedaTexto = "";
+
 function abrirModalExtraerEmpleadosExcel(){
   const modal = document.getElementById("modal-incompletos");
   const body = document.getElementById("modal-incompletos-body");
+  extraerEmpSeleccionado = null;
+  extraerEmpBusquedaTexto = "";
   modal.querySelector(".modal-head span").textContent = "📊 Extraer datos de Empleados";
   body.innerHTML = `
     <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Elegí qué columnas incluir — una fila por empleado en el Excel.</div>
@@ -659,6 +669,10 @@ function abrirModalExtraerEmpleadosExcel(){
       </label>
       <button class="btn" onclick="marcarTodosCamposExtraer(true)">Seleccionar todo</button>
       <button class="btn" onclick="marcarTodosCamposExtraer(false)">Ninguno</button>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:4px;">O elegí un empleado específico (en vez del filtro de arriba) — descarga solo esa fila</label>
+      <div id="extraer-emp-seleccion">${renderExtraerEmpSeleccion()}</div>
     </div>
     ${CAMPOS_EXPORTAR_EMPLEADOS.map(g => `
       <div style="margin-bottom:10px;">
@@ -675,10 +689,85 @@ function abrirModalExtraerEmpleadosExcel(){
     <div id="extraer-emp-status" style="font-size:12px; margin-top:8px;"></div>
   `;
   modal.classList.add("open");
+  // El buscador recién existe en el DOM después de pintar el innerHTML de
+  // arriba — mismo motivo por el que renderElegirEmpleadoGate difiere su
+  // primer render con setTimeout(...,0).
+  setTimeout(() => renderListaExtraerEmpBusqueda(), 0);
 }
 
 function marcarTodosCamposExtraer(marcar){
   document.querySelectorAll('#modal-incompletos-body input[data-campo-extraer]').forEach(cb => { cb.checked = marcar; });
+}
+
+// Alterna entre el buscador (nadie elegido todavía) y la "ficha" de quien ya
+// se eligió — nunca los dos a la vez, para que quede claro que elegir un
+// empleado reemplaza al filtro "Empleados a incluir" de arriba, no lo suma.
+function renderExtraerEmpSeleccion(){
+  if (extraerEmpSeleccionado){
+    return `<div class="catalog-item">
+      <div class="row1">
+        <div class="info"><div class="name">${escapeHtml(extraerEmpSeleccionado.nombre)}</div></div>
+        <div class="actions"><button class="btn" onclick="quitarExtraerEmpSeleccion()">✕ Quitar</button></div>
+      </div>
+    </div>`;
+  }
+  return `<input type="text" id="extraer-emp-busqueda" placeholder="🔍 Buscar por nombre, cédula o puesto…" value="${escapeHtml(extraerEmpBusquedaTexto)}" oninput="filtrarExtraerEmpBusqueda(this.value)" style="margin-bottom:8px;">
+    <div id="extraer-emp-lista"><div class="empty-state">Cargando…</div></div>`;
+}
+
+// Busca entre TODOS los empleados (activos y archivados) — a diferencia del
+// filtro "Empleados a incluir" de arriba, elegir a alguien puntual no debería
+// depender de si sigue activo o no.
+async function renderListaExtraerEmpBusqueda(){
+  const cont = document.getElementById("extraer-emp-lista");
+  if (!cont) return; // se quitó la selección o se cerró el modal antes de que esto terminara
+  try{
+    const empleados = await cargarEmpleadosDB();
+    const termino = (extraerEmpBusquedaTexto || "").toLowerCase().trim();
+    const filtrados = termino
+      ? empleados.filter(e => nombreCompletoEmpleado(e).toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
+      : empleados;
+    const ordenados = filtrados.slice().sort(compararPorApellido);
+    if (!ordenados.length){
+      cont.innerHTML = `<div class="empty-state">Ningún empleado coincide con la búsqueda.</div>`;
+      return;
+    }
+    cont.innerHTML = ordenados.slice(0, 50).map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="seleccionarExtraerEmpEmpleado('${e.key.replace(/'/g,"\\'")}')">
+      <div class="row1">
+        <div class="info">
+          <div class="name">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}${e.ARCHIVADO ? ' <span style="color:var(--ink-soft); font-weight:400;">(archivado)</span>' : ""}</div>
+          <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
+        </div>
+      </div>
+    </div>`).join("");
+  }catch(e){
+    cont.innerHTML = `<div class="empty-state">No se pudo cargar la lista de empleados.</div>`;
+  }
+}
+
+const _renderExtraerEmpListaDebounced = debounce(async function(){
+  await renderListaExtraerEmpBusqueda();
+  restaurarFocoBusqueda("extraer-emp-busqueda");
+}, 350);
+function filtrarExtraerEmpBusqueda(val){
+  extraerEmpBusquedaTexto = val;
+  _renderExtraerEmpListaDebounced();
+}
+
+async function seleccionarExtraerEmpEmpleado(key){
+  const empleados = await cargarEmpleadosDB();
+  const e = empleados.find(x => x.key === key);
+  extraerEmpSeleccionado = { key, nombre: (e && nombreCompletoEmpleado(e)) || key };
+  const wrap = document.getElementById("extraer-emp-seleccion");
+  if (wrap) wrap.innerHTML = renderExtraerEmpSeleccion();
+}
+
+function quitarExtraerEmpSeleccion(){
+  extraerEmpSeleccionado = null;
+  extraerEmpBusquedaTexto = "";
+  const wrap = document.getElementById("extraer-emp-seleccion");
+  if (wrap) wrap.innerHTML = renderExtraerEmpSeleccion();
+  setTimeout(() => renderListaExtraerEmpBusqueda(), 0);
 }
 
 async function descargarExcelEmpleadosSeleccionado(){
@@ -4638,6 +4727,7 @@ function showTab(which){
   document.getElementById("despido-wrap").style.display = "none";
   document.getElementById("liquidacion-wrap").style.display = "none";
   document.getElementById("amonestacion-wrap").style.display = "none";
+  document.getElementById("constancia-salarial-wrap").style.display = "none";
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
