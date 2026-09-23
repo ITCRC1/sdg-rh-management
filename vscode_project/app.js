@@ -9328,12 +9328,6 @@ const RELOJ_MANUAL_PREFIX = "reloj_manual:";
 const RELOJ_MOTIVOS_MANUAL = ["Olvidó marcar", "Falla del reloj", "Trabajo fuera del sitio", "Otro"];
 const RELOJ_DIAS_SEMANA = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const RELOJ_HORAS_SIN_MARCAS_ALERTA = 24;
-// Un par de marcas de más de esto casi nunca es un turno real en Corcovado:
-// suele ser la SALIDA de un turno nocturno (ej. 01:05) emparejada con la
-// ENTRADA del turno siguiente (17:00) del mismo día calendario. El cálculo
-// de horas no se toca (filasDesdeEventosMarcacion corta en 20 h y es la
-// misma regla que la importación de PDF) — esto solo lo señala para revisión.
-const RELOJ_TURNO_SOSPECHOSO_H = 12;
 
 let relojCtx = null;      // filtros y última vista calculada, entre renders
 let relojModalCtx = null; // qué está editando el modal abierto
@@ -9362,7 +9356,6 @@ function relojAhoraPared(){
   return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
 }
 function relojClaveMarca(codigo, ts){ return String(codigo) + ":" + String(ts); }
-function relojHoras(h){ return (Math.round(h * 100) / 100).toFixed(2).replace(/\.00$/, "") + " h"; }
 function relojNombreSesion(){
   const s = window.sdgApi && window.sdgApi.sesionActual ? window.sdgApi.sesionActual() : null;
   return (s && (s.nombre || s.email)) || "";
@@ -9443,16 +9436,23 @@ function relojHtmlError(e){
   return `<div class="reloj-aviso err">${escapeHtml((e && e.message) || "No se pudo cargar el reloj marcador.")}${reintentar}</div>`;
 }
 
+// Filtros con el mismo orden que el sistema anterior: Desde, Hasta, Persona,
+// "Solo días incompletos" y Ver.
 function relojHtmlFiltros(){
   const c = relojCtx;
   return `
     <div class="reloj-filtros">
       <div class="field"><label for="reloj-desde">Desde</label><input type="date" id="reloj-desde" value="${c.desde}"></div>
       <div class="field"><label for="reloj-hasta">Hasta</label><input type="date" id="reloj-hasta" value="${c.hasta}"></div>
-      <div class="field reloj-buscar"><label for="reloj-buscar">Buscar persona</label>
-        <input type="text" id="reloj-buscar" placeholder="Nombre o número" value="${escapeHtml(c.filtro)}"
+      <div class="field reloj-buscar"><label for="reloj-buscar">Persona</label>
+        <input type="text" id="reloj-buscar" placeholder="Nombre o PersonID" value="${escapeHtml(c.filtro)}"
                oninput="relojCtx.filtro = this.value; relojPintarPersonas();"></div>
-      <button class="btn primary" onclick="relojAplicarRango()">Consultar</button>
+      <label class="reloj-check">
+        <input type="checkbox" id="reloj-solo-incompletos" ${c.soloIncompletos ? "checked" : ""}
+               onchange="relojCtx.soloIncompletos = this.checked; relojPintarPersonas();">
+        Solo días incompletos
+      </label>
+      <button class="btn primary" onclick="relojAplicarRango()">Ver</button>
     </div>`;
 }
 
@@ -9470,8 +9470,11 @@ async function renderRelojPanel(){
   const panel = document.getElementById("reloj-panel");
   if (!panel) return;
   if (!relojCtx){
+    // Mismo rango por defecto que el reporte anterior: la quincena en curso
+    // (del 1 o del 16 hasta hoy).
     const hoy = isoDeFechaLocal(new Date());
-    relojCtx = { desde: relojSumarDias(hoy, -6), hasta: hoy, filtro: "", abiertos: new Set(), vista: null };
+    const desde = hoy.slice(0, 8) + (Number(hoy.slice(8, 10)) <= 15 ? "01" : "16");
+    relojCtx = { desde, hasta: hoy, filtro: "", soloIncompletos: false, abiertos: new Set(), vista: null };
   }
   if (!window.sdgApi || !window.sdgApi.reloj){
     panel.innerHTML = `<div class="reloj-aviso">El reloj marcador necesita el servidor de SDG.</div>`;
@@ -9505,34 +9508,32 @@ async function renderRelojPanel(){
   const horasSinMarcas = estado.ultimaMarca ? (ahora - estado.ultimaMarca) / 3600000 : Infinity;
   const relojAlDia = horasSinMarcas < RELOJ_HORAS_SIN_MARCAS_ALERTA;
 
+  const fechaDMA = ymd => `${ymd.slice(8, 10)}/${ymd.slice(5, 7)}/${ymd.slice(0, 4)}`;
   panel.innerHTML = `
     <div class="section-card reloj-cabecera">
       <div class="reloj-titulo-fila">
-        <h2 class="reloj-titulo">🕐 Reloj marcador</h2>
-        <span class="reloj-estado ${relojAlDia ? "ok" : "warn"}">
-          <i></i>${estado.ultimaMarca ? `Última marca: ${escapeHtml(relojFechaHoraCorta(estado.ultimaMarca))}` : "Sin marcas registradas"}
-        </span>
+        <div>
+          <h2 class="reloj-titulo">Reporte de asistencia</h2>
+          <div class="reloj-rango">Del ${fechaDMA(relojCtx.desde)} al ${fechaDMA(relojCtx.hasta)}</div>
+        </div>
+        <div class="reloj-acciones reloj-no-imprimir">
+          <span class="reloj-estado ${relojAlDia ? "ok" : "warn"}">
+            <i></i>${estado.ultimaMarca ? `Última marca: ${escapeHtml(relojFechaHoraCorta(estado.ultimaMarca))}` : "Sin marcas registradas"}
+          </span>
+          <button class="btn reloj-btn-excel" onclick="relojDescargarExcel()">Descargar Excel</button>
+          <button class="btn" onclick="relojImprimir()">Imprimir</button>
+        </div>
       </div>
-      ${relojAlDia ? "" : `<div class="reloj-aviso warn">No entran marcas nuevas hace más de ${RELOJ_HORAS_SIN_MARCAS_ALERTA} horas. Revisa que los relojes sigan sincronizando con SmartPSS.</div>`}
-      <div class="reloj-dispositivos">
-        ${estado.dispositivos.map(d => `<span class="reloj-disp" title="Última marca: ${escapeHtml(d.ultima ? relojFechaHoraCorta(d.ultima) : "—")}">${escapeHtml(d.nombre)} <b>${d.marcas.toLocaleString("es-CR")}</b></span>`).join("")}
-      </div>
-      ${relojHtmlFiltros()}
-      <div class="reloj-acciones">
-        ${puedeEditar ? `<button class="btn" onclick="relojAbrirManual(null, null)">✍️ Agregar marca manual</button>` : ""}
-        <button class="btn" onclick="relojDescargarExcel()">⬇️ Descargar Excel</button>
-        ${puedeEditar ? `<button class="btn gold" id="reloj-btn-enviar" onclick="relojEnviarAHorasExtras()">📤 Enviar a Horas extras</button>` : ""}
-      </div>
-      <div class="reloj-resumen">
-        <span><b>${v.todas.length.toLocaleString("es-CR")}</b> marcas</span>
-        <span><b>${v.personas.length}</b> personas</span>
-        ${v.totalManuales ? `<span><b>${v.totalManuales}</b> manuales</span>` : ""}
-        ${v.totalAnuladas ? `<span><b>${v.totalAnuladas}</b> anuladas</span>` : ""}
-        ${v.totalAlertas ? `<span class="alerta"><b>${v.totalAlertas}</b> día(s) por revisar</span>` : ""}
-        ${v.totalTurnosLargos ? `<span class="alerta">de ellos <b>${v.totalTurnosLargos}</b> con turno de más de ${RELOJ_TURNO_SOSPECHOSO_H} h</span>` : ""}
-      </div>
+      ${relojAlDia ? "" : `<div class="reloj-aviso warn reloj-no-imprimir">No entran marcas nuevas hace más de ${RELOJ_HORAS_SIN_MARCAS_ALERTA} horas. Revisa que los relojes sigan sincronizando con SmartPSS.</div>`}
+      <div class="reloj-no-imprimir">${relojHtmlFiltros()}</div>
+      ${puedeEditar ? `
+      <div class="reloj-acciones reloj-acciones-sdg reloj-no-imprimir">
+        <button class="btn" onclick="relojAbrirManual(null, null)">✎ Agregar marca manual</button>
+        <button class="btn gold" id="reloj-btn-enviar" onclick="relojEnviarAHorasExtras()">📤 Enviar a Horas extras</button>
+      </div>` : ""}
     </div>
-    ${relojHtmlSinFicha(v, empleados, puedeEditar)}
+    <div class="reloj-tarjetas" id="reloj-tarjetas"></div>
+    <div class="reloj-no-imprimir">${relojHtmlSinFicha(v, empleados, puedeEditar)}</div>
     <div id="reloj-personas"></div>`;
 
   relojPintarPersonas();
@@ -9568,54 +9569,99 @@ function relojConstruirVista(marcas, personasReloj, correcciones, empleados){
     porCodigo[m.codigo].marcas.push(m);
   });
 
-  let totalAlertas = 0, totalTurnosLargos = 0;
   const personas = Object.values(porCodigo).map(p => {
     const fichas = fichasDe(p.codigo);
     p.ficha = fichas.length === 1 ? fichas[0] : null;
     p.fichasAmbiguas = fichas.length > 1 ? fichas : null;
+    // Igual que el reporte anterior (dias.py: armar_personas): nombre y
+    // código de la ficha si la persona está vinculada; si no, el nombre del
+    // reloj y sin código.
     p.nombre = p.ficha ? nombreCompletoEmpleado(p.ficha) : (p.nombreReloj || "#" + p.codigo);
-
-    const validas = p.marcas.filter(m => !m.anulacion);
-    const { filas } = filasDesdeEventosMarcacion(validas.map(m => ({ codigo: m.codigo, nombre: m.nombre, fecha: m.fecha, ts: m.ts })));
-    const horasPorFecha = {}, sueltaPorFecha = {};
-    filas.forEach(f => {
-      if (f.INCOMPLETO) sueltaPorFecha[f.FECHA] = true;
-      else horasPorFecha[f.FECHA] = (horasPorFecha[f.FECHA] || 0) + (f["HORAS TRABAJADAS"] || 0);
-    });
+    p.codigoPlanilla = (p.ficha && p.ficha.NUMERO_EMPLEADO) || "";
 
     const porFecha = {};
     p.marcas.forEach(m => { (porFecha[m.fecha] = porFecha[m.fecha] || []).push(m); });
-    p.dias = Object.keys(porFecha).sort().map(fecha => {
-      const validasDia = porFecha[fecha].filter(m => !m.anulacion).map(m => m.ts).sort((a, b) => a - b);
-      const horas = horasPorFecha[fecha] || 0;
-      // Mismo emparejado que filasDesdeEventosMarcacion (consecutivas, de
-      // dos en dos, dentro del día) solo para detectar pares sospechosos.
-      let turnoLargo = false;
-      for (let i = 0; i + 1 < validasDia.length; i += 2){
-        if ((validasDia[i + 1] - validasDia[i]) / 3600000 > RELOJ_TURNO_SOSPECHOSO_H) turnoLargo = true;
-      }
-      // Hay marcas válidas pero ningún par sirvió (ej. dos marcas a más de
-      // 20h de distancia): se señala en vez de mostrar 0 h como si nada.
-      const revisar = validasDia.length > 0 && (sueltaPorFecha[fecha] || !horas || turnoLargo);
-      if (revisar) totalAlertas += 1;
-      if (turnoLargo) totalTurnosLargos += 1;
-      return { fecha, marcas: porFecha[fecha], horas, suelta: !!sueltaPorFecha[fecha], turnoLargo, revisar };
-    });
-    p.horasTotal = p.dias.reduce((s, d) => s + d.horas, 0);
-    p.alertas = p.dias.filter(d => d.revisar).length;
+    // Un día que quedó solo con marcas anuladas no aparece: el reporte
+    // anterior filtraba las anuladas antes de armar los días.
+    p.dias = Object.keys(porFecha).sort()
+      .map(fecha => relojArmarDia(fecha, porFecha[fecha]))
+      .filter(d => d.usadas.length || d.repetidas.length);
+    p.minutosTotal = p.dias.reduce((s, d) => s + d.minutos, 0);
+    p.incompletos = p.dias.filter(d => !d.completo).length;
     return p;
-  }).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  })
+  .filter(p => p.dias.length)
+  .sort((a, b) => a.nombre.toUpperCase().localeCompare(b.nombre.toUpperCase(), "es"));
 
   return {
     todas, personas, fichasDe,
     // Para el modal de marca manual: cualquiera registrado en el reloj, no
     // solo quien marcó en este rango (el caso típico es justo quien NO marcó).
     personasReloj: relojOrdenarPersonasReloj(personasReloj, fichasDe),
-    totalManuales: todas.filter(m => m.origen === "manual").length,
-    totalAnuladas: todas.filter(m => m.anulacion).length,
-    totalAlertas,
-    totalTurnosLargos,
   };
+}
+
+// Réplica de armar_dia (MarcasReloj/servidor/apps/reportes/dias.py) y de
+// _quitar_duplicados / _minutos_de_marca del motor: ordena, descarta las
+// repetidas, empareja por posición (E1-S1, E2-S2…) y suma los pares
+// completos. Todo en minutos cerrados: los segundos no cuentan.
+const RELOJ_VENTANA_DUPLICADO_MIN = 5;
+
+function relojArmarDia(fecha, marcasDelDia){
+  const validas = marcasDelDia.filter(m => !m.anulacion).sort((a, b) => a.ts - b.ts);
+  const minutoDe = m => Math.floor(m.ts / 60000);
+  // Se conserva siempre la primera; se descarta la que cae a MENOS de 5
+  // minutos de la última conservada (a exactamente 5 se conserva).
+  const usadas = [], repetidas = [];
+  let ultima = null;
+  validas.forEach(m => {
+    if (ultima !== null && minutoDe(m) - ultima < RELOJ_VENTANA_DUPLICADO_MIN){ repetidas.push(m); return; }
+    usadas.push(m);
+    ultima = minutoDe(m);
+  });
+  const pares = [];
+  for (let i = 0; i < usadas.length; i += 2) pares.push([usadas[i], usadas[i + 1] || null]);
+  const minutos = pares.reduce((s, [e, sal]) => s + (sal ? Math.max(0, minutoDe(sal) - minutoDe(e)) : 0), 0);
+  const completo = pares.every(([, sal]) => sal !== null);
+  const manuales = usadas.filter(m => m.origen === "manual").length;
+  return {
+    fecha, marcas: marcasDelDia, usadas, repetidas, pares, minutos, completo, manuales,
+    faltaSalidaDe: completo ? "" : relojHoraDeTs(pares[pares.length - 1][0].ts),
+  };
+}
+
+// 530 → "8:50", y 0 → "0:00" (el filtro hm_cero del reporte anterior).
+function relojHM(minutos){
+  const m = Math.max(0, Math.round(minutos));
+  return Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0");
+}
+
+// Mismas frases, en el mismo orden y unidas igual que Dia.observacion.
+function relojObservacion(d){
+  const partes = [];
+  if (!d.completo) partes.push(`Falta la salida de las ${d.faltaSalidaDe}`);
+  if (d.manuales) partes.push(`${d.manuales} marca(s) manual(es)`);
+  if (d.repetidas.length) partes.push(`${d.repetidas.length} marca(s) repetida(s) no cuentan`);
+  return partes.join(". ");
+}
+
+// Personas y días que se ven con el buscador y "Solo días incompletos" —
+// compartido por la pantalla y el Excel, para que nunca muestren distinto.
+function relojPersonasVisibles(){
+  const v = relojCtx.vista;
+  const f = normalizarNombreParaMatch(relojCtx.filtro || "");
+  return v.personas
+    .filter(p => !f || normalizarNombreParaMatch(p.nombre).includes(f) ||
+                 normalizarNombreParaMatch(p.nombreReloj).includes(f) || p.codigo === f || p.codigoPlanilla === f)
+    .map(p => relojCtx.soloIncompletos
+      ? { ...p, dias: p.dias.filter(d => !d.completo) }
+      : p)
+    .filter(p => p.dias.length);
+}
+
+// Cuántos pares E/S hacen falta. Mínimo dos: E1 S1 E2 S2.
+function relojColumnasDePares(personas){
+  return Math.max(2, ...personas.flatMap(p => p.dias.map(d => d.pares.length)));
 }
 
 function relojOrdenarPersonasReloj(personasReloj, fichasDe){
@@ -9664,14 +9710,6 @@ function relojHtmlSinFicha(v, empleados, puedeEditar){
     </details>`;
 }
 
-// Por qué un día pide revisión — el más grave primero: un turno largo
-// infla horas extra en silencio, una marca suelta solo deja el día a medias.
-function relojMotivoRevision(d){
-  if (d.turnoLargo) return `Turno de más de ${RELOJ_TURNO_SOSPECHOSO_H} h`;
-  if (d.suelta) return "Marca sin pareja";
-  return "Revisar";
-}
-
 function relojRecordarAbierto(id, abierto){
   if (!relojCtx) return;
   if (abierto) relojCtx.abiertos.add(id); else relojCtx.abiertos.delete(id);
@@ -9682,64 +9720,126 @@ function relojRecordarAbierto(id, abierto){
 function relojPintarPersonas(){
   const cont = document.getElementById("reloj-personas");
   if (!cont || !relojCtx || !relojCtx.vista) return;
-  const v = relojCtx.vista;
   const puedeEditar = window.sdgApi.puedeEditar();
-  const f = normalizarNombreParaMatch(relojCtx.filtro || "");
-  const visibles = v.personas.filter(p =>
-    !f || normalizarNombreParaMatch(p.nombre).includes(f) || normalizarNombreParaMatch(p.nombreReloj).includes(f) || p.codigo.includes(f));
+  const visibles = relojPersonasVisibles();
+
+  // Las tarjetas cuentan lo que se ve, como el reporte anterior (que las
+  // calculaba después de aplicar el buscador y "Solo días incompletos").
+  const totalDias = visibles.reduce((s, p) => s + p.dias.length, 0);
+  const totalIncompletos = visibles.reduce((s, p) => s + p.dias.filter(d => !d.completo).length, 0);
+  const tarjetas = document.getElementById("reloj-tarjetas");
+  if (tarjetas){
+    tarjetas.innerHTML = `
+      <div class="reloj-tarjeta"><b>${visibles.length}</b><span>personas</span></div>
+      <div class="reloj-tarjeta"><b>${totalDias}</b><span>días con marcas</span></div>
+      <div class="reloj-tarjeta${totalIncompletos ? " alerta" : ""}"><b>${totalIncompletos}</b><span>días incompletos</span></div>`;
+  }
 
   relojCtx.indiceMarcas = [];
   relojCtx.indicePersonas = [];
   if (!visibles.length){
-    cont.innerHTML = `<div class="empty-state">${v.personas.length ? "Nadie coincide con esa búsqueda." : "No hay marcas en ese rango de fechas."}</div>`;
+    cont.innerHTML = `<div class="reloj-aviso">No hay marcas en ese rango.</div>`;
     return;
   }
-  const unaSola = visibles.length === 1;
+
+  // Pares E/S en columnas: tantos como el día que más tenga, mínimo dos.
+  const pares = relojColumnasDePares(visibles);
+  const encabezados = [];
+  for (let i = 1; i <= pares; i++) encabezados.push(`<th class="reloj-es">E${i}</th>`, `<th class="reloj-es">S${i}</th>`);
+  const celdaHora = m => !m ? "<td></td>" : m.origen === "manual"
+    ? `<td class="reloj-h">${relojHoraDeTs(m.ts)} <span class="reloj-manual" title="Marca manual: ${escapeHtml(m.motivoManual)}">✎</span></td>`
+    : `<td class="reloj-h">${relojHoraDeTs(m.ts)}</td>`;
 
   cont.innerHTML = visibles.map(p => {
     const pi = relojCtx.indicePersonas.push(p) - 1;
-    const filas = p.dias.map(d => {
-      const chips = d.marcas.map(m => {
-        const mi = relojCtx.indiceMarcas.push(m) - 1;
-        const clases = ["reloj-chip", m.origen === "manual" ? "manual" : "", m.anulacion ? "anulada" : ""].filter(Boolean).join(" ");
-        const titulo = m.anulacion
-          ? `Anulada: ${m.anulacion.MOTIVO || ""}`
-          : m.origen === "manual" ? `Manual: ${m.motivoManual}` : `Reloj: ${m.dispositivo}`;
-        return `<button type="button" class="${clases}" title="${escapeHtml(titulo)}" onclick="relojAbrirMarca(${mi})">${relojHoraDeTs(m.ts)}${m.origen === "manual" ? '<span class="reloj-chip-tag">manual</span>' : ""}</button>`;
-      }).join("");
-      const horas = d.revisar
-        ? `<span class="reloj-alerta">${relojMotivoRevision(d)}</span>${d.horas ? `<div class="reloj-tenue">${relojHoras(d.horas)}</div>` : ""}`
-        : `<b>${relojHoras(d.horas)}</b>`;
-      return `<tr${d.revisar ? ' class="revisar"' : ""}>
+    const filas = p.dias.map((d, di) => {
+      const celdas = [];
+      for (let i = 0; i < pares; i++){
+        const [e, s] = d.pares[i] || [null, null];
+        celdas.push(celdaHora(e), celdaHora(s));
+      }
+      const obs = relojObservacion(d);
+      const accion = puedeEditar
+        ? (d.completo
+          ? `<button type="button" class="reloj-link reloj-no-imprimir" onclick="relojAbrirDia(${pi}, ${di}, false)">ver</button>`
+          : `<button type="button" class="reloj-btn-corregir reloj-no-imprimir" onclick="relojAbrirDia(${pi}, ${di}, true)">Corregir</button>`)
+        : `<button type="button" class="reloj-link reloj-no-imprimir" onclick="relojAbrirDia(${pi}, ${di}, false)">ver</button>`;
+      return `<tr${d.completo ? "" : ' class="incompleto"'}>
         <td class="reloj-fecha">${escapeHtml(relojFechaCorta(d.fecha))}</td>
-        <td><div class="reloj-chips">${chips}${puedeEditar ? `<button type="button" class="reloj-chip agregar" title="Agregar marca manual este día" onclick="relojAbrirManual(${pi}, '${d.fecha}')">+</button>` : ""}</div></td>
-        <td class="reloj-horas">${horas}</td>
+        ${celdas.join("")}
+        <td class="reloj-horas">${relojHM(d.minutos)}</td>
+        <td class="reloj-obs${d.completo ? "" : " reloj-obs-alerta"}">${escapeHtml(obs)}${accion}</td>
       </tr>`;
     }).join("");
 
-    const abierto = unaSola || relojCtx.abiertos.has(p.codigo);
     const etiquetaFicha = p.ficha ? "" : p.fichasAmbiguas
-      ? `<span class="reloj-badge warn">Número repetido en ${p.fichasAmbiguas.length} fichas</span>`
-      : `<span class="reloj-badge warn">Sin ficha en SDG</span>`;
+      ? `<span class="reloj-badge warn reloj-no-imprimir">Número repetido en ${p.fichasAmbiguas.length} fichas</span>`
+      : `<span class="reloj-badge warn reloj-no-imprimir">Sin ficha en SDG</span>`;
+    const incompletos = p.dias.filter(d => !d.completo).length;
     return `
-      <details class="section-card reloj-persona" ${abierto ? "open" : ""} ontoggle="relojRecordarAbierto('${escapeHtml(p.codigo)}', this.open)">
-        <summary>
-          <span class="reloj-persona-nombre">${escapeHtml(p.nombre)} <span class="reloj-tenue">#${escapeHtml(p.codigo)}</span></span>
+      <section class="section-card reloj-persona">
+        <header class="reloj-persona-cab">
+          <span class="reloj-persona-nombre">${escapeHtml(p.nombre)}</span>
           ${etiquetaFicha}
-          <span class="reloj-persona-datos">
-            <span>${p.dias.length} día(s)</span>
-            <span><b>${relojHoras(p.horasTotal)}</b></span>
-            ${p.alertas ? `<span class="reloj-alerta">${p.alertas} por revisar</span>` : ""}
-          </span>
-        </summary>
+          <span class="reloj-persona-meta">PersonID ${escapeHtml(p.codigo || "-")}${p.codigoPlanilla ? ` · Código ${escapeHtml(p.codigoPlanilla)}` : ""}</span>
+        </header>
         <div class="reloj-tabla-wrap">
-          <table class="reloj-tabla">
-            <thead><tr><th>Día</th><th>Marcas</th><th class="reloj-horas">Horas</th></tr></thead>
+          <table class="reloj-tabla reloj-asistencia">
+            <thead><tr><th>Fecha</th>${encabezados.join("")}<th class="reloj-horas">Horas</th><th>Observación</th></tr></thead>
             <tbody>${filas}</tbody>
+            <tfoot><tr>
+              <td colspan="${pares * 2 + 1}">${p.dias.length} día(s)${incompletos ? ` · <span class="reloj-obs-alerta">${incompletos} incompleto(s)</span>` : ""}</td>
+              <td class="reloj-horas">${relojHM(p.dias.reduce((s, d) => s + d.minutos, 0))}</td>
+              <td></td>
+            </tr></tfoot>
           </table>
         </div>
-      </details>`;
+      </section>`;
+  }).join("") + `
+    <p class="reloj-nota">El reloj no indica si una marca es entrada o salida: se toman en orden (E1, S1, E2, S2).
+    Las horas cuentan solo los pares completos. Una marca a menos de ${RELOJ_VENTANA_DUPLICADO_MIN} minutos de la anterior
+    se toma como repetida. ✎ = marca manual.</p>`;
+}
+
+// ---------- Modal: detalle de un día ("ver" / "Corregir") ----------
+// Lista todas las marcas del día (también las anuladas, tachadas) con su
+// origen, y permite anular/restaurar cada una o agregar una manual. Con
+// `corregir`, el formulario de marca manual se abre ya orientado a la
+// salida que falta.
+function relojAbrirDia(indicePersona, indiceDia, corregir){
+  const p = relojCtx.indicePersonas[indicePersona];
+  const d = p && p.dias[indiceDia];
+  if (!d) return;
+  const puedeEditar = window.sdgApi.puedeEditar();
+  const filas = d.marcas.slice().sort((a, b) => a.ts - b.ts).map(m => {
+    const mi = relojCtx.indiceMarcas.push(m) - 1;
+    const origen = m.origen === "manual" ? `Manual — ${escapeHtml(m.motivoManual)}` : `Reloj — ${escapeHtml(m.dispositivo || "")}`;
+    const estado = m.anulacion ? `<span class="reloj-obs-alerta">Anulada</span>`
+      : d.repetidas.includes(m) ? `<span class="reloj-tenue">Repetida (no cuenta)</span>` : "Válida";
+    const boton = puedeEditar || m.anulacion
+      ? `<button type="button" class="reloj-link" onclick="relojAbrirMarca(${mi})">${m.anulacion ? "detalle" : "anular"}</button>` : "";
+    return `<tr${m.anulacion ? ' class="anulada"' : ""}><td class="reloj-h">${relojHoraDeTs(m.ts)}</td><td>${origen}</td><td>${estado}</td><td>${boton}</td></tr>`;
   }).join("");
+
+  relojModalCtx = { tipo: "manual" };
+  document.getElementById("modal-reloj-titulo").textContent = `${p.nombre} · ${relojFechaCorta(d.fecha)}`;
+  document.getElementById("modal-reloj-body").innerHTML = `
+    <table class="reloj-tabla reloj-dia"><thead><tr><th>Hora</th><th>Origen</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table>
+    ${puedeEditar ? `
+      <h3 class="reloj-sub">${corregir ? `Agregar la salida que falta` : "Agregar marca manual"}</h3>
+      ${corregir ? `<p class="reloj-nota" style="margin-top:0;">La última marca del día es de las <b>${escapeHtml(d.faltaSalidaDe)}</b>. Si en realidad fue una marca repetida, anúlala arriba en vez de agregar una salida.</p>` : ""}
+      <input type="hidden" id="reloj-m-persona" value="${escapeHtml(p.codigo)}">
+      <input type="hidden" id="reloj-m-fecha" value="${d.fecha}">
+      <div class="reloj-fila-2">
+        <div class="field"><label for="reloj-m-hora">Hora</label><input type="time" id="reloj-m-hora"></div>
+        <div class="field"><label for="reloj-m-motivo">Motivo</label>
+          <select id="reloj-m-motivo">${RELOJ_MOTIVOS_MANUAL.map(m => `<option>${escapeHtml(m)}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label for="reloj-m-detalle">Detalle</label>
+        <textarea id="reloj-m-detalle" rows="2" placeholder="Qué pasó y quién lo confirma"></textarea></div>
+      <button class="btn primary" style="width:100%;" onclick="relojGuardarManual()">Guardar marca</button>` : ""}`;
+  document.getElementById("modal-reloj").classList.add("open");
+  if (corregir && puedeEditar) document.getElementById("reloj-m-hora").focus();
 }
 
 // ---------- Modal: detalle de marca, anular / restaurar ----------
@@ -9899,58 +9999,144 @@ async function relojVincular(indice){
 }
 
 // ---------- Excel ----------
-function relojDescargarExcel(){
-  const v = relojCtx && relojCtx.vista;
-  if (!v || !v.todas.length){ statusMsg("No hay marcas en ese rango para descargar.", false); return; }
-  const nombrePorCodigo = {};
-  v.personas.forEach(p => { nombrePorCodigo[p.codigo] = p; });
+// Réplica de _marcas_excel (MarcasReloj/servidor/apps/reportes/views.py):
+// hoja "Detalle" con título, rango, encabezado azul 1F3864 en la fila 4,
+// una fila por día con los pares E/S, subtotal gris por persona y una fila en
+// blanco entre personas; y hoja "Resumen" con una fila por persona. Las horas
+// van como valor de tiempo (minutos/1440, formato [h]:mm) para que se puedan
+// sumar dentro de Excel, y la fecha como fecha real. Encabezados idénticos al
+// reporte anterior (sin tildes), por si alguien ya lo procesa con fórmulas.
+// Respeta el buscador y "Solo días incompletos", igual que la pantalla.
+const RELOJ_DIAS_EXCEL = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 
-  const detalle = v.todas.map(m => {
-    const p = nombrePorCodigo[m.codigo];
-    return {
-      "Número": m.codigo,
-      "Nombre": p ? p.nombre : m.nombre,
-      "Ficha en SDG": p && p.ficha ? "Sí" : "No",
-      "Fecha": m.fecha,
-      "Hora": relojHoraDeTs(m.ts),
-      "Origen": m.origen === "manual" ? "Manual" : "Reloj",
-      "Dispositivo": m.origen === "manual" ? "" : m.dispositivo,
-      "Motivo marca manual": m.origen === "manual" ? [m.motivoManual, m.detalle].filter(Boolean).join(" — ") : "",
-      "Estado": m.anulacion ? "Anulada" : "Válida",
-      "Motivo anulación": m.anulacion ? m.anulacion.MOTIVO || "" : "",
-    };
-  });
-  const resumen = [];
-  v.personas.forEach(p => p.dias.forEach(d => {
-    resumen.push({
-      "Número": p.codigo,
-      "Nombre": p.nombre,
-      "Fecha": d.fecha,
-      "Marcas": d.marcas.filter(m => !m.anulacion).map(m => relojHoraDeTs(m.ts)).join(" · "),
-      "Horas": Math.round(d.horas * 100) / 100,
-      "Observación": d.revisar ? relojMotivoRevision(d) : "",
+async function relojDescargarExcel(){
+  if (!relojCtx || !relojCtx.vista) return;
+  const personas = relojPersonasVisibles();
+  if (!personas.length){ statusMsg("No hay marcas en ese rango para descargar.", false); return; }
+
+  const pares = relojColumnasDePares(personas);
+  const fechaDMA = ymd => `${ymd.slice(8, 10)}/${ymd.slice(5, 7)}/${ymd.slice(0, 4)}`;
+  const comoFecha = ymd => new Date(Date.UTC(Number(ymd.slice(0, 4)), Number(ymd.slice(5, 7)) - 1, Number(ymd.slice(8, 10))));
+  const TITULO = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } };
+  const GRIS = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7E6E6" } };
+  const ROJO = { color: { argb: "FFC00000" } };
+  const FORMATO_TIEMPO = "[h]:mm";
+
+  const encabezado = (hoja, columnas, fila) => {
+    columnas.forEach((texto, i) => {
+      const c = hoja.getCell(fila, i + 1);
+      c.value = texto;
+      c.fill = TITULO;
+      c.font = { color: { argb: "FFFFFFFF" }, bold: true };
+      c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     });
-  }));
+    hoja.views = [{ state: "frozen", ySplit: fila }];
+  };
+  const tiempo = (celda, minutos) => { celda.value = minutos / 1440; celda.numFmt = FORMATO_TIEMPO; };
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), "Resumen por día");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), "Marcas");
-  XLSX.writeFile(wb, `Reloj_Corcovado_${relojCtx.desde}_a_${relojCtx.hasta}.xlsx`);
+  try{
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "SDG RH Management";
+
+    // --- Detalle ---
+    const hoja = wb.addWorksheet("Detalle");
+    hoja.getCell("A1").value = "Reporte de asistencia";
+    hoja.getCell("A1").font = { bold: true, size: 14 };
+    hoja.getCell("A2").value = `Del ${fechaDMA(relojCtx.desde)} al ${fechaDMA(relojCtx.hasta)}`;
+
+    const marcasCols = [];
+    for (let i = 1; i <= pares; i++) marcasCols.push("E" + i, "S" + i);
+    encabezado(hoja, ["PersonID", "Codigo", "Nombre", "Fecha", "Dia", ...marcasCols, "Horas", "Observacion"], 4);
+    const colHoras = 6 + marcasCols.length;
+
+    let fila = 5;
+    personas.forEach(p => {
+      p.dias.forEach(d => {
+        hoja.getCell(fila, 1).value = p.codigo;
+        hoja.getCell(fila, 2).value = p.codigoPlanilla;
+        hoja.getCell(fila, 3).value = p.nombre;
+        hoja.getCell(fila, 4).value = comoFecha(d.fecha);
+        hoja.getCell(fila, 4).numFmt = "dd/mm/yyyy";
+        hoja.getCell(fila, 5).value = RELOJ_DIAS_EXCEL[comoFecha(d.fecha).getUTCDay()];
+        let col = 6;
+        for (let i = 0; i < pares; i++){
+          const [e, s] = d.pares[i] || [null, null];
+          [e, s].forEach(m => {
+            if (m) hoja.getCell(fila, col).value = relojHoraDeTs(m.ts) + (m.origen === "manual" ? " ✎" : "");
+            col += 1;
+          });
+        }
+        tiempo(hoja.getCell(fila, colHoras), d.minutos);
+        const obs = hoja.getCell(fila, colHoras + 1);
+        obs.value = relojObservacion(d);
+        if (!d.completo) obs.font = ROJO;
+        fila += 1;
+      });
+
+      const incompletos = p.dias.filter(d => !d.completo).length;
+      hoja.getCell(fila, 3).value = `Total ${p.nombre}`;
+      hoja.getCell(fila, 3).font = { bold: true };
+      hoja.getCell(fila, 4).value = `${p.dias.length} dia(s)`;
+      hoja.getCell(fila, 4).font = { bold: true };
+      tiempo(hoja.getCell(fila, colHoras), p.dias.reduce((s, d) => s + d.minutos, 0));
+      hoja.getCell(fila, colHoras).font = { bold: true };
+      if (incompletos){
+        hoja.getCell(fila, colHoras + 1).value = `${incompletos} dia(s) incompleto(s)`;
+        hoja.getCell(fila, colHoras + 1).font = ROJO;
+      }
+      for (let c = 1; c <= colHoras + 1; c++) hoja.getCell(fila, c).fill = GRIS;
+      fila += 2;
+    });
+    [10, 10, 34, 12, 6, ...marcasCols.map(() => 8), 10, 45].forEach((ancho, i) => { hoja.getColumn(i + 1).width = ancho; });
+
+    // --- Resumen ---
+    const resumen = wb.addWorksheet("Resumen");
+    resumen.getCell("A1").value = `Resumen del ${fechaDMA(relojCtx.desde)} al ${fechaDMA(relojCtx.hasta)}`;
+    resumen.getCell("A1").font = { bold: true, size: 13 };
+    encabezado(resumen, ["PersonID", "Codigo", "Nombre", "Dias con marcas", "Dias incompletos", "Horas"], 3);
+    personas.forEach((p, i) => {
+      const r = 4 + i;
+      [p.codigo, p.codigoPlanilla, p.nombre, p.dias.length, p.dias.filter(d => !d.completo).length]
+        .forEach((valor, c) => { resumen.getCell(r, c + 1).value = valor; });
+      tiempo(resumen.getCell(r, 6), p.dias.reduce((s, d) => s + d.minutos, 0));
+    });
+    [10, 10, 34, 16, 16, 10].forEach((ancho, i) => { resumen.getColumn(i + 1).width = ancho; });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    descargarBlobComoArchivo(blob, `asistencia-${relojCtx.desde}-${relojCtx.hasta}.xlsx`);
+  }catch(e){
+    statusMsg("No se pudo generar el Excel: " + (e.message || ""), false);
+  }
+}
+
+// Imprimir solo el reporte, sin el menú ni los botones — como el botón
+// "Imprimir" del sistema anterior.
+function relojImprimir(){
+  document.body.classList.add("imprimiendo-reloj");
+  const limpiar = () => { document.body.classList.remove("imprimiendo-reloj"); window.removeEventListener("afterprint", limpiar); };
+  window.addEventListener("afterprint", limpiar);
+  window.print();
 }
 
 // ---------- Enviar a Horas extras ----------
 // Siempre manda el rango COMPLETO, sin importar el buscador: filtrar a
 // medias haría que guardarFilasHorasExtra marcara como ausencia a quien
-// simplemente no estaba en pantalla.
+// simplemente no estaba en pantalla. Manda las marcas que el reporte USA
+// (sin anuladas ni repetidas) y en minuto cerrado, para que Horas extras
+// calcule sobre lo mismo que la persona ve en pantalla.
 async function relojEnviarAHorasExtras(){
   const v = relojCtx && relojCtx.vista;
   if (!v || !window.sdgApi.puedeEditar()) return;
-  const eventos = v.todas.filter(m => !m.anulacion)
-    .map(m => ({ codigo: m.codigo, nombre: m.nombre, fecha: m.fecha, ts: m.ts }));
+  const eventos = [];
+  v.personas.forEach(p => p.dias.forEach(d => d.usadas.forEach(m => {
+    eventos.push({ codigo: m.codigo, nombre: m.nombre, fecha: m.fecha, ts: Math.floor(m.ts / 60000) * 60000 });
+  })));
   if (!eventos.length){ statusMsg("No hay marcas válidas en ese rango.", false); return; }
+  const incompletos = v.personas.reduce((s, p) => s + p.dias.filter(d => !d.completo).length, 0);
   const sinFicha = v.personas.filter(p => !p.ficha).length;
-  const aviso = `Se enviarán ${eventos.length.toLocaleString("es-CR")} marcas del ${fmtFechaSimple(relojCtx.desde)} al ${fmtFechaSimple(relojCtx.hasta)} de las ${v.personas.length} personas del rango (el buscador no se aplica).`
-    + (v.totalTurnosLargos ? `\n\n⚠️ ${v.totalTurnosLargos} día(s) tienen un turno de más de ${RELOJ_TURNO_SOSPECHOSO_H} h — casi siempre es la salida de un turno nocturno emparejada con la entrada del siguiente. Esas horas llegarán infladas a Horas extras: revísalas allá antes de aprobar, o anula/completa las marcas aquí primero.` : "")
+  const aviso = `Se enviarán las marcas del ${fmtFechaSimple(relojCtx.desde)} al ${fmtFechaSimple(relojCtx.hasta)} de las ${v.personas.length} personas del rango (el buscador no se aplica).`
+    + (incompletos ? `\n\n${incompletos} día(s) están incompletos (falta una salida). Puedes corregirlos aquí antes de enviar, o completarlos después en Horas extras.` : "")
     + (sinFicha ? `\n\n${sinFicha} persona(s) no tienen ficha en SDG y quedarán en "Sin identificar".` : "")
     + `\n\nLos días que ya tienen una decisión (aprobada o rechazada) no se tocan. ¿Continuar?`;
   if (!confirm(aviso)) return;

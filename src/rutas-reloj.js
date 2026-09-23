@@ -12,15 +12,20 @@
 // sistema Django anterior (marcas_marcareloj): así SDG no depende de que ese
 // servicio siga corriendo — basta con que la base siga recibiendo marcas.
 //
-// Sobre el tiempo: AttendanceDateTime (ms) guarda la HORA DE PARED de Costa
-// Rica codificada como si fuera UTC — el mismo formato que ya usa app.js
-// para las marcas importadas de PDF (Date.UTC con la hora local). Se usa
-// esa columna y no AttendanceUtcTime porque esta última solo viene bien en
-// una parte de las filas (las más viejas traen otro valor).
+// Sobre el tiempo: AttendanceDateTime (ms) es el instante en UTC real. Para
+// Costa Rica hay que restarle 6 horas — así lo hacía el sistema anterior, y
+// así coincide con su reporte (ej. #170 el 17/09: 05:30 y 14:01). Esta ruta
+// devuelve `ts` ya convertido a HORA DE PARED de Costa Rica codificada como
+// UTC: el mismo formato que usa app.js para las marcas importadas de PDF
+// (Date.UTC con la hora local), así el front lo lee con getters UTC y nunca
+// depende del huso horario del navegador. AttendanceUtcTime NO se usa: viene
+// con el desfase aplicado al revés y solo en una parte de las filas.
 //
 // Variables de entorno:
-//   RELOJ_MYSQL_URL   mysql://usuario:clave@host:puerto/base (usuario de solo lectura)
-//   RELOJ_PROPIEDAD   propiedad de SDG a la que pertenecen los relojes (por defecto corcovado)
+//   RELOJ_MYSQL_URL        mysql://usuario:clave@host:puerto/base (usuario de solo lectura)
+//   RELOJ_PROPIEDAD        propiedad de SDG a la que pertenecen los relojes (por defecto corcovado)
+//   RELOJ_UTC_OFFSET_MIN   desfase de la hora local respecto de UTC (por defecto -360: Costa Rica,
+//                          que no tiene horario de verano)
 
 const express = require("express");
 const A = require("./auth");
@@ -28,6 +33,11 @@ const { propiedadDe } = require("./rutas-datos");
 
 const PROPIEDAD_RELOJ = process.env.RELOJ_PROPIEDAD || "corcovado";
 const MAX_DIAS_RANGO = 62;
+const OFFSET_MIN = /^-?\d+$/.test(process.env.RELOJ_UTC_OFFSET_MIN || "") ? Number(process.env.RELOJ_UTC_OFFSET_MIN) : -360;
+const OFFSET_MS = OFFSET_MIN * 60000;
+// UTC real (AttendanceDateTime) → hora de pared de Costa Rica, y al revés.
+const aPared = (utcMs) => Number(utcMs) + OFFSET_MS;
+const aUtc = (paredMs) => paredMs - OFFSET_MS;
 const ROLES_LECTURA = new Set(["master", "gerente", "consultor"]);
 
 let pool = null;
@@ -114,8 +124,8 @@ router.get("/estado", async (req, res, next) => {
     const ultima = dispositivos.reduce((m, d) => Math.max(m, Number(d.ultima) || 0), 0);
     res.json({
       propiedad: PROPIEDAD_RELOJ,
-      ultimaMarca: ultima || null,
-      dispositivos: dispositivos.map((d) => ({ nombre: d.nombre || "(sin nombre)", marcas: Number(d.marcas), ultima: Number(d.ultima) || null })),
+      ultimaMarca: ultima ? aPared(ultima) : null,
+      dispositivos: dispositivos.map((d) => ({ nombre: d.nombre || "(sin nombre)", marcas: Number(d.marcas), ultima: d.ultima ? aPared(d.ultima) : null })),
     });
   } catch (e) {
     errorConexion(e, res, next);
@@ -141,7 +151,8 @@ router.get("/marcas", async (req, res, next) => {
          FROM AttendanceRecordInfo
         WHERE AttendanceDateTime >= ? AND AttendanceDateTime < ?
         ORDER BY AttendanceDateTime`,
-      [ini, fin]
+      // El rango llega en días de Costa Rica; la columna está en UTC real.
+      [aUtc(ini), aUtc(fin)]
     );
     res.json({
       desde,
@@ -149,7 +160,7 @@ router.get("/marcas", async (req, res, next) => {
       marcas: filas.map((f) => ({
         codigo: String(f.codigo),
         nombre: String(f.nombre || "").trim(),
-        ts: Number(f.ts),
+        ts: aPared(f.ts),
         dispositivo: f.dispositivo || "",
       })),
     });
@@ -171,7 +182,7 @@ router.get("/personas", async (req, res, next) => {
         codigo: String(f.codigo),
         nombre: String(f.nombre || "").trim(),
         marcas: Number(f.marcas),
-        ultima: Number(f.ultima) || null,
+        ultima: f.ultima ? aPared(f.ultima) : null,
       })),
     });
   } catch (e) {
