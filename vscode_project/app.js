@@ -904,6 +904,10 @@ const CATALOGS = {
       ["DEPARTAMENTO_EMP","text","Puesto / departamento (texto libre, se llena solo al elegir arriba)","","libre"],
       ["EMPLEADO_CONFIANZA","select_sino_puro","Puesto de confianza (Art. 143 CT) — no marca asistencia ni genera horas extra",""],
       ["NUMERO_EMPLEADO","text","Número de empleado (planilla)",""],
+      // Solo hace falta si marca en el reloj con un ID distinto a su número
+      // de planilla — típico de la planilla en dólares, que numera aparte de
+      // la de colones (ver relojIndiceFichas).
+      ["ID_RELOJ","text","ID en el reloj marcador (solo si es distinto al número de planilla)","Ej. 501"],
       ["DIAS_LIBRES_MES_EMP","text","Días libres al mes (por contrato) — vacío usa el estándar (4)",""],
       ["FECHA_INGRESO_DATE","date_ingreso_emp","5. Fecha de ingreso",""],
       ["grp", "Salario"],
@@ -3496,8 +3500,9 @@ async function construirIndicesEmpleadosHorasExtra(){
     const v = r && r.value ? JSON.parse(r.value) : {};
     return { key: k.replace(CATALOGS.empleados.prefix, ""), ...v };
   }));
-  const porCedula = {}, porNumero = {}, porNombre = {};
+  const porCedula = {}, porNumero = {}, porNombre = {}, porKey = {};
   existentes.forEach(e => {
+    porKey[e.key] = e;
     if (e.IDENTIFICACION_EMP) porCedula[e.IDENTIFICACION_EMP.replace(/\D/g,"")] = e;
     if (e.NUMERO_EMPLEADO){
       const num = normalizarCodigoEmpleado(e.NUMERO_EMPLEADO);
@@ -3505,7 +3510,7 @@ async function construirIndicesEmpleadosHorasExtra(){
     }
     if (e.NOMBRE_EMP) porNombre[normalizarNombreParaMatch(nombreCompletoEmpleado(e))] = e;
   });
-  return { porCedula, porNumero, porNombre };
+  return { porCedula, porNumero, porNombre, porKey };
 }
 
 function buscarEmpleadoExistentePorFila(row, indices){
@@ -8998,7 +9003,7 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   if (!cols.horasExtra && !cols.horasTrabajadas && !(cols.entrada && cols.salida) && !tieneIncompletos) throw new Error("No se encontró una columna de horas extra, horas trabajadas, ni de entrada/salida para calcularlas.");
   const ordenFecha = cols.fecha ? detectarOrdenFechaMarcacion(rows.map(r => r[cols.fecha])) : "DMY";
 
-  const { porCedula, porNumero, porNombre } = await construirIndicesEmpleadosHorasExtra();
+  const { porCedula, porNumero, porNombre, porKey } = await construirIndicesEmpleadosHorasExtra();
   const cachePuestos = {};
 
   // Varias filas del mismo empleado+fecha se suman dentro de un mismo
@@ -9059,7 +9064,15 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // alguien la asigne a mano, en vez de pisar silenciosamente las horas de
     // uno de los dos con las del otro.
     let empleado = null;
-    const candidatosNumero = numeroSinCeros ? (porNumero[numeroSinCeros] || []) : [];
+    // Filas del reloj marcador (relojEnviarAHorasExtras): la ficha ya viene
+    // resuelta con las reglas del reloj (ID en el reloj, número exacto solo en
+    // la planilla de colones — ver relojIndiceFichas). No se vuelve a
+    // emparejar por número: aquí el 9 de la planilla en dólares y el 9 del
+    // reloj son la misma clave, y le daría a uno las marcas del otro. Vacío =
+    // sin ficha asignada → "Sin identificar".
+    const vieneDelReloj = Object.prototype.hasOwnProperty.call(row, "FICHA_RELOJ");
+    if (vieneDelReloj) empleado = row.FICHA_RELOJ ? (porKey[row.FICHA_RELOJ] || null) : null;
+    const candidatosNumero = !vieneDelReloj && numeroSinCeros ? (porNumero[numeroSinCeros] || []) : [];
     if (candidatosNumero.length === 1){
       empleado = candidatosNumero[0];
     } else if (candidatosNumero.length > 1){
@@ -9078,13 +9091,13 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
         if (porPalabras.length === 1) empleado = porPalabras[0];
       }
     }
-    if (!empleado){
+    if (!empleado && !vieneDelReloj){
       empleado = (nombreNormalizado && porNombre[nombreNormalizado])
         || (cedulaDigits && porCedula[cedulaDigits])
         || null;
     }
 
-    const accKey = (empleado ? empleado.key : "sinmatch-" + identificador) + ":" + fecha;
+    const accKey =(empleado ? empleado.key : "sinmatch-" + identificador) + ":" + fecha;
     if (!acumulado[accKey]){
       acumulado[accKey] = {
         CODIGO_ARCHIVO: codigoRaw,
@@ -9417,20 +9430,85 @@ function desempatarFichasPorNombre(candidatos, nombre){
   });
 }
 
+// Número comparable tal cual: solo dígitos y sin ceros a la izquierda.
+// "00000170" = "170", pero "10009" ≠ "9" — a diferencia de
+// normalizarCodigoEmpleado (últimos 4 dígitos), que sirve para archivos
+// externos con códigos recortados, pero para el reloj juntaría a gente distinta.
+function relojNumeroExacto(v){
+  return String(v == null ? "" : v).replace(/\D/g, "").replace(/^0+/, "");
+}
+
+// ¿Comparten al menos dos palabras de nombre (o todas, si alguno tiene una
+// sola)? Filtro de cordura para cuando se empareja por número de planilla:
+// si el número coincide pero el nombre no tiene nada que ver, casi seguro es
+// el número de otra persona.
+function relojNombresCompatibles(nombreA, nombreB){
+  const palabras = s => new Set(normalizarNombreParaMatch(s).split(" ").filter(t => t.length > 1));
+  const a = palabras(nombreA), b = palabras(nombreB);
+  const comunes = [...a].filter(t => b.has(t)).length;
+  return comunes >= Math.min(2, a.size, b.size) && comunes > 0;
+}
+
+// Resuelve qué ficha de SDG corresponde a cada persona del reloj. Hay DOS
+// planillas (colones y dólares) y cada una numera desde 1, así que el número
+// de planilla solo sirve para el reloj en la de colones, que es la que el
+// reloj usa como ID. Orden:
+//   1. ID_RELOJ de la ficha (lo fija "Vincular" o se escribe en la ficha).
+//      Explícito, así que manda sobre todo lo demás.
+//   2. Planilla de colones: NUMERO_EMPLEADO igual EXACTO al ID del reloj, y
+//      con un nombre compatible.
+//   3. La planilla de dólares nunca se empareja por número: su 9 no es el 9
+//      del reloj. Si alguien de dólares marca, se vincula por ID_RELOJ.
+// Devuelve { ficha, problema, candidatos } — problema es "sin_ficha",
+// "ambiguo" (varias fichas posibles) u "otro_nombre" (el número calza pero
+// es de alguien con otro nombre).
 function relojIndiceFichas(empleados){
-  const porNumero = {};
+  const porIdReloj = {}, porNumeroColones = {}, porUltimos4Colones = {};
   empleados.forEach(e => {
-    if (!e.NUMERO_EMPLEADO) return;
-    const n = normalizarCodigoEmpleado(e.NUMERO_EMPLEADO);
-    if (n) (porNumero[n] = porNumero[n] || []).push(e);
+    const idReloj = relojNumeroExacto(e.ID_RELOJ);
+    if (idReloj){
+      (porIdReloj[idReloj] = porIdReloj[idReloj] || []).push(e);
+      return; // con ID explícito, su número de planilla ya no cuenta para el reloj
+    }
+    if (e.MONEDA_SALARIO_EMP === "USD") return;
+    const n = relojNumeroExacto(e.NUMERO_EMPLEADO);
+    if (n) (porNumeroColones[n] = porNumeroColones[n] || []).push(e);
+    const u = normalizarCodigoEmpleado(e.NUMERO_EMPLEADO);
+    if (u) (porUltimos4Colones[u] = porUltimos4Colones[u] || []).push(e);
   });
-  // Con número repetido se desempata por el nombre que trae el reloj; si
-  // aun así no queda una sola, se devuelven todas y la pantalla lo avisa.
+
   return (codigo, nombreReloj) => {
-    const candidatos = porNumero[normalizarCodigoEmpleado(codigo)] || [];
-    if (candidatos.length <= 1 || !nombreReloj) return candidatos;
-    const porNombre = desempatarFichasPorNombre(candidatos, nombreReloj);
-    return porNombre.length === 1 ? porNombre : candidatos;
+    const c = relojNumeroExacto(codigo);
+    const explicitas = porIdReloj[c] || [];
+    if (explicitas.length === 1) return { ficha: explicitas[0], problema: null, candidatos: explicitas };
+    if (explicitas.length > 1){
+      const porNombre = desempatarFichasPorNombre(explicitas, nombreReloj);
+      return porNombre.length === 1
+        ? { ficha: porNombre[0], problema: null, candidatos: explicitas }
+        : { ficha: null, problema: "ambiguo", candidatos: explicitas };
+    }
+
+    const candidatos = porNumeroColones[c] || [];
+    if (!candidatos.length){
+      // Respaldo: RH confirmó que en algunas fichas el número de planilla
+      // trae un prefijo que el reloj no tiene, y lo que coincide son los
+      // últimos 4 dígitos (ver normalizarCodigoEmpleado). Solo se acepta si
+      // además el NOMBRE es compatible y queda una sola ficha: así "10009
+      // PEDRO SOLIS" nunca se confunde con el 9 del reloj.
+      const porCola = (porUltimos4Colones[normalizarCodigoEmpleado(codigo)] || [])
+        .filter(e => nombreReloj && relojNombresCompatibles(nombreReloj, nombreCompletoEmpleado(e)));
+      if (porCola.length === 1) return { ficha: porCola[0], problema: null, candidatos: porCola };
+      return { ficha: null, problema: "sin_ficha", candidatos: [] };
+    }
+    const compatibles = candidatos.filter(e => !nombreReloj || relojNombresCompatibles(nombreReloj, nombreCompletoEmpleado(e)));
+    if (compatibles.length === 1) return { ficha: compatibles[0], problema: null, candidatos };
+    if (compatibles.length > 1){
+      const porNombre = desempatarFichasPorNombre(compatibles, nombreReloj);
+      return porNombre.length === 1
+        ? { ficha: porNombre[0], problema: null, candidatos }
+        : { ficha: null, problema: "ambiguo", candidatos: compatibles };
+    }
+    return { ficha: null, problema: "otro_nombre", candidatos };
   };
 }
 
@@ -9604,9 +9682,10 @@ function relojConstruirVista(marcas, personasReloj, correcciones, empleados){
   });
 
   const personas = Object.values(porCodigo).map(p => {
-    const fichas = fichasDe(p.codigo, p.nombreReloj);
-    p.ficha = fichas.length === 1 ? fichas[0] : null;
-    p.fichasAmbiguas = fichas.length > 1 ? fichas : null;
+    const r = fichasDe(p.codigo, p.nombreReloj);
+    p.ficha = r.ficha;
+    p.problemaFicha = r.problema;
+    p.candidatosFicha = r.candidatos;
     // Igual que el reporte anterior (dias.py: armar_personas): nombre y
     // código de la ficha si la persona está vinculada; si no, el nombre del
     // reloj y sin código.
@@ -9700,10 +9779,21 @@ function relojColumnasDePares(personas){
 
 function relojOrdenarPersonasReloj(personasReloj, fichasDe){
   return personasReloj.map(p => {
-    const fichas = fichasDe(p.codigo, p.nombre);
-    return { ...p, ficha: fichas.length === 1 ? fichas[0] : null, fichasAmbiguas: fichas.length > 1 ? fichas : null,
-             nombreMostrar: fichas.length === 1 ? nombreCompletoEmpleado(fichas[0]) : p.nombre };
+    const r = fichasDe(p.codigo, p.nombre);
+    return { ...p, ficha: r.ficha, problemaFicha: r.problema, candidatosFicha: r.candidatos,
+             nombreMostrar: r.ficha ? nombreCompletoEmpleado(r.ficha) : p.nombre };
   }).sort((a, b) => a.nombreMostrar.localeCompare(b.nombreMostrar, "es"));
+}
+
+// Por qué una persona del reloj no quedó asignada a ninguna ficha.
+function relojMotivoSinFicha(p){
+  const nombres = (p.candidatosFicha || []).map(e => {
+    const moneda = e.MONEDA_SALARIO_EMP === "USD" ? "dólares" : "colones";
+    return `${nombreCompletoEmpleado(e)} (#${e.NUMERO_EMPLEADO || e.ID_RELOJ}, ${moneda})`;
+  }).join(", ");
+  if (p.problemaFicha === "ambiguo") return `Varias fichas podrían ser: ${nombres}.`;
+  if (p.problemaFicha === "otro_nombre") return `El número ${p.codigo} en colones lo tiene ${nombres}, que no se llama igual.`;
+  return "Ninguna ficha tiene este número en colones ni este ID de reloj.";
 }
 
 function relojHtmlSinFicha(v, empleados, puedeEditar){
@@ -9712,25 +9802,22 @@ function relojHtmlSinFicha(v, empleados, puedeEditar){
   const candidatos = empleados
     .filter(e => e.ARCHIVADO !== true && e.NOMBRE_EMP)
     .sort((a, b) => nombreCompletoEmpleado(a).localeCompare(nombreCompletoEmpleado(b), "es"));
-  // Fichas cuyo número ya corresponde a alguien del reloj: siguen en la
-  // lista (puede hacer falta corregir un número mal puesto), pero nunca se
-  // sugieren.
-  const codigosReloj = new Set(v.personasReloj.map(p => normalizarCodigoEmpleado(p.codigo)));
-  const libres = candidatos.filter(e => !e.NUMERO_EMPLEADO || !codigosReloj.has(normalizarCodigoEmpleado(e.NUMERO_EMPLEADO)));
+  // Solo se sugieren fichas que todavía no estén asignadas a nadie del reloj.
+  const asignadas = new Set(v.personasReloj.filter(p => p.ficha).map(p => p.ficha.key));
+  const libres = candidatos.filter(e => !asignadas.has(e.key));
   const filas = sinFicha.map((p, i) => {
-    const sugerida = puedeEditar && !p.fichasAmbiguas ? relojSugerirFicha(p.nombre, libres) : null;
-    const control = p.fichasAmbiguas
-      ? `<span class="reloj-alerta">⚠️ ${p.fichasAmbiguas.length} fichas tienen el número ${escapeHtml(p.codigo)}: ${p.fichasAmbiguas.map(e => escapeHtml(nombreCompletoEmpleado(e))).join(", ")}. Corrige el número en la que no corresponde.</span>`
-      : puedeEditar
+    const sugerida = puedeEditar ? relojSugerirFicha(p.nombre, libres) : null;
+    const control = puedeEditar
       ? `<select id="reloj-vinc-${i}">
            <option value="">Elegir ficha…</option>
-           ${candidatos.map(e => `<option value="${escapeHtml(e.key)}"${sugerida && sugerida.key === e.key ? " selected" : ""}>${escapeHtml(nombreCompletoEmpleado(e))}${e.NUMERO_EMPLEADO ? " · #" + escapeHtml(e.NUMERO_EMPLEADO) : ""}</option>`).join("")}
+           ${candidatos.map(e => `<option value="${escapeHtml(e.key)}"${sugerida && sugerida.key === e.key ? " selected" : ""}>${escapeHtml(nombreCompletoEmpleado(e))}${e.NUMERO_EMPLEADO ? " · #" + escapeHtml(e.NUMERO_EMPLEADO) : ""}${e.MONEDA_SALARIO_EMP === "USD" ? " · USD" : ""}</option>`).join("")}
          </select>
          <button class="btn" onclick="relojVincular(${i})">Vincular</button>`
-      : `<span class="reloj-tenue">Sin ficha</span>`;
+      : "";
     return `<tr>
       <td class="num">#${escapeHtml(p.codigo)}</td>
-      <td>${escapeHtml(p.nombre)}<div class="reloj-tenue">${p.marcas.toLocaleString("es-CR")} marcas · última ${escapeHtml(p.ultima ? relojFechaCorta(relojFechaDeTs(p.ultima)) : "—")}</div></td>
+      <td>${escapeHtml(p.nombre)}<div class="reloj-tenue">${p.marcas.toLocaleString("es-CR")} marcas · última ${escapeHtml(p.ultima ? relojFechaCorta(relojFechaDeTs(p.ultima)) : "—")}</div>
+        <div class="reloj-motivo">${escapeHtml(relojMotivoSinFicha(p))}</div></td>
       <td><div class="reloj-vincular">${control}</div></td>
     </tr>`;
   }).join("");
@@ -9738,8 +9825,9 @@ function relojHtmlSinFicha(v, empleados, puedeEditar){
   return `
     <details class="section-card reloj-sinficha" ${relojCtx.abiertos.has("__sinficha") ? "open" : ""}
              ontoggle="relojRecordarAbierto('__sinficha', this.open)">
-      <summary>⚠️ <b>${sinFicha.length}</b> persona(s) del reloj sin ficha en SDG — sus marcas quedarán "Sin identificar" en Horas extras</summary>
-      <p class="reloj-tenue">Vincular guarda el número del reloj en la ficha (campo número de empleado). Si esa ficha ya tiene nombre, apellidos y cédula, el sistema le crea su cuenta de autoservicio como hace siempre al completar ese número.</p>
+      <summary>⚠️ <b>${sinFicha.length}</b> persona(s) del reloj sin ficha asignada — sus marcas quedarán "Sin identificar" en Horas extras</summary>
+      <p class="reloj-tenue">El reloj se empareja con el número de planilla de <b>colones</b>. La planilla de <b>dólares</b> numera aparte, así que quien cobra en dólares y marca necesita que se le guarde su ID del reloj.
+      Vincular guarda el ID del reloj en el campo «ID en el reloj marcador» de la ficha. <b>No cambia el número de planilla</b>, así que las colillas siguen asignándose igual.</p>
       <div class="reloj-tabla-wrap"><table class="reloj-tabla"><tbody>${filas}</tbody></table></div>
     </details>`;
 }
@@ -9815,8 +9903,10 @@ function relojPintarPersonas(){
       </tr>`;
     }).join("");
 
-    const etiquetaFicha = p.ficha ? "" : p.fichasAmbiguas
-      ? `<span class="reloj-badge warn reloj-no-imprimir">Número repetido en ${p.fichasAmbiguas.length} fichas</span>`
+    const etiquetaFicha = p.ficha ? "" : p.problemaFicha === "ambiguo"
+      ? `<span class="reloj-badge warn reloj-no-imprimir">Varias fichas posibles</span>`
+      : p.problemaFicha === "otro_nombre"
+      ? `<span class="reloj-badge warn reloj-no-imprimir">Su número lo tiene otra ficha</span>`
       : `<span class="reloj-badge warn reloj-no-imprimir">Sin ficha en SDG</span>`;
     const incompletos = p.dias.filter(d => !d.completo).length;
     return `
@@ -10066,12 +10156,25 @@ async function relojVincular(indice){
     const r = await window.storage.get(fullKey, false);
     const emp = JSON.parse(r.value);
     const nombre = nombreCompletoEmpleado(emp);
-    if (emp.NUMERO_EMPLEADO && normalizarCodigoEmpleado(emp.NUMERO_EMPLEADO) !== normalizarCodigoEmpleado(p.codigo)){
-      if (!confirm(`${nombre} ya tiene el número de empleado ${emp.NUMERO_EMPLEADO}. ¿Reemplazarlo por ${p.codigo}, el del reloj?`)) return;
+    // Guarda el ID en su propio campo: el número de planilla (NUMERO_EMPLEADO)
+    // no se toca nunca desde aquí, porque es el que usan las colillas.
+    if (emp.ID_RELOJ && relojNumeroExacto(emp.ID_RELOJ) !== relojNumeroExacto(p.codigo)){
+      if (!confirm(`${nombre} ya tiene el ID de reloj ${emp.ID_RELOJ}. ¿Cambiarlo por ${p.codigo}?`)) return;
     }
-    emp.NUMERO_EMPLEADO = p.codigo;
+    // Un ID del reloj es de una sola persona: si otra ficha lo tenía, se le quita.
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    for (const k of (res && res.keys) || []){
+      if (k === fullKey) continue;
+      const otro = JSON.parse((await window.storage.get(k, false)).value || "{}");
+      if (otro.ID_RELOJ && relojNumeroExacto(otro.ID_RELOJ) === relojNumeroExacto(p.codigo)){
+        if (!confirm(`El ID de reloj ${p.codigo} está asignado a ${nombreCompletoEmpleado(otro)}. ¿Quitárselo y dárselo a ${nombre}?`)) return;
+        delete otro.ID_RELOJ;
+        await window.storage.set(k, JSON.stringify(otro), false);
+      }
+    }
+    emp.ID_RELOJ = p.codigo;
     await window.storage.set(fullKey, JSON.stringify(emp), false);
-    statusMsg(`${nombre} quedó vinculado con el número ${p.codigo} del reloj.`);
+    statusMsg(`${nombre} quedó vinculado con el ID ${p.codigo} del reloj. Su número de planilla no cambió.`);
     renderRelojPanel();
   }catch(e){ statusMsg("No se pudo vincular: " + e.message, false); }
 }
@@ -10231,6 +10334,11 @@ async function relojEnviarAHorasExtras(){
   if (btn){ btn.disabled = true; btn.textContent = "Enviando…"; }
   try{
     const { filas, sinPar, turnosSinMarcar } = filasDesdeEventosMarcacion(eventos);
+    // Cada fila lleva la ficha que resolvió el reporte, para que Horas extras
+    // asigne exactamente a quien ve la persona en pantalla.
+    const fichaPorCodigo = {};
+    v.personas.forEach(p => { fichaPorCodigo[p.codigo] = p.ficha ? p.ficha.key : ""; });
+    filas.forEach(f => { f.FICHA_RELOJ = fichaPorCodigo[f.CODIGO] || ""; });
     const r = await guardarFilasHorasExtra(filas, `Reloj marcador ${relojCtx.desde} a ${relojCtx.hasta}`);
     statusMsg(mensajeResultadoHorasExtra(r, turnosSinMarcar, sinPar, true) + " Revísalos en Planilla → Horas extras.");
   }catch(e){

@@ -772,6 +772,7 @@ body.solo-lectura select{
 .reloj-sinficha > summary:focus-visible{ outline:2px solid var(--navy); outline-offset:-2px; }
 .reloj-sinficha > p{ padding:10px 16px 0; margin:0; }
 .reloj-vincular{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.reloj-motivo{ font-size:11.5px; color:#7A5410; margin-top:3px; }
 .reloj-vincular select{
   font-size:12.5px; padding:6px 8px; border-radius:7px; border:1px solid var(--field-border);
   background:var(--field-bg); color:var(--ink); max-width:280px;
