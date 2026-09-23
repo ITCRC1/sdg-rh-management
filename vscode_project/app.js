@@ -6697,7 +6697,7 @@ function renderManualPanel(){
           <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Confirmar handbook</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Marca el Handbook como recibido y firmado</td></tr>
           <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Subir contrato firmado (PDF)</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Archiva el contrato ya firmado</td></tr>
           <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Descargar datos CCSS (Excel)</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Exporta sus datos en el formato de la CCSS</td></tr>
-          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Constancia salarial</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Genera una constancia de salario</td></tr>
+          <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Constancia salarial</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Genera una constancia de salario con los datos actuales de la ficha — si ya existe una, el botón dice "Actualizar" y genera una nueva con lo corregido (ej. fecha de ingreso); la anterior queda en el historial de documentos, anúlala ahí si ya no aplica</td></tr>
           <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line);">Designar como jefatura</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Crea una cuenta de acceso con rol Jefatura</td></tr>
           <tr><td style="padding:4px 8px;">Archivar</td><td style="padding:4px 8px; color:var(--ink-soft);">Da de baja el expediente (salida de la empresa)</td></tr>
         </table>
@@ -15651,7 +15651,15 @@ async function guardarBorradorRecomendacion(){
 // acciones que no aplican a alguien que ya salió (permiso, vacaciones,
 // designar jefatura, archivar de nuevo) y habilita la recomendación
 // laboral, que solo tiene sentido después de la salida.
-function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado }){
+// `tieneConstanciaSalarial` solo cambia la ETIQUETA del botón de constancia
+// salarial ("Actualizar" en vez de el genérico "Constancia salarial") — el
+// generador (generarConstanciaSalarialDeEmpleado) siempre relee la ficha
+// del empleado desde cero, así que ya recoge cualquier corrección (ej. la
+// fecha de ingreso) sin más cambios; solo hacía falta que el botón avisara
+// que sirve para eso en vez de parecer que crea una constancia nueva de la
+// nada. La anterior queda igual en el historial (documentos_emitidos es de
+// solo-inserción) — se anula a mano ahí si ya no aplica.
+function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado, tieneConstanciaSalarial }){
   const esMaster = !!(window.sdgApi && window.sdgApi.esMaster());
   const n = i => numerado ? `${i}. ` : "";
   const botones = [];
@@ -15666,7 +15674,7 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(8)}✍️ Confirmar handbook</button>`);
   botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(9)}📎 Subir contrato firmado (PDF)</button>`);
   botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(10)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
-  if (!archivado) botones.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">💵 Constancia salarial</button>`);
+  if (!archivado) botones.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">${tieneConstanciaSalarial ? "🔄 Actualizar constancia salarial" : "💵 Constancia salarial"}</button>`);
   if (esMaster && !archivado) botones.push(`<button onclick="mostrarModalDesignarJefatura('${empKey}')">👑 Designar como jefatura</button>`);
   if (!archivado) botones.push(`<button onclick="mostrarCredencialesEmpleado('${empKey}')">🔑 Ver/generar credenciales de acceso</button>`);
   if (!archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(11)}🗄️ Archivar</button>`);
@@ -16902,7 +16910,7 @@ async function renderPerfilEmpleado(){
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:8px;">Acciones</div>
         <div class="emp-acciones-menu open" style="border:none; margin:0; padding:0;">
-          ${renderBotonesAccionesEmpleado(perfilActualKey, { archivado: !!emp.ARCHIVADO, contratosVinculados: contratos, numerado: false })}
+          ${renderBotonesAccionesEmpleado(perfilActualKey, { archivado: !!emp.ARCHIVADO, contratosVinculados: contratos, numerado: false, tieneConstanciaSalarial: documentosEmpleado.some(d => d.tipo === "constancia_salarial" && !d.anulado_en) })}
         </div>
         ${!emp.ARCHIVADO ? `<div class="hint" style="margin-top:6px;">📝 La recomendación laboral se habilita cuando el empleado pasa a Archivo (salida de la empresa).</div>` : ""}
         ${contratos.length > 0 ? `<button class="btn" style="width:100%; margin-top:8px;" onclick="openContract('${contratos[0].key.replace(/'/g,"\\'")}')">📄 Abrir contrato vinculado</button>` : ""}
