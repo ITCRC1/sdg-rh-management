@@ -9070,6 +9070,13 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
           })
         : [];
       if (porNombreEntreCandidatos.length === 1) empleado = porNombreEntreCandidatos[0];
+      // Segundo intento, por palabras sin importar el orden: el reloj manda
+      // "NOMBRE APELLIDOS" y la ficha guarda "APELLIDOS NOMBRE", y como texto
+      // corrido ninguno contiene al otro.
+      if (!empleado && nombreRaw){
+        const porPalabras = desempatarFichasPorNombre(candidatosNumero, nombreRaw);
+        if (porPalabras.length === 1) empleado = porPalabras[0];
+      }
     }
     if (!empleado){
       empleado = (nombreNormalizado && porNombre[nombreNormalizado])
@@ -9391,6 +9398,25 @@ async function relojCargarEmpleados(){
 // Mismo criterio de emparejado que Horas extras (normalizarCodigoEmpleado):
 // si aquí dice "sin ficha", al enviar a Horas extras también quedará en
 // "Sin identificar" — las dos pantallas nunca se contradicen.
+// Si varias fichas comparten número, devuelve solo las que calzan por
+// nombre con `nombre`, comparando PALABRAS sin importar el orden. El reloj
+// escribe "ADRIANA MARIA CASTRO AZOFEIFA" y la ficha "CASTRO AZOFEIFA ADRIANA
+// MARIA": comparado como texto corrido nunca calzaba, y la persona quedaba
+// "Sin identificar" aunque solo una de las dos fichas fuera suya (caso real:
+// Monge Mora tiene el 9 de planilla; Castro Azofeifa, el 9 del reloj). Calza
+// si todas las palabras del nombre más corto están en el otro.
+function desempatarFichasPorNombre(candidatos, nombre){
+  const palabras = s => new Set(normalizarNombreParaMatch(s).split(" ").filter(t => t.length > 1));
+  const buscado = palabras(nombre);
+  if (!buscado.size) return [];
+  return candidatos.filter(e => {
+    const deFicha = palabras(nombreCompletoEmpleado(e));
+    if (!deFicha.size) return false;
+    const [corto, largo] = buscado.size <= deFicha.size ? [buscado, deFicha] : [deFicha, buscado];
+    return [...corto].every(t => largo.has(t));
+  });
+}
+
 function relojIndiceFichas(empleados){
   const porNumero = {};
   empleados.forEach(e => {
@@ -9398,7 +9424,14 @@ function relojIndiceFichas(empleados){
     const n = normalizarCodigoEmpleado(e.NUMERO_EMPLEADO);
     if (n) (porNumero[n] = porNumero[n] || []).push(e);
   });
-  return codigo => porNumero[normalizarCodigoEmpleado(codigo)] || [];
+  // Con número repetido se desempata por el nombre que trae el reloj; si
+  // aun así no queda una sola, se devuelven todas y la pantalla lo avisa.
+  return (codigo, nombreReloj) => {
+    const candidatos = porNumero[normalizarCodigoEmpleado(codigo)] || [];
+    if (candidatos.length <= 1 || !nombreReloj) return candidatos;
+    const porNombre = desempatarFichasPorNombre(candidatos, nombreReloj);
+    return porNombre.length === 1 ? porNombre : candidatos;
+  };
 }
 
 // Sugerencia para vincular. Estricta a propósito: una preselección errada es
@@ -9571,7 +9604,7 @@ function relojConstruirVista(marcas, personasReloj, correcciones, empleados){
   });
 
   const personas = Object.values(porCodigo).map(p => {
-    const fichas = fichasDe(p.codigo);
+    const fichas = fichasDe(p.codigo, p.nombreReloj);
     p.ficha = fichas.length === 1 ? fichas[0] : null;
     p.fichasAmbiguas = fichas.length > 1 ? fichas : null;
     // Igual que el reporte anterior (dias.py: armar_personas): nombre y
@@ -9667,7 +9700,7 @@ function relojColumnasDePares(personas){
 
 function relojOrdenarPersonasReloj(personasReloj, fichasDe){
   return personasReloj.map(p => {
-    const fichas = fichasDe(p.codigo);
+    const fichas = fichasDe(p.codigo, p.nombre);
     return { ...p, ficha: fichas.length === 1 ? fichas[0] : null, fichasAmbiguas: fichas.length > 1 ? fichas : null,
              nombreMostrar: fichas.length === 1 ? nombreCompletoEmpleado(fichas[0]) : p.nombre };
   }).sort((a, b) => a.nombreMostrar.localeCompare(b.nombreMostrar, "es"));
