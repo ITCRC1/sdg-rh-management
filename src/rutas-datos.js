@@ -20,9 +20,12 @@ const MAX_ARCHIVO_BYTES = 15 * 1024 * 1024; // por documento emitido
 router.use(A.requiereSesion, A.exigeCambioPassword);
 
 // Resuelve sobre qué propiedad trabaja esta petición.
+function puedeVerCualquierPropiedad(rol) {
+  return rol === "master" || rol === "consultor";
+}
 function propiedadDe(req) {
   const pedida = req.query.propiedad || req.body?.propiedad;
-  if (pedida && req.usuario.rol === "master") return String(pedida);
+  if (pedida && puedeVerCualquierPropiedad(req.usuario.rol)) return String(pedida);
   return req.usuario.propiedadId;
 }
 
@@ -158,6 +161,13 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
       if (!yaEraFinal) return false;
     }
   }
+  // Consultor (Consultants: RRHH/planillas/contador jefe) es de solo
+  // lectura en TODO — ni PUEDEN_ESCRIBIR lo incluye, ni hay ninguna
+  // excepción para él aquí abajo (a diferencia de jefatura). Ve cualquier
+  // propiedad (ver propiedadDe) pero nunca crea ni edita nada por esta vía.
+  // La única escritura que tendrá, más adelante, es firmar/rechazar un
+  // contrato (usuarios.puede_firmar_contratos) — una acción angosta y
+  // aparte, todavía sin construir, que no pasa por este chequeo genérico.
   if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
     return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);
@@ -809,7 +819,7 @@ emitidos.get("/:id/archivo", async (req, res, next) => {
     );
     const d = rows[0];
     if (!d) return res.status(404).json({ error: "Documento no encontrado." });
-    if (d.propiedad_id !== propiedad && req.usuario.rol !== "master") {
+    if (d.propiedad_id !== propiedad && !puedeVerCualquierPropiedad(req.usuario.rol)) {
       return res.status(403).json({ error: "Ese documento pertenece a otra propiedad." });
     }
     if ((req.usuario.rol === "empleado" || req.usuario.rol === "jefatura") && d.empleado_cedula !== req.usuario.cedula) {

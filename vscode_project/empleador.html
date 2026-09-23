@@ -49,6 +49,7 @@
   .badge-gerente{ background:#e7f0e2; color:#4C5D39; }
   .badge-jefatura{ background:#dcebf0; color:#2c5f70; }
   .badge-empleado{ background:#f0ece0; color:#8a7a52; }
+  .badge-consultor{ background:#f0e0e6; color:#7a3f57; }
   .select-rol{ font-size:11.5px; padding:4px 6px; border-radius:7px; width:auto; }
   .hint{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
   #app{ display:none; }
@@ -271,6 +272,7 @@
         <option value="empleado">Colaborador (autoservicio) — solo su propio expediente</option>
         <option value="gerente">Gerente — lee, edita y sube archivos</option>
         <option value="jefatura">Jefatura — solo lectura + aprueba horas extra de su equipo</option>
+        <option value="consultor">Consultor (Consultants) — solo lectura, todas las propiedades</option>
         <option value="master">Master — todo lo anterior + gestiona usuarios + todas las propiedades</option>
       </select>
       <div class="hint" id="rol-explica"></div>
@@ -291,6 +293,15 @@
         así, esta cuenta no verá su expediente hasta que RRHH la vincule por API
         (campo empleadoClave) — este panel todavía no tiene esa opción.
       </div>
+      <label id="new-firma-label" style="display:none;">
+        <input type="checkbox" id="new-puede-firmar" style="width:auto; margin-right:6px;">
+        Puede firmar contratos (contador jefe)
+      </label>
+      <div class="hint" id="new-firma-hint" style="display:none;">
+        Habilita la bandeja de contratos para firmar. Deja esto sin marcar para las demás
+        cuentas de Consultants (RRHH, planillas) — comparten el mismo rol, pero solo el contador
+        jefe firma.
+      </div>
       <button class="btn btn-gold" onclick="crearTrabajador()">Crear usuario</button>
       <div id="crear-msg"></div>
       <div class="hint">
@@ -309,6 +320,7 @@
           <option value="gerente">Gerente</option>
           <option value="jefatura">Jefatura</option>
           <option value="empleado">Colaborador</option>
+          <option value="consultor">Consultor</option>
         </select>
         <select id="filtro-usuarios-propiedad" style="flex:1; min-width:140px;" onchange="aplicarFiltroUsuarios()">
           <option value="">Todas las propiedades</option>
@@ -438,6 +450,7 @@ const ROLES = {
   gerente:  { nombre: "Gerente",                     desc: "Lee, edita y sube archivos. No puede crear ni modificar usuarios." },
   jefatura: { nombre: "Jefatura",                    desc: "Solo lectura, más aprobar, corregir o rechazar horas extra — pero solo las de su propio equipo." },
   empleado: { nombre: "Colaborador (autoservicio)",  desc: "Solo lectura de su PROPIO expediente — vacaciones, horas extra, colillas y documentos. No ve el de nadie más." },
+  consultor: { nombre: "Consultor (Consultants)",    desc: "Solo lectura en TODAS las propiedades: planillas, expedientes, datos y documentos de empleados, horas extra y días libres/vacaciones por empleado, incapacidades. Nunca crea ni edita nada — ni siquiera contratos u otros documentos." },
 };
 
 // Mismos departamentos que DEPARTAMENTOS_MINISTERIO en app.js (derivados del
@@ -459,8 +472,9 @@ function llenarSelectDepartamentos(sel){
 
 function alCambiarRol(){
   const rol = document.getElementById("new-rol").value;
-  // Un master no está atado a una propiedad; los demás roles siempre lo están.
-  document.getElementById("new-propiedad").disabled = (rol === "master");
+  // Master y consultor no están atados a una propiedad; los demás roles
+  // siempre lo están.
+  document.getElementById("new-propiedad").disabled = (rol === "master" || rol === "consultor");
   document.getElementById("rol-explica").textContent = ROLES[rol] ? ROLES[rol].desc : "";
 
   const esJefatura = rol === "jefatura";
@@ -473,6 +487,11 @@ function alCambiarRol(){
   }
 
   document.getElementById("new-empleado-hint").style.display = rol === "empleado" ? "" : "none";
+
+  const esConsultor = rol === "consultor";
+  document.getElementById("new-firma-label").style.display = esConsultor ? "" : "none";
+  document.getElementById("new-firma-hint").style.display = esConsultor ? "" : "none";
+  if (!esConsultor) document.getElementById("new-puede-firmar").checked = false;
 }
 
 async function cargarPropiedades(){
@@ -503,7 +522,8 @@ async function crearTrabajador(){
     password: document.getElementById("new-pass").value,
     puesto,
     rol,
-    propiedadId: rol === "master" ? null : document.getElementById("new-propiedad").value,
+    propiedadId: (rol === "master" || rol === "consultor") ? null : document.getElementById("new-propiedad").value,
+    puedeFirmarContratos: rol === "consultor" ? document.getElementById("new-puede-firmar").checked : false,
   };
   if (!datos.nombre || !datos.email || !datos.password){
     mostrarMsg("crear-msg", "Nombre, correo y contraseña temporal son obligatorios.", false);
@@ -582,8 +602,9 @@ function renderListaUsuarios(usuarios){
             ${u.activo ? "" : '<span class="badge-inactivo">inactivo</span>'}
           </div>
           <div class="user-meta">
-            ${esc(u.email)} · ${u.rol === "master" ? "todas las propiedades" : esc(nombrePropiedad(u.propiedadId))}
+            ${esc(u.email)} · ${(u.rol === "master" || u.rol === "consultor") ? "todas las propiedades" : esc(nombrePropiedad(u.propiedadId))}
             ${u.rol === "jefatura" ? " · lidera: " + esc(u.puesto || "—") : ""}
+            ${u.rol === "consultor" && u.puedeFirmarContratos ? " · ✍️ firma contratos" : ""}
             ${u.ultimoAcceso ? " · último acceso " + new Date(u.ultimoAcceso).toLocaleString("es-CR") : " · nunca ha entrado"}
           </div>
           <div style="margin-top:6px;">
@@ -592,6 +613,12 @@ function renderListaUsuarios(usuarios){
                 `<option value="${r}" ${r === u.rol ? "selected" : ""}>${ROLES[r].nombre}</option>`
               ).join("")}
             </select>
+            ${u.rol === "consultor" ? `
+            <label style="font-size:11.5px; margin-left:8px;">
+              <input type="checkbox" style="width:auto; margin-right:4px;" ${u.puedeFirmarContratos ? "checked" : ""}
+                     onchange="cambiarPuedeFirmar('${esc(u.id)}', this.checked)">
+              Firma contratos
+            </label>` : ""}
           </div>
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0;">
@@ -650,17 +677,27 @@ async function cambiarRol(id, nuevoRol, rolAnterior){
   }
   try{
     // Al pasar a un rol con propiedad, el servidor exige que tenga una; si no
-    // la tenía (venía de master), se le asigna la primera para no dejarlo en un
-    // estado inválido que la API rechazaría.
+    // la tenía (venía de master/consultor), se le asigna la primera para no
+    // dejarlo en un estado inválido que la API rechazaría.
     const usuarios = await api.usuarios.listar();
     const u = usuarios.find(x => x.id === id);
-    if (nuevoRol !== "master" && u && !u.propiedadId && propiedadesCache.length){
+    if (nuevoRol !== "master" && nuevoRol !== "consultor" && u && !u.propiedadId && propiedadesCache.length){
       cambios.propiedadId = propiedadesCache[0].id;
     }
     await api.usuarios.actualizar(id, cambios);
     await cargarUsuarios();
   }catch(e){
     alert(e.message || "No se pudo cambiar el rol.");
+    await cargarUsuarios();
+  }
+}
+
+async function cambiarPuedeFirmar(id, marcado){
+  try{
+    await api.usuarios.actualizar(id, { puedeFirmarContratos: marcado });
+    await cargarUsuarios();
+  }catch(e){
+    alert(e.message || "No se pudo actualizar.");
     await cargarUsuarios();
   }
 }

@@ -8,7 +8,8 @@ const A = require("./auth");
 const router = express.Router();
 
 const CAMPOS_PUBLICOS = `id, email, nombre, cedula, puesto, propiedad_id, rol,
-  activo, debe_cambiar_password, creado_en, ultimo_acceso, desactivado_en, empleado_clave`;
+  activo, debe_cambiar_password, creado_en, ultimo_acceso, desactivado_en, empleado_clave,
+  puede_firmar_contratos`;
 
 function aUsuario(r) {
   return {
@@ -25,6 +26,7 @@ function aUsuario(r) {
     ultimoAcceso: r.ultimo_acceso,
     desactivadoEn: r.desactivado_en,
     empleadoClave: r.empleado_clave,
+    puedeFirmarContratos: r.puede_firmar_contratos,
   };
 }
 
@@ -47,7 +49,7 @@ router.post("/login", async (req, res, next) => {
 
     const { rows } = await query(
       `SELECT id, email, nombre, password_hash, activo, rol, propiedad_id,
-              debe_cambiar_password, bloqueado_hasta
+              debe_cambiar_password, bloqueado_hasta, puede_firmar_contratos
          FROM usuarios WHERE lower(email) = $1`,
       [email]
     );
@@ -80,6 +82,7 @@ router.post("/login", async (req, res, next) => {
       usuario: {
         id: u.id, email: u.email, nombre: u.nombre, rol: u.rol,
         propiedadId: u.propiedad_id, debeCambiarPassword: u.debe_cambiar_password,
+        puedeFirmarContratos: u.puede_firmar_contratos,
       },
     });
   } catch (e) {
@@ -144,9 +147,10 @@ router.get("/mi-informacion", A.requiereSesion, A.exigeCambioPassword, async (re
     const cedulaLimpia = cedula.replace(/\D/g, "");
     const params = [cedulaLimpia];
     let filtroPropiedad = "";
-    // gerente/jefatura: su propia propiedad fija. master (normalmente sin
-    // propiedad fija): busca en cualquiera, puede trabajar con todas.
-    if (req.usuario.rol !== "master") {
+    // gerente/jefatura: su propia propiedad fija. master/consultor
+    // (normalmente sin propiedad fija): busca en cualquiera, puede trabajar
+    // con todas.
+    if (req.usuario.rol !== "master" && req.usuario.rol !== "consultor") {
       params.push(req.usuario.propiedadId);
       filtroPropiedad = "AND propiedad_id = $2";
     }
@@ -182,7 +186,7 @@ router.get("/mi-informacion", A.requiereSesion, A.exigeCambioPassword, async (re
 // --------------------------------------------------------------------------
 router.post("/regenerar-clave-empleado", A.requiereSesion, A.requiereEscritura, async (req, res, next) => {
   try {
-    const propiedad = (req.body?.propiedad && req.usuario.rol === "master")
+    const propiedad = (req.body?.propiedad && (req.usuario.rol === "master" || req.usuario.rol === "consultor"))
       ? String(req.body.propiedad)
       : req.usuario.propiedadId;
     if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
@@ -239,7 +243,7 @@ router.post("/regenerar-clave-empleado", A.requiereSesion, A.requiereEscritura, 
 // --------------------------------------------------------------------------
 router.get("/empleados-vinculados", A.requiereSesion, A.requiereEscritura, async (req, res, next) => {
   try {
-    const propiedad = (req.query.propiedad && req.usuario.rol === "master")
+    const propiedad = (req.query.propiedad && (req.usuario.rol === "master" || req.usuario.rol === "consultor"))
       ? String(req.query.propiedad)
       : req.usuario.propiedadId;
     if (!propiedad) return res.status(400).json({ error: "Sin propiedad asignada." });
@@ -328,9 +332,9 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
     }
     if (!nombre) return res.status(400).json({ error: "El nombre es obligatorio." });
     if (!A.rolValido(rol)) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o empleado." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura, empleado o consultor." });
     }
-    if (rol !== "master" && !propiedadId) {
+    if (rol !== "master" && rol !== "consultor" && !propiedadId) {
       return res.status(400).json({ error: "Gerentes, jefaturas y empleados deben tener una propiedad asignada." });
     }
     if (rol === "jefatura" && !String(b.puesto || "").trim()) {
@@ -367,13 +371,18 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
       }
     }
 
+    // Solo tiene sentido en cuentas consultor (ej. el contador jefe) — en
+    // cualquier otro rol se ignora el valor recibido y queda en false.
+    const puedeFirmarContratos = rol === "consultor" ? !!b.puedeFirmarContratos : false;
+
     const { rows } = await query(
       `INSERT INTO usuarios (email, nombre, cedula, puesto, propiedad_id, rol,
-                             password_hash, creado_por, debe_cambiar_password, empleado_clave)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9)
+                             password_hash, creado_por, debe_cambiar_password, empleado_clave,
+                             puede_firmar_contratos)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10)
        RETURNING ${CAMPOS_PUBLICOS}`,
       [email, nombre, b.cedula || null, b.puesto || null, propiedadId, rol,
-       A.hashPassword(password), req.usuario.id, b.empleadoClave || null]
+       A.hashPassword(password), req.usuario.id, b.empleadoClave || null, puedeFirmarContratos]
     );
 
     await A.registrarAcceso({
@@ -401,7 +410,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
       return res.status(400).json({ error: "No puedes quitarte a ti mismo el rol de master." });
     }
     if (b.rol !== undefined && !A.rolValido(String(b.rol))) {
-      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura o empleado." });
+      return res.status(400).json({ error: "Rol inválido. Debe ser master, gerente, jefatura, empleado o consultor." });
     }
     if (b.rol === "jefatura"){
       // El puesto puede venir en este mismo PATCH o ya estar guardado de antes
@@ -452,6 +461,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
     if (b.propiedadId !== undefined) set("propiedad_id", b.propiedadId || null);
     if (b.rol !== undefined) set("rol", String(b.rol));
     if (b.empleadoClave !== undefined) set("empleado_clave", b.empleadoClave || null);
+    if (b.puedeFirmarContratos !== undefined) set("puede_firmar_contratos", !!b.puedeFirmarContratos);
     if (b.activo !== undefined) {
       set("activo", !!b.activo);
       set("desactivado_en", b.activo ? null : new Date());

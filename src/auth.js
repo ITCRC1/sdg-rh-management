@@ -105,7 +105,8 @@ async function buscarSesion(token) {
   const { rows } = await query(
     `SELECT s.token_hash, s.expira_en,
             u.id, u.email, u.nombre, u.cedula, u.puesto,
-            u.propiedad_id, u.rol, u.activo, u.debe_cambiar_password, u.empleado_clave
+            u.propiedad_id, u.rol, u.activo, u.debe_cambiar_password, u.empleado_clave,
+            u.puede_firmar_contratos
        FROM sesiones s
        JOIN usuarios u ON u.id = s.usuario_id
       WHERE s.token_hash = $1
@@ -316,6 +317,7 @@ async function requiereSesion(req, res, next) {
       rol: sesion.rol,
       debeCambiarPassword: sesion.debe_cambiar_password,
       empleadoClave: sesion.empleado_clave,
+      puedeFirmarContratos: sesion.puede_firmar_contratos,
       ip: ipDe(req),
     };
     req.sesionToken = token;
@@ -347,11 +349,26 @@ async function requiereSesion(req, res, next) {
 //                lectura de TODOS los empleados (se quitó "colaborador" a
 //                propósito: nadie ajeno a RRHH/gerencia debía ver el
 //                expediente de otros).
+//   consultor    cuentas del grupo externo "Consultants" que administra SDG
+//                RH Management (RRHH, planillas, contador jefe) — a
+//                diferencia de gerente/jefatura/empleado no queda atado a
+//                una sola propiedad (propiedad_id puede ser NULL, igual que
+//                master: ve cualquiera de las 5). A diferencia de master, NO
+//                administra usuarios (requiereAdmin sigue siendo solo
+//                master) y es de SOLO LECTURA en todo — planillas,
+//                expedientes, datos y documentos de empleados, horas extra
+//                y días libres/vacaciones por empleado, incapacidades —
+//                nunca crea ni edita nada de eso (no está en
+//                PUEDEN_ESCRIBIR). usuarios.puede_firmar_contratos marca,
+//                dentro de este rol, a la única cuenta (el contador jefe)
+//                que además podrá firmar/rechazar contratos — esa es una
+//                capacidad angosta y aparte (bandeja de firma, todavía sin
+//                construir), nunca escritura general.
 //
 // Estas comprobaciones son las que de verdad mandan. Que el front esconda
 // botones es comodidad visual: quien manipule la petición choca aquí.
 // --------------------------------------------------------------------------
-const ROLES = ["master", "gerente", "jefatura", "empleado"];
+const ROLES = ["master", "gerente", "jefatura", "empleado", "consultor"];
 const PUEDEN_ESCRIBIR = new Set(["master", "gerente"]);
 
 function rolValido(rol) {

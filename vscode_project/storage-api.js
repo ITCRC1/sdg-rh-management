@@ -269,6 +269,11 @@
       return sesion ? sesion.rol === "master" : false;
     },
 
+    // Solo tiene sentido en cuentas rol=consultor — el resto siempre da false.
+    puedeFirmarContratos() {
+      return sesion ? !!sesion.puedeFirmarContratos : false;
+    },
+
     rol() {
       return sesion ? sesion.rol : null;
     },

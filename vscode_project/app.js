@@ -322,12 +322,12 @@ function aplicarModoSegunRol(rol){
   const btnEmpleador = document.getElementById("nav-btn-empleador");
   if (btnEmpleador) btnEmpleador.style.display = rol === "master" ? "block" : "none";
 
-  // Cambiar de propiedad solo tiene sentido para master: gerente/jefatura/
-  // empleado tienen la suya fija en la cuenta, y el servidor ignora
+  // Cambiar de propiedad solo tiene sentido para master/consultor: gerente/
+  // jefatura/empleado tienen la suya fija en la cuenta, y el servidor ignora
   // cualquier otra que elijan aquí — mostrar el selector solo confundiría
   // (branding de una propiedad, datos reales de otra).
   const btnCambiarPropiedad = document.getElementById("nav-btn-cambiar-propiedad");
-  if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = rol === "master" ? "block" : "none";
+  if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = (rol === "master" || rol === "consultor") ? "block" : "none";
 
   // Jefatura no tiene "página de RH" — solo Horas extras, el módulo de Días
   // Libres y Vacaciones (ahí sí necesita entrar: la especificación dice que
@@ -398,7 +398,7 @@ function aplicarModoSegunRol(rol){
     }
   }
 
-  const etiquetas = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", empleado: "Colaborador (autoservicio)" };
+  const etiquetas = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", empleado: "Colaborador (autoservicio)", consultor: "Consultor (Consultants)" };
   let barra = document.getElementById("barra-rol");
   if (!barra){
     barra = document.createElement("div");
@@ -4560,14 +4560,15 @@ function renderPropiedadBadge(){
     wrap.innerHTML = "";
     return;
   }
-  // Solo master puede cambiar de propiedad: gerente/jefatura/empleado tienen
-  // la suya fija en la cuenta, y el servidor ignora cualquier otra que el
-  // badge les deje elegir aquí.
-  const esMaster = window.sdgApi && window.sdgApi.rol() === "master";
-  const onclick = esMaster ? `onclick="event.stopPropagation(); abrirPropiedadGate();"` : "";
+  // Solo master/consultor pueden cambiar de propiedad: gerente/jefatura/
+  // empleado tienen la suya fija en la cuenta, y el servidor ignora
+  // cualquier otra que el badge les deje elegir aquí.
+  const rolBadge = window.sdgApi && window.sdgApi.rol();
+  const puedeCambiar = rolBadge === "master" || rolBadge === "consultor";
+  const onclick = puedeCambiar ? `onclick="event.stopPropagation(); abrirPropiedadGate();"` : "";
   wrap.innerHTML = `<div class="propiedad-actual-badge" ${onclick}>
     <img src="${p.logo}" alt="">
-    <span>${escapeHtml(p.nombre)}${esMaster ? " · Cambiar" : ""}</span>
+    <span>${escapeHtml(p.nombre)}${puedeCambiar ? " · Cambiar" : ""}</span>
   </div>`;
   if (brandTag) brandTag.textContent = "🏠 " + p.nombre;
 }
@@ -6562,7 +6563,7 @@ function renderManualPanel(){
 
   const SECCIONES = [
     {
-      id: "dashboard", roles: ["gerente","master"],
+      id: "dashboard", roles: ["gerente","master","consultor"],
       titulo: "🏠 Dashboard (Inicio)",
       cuerpo: `<p>Pantalla de aterrizaje al entrar al sistema.</p>
         ${img("dashboard-anotado.svg", "Dashboard anotado con 14 elementos numerados")}
@@ -6584,7 +6585,7 @@ function renderManualPanel(){
         </ol>`,
     },
     {
-      id: "contratos", roles: ["gerente","master"],
+      id: "contratos", roles: ["gerente","master","consultor"],
       titulo: "📄 Contratos",
       cuerpo: `<p><b>Lista de contratos</b></p>
         ${img("contratos-lista-anotado.svg", "Lista de contratos anotada")}
@@ -6656,12 +6657,12 @@ function renderManualPanel(){
         <p><b>Handbook — Constancia de entrega y recibido</b> (botón "HB Firma"): trae los mismos datos del contrato — mientras no se apliquen, se ven como <code>[pendiente]</code> — con espacio de firma para colaborador y representante. "Descargar Constancia PDF" genera el documento.</p>`,
     },
     {
-      id: "empleados", roles: ["gerente","master"],
+      id: "empleados", roles: ["gerente","master","consultor"],
       titulo: "👥 Empleados",
       cuerpo: `<p>Catálogo de expedientes. La sección 🎂 Cumpleaños próximos (con filtro por mes) vive dentro de Días Libres y Vacaciones, no acá.</p>`,
     },
     {
-      id: "expedientes", roles: ["gerente","master"],
+      id: "expedientes", roles: ["gerente","master","consultor"],
       titulo: "📁 Expedientes",
       cuerpo: `<p><b>Lista y búsqueda</b></p>
         ${img("expedientes-lista-anotado.svg", "Lista de expedientes anotada")}
@@ -6742,7 +6743,7 @@ function renderManualPanel(){
         <p><b>Reparar días / Reparar todos</b> — informan si algún día no se pudo tocar por chocar con otro registro, y por qué.</p>`,
     },
     {
-      id: "miinformacion", roles: ["empleado","jefatura","gerente","master"],
+      id: "miinformacion", roles: ["empleado","jefatura","gerente","master","consultor"],
       titulo: "🙋 Mi información",
       cuerpo: `<p>Tu propio expediente en modo lectura.</p>
         <p><b>4 tarjetas KPI</b>: 🏖️ vacaciones disponibles/adelanto, 🗓️ días libres disponibles/adelanto (mes actual), ⏳ horas extra por aprobar, ✅ horas extra aprobadas.</p>
@@ -6762,7 +6763,7 @@ function renderManualPanel(){
         <p><b>Alerta de empleados sin registrar</b> — si alguien activo no tiene NINGÚN día registrado en el rango elegido, aparece un aviso rojo ("N empleado(s) sin ningún día registrado en este rango") — señal de que su marcación de ese período todavía no se importó.</p>`,
     },
     {
-      id: "planilla_menu", roles: ["gerente","master"],
+      id: "planilla_menu", roles: ["gerente","master","consultor"],
       titulo: "💰 Planilla",
       cuerpo: `<p>Colillas de pago archivadas por trabajador, más las herramientas para mantenerlas al día.</p>
         ${img("planilla-anotado.svg", "Planilla anotado")}
@@ -6786,7 +6787,7 @@ function renderManualPanel(){
         </ol>`,
     },
     {
-      id: "incapacidades", roles: ["gerente","master"],
+      id: "incapacidades", roles: ["gerente","master","consultor"],
       titulo: "🤒 Incapacidades",
       cuerpo: `<p>Registro con boleta CCSS/INS, incapacidades activas y alerta al acercarse la fecha de regreso. Pausa la acumulación de vacaciones automáticamente (Art. 160 CT) mientras está activa. Universal para las 5 propiedades.</p>
         ${img("incapacidades-anotado.svg", "Incapacidades anotado")}
@@ -6805,7 +6806,7 @@ function renderManualPanel(){
         </ol>`,
     },
     {
-      id: "planilla", roles: ["gerente","master"],
+      id: "planilla", roles: ["gerente","master","consultor"],
       titulo: "📋 Resumen de quincena para planilla",
       cuerpo: `<table style="width:100%; border-collapse:collapse; font-size:12.5px;">
           <tr><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); font-weight:600;">Días laborados</td><td style="padding:4px 8px; border-bottom:1px solid var(--paper-line); color:var(--ink-soft);">Días base menos incapacidad/permiso/cita/ausencia aprobados</td></tr>
@@ -10638,11 +10639,11 @@ async function renderAppTopbar(){
   const rol = window.sdgApi ? window.sdgApi.rol() : null;
   const nombre = (trabajadorActual && trabajadorActual.nombre) || "";
   const inicial = nombre ? nombre.trim().charAt(0).toUpperCase() : "?";
-  const etiquetasRol = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", empleado: "Colaborador" };
+  const etiquetasRol = { master: "Master", gerente: "Gerente", jefatura: "Jefatura", empleado: "Colaborador", consultor: "Consultor" };
 
   let alertas = 0;
   try{
-    if (rol === "master" || rol === "gerente"){
+    if (rol === "master" || rol === "gerente" || rol === "consultor"){
       const { faltantes } = await evaluarColillasFaltantes();
       alertas += faltantes.length;
     }
