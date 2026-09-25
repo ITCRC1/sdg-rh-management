@@ -14429,7 +14429,7 @@ async function confirmarRegistroIncapacidad(){
   }
 }
 
-function renderFilaIncapacidad(i, empleadosPorKey){
+function renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar){
   const emp = empleadosPorKey[i.EMPLEADO_KEY];
   const tipo = TIPOS_INCAPACIDAD[i.TIPO_INCAPACIDAD] || { label: i.TIPO_INCAPACIDAD || "—", emoji: "🤒" };
   const r = calcularPagoIncapacidad(i);
@@ -14440,13 +14440,38 @@ function renderFilaIncapacidad(i, empleadosPorKey){
     ? `$${r.montoAPagarPlanilla.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2})}`
     : `₡${Math.round(r.montoAPagarPlanilla).toLocaleString("es-CR")}`;
   const lineaNomina = `<span class="meta">💰 Pago patrono estimado: ${montoTxt} · vacaciones: ${r.diasValidosVacaciones} día(s) · aguinaldo: ${r.diasValidosAguinaldo} día(s)</span><br>`;
+  const keyEsc = String(i.key).replace(/'/g,"\\'");
+  // Fecha/hora de registro, para poder distinguir un duplicado (ej. dos
+  // clics seguidos en "Guardar") del original — antes no se mostraba nada
+  // que permitiera diferenciarlos.
+  const registro = i.FECHA_REGISTRO ? `<span class="meta">Registrada: ${new Date(i.FECHA_REGISTRO).toLocaleString("es-CR")}${i.REGISTRADO_POR ? " · " + escapeHtml(i.REGISTRADO_POR.split("@")[0]) : ""}</span><br>` : "";
   return `<div style="padding:6px 0; border-bottom:1px solid var(--paper-line);">
     <div style="font-size:12.5px;">
       <b>${escapeHtml(emp ? (nombreCompletoEmpleado(emp)||emp.key) : i.EMPLEADO_KEY)}</b> — ${tipo.emoji} ${escapeHtml(tipo.label)}${i.ES_PRORROGA ? " (prórroga)" : ""}<br>
       <span class="meta">${fmtFecha(i.FECHA_INICIO + "T00:00:00")} al ${fmtFecha(i.FECHA_FIN + "T00:00:00")} · ${i.DIAS} día(s)${i.NUMERO_BOLETA ? " · boleta " + escapeHtml(i.NUMERO_BOLETA) : ""}</span><br>
+      ${registro}
       ${lineaNomina}
+      ${puedeRegistrar ? `<button class="del" style="margin-top:4px;" onclick="eliminarIncapacidad('${keyEsc}')">🗑️ Eliminar</button>` : ""}
     </div>
   </div>`;
+}
+
+// Borra un registro de incapacidad duplicado o mal cargado — ej. dos clics
+// seguidos en "Guardar" del formulario. Exclusivo de master/gerente
+// (puedeEditar, igual que registrar una). Solo borra el documento
+// incapacidad: en sí; NO revierte los días ya marcados "incapacidad" en
+// Horas extra/planilla para ese rango (ver justificarRangoISO en
+// crearIncapacidad) — si de verdad se registró por error (no un duplicado
+// exacto) y hace falta deshacer esos días, hay que corregirlos aparte desde
+// Planilla → Horas extras.
+async function eliminarIncapacidad(key){
+  if (!window.sdgApi.puedeEditar()) return;
+  if (!confirm("¿Eliminar este registro de incapacidad? Si era un duplicado exacto (mismas fechas y boleta que otro), los días de Horas extra/planilla quedan igual de correctos — pero si esta incapacidad no era un duplicado, los días que ya justificó NO se deshacen solos; revísalos en Planilla → Horas extras si hace falta.")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Incapacidad eliminada.");
+    renderIncapacidadesPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
 async function renderIncapacidadesPanel(){
@@ -14499,12 +14524,12 @@ async function renderIncapacidadesPanel(){
 
     html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📋 Incapacidades activas (${activas.length})</div>
-      ${activas.length ? activas.map(i => renderFilaIncapacidad(i, empleadosPorKey)).join("") : `<div class="empty-state" style="padding:10px 0;">Nadie está incapacitado hoy.</div>`}
+      ${activas.length ? activas.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar)).join("") : `<div class="empty-state" style="padding:10px 0;">Nadie está incapacitado hoy.</div>`}
     </div></div>`;
 
     html += `<div class="section-card"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗂️ Historial reciente</div>
-      ${historial.length ? historial.map(i => renderFilaIncapacidad(i, empleadosPorKey)).join("") : `<div class="empty-state" style="padding:10px 0;">Sin registros anteriores.</div>`}
+      ${historial.length ? historial.map(i => renderFilaIncapacidad(i, empleadosPorKey, puedeRegistrar)).join("") : `<div class="empty-state" style="padding:10px 0;">Sin registros anteriores.</div>`}
     </div></div>`;
 
     panel.innerHTML = html;
