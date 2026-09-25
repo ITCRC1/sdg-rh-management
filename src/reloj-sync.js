@@ -354,25 +354,15 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
     const puesto = empleado && empleado.PUESTO_KEY ? puestoPorKey[empleado.PUESTO_KEY] || null : null;
     const jornada = jornadaDiariaDePuesto(puesto && puesto.MODALIDAD_JORNADA);
 
-    let marcas = fila.MARCAS || [];
-    let incompleto = !!fila.INCOMPLETO;
-    let marcaSuelta = fila.MARCA_SUELTA || null;
-    let autocompletado = false;
-    // Turno con una sola marca, YA con el empleado identificado: se completa
-    // solo asumiendo la jornada completa del puesto (ver el porqué en
-    // guardarFilasHorasExtra). Sigue quedando "pendiente" para que
-    // jefatura/gerencia lo corrija si la suposición no calza.
-    if (incompleto && empleado && marcaSuelta) {
-      const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(marcaSuelta);
-      if (m) {
-        const entradaTs = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
-        const salidaTs = entradaTs + Math.round(jornada * 60) * 60000;
-        marcas = [{ entrada: formatoFechaHoraCortaUTC(entradaTs), salida: formatoFechaHoraCortaUTC(salidaTs) }];
-        incompleto = false;
-        marcaSuelta = null;
-        autocompletado = true;
-      }
-    }
+    const marcas = fila.MARCAS || [];
+    const incompleto = !!fila.INCOMPLETO;
+    const marcaSuelta = fila.MARCA_SUELTA || null;
+    // Turno con una sola marca: NO se asume la jornada completa del puesto,
+    // ni siquiera con el empleado identificado — eso ocultaba que faltó una
+    // marca real. Se deja INCOMPLETO/MARCA_SUELTA tal cual, para que la fila
+    // pase por "⚠️ Turno sin marcar" en el panel de Horas extras y sea
+    // jefatura/gerencia quien decida la hora de salida (ver
+    // mostrarModalCompletarTurno en app.js), no el envío automático.
 
     const horasTrabajadas = fila.HORAS_TRABAJADAS || 0;
     const excedente = horasTrabajadas > jornada ? horasTrabajadas - jornada : 0;
@@ -395,7 +385,7 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
       MARCAS: marcas,
       INCOMPLETO: incompleto,
       MARCA_SUELTA: marcaSuelta,
-      AUTOCOMPLETADO: autocompletado,
+      AUTOCOMPLETADO: false,
       TIPO_DIA: incompleto ? null : "laboral",
       ESTADO: "pendiente",
       ORIGEN_ARCHIVO: nombreArchivo,
