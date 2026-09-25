@@ -484,10 +484,16 @@ async function ejecutarSincronizacionDiaria() {
   if (desde > hasta) return { configurado: true, saltado: true };
 
   const resultado = await sincronizarRango(desde, hasta);
-  if (resultado.configurado) {
-    await guardarDocumento(SYNC_ESTADO_CLAVE, { ULTIMA_FECHA: hasta, ACTUALIZADO_EN: new Date().toISOString(), ULTIMO_RESULTADO: resultado });
-  }
+  if (resultado.configurado) await marcarUltimaFechaSincronizada(hasta, resultado);
   return { desde, hasta, catchUpDesde: desdeCatchUp, ...resultado };
 }
 
-module.exports = { sincronizarRango, ejecutarSincronizacionDiaria, FECHA_INICIO_SYNC };
+// Actualiza el bookmark de la corrida diaria (ver arriba) — se expone aparte
+// para que un resync manual (ej. scripts/resincronizar-reloj-horas-extra.js)
+// pueda dejar la ventana automática apuntando al mismo lugar donde terminó,
+// en vez de que la próxima corrida automática vuelva a repetir todo el rango.
+async function marcarUltimaFechaSincronizada(hasta, resultado) {
+  await guardarDocumento(SYNC_ESTADO_CLAVE, { ULTIMA_FECHA: hasta, ACTUALIZADO_EN: new Date().toISOString(), ULTIMO_RESULTADO: resultado || null });
+}
+
+module.exports = { sincronizarRango, ejecutarSincronizacionDiaria, marcarUltimaFechaSincronizada, FECHA_INICIO_SYNC };
