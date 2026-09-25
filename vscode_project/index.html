@@ -90,6 +90,7 @@
     <div class="nav-dd-menu" id="navmenu-planilla">
       <button id="navlink-planilla-ver" onclick="navCloseAndRun(function(){ showTab('planilla'); })">💰 Ver planilla y colillas</button>
       <button onclick="navCloseAndRun(function(){ showTab('horasextras'); })">⏱️ Horas extras</button>
+      <button id="navlink-planilla-reloj" onclick="navCloseAndRun(function(){ showTab('reloj'); })">🕐 Reloj marcador</button>
       <div class="nav-dd-sep" id="navsep-planilla-datos">Importar / actualizar</div>
       <button id="navlink-planilla-datos" onclick="navCloseAndRun(function(){ showTab('datos'); })">📥 Ir al menú Datos</button>
     </div>
@@ -185,6 +186,13 @@
   <div class="modal-box">
     <div class="modal-head"><span>👁️ Datos incompletos por empleado</span><button onclick="cerrarModalIncompletos()">×</button></div>
     <div class="modal-body" id="modal-incompletos-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-reloj" onclick="if(event.target===this) cerrarModalReloj();">
+  <div class="modal-box">
+    <div class="modal-head"><span id="modal-reloj-titulo">Reloj marcador</span><button onclick="cerrarModalReloj()">×</button></div>
+    <div class="modal-body" id="modal-reloj-body"></div>
   </div>
 </div>
 
@@ -314,6 +322,7 @@
   <div id="datos-panel" class="catalog-panel" style="display:none;"></div>
   <div id="planilla-panel" class="catalog-panel" style="display:none;"></div>
   <div id="horasextras-panel" class="catalog-panel" style="display:none;"></div>
+  <div id="reloj-panel" class="catalog-panel" style="display:none;"></div>
   <!-- Panel compartido para los módulos del roadmap SCP People que todavía
        no tienen lógica/datos propios (Vacaciones, Días libres, Incapacidades,
        Estadísticas, Asistente IA) — ver MODULOS_PENDIENTES en app.js. -->

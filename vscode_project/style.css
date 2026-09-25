@@ -698,3 +698,179 @@ body.solo-lectura select{
 }
 .dash-activity-row .who2{ font-weight:700; color:var(--ink); }
 .dash-activity-row .when{ margin-left:auto; color:var(--ink-soft); font-size:10.5px; white-space:nowrap; }
+
+/* ---------------------------------------------------------------------
+   RELOJ MARCADOR (app.js: renderRelojPanel)
+   Misma estructura que el reporte de asistencia del sistema anterior:
+   tarjetas de resumen, una tabla por persona con E1/S1…E4/S4, filas
+   incompletas en rojo con "Corregir", y total al pie.
+   --------------------------------------------------------------------- */
+.reloj-cabecera{ padding:16px 18px; display:flex; flex-direction:column; gap:12px; }
+.reloj-titulo-fila{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.reloj-titulo{ margin:0; font-family:Georgia,"Times New Roman",serif; font-size:19px; color:var(--navy-deep); }
+.reloj-rango{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
+.reloj-titulo-fila .reloj-acciones{ align-items:center; padding-top:0; border-top:none; }
+.reloj-btn-excel{ background:#1E7B45; border-color:#1E7B45; color:#fff; }
+.reloj-btn-excel:hover{ background:#17653A; border-color:#17653A; }
+.reloj-acciones-sdg{ padding-top:12px; border-top:1px solid var(--paper-line); }
+.reloj-estado{
+  display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:600;
+  padding:5px 11px; border-radius:20px; background:#E7F0E2; color:#3F5030;
+}
+.reloj-estado i{ width:8px; height:8px; border-radius:50%; background:#4C8A3F; }
+.reloj-estado.warn{ background:#FBEFD9; color:#7A5410; }
+.reloj-estado.warn i{ background:#C98A1B; }
+
+.reloj-filtros{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; }
+.reloj-filtros .field{ margin:0; min-width:140px; }
+.reloj-filtros .reloj-buscar{ flex:1; min-width:180px; }
+.reloj-check{
+  display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--ink);
+  padding:9px 2px; cursor:pointer; white-space:nowrap;
+}
+.reloj-check input{ width:16px; height:16px; accent-color:var(--navy); margin:0; }
+.reloj-acciones{ display:flex; flex-wrap:wrap; gap:8px; }
+
+/* Tarjetas de resumen: personas / días con marcas / días incompletos. */
+.reloj-tarjetas{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:14px; }
+.reloj-tarjeta{
+  background:#fff; border:1px solid var(--paper-line); border-radius:var(--radius);
+  padding:14px 18px; display:flex; flex-direction:column; gap:2px;
+}
+.reloj-tarjeta b{ font-size:30px; line-height:1.1; color:var(--ink); font-variant-numeric:tabular-nums; }
+.reloj-tarjeta span{ font-size:13px; color:var(--ink-soft); }
+.reloj-tarjeta.alerta{ border-color:#D9534F; }
+.reloj-tarjeta.alerta b{ color:#C0392B; }
+
+.reloj-aviso{
+  font-size:13px; line-height:1.5; color:var(--ink); background:#fff;
+  border:1px solid var(--paper-line); border-left:3px solid var(--gold);
+  border-radius:0 10px 10px 0; padding:12px 14px; margin-bottom:14px;
+}
+.reloj-aviso.warn{ background:#FBF3E4; border-left-color:#C98A1B; margin-bottom:0; }
+.reloj-aviso.err{ background:#F7E3DF; border-left-color:#963527; }
+.modal-body .reloj-aviso{ margin-bottom:12px; }
+
+.reloj-tenue{ font-size:11.5px; color:var(--ink-soft); font-weight:400; }
+.reloj-nota{ font-size:11.5px; line-height:1.5; color:var(--ink-soft); margin:10px 0 0; }
+.reloj-alerta{ font-size:11.5px; font-weight:700; color:#963527; }
+.reloj-badge{
+  font-size:10.5px; font-weight:700; letter-spacing:.3px; border-radius:6px; padding:2px 7px;
+  background:var(--paper); color:var(--ink-soft);
+}
+.reloj-badge.warn{ background:#FBEFD9; color:#7A5410; }
+
+/* Aviso plegable de personas del reloj sin ficha en SDG. */
+.reloj-sinficha{ border-color:#E8CFA0; }
+.reloj-sinficha > summary{
+  list-style:none; cursor:pointer; padding:12px 16px; font-size:13px; color:#7A5410; background:#FBF3E4;
+  display:flex; align-items:center; gap:8px;
+}
+.reloj-sinficha > summary::-webkit-details-marker{ display:none; }
+.reloj-sinficha > summary::before{ content:"▸"; color:var(--gold); font-size:11px; transition:transform .15s ease; }
+.reloj-sinficha[open] > summary::before{ transform:rotate(90deg); }
+.reloj-sinficha > summary:focus-visible{ outline:2px solid var(--navy); outline-offset:-2px; }
+.reloj-sinficha > p{ padding:10px 16px 0; margin:0; }
+.reloj-vincular{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.reloj-motivo{ font-size:11.5px; color:#7A5410; margin-top:3px; }
+.reloj-vincular select{
+  font-size:12.5px; padding:6px 8px; border-radius:7px; border:1px solid var(--field-border);
+  background:var(--field-bg); color:var(--ink); max-width:280px;
+}
+
+/* Una tarjeta por persona, siempre abierta, como el reporte anterior. */
+.reloj-persona-cab{
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px;
+  padding:12px 16px; border-bottom:1px solid var(--paper-line); background:#FBF9F4;
+}
+.reloj-persona-nombre{ font-weight:700; font-size:14px; color:var(--ink); text-transform:uppercase; letter-spacing:.2px; }
+.reloj-persona-meta{ margin-left:auto; font-size:12px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+
+.reloj-tabla-wrap{ overflow-x:auto; }
+.reloj-tabla{ width:100%; border-collapse:collapse; font-size:13px; }
+.reloj-tabla th{
+  text-align:left; font-size:12px; font-weight:700; color:var(--ink);
+  padding:9px 12px; border-bottom:1px solid var(--paper-line); white-space:nowrap;
+}
+.reloj-tabla td{ padding:9px 12px; border-bottom:1px solid var(--paper-line); vertical-align:middle; }
+.reloj-tabla tbody tr:last-child td{ border-bottom:none; }
+.reloj-tabla .num{ font-variant-numeric:tabular-nums; color:var(--ink-soft); white-space:nowrap; }
+
+/* Ancho fijo por columna: así las columnas de todas las personas quedan
+   alineadas una bajo otra, sin importar qué tan larga sea cada observación. */
+.reloj-asistencia{ table-layout:fixed; min-width:760px; }
+.reloj-asistencia th:first-child{ width:104px; }
+.reloj-asistencia th.reloj-es{ width:64px; }
+.reloj-asistencia th.reloj-horas{ width:72px; }
+.reloj-asistencia th:not(:first-child):not(:last-child){ text-align:center; }
+.reloj-asistencia .reloj-h{ text-align:center; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.reloj-fecha{ white-space:nowrap; color:var(--ink); }
+.reloj-horas{ text-align:right !important; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.reloj-obs{ white-space:nowrap; }
+.reloj-obs .reloj-link, .reloj-obs .reloj-btn-corregir{ margin-left:8px; }
+.reloj-asistencia tr.incompleto td{ background:#F9DEDC; }
+.reloj-obs-alerta{ color:#C0392B; font-weight:600; }
+.reloj-asistencia tfoot td{
+  font-weight:700; background:#FBF9F4; border-top:1px solid var(--paper-line); border-bottom:none;
+}
+/* ✎ junto a la hora: marca manual, igual que el reporte anterior. */
+.reloj-manual{ color:#8A6D2E; cursor:help; }
+.reloj-obs.reloj-obs-alerta{ font-weight:600; }
+
+.reloj-link{
+  background:none; border:none; padding:0; font:inherit; font-size:12.5px;
+  color:#2F6DB5; text-decoration:underline; cursor:pointer;
+}
+.reloj-link:hover{ color:var(--navy); }
+.reloj-btn-corregir{
+  font-family:inherit; font-size:12px; font-weight:600; color:#fff; background:#C0392B;
+  border:1px solid #C0392B; border-radius:6px; padding:3px 11px; cursor:pointer;
+}
+.reloj-btn-corregir:hover{ background:#A93226; border-color:#A93226; }
+.reloj-link:focus-visible, .reloj-btn-corregir:focus-visible{ outline:2px solid var(--navy); outline-offset:2px; }
+
+/* Paginador: de a 10 personas, arriba y abajo de la lista. */
+.reloj-paginador{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  margin:0 0 14px;
+}
+.reloj-paginador:last-of-type{ margin:4px 0 10px; }
+.reloj-pag-info{ font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+.reloj-pag-botones{ display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.reloj-pag-btn{
+  font-family:inherit; font-size:12.5px; font-weight:600; min-width:34px; padding:6px 10px;
+  color:var(--ink); background:#fff; border:1px solid var(--paper-line); border-radius:8px; cursor:pointer;
+  font-variant-numeric:tabular-nums;
+}
+.reloj-pag-btn:hover:not(:disabled){ border-color:var(--navy); color:var(--navy); }
+.reloj-pag-btn.actual{ background:var(--navy); border-color:var(--navy); color:#fff; }
+.reloj-pag-btn:disabled{ opacity:.45; cursor:default; }
+.reloj-pag-btn:focus-visible{ outline:2px solid var(--navy); outline-offset:1px; }
+.reloj-pag-sep{ color:var(--ink-soft); padding:0 2px; }
+
+/* Modal del día y de la marca. */
+.reloj-dia tr.anulada td{ color:var(--ink-soft); text-decoration:line-through; }
+.reloj-dia tr.anulada td:last-child{ text-decoration:none; }
+.reloj-sub{ font-size:13px; margin:16px 0 8px; color:var(--navy-deep); }
+.reloj-detalle{ display:grid; grid-template-columns:auto 1fr; gap:8px 14px; margin:0 0 14px; font-size:13px; }
+.reloj-detalle dt{ font-size:10.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--ink-soft); padding-top:2px; }
+.reloj-detalle dd{ margin:0; color:var(--ink); }
+.reloj-fila-2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+@media (max-width:560px){
+  .reloj-persona-meta{ margin-left:0; width:100%; }
+  .reloj-tabla th, .reloj-tabla td{ padding:8px 8px; }
+}
+@media (prefers-reduced-motion:reduce){
+  .reloj-sinficha > summary::before{ transition:none; }
+}
+
+/* "Imprimir": solo el reporte, sin menú, filtros ni botones. */
+@media print{
+  body.imprimiendo-reloj *{ visibility:hidden; }
+  body.imprimiendo-reloj #reloj-panel, body.imprimiendo-reloj #reloj-panel *{ visibility:visible; }
+  body.imprimiendo-reloj #reloj-panel{ position:absolute; left:0; top:0; width:100%; }
+  body.imprimiendo-reloj .reloj-no-imprimir{ display:none !important; }
+  body.imprimiendo-reloj .reloj-persona{ break-inside:avoid; box-shadow:none; }
+  body.imprimiendo-reloj .reloj-asistencia tr.incompleto td{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
