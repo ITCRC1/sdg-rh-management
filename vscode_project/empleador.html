@@ -7,6 +7,9 @@
 
 <!-- Capa de sesión y API contra el backend (Postgres). -->
 <script src="storage-api.js"></script>
+<!-- Lista de departamentos compartida con app.js/index.html — único lugar
+     donde vive (ver departamentos-ministerio.js). -->
+<script src="departamentos-ministerio.js"></script>
 
 <style>
   :root{
@@ -453,17 +456,13 @@ const ROLES = {
   consultor: { nombre: "Consultor (Consultants)",    desc: "Solo lectura en TODAS las propiedades: planillas, expedientes, datos y documentos de empleados, horas extra y días libres/vacaciones por empleado, incapacidades. Nunca crea ni edita nada — ni siquiera contratos u otros documentos." },
 };
 
-// Mismos departamentos que DEPARTAMENTOS_MINISTERIO en app.js (derivados del
-// catálogo del Ministerio de Trabajo) — una cuenta de jefatura debe apuntar
-// a uno de estos mismos textos exactos para que el servidor sepa a quién le
-// aprueba horas (el departamento vive en DEPARTAMENTO_MINISTERIO del puesto
-// de cada empleado, en el catálogo de Puestos).
-const DEPARTAMENTOS_MINISTERIO = [
-  "ACTIVIDADES", "COCINA", "COMEDOR DE EMPLEADOS", "COMPRAS", "CONCIERGE",
-  "DIRECCIÓN", "FINANZAS", "LIMPIEZA", "MANTENIMIENTO",
-  "RECEPCIÓN", "RESERVA", "RESTAURANTE", "SEGURIDAD", "SISTEMA DE INFORMACIÓN",
-  "SPA", "TOURS", "TRANSPORTE", "VENTAS Y MARKETING",
-];
+// DEPARTAMENTOS_MINISTERIO ya no se declara acá — viene de
+// departamentos-ministerio.js (cargado arriba, antes de este script), el
+// único lugar donde vive esta lista compartida con app.js. Una cuenta de
+// jefatura debe apuntar a uno de esos mismos textos exactos para que el
+// servidor sepa a quién le aprueba horas (el departamento vive en
+// DEPARTAMENTO_MINISTERIO del puesto de cada empleado, en el catálogo de
+// Puestos).
 
 function llenarSelectDepartamentos(sel){
   sel.innerHTML = `<option value="">— Selecciona un departamento —</option>`

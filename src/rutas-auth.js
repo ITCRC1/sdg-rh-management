@@ -374,6 +374,11 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
     // Solo tiene sentido en cuentas consultor (ej. el contador jefe) — en
     // cualquier otro rol se ignora el valor recibido y queda en false.
     const puedeFirmarContratos = rol === "consultor" ? !!b.puedeFirmarContratos : false;
+    // Recortado: para jefatura este campo se compara con === contra
+    // DEPARTAMENTO_MINISTERIO del puesto de cada empleado (ver
+    // horaExtraPerteneceAEquipo) — un espacio de más lo dejaría sin poder
+    // ver a nadie de su equipo, sin ningún error visible.
+    const puestoFinal = b.puesto ? String(b.puesto).trim() : null;
 
     const { rows } = await query(
       `INSERT INTO usuarios (email, nombre, cedula, puesto, propiedad_id, rol,
@@ -381,7 +386,7 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
                              puede_firmar_contratos)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10)
        RETURNING ${CAMPOS_PUBLICOS}`,
-      [email, nombre, b.cedula || null, b.puesto || null, propiedadId, rol,
+      [email, nombre, b.cedula || null, puestoFinal, propiedadId, rol,
        A.hashPassword(password), req.usuario.id, b.empleadoClave || null, puedeFirmarContratos]
     );
 
@@ -457,7 +462,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
 
     if (b.nombre !== undefined) set("nombre", String(b.nombre).trim());
     if (b.cedula !== undefined) set("cedula", b.cedula || null);
-    if (b.puesto !== undefined) set("puesto", b.puesto || null);
+    if (b.puesto !== undefined) set("puesto", b.puesto ? String(b.puesto).trim() : null);
     if (b.propiedadId !== undefined) set("propiedad_id", b.propiedadId || null);
     if (b.rol !== undefined) set("rol", String(b.rol));
     if (b.empleadoClave !== undefined) set("empleado_clave", b.empleadoClave || null);

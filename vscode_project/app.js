@@ -614,6 +614,8 @@ const CAMPOS_EXPORTAR_EMPLEADOS = [
   { grupo: "Cuenta bancaria", campos: [
     ["BANCO_EMP", "Banco"],
     ["NUMERO_CUENTA_EMP", "Número de cuenta"],
+    ["__CUENTA_ELECTRONICA_BNCR", "Cuenta electrónica (si es BNCR)"],
+    ["__ALERTA_CUENTA_BANCARIA", "Alerta cuenta bancaria (para el contador)"],
   ]},
   { grupo: "Datos personales", campos: [
     ["ESTADO_CIVIL_EMP", "Estado civil"],
@@ -697,6 +699,32 @@ function abrirModalExtraerEmpleadosExcel(){
 
 function marcarTodosCamposExtraer(marcar){
   document.querySelectorAll('#modal-incompletos-body input[data-campo-extraer]').forEach(cb => { cb.checked = marcar; });
+}
+
+// Las dos columnas "__CUENTA_ELECTRONICA_BNCR" y "__ALERTA_CUENTA_BANCARIA"
+// no son campos guardados en el empleado — se calculan al exportar, a partir
+// del mismo IBAN de siempre (ver analizarIbanCR), para que el contador no
+// tenga que revisar banco por banco a mano cuál cuenta ya está lista para la
+// planilla bancaria (BNCR) y cuál necesita depósito aparte (otro banco) o ni
+// siquiera tiene cuenta registrada.
+function valorCampoExportarEmpleado(emp, campo){
+  if (campo !== "__CUENTA_ELECTRONICA_BNCR" && campo !== "__ALERTA_CUENTA_BANCARIA"){
+    return emp[campo] || "";
+  }
+  const esAlerta = campo === "__ALERTA_CUENTA_BANCARIA";
+  const numero = String(emp.NUMERO_CUENTA_EMP || "").trim();
+  if (!numero) return esAlerta ? "⚠️ Sin número de cuenta registrado" : "";
+
+  const esIban = (emp.TIPO_CUENTA_EMP || "iban") === "iban";
+  if (!esIban) return esAlerta ? "Cuenta electrónica manual (no IBAN) — no se puede verificar el banco" : "";
+
+  const iban = numero.replace(/\s/g, "").toUpperCase();
+  if (!/^CR\d{20}$/.test(iban)) return esAlerta ? "⚠️ IBAN con formato inválido" : "";
+
+  const info = analizarIbanCR(iban);
+  if (!esAlerta) return info.esBNCR ? info.cuentaElectronica : "";
+  if (!info.digitosOk) return "⚠️ Los dígitos de control del IBAN no cuadran — revisar a mano";
+  return info.esBNCR ? "" : "⚠️ Cuenta de otro banco (código " + info.codigoBanco + ") — revisar a mano para el depósito";
 }
 
 // Alterna entre el buscador (nadie elegido todavía) y la "ficha" de quien ya
@@ -813,7 +841,7 @@ async function descargarExcelEmpleadosSeleccionado(){
 
     filtrados.forEach(emp => {
       const fila = {};
-      seleccionados.forEach(campo => { fila[campo] = emp[campo] || ""; });
+      seleccionados.forEach(campo => { fila[campo] = valorCampoExportarEmpleado(emp, campo); });
       ws.addRow(fila);
     });
     ws.views = [{ state: "frozen", ySplit: 1 }];
@@ -1089,13 +1117,33 @@ const PUESTOS_LIDERAZGO = [
   "Supervisor de Actividades",
 ];
 
-// Departamentos reales de operación (COCINA, LIMPIEZA, RECEPCIÓN...), derivados
-// de MINISTERIO_PUESTOS — es la misma agrupación que ya trae el catálogo del
-// Ministerio de Trabajo (ej. COCINA engloba Cocinero A, Cocinero B, Panadero y
-// Steward). Se usa para agrupar a quién le aprueba horas extra cada jefatura,
-// y para que un puesto creado a mano también pueda quedar en un departamento
-// aunque no se haya elegido de la lista del Ministerio.
-const DEPARTAMENTOS_MINISTERIO = [...new Set(MINISTERIO_PUESTOS.map(p => p.departamento))].sort();
+// DEPARTAMENTOS_MINISTERIO ya no se declara acá — vive en el único lugar
+// compartido con empleador.html (ver departamentos-ministerio.js, cargado
+// antes que este archivo en index.html). Se usa para agrupar a quién le
+// aprueba horas extra cada jefatura, y para que un puesto creado a mano
+// también pueda quedar en un departamento aunque no se haya elegido de la
+// lista del Ministerio.
+//
+// Esta lista compartida está tecleada a mano, mientras que MINISTERIO_PUESTOS
+// de acá abajo trae su propio "departamento" por cada puesto — nada obliga a
+// que sigan coincidiendo si alguien edita uno sin acordarse del otro. En vez
+// de confiar en que nadie se olvide, se comparan de verdad al cargar la
+// página: si MINISTERIO_PUESTOS llega a traer un departamento que
+// DEPARTAMENTOS_MINISTERIO no tiene (o le sobra uno que ya nadie usa), avisa
+// fuerte por consola en vez de dejar a una jefatura nueva sin poder ver a su
+// equipo en silencio.
+(function validarDepartamentosMinisterioSincronizados(){
+  const reales = new Set(MINISTERIO_PUESTOS.map(p => p.departamento));
+  const declarados = new Set(DEPARTAMENTOS_MINISTERIO);
+  const faltanEnLista = [...reales].filter(d => !declarados.has(d));
+  const sobranEnLista = [...declarados].filter(d => !reales.has(d));
+  if (faltanEnLista.length || sobranEnLista.length){
+    console.error(
+      "⚠️ DEPARTAMENTOS_MINISTERIO (departamentos-ministerio.js) desincronizado con MINISTERIO_PUESTOS (app.js).",
+      { faltanEnLista, sobranEnLista }
+    );
+  }
+})();
 
 // data object: covers every FIELDS_META field plus the company/legal-rep fields,
 // which now live only in the Empresas catalog and are never asked again in Formulario.
@@ -2460,6 +2508,64 @@ const BANCOS_CR = [
   "Banco BCT",
 ];
 
+// Estructura real del IBAN costarricense (BCCR/SINPE, 22 caracteres):
+// CR (país) + 2 dígitos de control + 1 dígito fijo "0" + 3 dígitos de banco
+// (código SUGEF) + 14 dígitos de cuenta interna ("cuenta electrónica" — el
+// número que ya se usa para transferencias SINPE dentro del país). Por eso
+// se puede extraer sin ninguna tabla de bancos: la posición es siempre la
+// misma para cualquier banco, no hace falta saber a cuál pertenece.
+//
+// El único código de banco que esta app conoce con certeza es el 151 (Banco
+// Nacional de Costa Rica) — a propósito no se adivinan los códigos de los
+// otros 14 bancos/cooperativas de BANCOS_CR (una etiqueta de banco
+// equivocada en un dato de depósito de planilla es un error caro), así que
+// cualquier código distinto de 151 se reporta genérico como "de otro banco".
+const BANCO_CODIGO_BNCR = "151";
+
+// Verificación matemática real del IBAN (ISO 13616 / MOD 97-10): mueve los
+// primeros 4 caracteres al final, convierte letras a números (A=10…Z=35) y
+// el número resultante debe dar resto 1 al dividirlo entre 97. Se procesa
+// dígito por dígito (nunca como un solo Number) porque el IBAN completo
+// convertido tiene más de 30 dígitos — se saldría del rango seguro de un
+// entero de JavaScript.
+function ibanChecksumValidoCR(iban){
+  const reordenado = iban.slice(4) + iban.slice(0, 4);
+  const numerico = reordenado.replace(/[A-Z]/g, ch => (ch.charCodeAt(0) - 55).toString());
+  let resto = 0;
+  for (let i = 0; i < numerico.length; i++){
+    resto = (resto * 10 + Number(numerico[i])) % 97;
+  }
+  return resto === 1;
+}
+
+// Analiza un IBAN costarricense ya con formato válido (CR + 20 dígitos —
+// eso se valida aparte, con la misma regexp de siempre) y extrae lo que se
+// pueda saber sin adivinar nada: si los dígitos de control cuadran, el
+// código de banco, y si es BNCR, la cuenta electrónica (los últimos 14
+// dígitos) ya lista para usar en la planilla bancaria.
+function analizarIbanCR(iban){
+  const codigoBanco = iban.slice(5, 8);
+  return {
+    digitosOk: ibanChecksumValidoCR(iban),
+    codigoBanco,
+    esBNCR: codigoBanco === BANCO_CODIGO_BNCR,
+    cuentaElectronica: iban.slice(8, 22),
+  };
+}
+
+// Mensaje corto para el hint del formulario — solo aplica una vez el
+// formato ya es válido (CR + 20 dígitos); el error de formato lo sigue
+// mostrando el hint de al lado, sin duplicarlo acá.
+function hintBancoIban(valorCrudo, esIban){
+  if (!esIban) return "";
+  const v = String(valorCrudo || "").replace(/\s/g, "").toUpperCase();
+  if (!/^CR\d{20}$/.test(v)) return "";
+  const info = analizarIbanCR(v);
+  if (!info.digitosOk) return "⚠️ Los dígitos de control no cuadran con el resto del número — revisa que esté bien digitado.";
+  if (info.esBNCR) return "✅ Banco Nacional (BNCR) — cuenta electrónica: " + info.cuentaElectronica;
+  return "⚠️ IBAN de un banco distinto a BNCR (código " + info.codigoBanco + ") — revisar a mano para la planilla bancaria.";
+}
+
 function catalogFieldHtml(meta){
   const [id, type, label, hint] = meta;
   const val = (catalogEditing.values[id] || "");
@@ -2601,8 +2707,10 @@ function catalogFieldHtml(meta){
         document.getElementById('hint-${id}').textContent = ${esIban}
           ? (/^CR\\d{20}$/.test(v) ? '' : 'Incompleto — debe ser CR + 20 dígitos.')
           : '';
+        document.getElementById('hintbanco-${id}').textContent = hintBancoIban(v, ${esIban});
       ">
-      <div class="hint-error" id="hint-${id}">${esIban && valCuenta ? (okIban ? "" : "Incompleto — debe ser CR + 20 dígitos.") : ""}</div>`;
+      <div class="hint-error" id="hint-${id}">${esIban && valCuenta ? (okIban ? "" : "Incompleto — debe ser CR + 20 dígitos.") : ""}</div>
+      <div class="hint" id="hintbanco-${id}">${escapeHtml(hintBancoIban(valCuenta, esIban))}</div>`;
   } else if (type === "file_adjunto_emp"){
     // Tres estados posibles: vacío, referencia al almacén ("doc:<id>"), o un
     // base64 heredado de antes del backend. Los tres se muestran distinto.

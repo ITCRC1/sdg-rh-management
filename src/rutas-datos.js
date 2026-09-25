@@ -146,20 +146,20 @@ async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departam
 // de ese paso final, aunque el registro sea de su propio equipo: su acceso
 // de escritura a horas_extra: (más abajo) es para aprobar en primera
 // instancia, rechazar, editar horas o reclasificar tipo de día — nunca para
-// dar la palabra final sobre lo que se paga.
+// dar la palabra final sobre lo que se paga, ni para tocar un día que ya la
+// tenga (ver el chequeo de actual.ESTADO === "aprobada" más abajo, antes de
+// cualquier otra cosa).
 async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
-  if (clave.startsWith(HORAS_EXTRA_PREFIX) && usuario.rol === "jefatura" && typeof valorNuevo === "string") {
-    let nuevo = null;
-    try {
-      nuevo = JSON.parse(valorNuevo);
-    } catch (e) {
-      /* no es JSON válido — se rechaza más abajo en la ruta, no aquí */
-    }
-    if (nuevo && nuevo.ESTADO === "aprobada") {
-      const actual = await valorDeClave(propiedad, clave);
-      const yaEraFinal = actual && actual.ESTADO === "aprobada";
-      if (!yaEraFinal) return false;
-    }
+  // Una vez que un día de horas_extra: llega a "aprobada" (palabra final,
+  // ya cuenta para planilla), jefatura queda AFUERA de esa clave sin
+  // excepción — no importa qué traiga valorNuevo (otro ESTADO, un
+  // "downgrade" a "pendiente"/"rechazada", o solo editar HORAS_EXTRA
+  // manteniendo el ESTADO igual). Chequear el estado ACTUAL (nunca el que
+  // proponga el payload) es lo único que cierra los dos huecos: editar un
+  // día ya finalizado, o revertir la aprobación final de gerencia/master.
+  if (clave.startsWith(HORAS_EXTRA_PREFIX) && usuario.rol === "jefatura") {
+    const actual = await valorDeClave(propiedad, clave);
+    if (actual && actual.ESTADO === "aprobada") return false;
   }
   // Consultor (Consultants: RRHH/planillas/contador jefe) es de solo
   // lectura en TODO — ni PUEDEN_ESCRIBIR lo incluye, ni hay ninguna
