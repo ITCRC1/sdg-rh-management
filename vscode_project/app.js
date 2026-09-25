@@ -18280,7 +18280,13 @@ async function renderPerfilEmpleado(){
       </div></div>` : ""}
 
       ${(() => {
-        const monedaDed = emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC";
+        // Las deducciones recurrentes siempre se cobran en colones, sin
+        // importar en qué moneda esté el salario del empleado (igual que ya
+        // asumen agregarDeduccionRecurrente/aplicarDeduccionRecurrente al
+        // registrar en la bitácora) — antes esta pantalla la ponía en USD
+        // para cualquier empleado con salario en dólares, aunque el monto
+        // (ej. un plan dental de ₡5,000) siempre fue en colones.
+        const monedaDed = "CRC";
         const deduccionesActivas = (emp.DEDUCCIONES_RECURRENTES || []).filter(d => d.activo !== false);
         return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;">
