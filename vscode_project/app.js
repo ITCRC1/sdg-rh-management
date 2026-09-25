@@ -11333,7 +11333,14 @@ async function renderHorasExtrasPanel(){
       } else if (r.ESTADO === "aprobada"){
         acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}</span>`;
       } else if (r.ESTADO === "rechazada"){
-        acciones = `<span class="meta">${escapeHtml(r.MOTIVO_RECHAZO || "Rechazada")}</span>`;
+        // Reabrir/ver historial: solo master/gerente (puedeEditar) — antes un
+        // día rechazado quedaba atrapado sin ninguna forma de corregirlo si
+        // alguien se equivocó al marcarlo "no laboró".
+        acciones = `<span class="meta">${escapeHtml(r.MOTIVO_RECHAZO || "Rechazada")}</span>`
+          + (puedeEditar
+            ? `<button class="btn" onclick="mostrarModalHistorialHorasExtra('${keyEsc}')">🕘 Historial</button>
+               <button class="use" onclick="reabrirHoraExtraRechazada('${keyEsc}')">↩️ Reabrir</button>`
+            : "");
       }
       const marcasHtml = (Array.isArray(r.MARCAS) && r.MARCAS.length)
         ? `<details style="margin-top:3px;">
@@ -11630,6 +11637,65 @@ async function confirmarEdicionesHorasExtra(){
 function descartarEdicionesHorasExtra(){
   horasExtraEdicionesPendientes = {};
   renderHorasExtrasPanel();
+}
+
+// Reabre un día "rechazada" (no laboró/no aprobado) — exclusivo de
+// master/gerente (puedeEditar). Lo regresa a "pendiente" para que pase de
+// nuevo por el flujo normal de aprobación en vez de quedar atrapado sin
+// forma de corregirlo; el motivo de rechazo anterior sigue disponible en
+// "🕘 Historial" (el histórico nunca se pierde, ver mostrarModalHistorialHorasExtra).
+async function reabrirHoraExtraRechazada(key){
+  if (!window.sdgApi.puedeEditar()) return;
+  if (!confirm("¿Reabrir este día? Vuelve a quedar pendiente de una nueva decisión.")) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.ESTADO = "pendiente";
+    delete v.MOTIVO_RECHAZO;
+    v.REABIERTO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    v.FECHA_REAPERTURA = new Date().toISOString();
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Día reabierto — vuelve a estar pendiente de aprobación.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo reabrir: " + e.message, false); }
+}
+
+// Histórico de versiones de un registro de horas_extra: (quién lo creó,
+// aprobó, rechazó o reabrió, y cuándo) — reusa /api/historial, que ya
+// registra cada cambio con su autor vía el trigger de Postgres, aunque hasta
+// ahora ninguna pantalla lo mostraba para este prefijo.
+async function mostrarModalHistorialHorasExtra(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🕘 Historial";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const r = await window.sdgApi.historial(key, 50);
+    const versiones = (r && r.versiones) || [];
+    if (!versiones.length){ body.innerHTML = `<div class="empty-state">Sin historial todavía.</div>`; return; }
+    const ACCION_LABEL = { crear: "Creado", actualizar: "Actualizado", eliminar: "Eliminado", restaurar: "Restaurado" };
+    body.innerHTML = versiones.map(v => {
+      let val = null;
+      try{ val = JSON.parse(v.valor); }catch(e){ /* valor no parseable, se omite el detalle */ }
+      const quien = v.actor_nombre || (v.actor_email || "").split("@")[0] || "—";
+      const cuando = v.creado_en ? new Date(v.creado_en).toLocaleString("es-CR") : "—";
+      const detalle = val
+        ? [
+            val.ESTADO ? `Estado: ${val.ESTADO}` : "",
+            val.TIPO_DIA ? `Tipo: ${val.TIPO_DIA}` : "",
+            val.MOTIVO_RECHAZO ? `Motivo: ${val.MOTIVO_RECHAZO}` : "",
+          ].filter(Boolean).join(" · ")
+        : "";
+      return `<div class="catalog-item">
+        <div class="row1"><div class="info">
+          <div class="name">v${v.version} — ${escapeHtml(ACCION_LABEL[v.accion] || v.accion)}</div>
+          <div class="meta">${escapeHtml(quien)} · ${escapeHtml(cuando)}</div>
+          ${detalle ? `<div class="meta">${escapeHtml(detalle)}</div>` : ""}
+        </div></div>
+      </div>`;
+    }).join("");
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
 }
 
 async function rechazarHoraExtra(key){
