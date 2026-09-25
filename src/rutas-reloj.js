@@ -190,4 +190,9 @@ router.get("/personas", async (req, res, next) => {
   }
 });
 
-module.exports = { reloj: router, PROPIEDAD_RELOJ };
+// `consultar`/`obtenerPool`/`aPared`/`aUtc`/`OFFSET_MIN` se exportan además
+// de la ruta para que reloj-sync.js (envío automático diario a Horas extra)
+// pueda leer la misma base MySQL de solo lectura sin abrir un segundo pool ni
+// duplicar la conversión de huso horario — sigue siendo esta ruta la única
+// que sabe cómo hablarle a SmartPSS.
+module.exports = { reloj: router, PROPIEDAD_RELOJ, consultar, obtenerPool, aPared, aUtc, OFFSET_MIN };

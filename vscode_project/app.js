@@ -8908,7 +8908,13 @@ async function leerRegistrosMarcacionPDF(file){
 // empareje con exactamente las mismas reglas — mismo corte por fecha civil,
 // mismo tope de 20h por par, mismas filas INCOMPLETO — en vez de una copia
 // que con el tiempo diverja.
-function filasDesdeEventosMarcacion(eventos){
+// `jornadaPorCodigo(codigo)`, si se pasa, es una función SÍNCRONA que
+// devuelve la MODALIDAD_JORNADA del empleado dueño de ese código ("turno_
+// nocturno"/"turno_mixto"/"turno_continuo_diurno"/null) — solo la usa el
+// Reloj marcador (relojEnviarAHorasExtras y su envío automático), que ya
+// conoce la ficha de cada persona antes de armar las filas; el importador de
+// PDF de marcas sueltas nunca la pasa, así que su comportamiento no cambia.
+function filasDesdeEventosMarcacion(eventos, jornadaPorCodigo){
   if (!eventos.length) return { filas: [], sinPar: 0, turnosSinMarcar: 0 };
 
   const porEmpleado = {};
@@ -8923,7 +8929,38 @@ function filasDesdeEventosMarcacion(eventos){
   Object.entries(porEmpleado).forEach(([codigo, info]) => {
     const porFecha = {};
     info.marcas.forEach(ev => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
-    Object.entries(porFecha).forEach(([fecha, marcasDelDia]) => {
+
+    // Turno nocturno/mixto que cruza medianoche (típico de seguridad): si un
+    // día trae UNA sola marca y el día calendario siguiente también trae una
+    // sola marca, se tratan como el mismo turno (entrada hoy, salida mañana,
+    // contado en el día de hoy) en vez de dos días "sin marcar" — antes esto
+    // SIEMPRE se veía como dos turnos incompletos porque el corte por fecha
+    // civil parte cualquier turno que cruce la medianoche (ver el porqué de
+    // ese corte más arriba). Cualquier otro patrón (2+ marcas de sobra
+    // cualquiera de los dos días) se deja intacto para revisión manual — acá
+    // fusionar sería adivinar cuál de varias marcas es la del turno nocturno.
+    const puedeCruzarMedianoche = typeof jornadaPorCodigo === "function" &&
+      ["turno_nocturno", "turno_mixto"].includes(jornadaPorCodigo(codigo));
+    const fusionaConMañana = new Set(); // fecha D: su única marca se movió al turno de D
+    const fusionadaDesdeAyer = new Set(); // fecha D+1: su única marca ya se consumió en el turno de D
+    if (puedeCruzarMedianoche){
+      Object.keys(porFecha).sort().forEach(fecha => {
+        if (porFecha[fecha].length !== 1) return;
+        const mañana = relojSumarDias(fecha, 1);
+        const marcasMañana = porFecha[mañana];
+        if (!marcasMañana || marcasMañana.length !== 1) return;
+        const horas = (marcasMañana[0].ts - porFecha[fecha][0].ts) / 3600000;
+        if (horas <= 0 || horas > 20) return;
+        fusionaConMañana.add(fecha);
+        fusionadaDesdeAyer.add(mañana);
+      });
+    }
+
+    Object.entries(porFecha).forEach(([fecha, marcasDelDiaOriginal]) => {
+      if (fusionadaDesdeAyer.has(fecha)) return; // ya se contó como la salida del turno de ayer
+      const marcasDelDia = fusionaConMañana.has(fecha)
+        ? [marcasDelDiaOriginal[0], porFecha[relojSumarDias(fecha, 1)][0]]
+        : marcasDelDiaOriginal;
       const marcas = marcasDelDia.slice().sort((a, b) => a.ts - b.ts);
       for (let i = 0; i + 1 < marcas.length; i += 2){
         const horas = (marcas[i + 1].ts - marcas[i].ts) / 3600000;
@@ -8993,18 +9030,26 @@ function detectarColumnasHorasExtra(rows){
   };
 }
 
-// Puesto → jornada diaria de referencia (MODALIDAD_JORNADA del puesto, con
-// caché por PUESTO_KEY para no repetir la misma consulta por cada empleado
-// de un mismo puesto).
-async function jornadaDiariaDeEmpleado(empleado, cachePuestos){
-  if (!empleado || !empleado.PUESTO_KEY) return JORNADA_DIARIA_POR_DEFECTO;
+// Puesto → MODALIDAD_JORNADA del empleado (con caché por PUESTO_KEY para no
+// repetir la misma consulta por cada empleado de un mismo puesto). Separada
+// de jornadaDiariaDeEmpleado (que ya convierte esto a horas) porque el
+// emparejado de turnos que cruzan medianoche (ver filasDesdeEventosMarcacion)
+// necesita la modalidad en sí ("turno_nocturno"/"turno_mixto"), no las horas.
+async function modalidadJornadaDeEmpleado(empleado, cachePuestos){
+  if (!empleado || !empleado.PUESTO_KEY) return null;
   if (!(empleado.PUESTO_KEY in cachePuestos)){
     try{
       const r = await window.storage.get(CATALOGS.puestos.prefix + empleado.PUESTO_KEY, false);
       cachePuestos[empleado.PUESTO_KEY] = r && r.value ? JSON.parse(r.value) : null;
     }catch(e){ cachePuestos[empleado.PUESTO_KEY] = null; }
   }
-  return jornadaDiariaDePuesto(cachePuestos[empleado.PUESTO_KEY]);
+  const puesto = cachePuestos[empleado.PUESTO_KEY];
+  return (puesto && puesto.MODALIDAD_JORNADA) || null;
+}
+
+async function jornadaDiariaDeEmpleado(empleado, cachePuestos){
+  const modalidad = await modalidadJornadaDeEmpleado(empleado, cachePuestos);
+  return jornadaDiariaDePuesto(modalidad ? { MODALIDAD_JORNADA: modalidad } : null);
 }
 
 // Puesto de confianza (Art. 143 CT, ver campo EMPLEADO_CONFIANZA en
@@ -10441,7 +10486,16 @@ async function relojEnviarAHorasExtras(){
   const btn = document.getElementById("reloj-btn-enviar");
   if (btn){ btn.disabled = true; btn.textContent = "Enviando…"; }
   try{
-    const { filas, sinPar, turnosSinMarcar } = filasDesdeEventosMarcacion(eventos);
+    // Modalidad de jornada por persona, para que el emparejado sepa a quién
+    // se le permite cruzar medianoche (ver filasDesdeEventosMarcacion) —
+    // solo a quien ya tiene ficha resuelta en pantalla, igual que el resto
+    // del envío.
+    const cachePuestos = {};
+    const modalidadPorCodigo = {};
+    for (const p of v.personas){
+      modalidadPorCodigo[p.codigo] = p.ficha ? await modalidadJornadaDeEmpleado(p.ficha, cachePuestos) : null;
+    }
+    const { filas, sinPar, turnosSinMarcar } = filasDesdeEventosMarcacion(eventos, codigo => modalidadPorCodigo[codigo] || null);
     // Cada fila lleva la ficha que resolvió el reporte, para que Horas extras
     // asigne exactamente a quien ve la persona en pantalla.
     const fichaPorCodigo = {};
