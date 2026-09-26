@@ -7999,14 +7999,24 @@ async function generarReporteHorarioPlanilla(){
     // propia columna (encabezado = la etiqueta, ej. "Plan dental"), en el
     // orden en que aparece por primera vez — así se puede mapear cada
     // columna directo a su cuenta contable, en vez de un solo texto con todo
-    // junto.
-    const etiquetasDeduccion = [];
+    // junto. Se agrupa por etiqueta NORMALIZADA (sin espacios de sobra ni
+    // distinguir mayúscula/minúscula): la etiqueta es texto libre que cada
+    // quien escribe al crear la deducción (ver agregarDeduccionRecurrente),
+    // así que "Plan dental" y "PLAN DENTAL" son la misma deducción y deben
+    // caer en la misma columna — comparándolas tal cual quedaban en columnas
+    // separadas, con los montos "desfasados" entre una y otra según cómo la
+    // hubiera escrito cada quien.
+    const etiquetaNormalizada = s => String(s || "").trim().toUpperCase();
+    const etiquetasDeduccion = []; // claves normalizadas, en orden de aparición
+    const etiquetaDisplay = {}; // clave normalizada -> texto tal cual se vio la primera vez (para el encabezado)
     filas.forEach(f => {
       deduccionesActivasDeEmpleado(f.emp).forEach(d => {
-        if (!etiquetasDeduccion.includes(d.label)) etiquetasDeduccion.push(d.label);
+        const clave = etiquetaNormalizada(d.label);
+        if (!clave) return;
+        if (!(clave in etiquetaDisplay)){ etiquetaDisplay[clave] = d.label; etiquetasDeduccion.push(clave); }
       });
     });
-    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)", ...etiquetasDeduccion];
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)", ...etiquetasDeduccion.map(clave => etiquetaDisplay[clave])];
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
@@ -8061,7 +8071,8 @@ async function generarReporteHorarioPlanilla(){
       // (ver aplicarDeduccionRecurrente, usada por "Generar colillas").
       const montoPorEtiquetaDeduccion = {};
       deduccionesActivasDeEmpleado(f.emp).forEach(d => {
-        montoPorEtiquetaDeduccion[d.label] = (montoPorEtiquetaDeduccion[d.label] || 0) + (d.monto || 0);
+        const clave = etiquetaNormalizada(d.label);
+        montoPorEtiquetaDeduccion[clave] = (montoPorEtiquetaDeduccion[clave] || 0) + (d.monto || 0);
       });
       // Puesto de confianza: horasExtra/horasExtraFeriado ya vienen en 0 desde
       // calcularResumenQuincena (nunca se les paga horas extra), así que estas
