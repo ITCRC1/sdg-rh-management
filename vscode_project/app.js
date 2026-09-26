@@ -10797,19 +10797,33 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     const finEfectivoISO = isoDeFechaLocal(activo.finEfectivo);
     const inicioISO = (datosDesdeISO && datosDesdeISO > inicioEfectivoISO) ? datosDesdeISO : inicioEfectivoISO;
     const finISO = (datosHastaISO && datosHastaISO < finEfectivoISO) ? datosHastaISO : finEfectivoISO;
+    // Horas extra (y el recargo de feriado trabajado que va con ellas, ver
+    // diasFeriadosTrabajados/horasExtraFeriado) SÍ usan el rango de "Datos
+    // desde/hasta" TAL CUAL, sin acotarlo a la quincena calendario — a
+    // diferencia de los días base/descuentos (que solo pueden angostar la
+    // ventana, arriba), las horas extra se pagan según el ciclo real que se
+    // esté liquidando en esta corrida (ej. un archivo de marcación del 10 al
+    // 26), que puede incluir un feriado que cae fuera de la quincena
+    // calendario pero SÍ dentro de lo que de verdad se está pagando ahora.
+    const inicioHorasISO = datosDesdeISO || inicioEfectivoISO;
+    const finHorasISO = datosHastaISO || finEfectivoISO;
 
     const confianza = esEmpleadoConfianza(emp);
     const delEmpleadoEnRango = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
+    const delEmpleadoEnRangoHoras = (inicioHorasISO === inicioISO && finHorasISO === finISO)
+      ? delEmpleadoEnRango
+      : registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioHorasISO && r.FECHA <= finHorasISO);
     // Puesto de confianza: nunca genera horas extra, así que se fuerza a 0 acá
     // mismo (defensivo — aunque por error existiera algún registro "laboral"
     // con horas, no debe pagarse). El día doble por feriado trabajado
     // (diasFeriadosTrabajados, más abajo) SÍ le sigue aplicando igual que a
     // cualquiera — lo único que no aplica es el recargo por HORAS extra.
-    const horasExtra = confianza ? 0 : delEmpleadoEnRango.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
-    const horasExtraFeriado = confianza ? 0 : delEmpleadoEnRango
+    const horasExtra = confianza ? 0 : delEmpleadoEnRangoHoras.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+    const horasExtraFeriado = confianza ? 0 : delEmpleadoEnRangoHoras
       .filter(r => r.TIPO_DIA === "laboral" && feriadoLeyEnFecha(r.FECHA))
       .reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
-    let diasFeriadosTrabajados = 0;
+    const diasFeriadosTrabajados = delEmpleadoEnRangoHoras
+      .filter(r => esDiaBaseDePago(r.FECHA) && r.TIPO_DIA === "laboral" && feriadoLeyEnFecha(r.FECHA)).length;
     const descPorTipo = {};
     let totalDescuento = 0;
     let diasLibresQuincena = 0;
@@ -10826,10 +10840,7 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
       // en la columna de la quincena — eran vacaciones, no días libres.
       if (r.TIPO_DIA === "vacaciones"){ diasVacacionesQuincena++; return; }
       if (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"){ diasLibresQuincena++; return; } // día libre (programado por solicitud, o reclasificado a mano desde Horas Extra): no resta, se muestra aparte
-      if (feriadoLeyEnFecha(r.FECHA)){
-        if (r.TIPO_DIA === "laboral") diasFeriadosTrabajados++; // se paga doble, no se descuenta (ver calcularColillaEmpleado)
-        if (r.TIPO_DIA === "laboral" || r.TIPO_DIA === "ausencia") return; // trabajado o simplemente no marcado: ninguno de los dos se descuenta — el feriado se paga se trabaje o no
-      }
+      if (feriadoLeyEnFecha(r.FECHA) && (r.TIPO_DIA === "laboral" || r.TIPO_DIA === "ausencia")) return; // trabajado o simplemente no marcado: ninguno de los dos se descuenta — el feriado se paga se trabaje o no (diasFeriadosTrabajados ya se contó arriba, sobre el rango de horas extra)
       if (!TIPOS_DIA_DESCUENTA_QUINCENA[r.TIPO_DIA]) return;
       descPorTipo[r.TIPO_DIA] = (descPorTipo[r.TIPO_DIA] || 0) + 1;
       totalDescuento++;
