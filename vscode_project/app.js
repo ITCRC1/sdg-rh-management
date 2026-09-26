@@ -10784,27 +10784,34 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
     if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasVacacionesQuincena: 0, diasLibresMes: 0, diasArrastrados: 0 };
     const diasArrastrados = diasArrastradosPorIngresoSinColilla(emp, rango, clavesColillasArchivadas);
-    // El rango de "Datos desde/hasta" (datosDesdeISO/datosHastaISO) SOLO
-    // puede angostar la ventana de la quincena, nunca ensancharla — antes, si
-    // alguien ponía un "Datos desde" anterior al inicio real de la quincena
-    // (ej. para calzar con un archivo de marcación que empieza unos días
-    // antes), se colaban días de la quincena ANTERIOR en el descuento de
-    // esta (ej. un permiso sin goce del 05 al 17 de un mes contaba sus 13
-    // días completos en la quincena 16-30, en vez de solo el 16 y el 17).
-    // Por eso se toma la intersección con [inicioEfectivo, finEfectivo], que
-    // ya viene acotado a la quincena real (y al contrato del empleado).
+    // Los días base y sus descuentos (incapacidad, permiso sin goce, cita
+    // médica, ausencia, días libres, vacaciones) SIEMPRE usan la quincena
+    // calendario completa (acotada solo por el contrato del empleado) — el
+    // rango de "Datos desde/hasta" NUNCA los toca, ni para ensanchar ni para
+    // angostar. Son hechos ya registrados con fecha fija (una incapacidad
+    // con FECHA_FIN conocida, una vacación ya aprobada, etc.), no dependen de
+    // que llegue un archivo de marcación — por eso no tiene sentido
+    // recortarlos aunque la planilla se arme unos días antes de que cierre
+    // el período (ej. "Datos hasta" en el 25 porque así se cierra la
+    // planilla, mientras una incapacidad ya registrada sigue hasta el 30 o
+    // más allá — esos últimos días SÍ deben descontarse de esta quincena, no
+    // perderse ni esperar a la siguiente). Si la incapacidad/permiso se
+    // extiende MÁS ALLÁ de esta quincena, el resto se descuenta solo al
+    // generar el reporte de la quincena siguiente (cada corrida ve su propia
+    // quincena calendario, nunca las dos a la vez).
     const inicioEfectivoISO = isoDeFechaLocal(activo.inicioEfectivo);
     const finEfectivoISO = isoDeFechaLocal(activo.finEfectivo);
-    const inicioISO = (datosDesdeISO && datosDesdeISO > inicioEfectivoISO) ? datosDesdeISO : inicioEfectivoISO;
-    const finISO = (datosHastaISO && datosHastaISO < finEfectivoISO) ? datosHastaISO : finEfectivoISO;
+    const inicioISO = inicioEfectivoISO;
+    const finISO = finEfectivoISO;
     // Horas extra (y el recargo de feriado trabajado que va con ellas, ver
     // diasFeriadosTrabajados/horasExtraFeriado) SÍ usan el rango de "Datos
-    // desde/hasta" TAL CUAL, sin acotarlo a la quincena calendario — a
-    // diferencia de los días base/descuentos (que solo pueden angostar la
-    // ventana, arriba), las horas extra se pagan según el ciclo real que se
-    // esté liquidando en esta corrida (ej. un archivo de marcación del 10 al
-    // 26), que puede incluir un feriado que cae fuera de la quincena
-    // calendario pero SÍ dentro de lo que de verdad se está pagando ahora.
+    // desde/hasta" tal cual, sin acotarlo a la quincena calendario — a
+    // diferencia de los días base/descuentos (arriba, que ignoran "Datos"
+    // por completo), las horas extra dependen del archivo de marcación real,
+    // que puede tener su propio ciclo (ej. del 10 al 26) distinto al de la
+    // quincena, y ese ciclo puede incluir un feriado que cae fuera de la
+    // quincena calendario pero SÍ dentro de lo que de verdad se está pagando
+    // ahora.
     const inicioHorasISO = datosDesdeISO || inicioEfectivoISO;
     const finHorasISO = datosHastaISO || finEfectivoISO;
 
