@@ -7995,7 +7995,18 @@ async function generarReporteHorarioPlanilla(){
     // hacía parecer que faltaban horas al sumar a simple vista. El dinero
     // sigue calculado exactamente igual (cada tramo a su propia tarifa) —
     // esto es solo para poder ver el total de horas de un vistazo.
-    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)","Monto horas extra (₡)","Monto feriado — doble + horas triples (₡)"];
+    // Cada tipo de deducción recurrente presente en este lote se vuelve su
+    // propia columna (encabezado = la etiqueta, ej. "Plan dental"), en el
+    // orden en que aparece por primera vez — así se puede mapear cada
+    // columna directo a su cuenta contable, en vez de un solo texto con todo
+    // junto.
+    const etiquetasDeduccion = [];
+    filas.forEach(f => {
+      deduccionesActivasDeEmpleado(f.emp).forEach(d => {
+        if (!etiquetasDeduccion.includes(d.label)) etiquetasDeduccion.push(d.label);
+      });
+    });
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)", ...etiquetasDeduccion];
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
@@ -8032,20 +8043,26 @@ async function generarReporteHorarioPlanilla(){
 
     let filaActual = 4;
     filas.forEach(f => {
-      // Misma fórmula que ya usa el estimado en pantalla del panel de Horas
-      // Extras (salario mensual / 30 días / jornada diaria = salario por
-      // hora, a tiempo y medio) — solo cubre salario en colones, igual que
-      // ese estimado: si el empleado gana en dólares, queda en blanco.
-      const jornadaEmpleado = jornadaDiariaDePuesto(puestosPorKey[f.emp.PUESTO_KEY]);
-      const salarioHora = f.emp.SALARIO_EMP ? (parseFloat(f.emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
-      const salarioDiario = f.emp.SALARIO_EMP ? (parseFloat(f.emp.SALARIO_EMP) / 30) : null;
+      // El estimado en colones (horas × tarifa × salario) se quitó de este
+      // reporte masivo — se veía como un cálculo poco confiable a esta
+      // escala. El monto exacto por persona sigue disponible al generar su
+      // colilla individual (ver calcularColillaEmpleado); acá solo quedan
+      // días/horas, sin plata.
       const horasExtraFeriado = f.horasExtraFeriado || 0;
       const horasExtraTotales = f.horasExtra || 0;
       const horasExtraNormal = Math.max(0, horasExtraTotales - horasExtraFeriado);
-      const montoHorasExtra = (salarioHora && !isNaN(salarioHora)) ? Math.round(salarioHora * TARIFA_HORAS_EXTRA * horasExtraNormal * 100) / 100 : "";
-      const montoFeriado = (salarioHora && salarioDiario && !isNaN(salarioHora))
-        ? Math.round(((f.diasFeriadosTrabajados || 0) * salarioDiario + horasExtraFeriado * salarioHora * TARIFA_HORAS_EXTRA_FERIADO) * 100) / 100
-        : "";
+      // Deducciones recurrentes (plan dental, cuota de préstamo, etc.) ya
+      // cargadas en el Expediente del empleado — siempre en colones (ver
+      // agregarDeduccionRecurrente). Una columna por etiqueta (ver
+      // etiquetasDeduccion más arriba); si el empleado no tiene esa
+      // deducción, la celda queda vacía en vez de 0, para que se note a
+      // simple vista cuáles sí le aplican. No se prorratean ni se marcan
+      // como aplicadas acá — eso solo pasa de verdad al archivar una colilla
+      // (ver aplicarDeduccionRecurrente, usada por "Generar colillas").
+      const montoPorEtiquetaDeduccion = {};
+      deduccionesActivasDeEmpleado(f.emp).forEach(d => {
+        montoPorEtiquetaDeduccion[d.label] = (montoPorEtiquetaDeduccion[d.label] || 0) + (d.monto || 0);
+      });
       // Puesto de confianza: horasExtra/horasExtraFeriado ya vienen en 0 desde
       // calcularResumenQuincena (nunca se les paga horas extra), así que estas
       // columnas quedan en 0 solas — mismas columnas y formato que siempre,
@@ -8064,8 +8081,7 @@ async function generarReporteHorarioPlanilla(){
         Math.round(horasExtraTotales * 100) / 100,
         Math.round(horasExtraNormal * 100) / 100,
         Math.round(horasExtraFeriado * 100) / 100,
-        montoHorasExtra,
-        montoFeriado,
+        ...etiquetasDeduccion.map(l => montoPorEtiquetaDeduccion[l] ? Math.round(montoPorEtiquetaDeduccion[l]) : ""),
       ];
       const fila = ws.getRow(filaActual);
       valores.forEach((v, i) => {
