@@ -7988,7 +7988,14 @@ async function generarReporteHorarioPlanilla(){
 
     const prop = getPropiedadActual();
     const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
-    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra","Monto horas extra (₡)","Monto feriado — doble + horas triples (₡)"];
+    // "Horas extra totales" suma TODAS las horas extra del período (normales
+    // + en feriado) en un solo número — antes solo se veían por separado
+    // ("Horas extra" ya traía restadas las de feriado, para no calcularlas
+    // dos veces en el dinero, ver horasExtraNormal más abajo) y esa resta
+    // hacía parecer que faltaban horas al sumar a simple vista. El dinero
+    // sigue calculado exactamente igual (cada tramo a su propia tarifa) —
+    // esto es solo para poder ver el total de horas de un vistazo.
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)","Monto horas extra (₡)","Monto feriado — doble + horas triples (₡)"];
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
@@ -8033,7 +8040,8 @@ async function generarReporteHorarioPlanilla(){
       const salarioHora = f.emp.SALARIO_EMP ? (parseFloat(f.emp.SALARIO_EMP) / 30 / jornadaEmpleado) : null;
       const salarioDiario = f.emp.SALARIO_EMP ? (parseFloat(f.emp.SALARIO_EMP) / 30) : null;
       const horasExtraFeriado = f.horasExtraFeriado || 0;
-      const horasExtraNormal = Math.max(0, (f.horasExtra || 0) - horasExtraFeriado);
+      const horasExtraTotales = f.horasExtra || 0;
+      const horasExtraNormal = Math.max(0, horasExtraTotales - horasExtraFeriado);
       const montoHorasExtra = (salarioHora && !isNaN(salarioHora)) ? Math.round(salarioHora * TARIFA_HORAS_EXTRA * horasExtraNormal * 100) / 100 : "";
       const montoFeriado = (salarioHora && salarioDiario && !isNaN(salarioHora))
         ? Math.round(((f.diasFeriadosTrabajados || 0) * salarioDiario + horasExtraFeriado * salarioHora * TARIFA_HORAS_EXTRA_FERIADO) * 100) / 100
@@ -8053,7 +8061,9 @@ async function generarReporteHorarioPlanilla(){
         f.descPorTipo.ausencia || 0,
         `${f.diasLibresMes}/${diasLibresMesDeEmpleado(f.emp)}`,
         f.diasFeriadosTrabajados || 0,
+        Math.round(horasExtraTotales * 100) / 100,
         Math.round(horasExtraNormal * 100) / 100,
+        Math.round(horasExtraFeriado * 100) / 100,
         montoHorasExtra,
         montoFeriado,
       ];
@@ -10747,8 +10757,19 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     const activo = diasBaseParaEmpleadoEnQuincena(emp, rango);
     if (!activo) return { emp, activo: false, horasExtra: 0, horasExtraFeriado: 0, diasFeriadosTrabajados: 0, descPorTipo: {}, totalDescuento: 0, diasBase: 0, diasLaborados: 0, diasLibresQuincena: 0, diasVacacionesQuincena: 0, diasLibresMes: 0, diasArrastrados: 0 };
     const diasArrastrados = diasArrastradosPorIngresoSinColilla(emp, rango, clavesColillasArchivadas);
-    const inicioISO = datosDesdeISO || isoDeFechaLocal(activo.inicioEfectivo);
-    const finISO = datosHastaISO || isoDeFechaLocal(activo.finEfectivo);
+    // El rango de "Datos desde/hasta" (datosDesdeISO/datosHastaISO) SOLO
+    // puede angostar la ventana de la quincena, nunca ensancharla — antes, si
+    // alguien ponía un "Datos desde" anterior al inicio real de la quincena
+    // (ej. para calzar con un archivo de marcación que empieza unos días
+    // antes), se colaban días de la quincena ANTERIOR en el descuento de
+    // esta (ej. un permiso sin goce del 05 al 17 de un mes contaba sus 13
+    // días completos en la quincena 16-30, en vez de solo el 16 y el 17).
+    // Por eso se toma la intersección con [inicioEfectivo, finEfectivo], que
+    // ya viene acotado a la quincena real (y al contrato del empleado).
+    const inicioEfectivoISO = isoDeFechaLocal(activo.inicioEfectivo);
+    const finEfectivoISO = isoDeFechaLocal(activo.finEfectivo);
+    const inicioISO = (datosDesdeISO && datosDesdeISO > inicioEfectivoISO) ? datosDesdeISO : inicioEfectivoISO;
+    const finISO = (datosHastaISO && datosHastaISO < finEfectivoISO) ? datosHastaISO : finEfectivoISO;
 
     const confianza = esEmpleadoConfianza(emp);
     const delEmpleadoEnRango = registros.filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO);
