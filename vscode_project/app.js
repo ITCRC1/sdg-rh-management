@@ -18671,6 +18671,37 @@ async function mostrarModalDesignarJefatura(key){
       }catch(e){ /* el puesto no tiene departamento asignado — se deja vacío */ }
     }
 
+    // Si el empleado YA tiene una cuenta de acceso (típicamente "Empleado",
+    // creada sola al completar su ficha — ver sincronizarCuentaEmpleado en
+    // src/rutas-datos.js), cambiarle el rol a jefatura ahí mismo conserva su
+    // mismo correo y contraseña — antes esto siempre creaba una cuenta
+    // NUEVA con contraseña temporal, ignorando la que ya tenía.
+    const departamentoOptions = `<option value="">— Selecciona —</option>` +
+      DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}" ${d===departamentoSugerido?"selected":""}>${escapeHtml(d)}</option>`).join("");
+    const hintDepartamento = departamentoSugerido ? "" : `<div class="hint">Su puesto no tiene un departamento asignado — elígelo a mano, o complétalo primero en el catálogo de Puestos.</div>`;
+
+    let cuentaExistente = null;
+    try{
+      const usuarios = await window.sdgApi.usuarios.listar();
+      cuentaExistente = usuarios.find(u => u.empleadoClave === CATALOGS.empleados.prefix + key) || null;
+    }catch(e){ /* si falla la búsqueda, se sigue con el flujo de crear cuenta nueva */ }
+
+    if (cuentaExistente){
+      body.innerHTML = `
+        <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
+          <b>${escapeHtml(nombreCompletoEmpleado(emp))}</b> ya tiene una cuenta de acceso
+          (<b>${escapeHtml(cuentaExistente.email)}</b>, rol actual: ${escapeHtml(cuentaExistente.rol)}).
+          Cambiarla a Jefatura conserva ese mismo correo y contraseña — no hace falta crear una cuenta nueva.
+        </div>
+        <div class="field">
+          <label>Departamento que lidera</label>
+          <select id="jefatura-departamento">${departamentoOptions}</select>
+          ${hintDepartamento}
+        </div>
+        <button class="btn primary" style="margin-top:8px;" onclick="confirmarCambiarAJefatura('${String(cuentaExistente.id).replace(/'/g,"\\'")}')">Cambiar a Jefatura (mismo correo/contraseña)</button>`;
+      return;
+    }
+
     body.innerHTML = `
       <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Esto crea una cuenta de acceso para <b>${escapeHtml(nombreCompletoEmpleado(emp))}</b> con el rol Jefatura: verá el portal en modo solo lectura, y podrá aprobar, corregir o rechazar las horas extra de su departamento.</div>
       <div class="field">
@@ -18679,11 +18710,8 @@ async function mostrarModalDesignarJefatura(key){
       </div>
       <div class="field">
         <label>Departamento que lidera</label>
-        <select id="jefatura-departamento">
-          <option value="">— Selecciona —</option>
-          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}" ${d===departamentoSugerido?"selected":""}>${escapeHtml(d)}</option>`).join("")}
-        </select>
-        ${departamentoSugerido ? "" : `<div class="hint">Su puesto no tiene un departamento asignado — elígelo a mano, o complétalo primero en el catálogo de Puestos.</div>`}
+        <select id="jefatura-departamento">${departamentoOptions}</select>
+        ${hintDepartamento}
       </div>
       <div class="field">
         <label>Contraseña temporal</label>
@@ -18691,6 +18719,18 @@ async function mostrarModalDesignarJefatura(key){
       </div>
       <button class="btn primary" style="margin-top:8px;" onclick="confirmarDesignarJefatura('${key.replace(/'/g,"\\'")}')">Crear cuenta de jefatura</button>`;
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarCambiarAJefatura(usuarioId){
+  const departamento = document.getElementById("jefatura-departamento").value;
+  if (!departamento){ statusMsg("Elige el departamento que lidera.", false); return; }
+  try{
+    await window.sdgApi.usuarios.actualizar(usuarioId, { rol: "jefatura", puesto: departamento });
+    cerrarModalIncompletos();
+    statusMsg("Cuenta actualizada a Jefatura — mismo correo y contraseña de antes.");
+  }catch(e){
+    statusMsg(e.message || "No se pudo cambiar el rol.", false);
+  }
 }
 
 async function confirmarDesignarJefatura(key){
