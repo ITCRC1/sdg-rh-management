@@ -348,9 +348,12 @@ function aplicarModoSegunRol(rol){
     // sí necesita llegar a Horas extras desde ahí); se esconden nada más
     // "Ver planilla y colillas" e "Ir al menú Datos", que sí siguen siendo
     // exclusivos de master/gerente.
-    // El reloj trae las marcas de TODA la propiedad sin filtro por equipo —
-    // el servidor ya se lo niega a jefatura (rutas-reloj.js).
-    ["navlink-planilla-ver","navlink-planilla-reloj","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
+    // El reloj marcador SÍ se muestra a jefatura, pero de solo lectura y
+    // filtrado a su propio departamento — el servidor (rutas-reloj.js) hace
+    // ese filtro y de todas formas nunca le deja anular/agregar marcas ni
+    // enviar a Horas extras (esas siguen exclusivas de master/gerente, ver
+    // renderRelojPanel).
+    ["navlink-planilla-ver","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = "none";
     });

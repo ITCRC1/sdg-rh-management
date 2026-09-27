@@ -30,6 +30,8 @@
 const express = require("express");
 const A = require("./auth");
 const { propiedadDe } = require("./rutas-datos");
+const { query } = require("./db");
+const { construirIndiceFichas } = require("./reloj-matching");
 
 const PROPIEDAD_RELOJ = process.env.RELOJ_PROPIEDAD || "corcovado";
 const MAX_DIAS_RANGO = 62;
@@ -38,7 +40,16 @@ const OFFSET_MS = OFFSET_MIN * 60000;
 // UTC real (AttendanceDateTime) → hora de pared de Costa Rica, y al revés.
 const aPared = (utcMs) => Number(utcMs) + OFFSET_MS;
 const aUtc = (paredMs) => paredMs - OFFSET_MS;
-const ROLES_LECTURA = new Set(["master", "gerente", "consultor"]);
+// jefatura entra, pero de solo lectura y filtrado a su propio departamento
+// (ver filtrarPorDepartamentoJefatura) — a diferencia de master/gerente/
+// consultor, que ven la propiedad completa. Nunca puede anular una marca,
+// agregar una manual, ni enviar a Horas extras: esas acciones no pasan por
+// este router (son claves normales de /api/datos, ver puedeEscribirClave en
+// rutas-datos.js), que ya le niega jefatura cualquier prefijo reloj_*.
+const ROLES_LECTURA_COMPLETA = new Set(["master", "gerente", "consultor"]);
+const ROLES_LECTURA = new Set([...ROLES_LECTURA_COMPLETA, "jefatura"]);
+const EMPLEADO_PREFIX = "cat_empleado:";
+const PUESTO_PREFIX = "cat_puesto:";
 
 let pool = null;
 function obtenerPool() {
@@ -103,6 +114,48 @@ function fechaValida(s) {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s + "T00:00:00Z"));
 }
 
+// Empleados + puestos de la propiedad del reloj, para poder resolver a qué
+// departamento pertenece cada persona que marca (mismo criterio de
+// DEPARTAMENTO_MINISTERIO que ya usa el resto del sistema para el alcance de
+// una jefatura — ver empleadoPerteneceAEquipo en rutas-datos.js).
+async function empleadosYPuestos() {
+  const [empRows, puestoRows] = await Promise.all([
+    query(
+      `SELECT clave, valor FROM documentos
+        WHERE propiedad_id = $1 AND eliminado_en IS NULL AND clave LIKE $2 ESCAPE '\\'`,
+      [PROPIEDAD_RELOJ, EMPLEADO_PREFIX.replace(/([\\%_])/g, "\\$1") + "%"]
+    ),
+    query(
+      `SELECT clave, valor FROM documentos
+        WHERE propiedad_id = $1 AND eliminado_en IS NULL AND clave LIKE $2 ESCAPE '\\'`,
+      [PROPIEDAD_RELOJ, PUESTO_PREFIX.replace(/([\\%_])/g, "\\$1") + "%"]
+    ),
+  ]);
+  const parse = (rows) => rows.rows.map((r) => {
+    try { return { clave: r.clave, valor: JSON.parse(r.valor) }; } catch (e) { return null; }
+  }).filter(Boolean);
+  const empleados = parse(empRows).map((d) => ({ key: d.clave.slice(EMPLEADO_PREFIX.length), ...d.valor }));
+  const puestoPorKey = {};
+  parse(puestoRows).forEach((d) => { puestoPorKey[d.clave.slice(PUESTO_PREFIX.length)] = d.valor; });
+  return { empleados, puestoPorKey };
+}
+
+// Para una jefatura, deja solo las filas (marcas o personas) cuyo empleado
+// emparejado pertenezca a su departamento (req.usuario.puesto) — una fila
+// que no se pudo emparejar a nadie se descarta (no se puede confirmar que
+// sea de su equipo, así que por seguridad no se le muestra).
+async function filtrarPorDepartamentoJefatura(req, filas, campoCodigo, campoNombre) {
+  const { empleados, puestoPorKey } = await empleadosYPuestos();
+  const fichasDe = construirIndiceFichas(empleados);
+  const deptoLider = req.usuario.puesto || "";
+  return filas.filter((f) => {
+    const ficha = fichasDe(f[campoCodigo], f[campoNombre]);
+    if (!ficha || !ficha.PUESTO_KEY) return false;
+    const puesto = puestoPorKey[ficha.PUESTO_KEY];
+    return !!puesto && puesto.DEPARTAMENTO_MINISTERIO === deptoLider;
+  });
+}
+
 function errorConexion(e, res, next) {
   // Errores de red/credenciales de MySQL: mensaje útil al cliente, detalle
   // solo en los logs (nunca la URL ni el usuario).
@@ -154,16 +207,16 @@ router.get("/marcas", async (req, res, next) => {
       // El rango llega en días de Costa Rica; la columna está en UTC real.
       [aUtc(ini), aUtc(fin)]
     );
-    res.json({
-      desde,
-      hasta,
-      marcas: filas.map((f) => ({
-        codigo: String(f.codigo),
-        nombre: String(f.nombre || "").trim(),
-        ts: aPared(f.ts),
-        dispositivo: f.dispositivo || "",
-      })),
-    });
+    let marcas = filas.map((f) => ({
+      codigo: String(f.codigo),
+      nombre: String(f.nombre || "").trim(),
+      ts: aPared(f.ts),
+      dispositivo: f.dispositivo || "",
+    }));
+    if (req.usuario.rol === "jefatura") {
+      marcas = await filtrarPorDepartamentoJefatura(req, marcas, "codigo", "nombre");
+    }
+    res.json({ desde, hasta, marcas });
   } catch (e) {
     errorConexion(e, res, next);
   }
@@ -177,14 +230,16 @@ router.get("/personas", async (req, res, next) => {
       `SELECT PersonID AS codigo, MAX(PersonName) AS nombre, COUNT(*) AS marcas, MAX(AttendanceDateTime) AS ultima
          FROM AttendanceRecordInfo GROUP BY PersonID ORDER BY nombre`
     );
-    res.json({
-      personas: filas.map((f) => ({
-        codigo: String(f.codigo),
-        nombre: String(f.nombre || "").trim(),
-        marcas: Number(f.marcas),
-        ultima: f.ultima ? aPared(f.ultima) : null,
-      })),
-    });
+    let personas = filas.map((f) => ({
+      codigo: String(f.codigo),
+      nombre: String(f.nombre || "").trim(),
+      marcas: Number(f.marcas),
+      ultima: f.ultima ? aPared(f.ultima) : null,
+    }));
+    if (req.usuario.rol === "jefatura") {
+      personas = await filtrarPorDepartamentoJefatura(req, personas, "codigo", "nombre");
+    }
+    res.json({ personas });
   } catch (e) {
     errorConexion(e, res, next);
   }
