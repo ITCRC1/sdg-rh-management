@@ -62,17 +62,39 @@ const FERIADOS_LEY_CR_FIJOS = [
   { mes: 9, dia: 15 },
   { mes: 12, dia: 25 },
 ];
-// Nota: no incluye Jueves/Viernes Santo (fecha móvil, calculada en app.js
-// vía feriadosDeLeyDelAnio) — no hace falta acá porque el envío automático
-// del reloj corre a diario, con un rango de pocos días (ver LOOKBACK_DIAS);
-// si algún día se necesitara Semana Santa, hay que portar ese cálculo aquí
-// también.
+// Domingo de Pascua (algoritmo de Meeus/Jones/Butcher, calendario
+// gregoriano) — de ahí salen Jueves y Viernes Santo, réplica exacta de
+// domingoDePascua/feriadosDeLeyDelAnio en app.js. Sin esto, un Jueves/
+// Viernes Santo sin marcar quedaría sin crear en la corrida automática
+// (aunque el botón manual sí lo detectaría, porque ese sí usa la versión
+// completa de app.js) — justo el tipo de divergencia entre las dos vías que
+// este archivo existe para evitar (ver comentario de cabecera).
+function domingoDePascuaISO(anio) {
+  const a = anio % 19, b = Math.floor(anio / 100), c = anio % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(anio, mes - 1, dia);
+}
+function isoDeFecha(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function feriadosFijosEnRango(desdeISO, hastaISO) {
   const fechas = [];
   const anioDesde = Number(desdeISO.slice(0, 4)), anioHasta = Number(hastaISO.slice(0, 4));
   for (let anio = anioDesde; anio <= anioHasta; anio++) {
     FERIADOS_LEY_CR_FIJOS.forEach((f) => {
       const fecha = `${anio}-${String(f.mes).padStart(2, "0")}-${String(f.dia).padStart(2, "0")}`;
+      if (fecha >= desdeISO && fecha <= hastaISO) fechas.push(fecha);
+    });
+    const pascua = domingoDePascuaISO(anio);
+    const juevesSanto = new Date(pascua); juevesSanto.setDate(pascua.getDate() - 3);
+    const viernesSanto = new Date(pascua); viernesSanto.setDate(pascua.getDate() - 2);
+    [juevesSanto, viernesSanto].forEach((d) => {
+      const fecha = isoDeFecha(d);
       if (fecha >= desdeISO && fecha <= hastaISO) fechas.push(fecha);
     });
   }
