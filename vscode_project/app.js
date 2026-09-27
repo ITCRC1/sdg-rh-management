@@ -11300,6 +11300,12 @@ async function renderHorasExtrasPanel(){
     // vez de un expediente, que es lo único que hay para esos registros.
     const coincideNombreHorasExtra = r => {
       if (!horasExtraFiltroNombre) return true;
+      // Buscar "feriado" encuentra los días que caen en un feriado de ley
+      // (los que se crearon solos por no tener marca, o cualquier otro "Día
+      // laboral" cuya fecha sea feriado) — para poder ubicarlos entre el
+      // resto de pendientes sin revisarlos uno por uno.
+      const esFeriado = r.ORIGEN === "feriado_sin_marca" || !!feriadoLeyEnFecha(r.FECHA);
+      if (esFeriado && "feriado".includes(horasExtraFiltroNombre)) return true;
       const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
       const nombre = (emp ? nombreCompletoEmpleado(emp) : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "")) || "";
       return nombre.toLowerCase().includes(horasExtraFiltroNombre);
