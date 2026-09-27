@@ -9154,6 +9154,16 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
         if (existente && existente.value) continue; // ya hay algo ahí (de otro archivo, o ya resuelto) — no se pisa
       }catch(e){ /* no existía, sigue normal */ }
 
+      // Un feriado de ley sin ninguna marca NO se asume como ausencia: se
+      // intuye que sí le tocaba trabajar (se paga doble, ver
+      // diasFeriadosTrabajados en calcularResumenQuincena), a menos que
+      // alguien ya haya registrado un día libre/vacaciones/permiso/
+      // incapacidad para esa fecha (esos ni siquiera llegan aquí — el
+      // registro ya existe y "existente" arriba lo salta) o que jefatura, al
+      // revisarlo, decida a mano que de verdad no laboró (reclasificándolo a
+      // "Ausencia" con el selector — eso sigue siendo válido, solo que ya no
+      // es la suposición automática).
+      const esFeriado = !!feriadoLeyEnFecha(fechaStr);
       try{
         await window.storage.set(key, JSON.stringify({
           EMPLEADO_KEY: empKey,
@@ -9162,9 +9172,9 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
           MARCAS: [],
           INCOMPLETO: false,
           MARCA_SUELTA: null,
-          TIPO_DIA: "ausencia",
+          TIPO_DIA: esFeriado ? "laboral" : "ausencia",
           ESTADO: "pendiente",
-          ORIGEN: "ausencia_detectada",
+          ORIGEN: esFeriado ? "feriado_sin_marca" : "ausencia_detectada",
           ORIGEN_ARCHIVO: nombreArchivo,
           IMPORTADO_EN: new Date().toISOString(),
         }), false);
@@ -10841,8 +10851,18 @@ function calcularResumenQuincena(registros, empleados, rango, datosDesdeISO, dat
     const horasExtraFeriado = confianza ? 0 : delEmpleadoEnRangoHoras
       .filter(r => r.TIPO_DIA === "laboral" && feriadoLeyEnFecha(r.FECHA))
       .reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+    // "ausencia" en un feriado (el default automático de un día sin marca,
+    // sin ninguna otra explicación — ver más abajo) cuenta IGUAL que
+    // "laboral" para el día doble: a pedido del usuario, si no hay una
+    // solicitud de día libre/vacaciones/permiso/incapacidad que explique por
+    // qué no marcó ese feriado, se asume que sí le tocaba trabajar y se le
+    // paga doble — no se le penaliza con solo el pago sencillo por faltar
+    // la marca. Si en cambio el día SÍ tiene una razón registrada (vacación,
+    // día libre, permiso, incapacidad), esos TIPO_DIA nunca llegan a
+    // "ausencia" y quedan fuera de este conteo — siguen sin generar el
+    // recargo, solo se pagan sencillos como cualquier feriado no trabajado.
     const diasFeriadosTrabajados = delEmpleadoEnRangoHoras
-      .filter(r => esDiaBaseDePago(r.FECHA) && r.TIPO_DIA === "laboral" && feriadoLeyEnFecha(r.FECHA)).length;
+      .filter(r => esDiaBaseDePago(r.FECHA) && (r.TIPO_DIA === "laboral" || r.TIPO_DIA === "ausencia") && feriadoLeyEnFecha(r.FECHA)).length;
     const descPorTipo = {};
     let totalDescuento = 0;
     let diasLibresQuincena = 0;
