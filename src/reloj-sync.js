@@ -49,6 +49,48 @@ const RELOJ_VENTANA_DUPLICADO_MIN = 5;
 
 const ACTOR_SISTEMA = { id: null, email: "sistema:reloj-marcador (envío automático)", ip: null };
 
+// Feriados de ley de Costa Rica (Arts. 147-148 CT) — réplica exacta de
+// FERIADOS_LEY_CR_FIJOS en app.js (sin los facultativos/no obligatorios,
+// que no llevan recargo garantizado por ley). Si esa lista cambia allá,
+// debe cambiar aquí también.
+const FERIADOS_LEY_CR_FIJOS = [
+  { mes: 1, dia: 1 },
+  { mes: 4, dia: 11 },
+  { mes: 5, dia: 1 },
+  { mes: 7, dia: 25 },
+  { mes: 8, dia: 15 },
+  { mes: 9, dia: 15 },
+  { mes: 12, dia: 25 },
+];
+// Nota: no incluye Jueves/Viernes Santo (fecha móvil, calculada en app.js
+// vía feriadosDeLeyDelAnio) — no hace falta acá porque el envío automático
+// del reloj corre a diario, con un rango de pocos días (ver LOOKBACK_DIAS);
+// si algún día se necesitara Semana Santa, hay que portar ese cálculo aquí
+// también.
+function feriadosFijosEnRango(desdeISO, hastaISO) {
+  const fechas = [];
+  const anioDesde = Number(desdeISO.slice(0, 4)), anioHasta = Number(hastaISO.slice(0, 4));
+  for (let anio = anioDesde; anio <= anioHasta; anio++) {
+    FERIADOS_LEY_CR_FIJOS.forEach((f) => {
+      const fecha = `${anio}-${String(f.mes).padStart(2, "0")}-${String(f.dia).padStart(2, "0")}`;
+      if (fecha >= desdeISO && fecha <= hastaISO) fechas.push(fecha);
+    });
+  }
+  return fechas;
+}
+// Réplica mínima de parsearFechaDDMMYYYY (app.js) — solo el caso normal
+// DD/MM/AAAA; el respaldo de fechas de Excel mal importadas no aplica aquí
+// (FECHA_INGRESO_EMP casi siempre llega ya bien guardada a este punto).
+function fechaDDMMYYYYaISO(str) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(str || "").trim());
+  if (!m) return null;
+  let dia = Number(m[1]), mes = Number(m[2]);
+  const anio = Number(m[3]);
+  if (mes > 12 && dia <= 12) [dia, mes] = [mes, dia];
+  if (mes < 1 || mes > 12) return null;
+  return `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
 // --------------------------------------------------------------------------
 // Helpers de texto/fecha — réplica exacta de sus equivalentes en app.js. Ver
 // el comentario de cabecera: si esos cambian allá, deben cambiar aquí igual.
@@ -401,6 +443,49 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
 }
 
 // --------------------------------------------------------------------------
+// Feriados de ley sin ninguna marca dentro del rango: a diferencia de una
+// importación de archivo completo, el reloj nunca genera un registro para
+// un día sin NINGUNA marca (no compara contra un turno esperado) — así que
+// un feriado sin marcar quedaba invisible para la planilla en vez de
+// presumirse trabajado (réplica de crearFeriadosSinMarcaDelReloj en
+// app.js — mismo criterio si esa cambia). Se crea "Día laboral" pendiente
+// (0h extra, sin marcas) para cada empleado activo, sin puesto de
+// confianza, que ya hubiera ingresado para esa fecha — salvo que YA exista
+// cualquier registro ahí (con marca, ya reclasificado, o ya decidido), en
+// cuyo caso no se toca.
+// --------------------------------------------------------------------------
+async function crearFeriadosSinMarcaDelReloj(empleados, desdeISO, hastaISO) {
+  const feriadosEnRango = feriadosFijosEnRango(desdeISO, hastaISO);
+  if (!feriadosEnRango.length) return { creados: 0 };
+
+  let creados = 0;
+  for (const emp of empleados) {
+    if (emp.ARCHIVADO || esEmpleadoConfianza(emp)) continue;
+    const ingresoISO = fechaDDMMYYYYaISO(emp.FECHA_INGRESO_EMP);
+    for (const fecha of feriadosEnRango) {
+      if (ingresoISO && fecha < ingresoISO) continue;
+      const key = HORAS_EXTRA_PREFIX + emp.key + ":" + fecha;
+      const existente = await obtenerDocumento(key);
+      if (existente) continue;
+      await guardarDocumento(key, {
+        EMPLEADO_KEY: emp.key,
+        FECHA: fecha,
+        HORAS_EXTRA: 0,
+        MARCAS: [],
+        INCOMPLETO: false,
+        MARCA_SUELTA: null,
+        TIPO_DIA: "laboral",
+        ESTADO: "pendiente",
+        ORIGEN: "feriado_sin_marca",
+        IMPORTADO_EN: new Date().toISOString(),
+      });
+      creados++;
+    }
+  }
+  return { creados };
+}
+
+// --------------------------------------------------------------------------
 // Punto de entrada: sincroniza un rango [desde, hasta] (fechas ISO,
 // inclusive) exactamente como lo haría relojEnviarAHorasExtras para ese
 // mismo rango.
@@ -452,7 +537,12 @@ async function sincronizarRango(desde, hasta) {
       eventos.push({ codigo, nombre: info.nombreReloj, fecha: m.fecha, ts: Math.floor(m.ts / 60000) * 60000 });
     });
   });
-  if (!eventos.length) return { configurado: true, creadas: 0, actualizadas: 0, omitidas: 0, sinMatch: 0, confianzaOmitidos: 0 };
+
+  // Corre siempre, tenga o no marcas esta corrida — un feriado sin marcar
+  // no depende de que haya habido actividad en el reloj ese rango.
+  const { creados: feriadosCreados } = await crearFeriadosSinMarcaDelReloj(empleados, desde, hasta);
+
+  if (!eventos.length) return { configurado: true, creadas: feriadosCreados, actualizadas: 0, omitidas: 0, sinMatch: 0, confianzaOmitidos: 0, feriadosCreados };
 
   const filas = filasDesdeEventosMarcacion(eventos, (codigo) => jornadaPorCodigoMap[codigo] || null);
   filas.forEach((f) => {
@@ -462,7 +552,7 @@ async function sincronizarRango(desde, hasta) {
 
   const nombreArchivo = `Reloj marcador (automático) ${desde} a ${hasta}`;
   const resultado = await guardarFilas(filas, porKey, puestoPorKey, nombreArchivo);
-  return { configurado: true, ...resultado };
+  return { configurado: true, ...resultado, creadas: resultado.creadas + feriadosCreados, feriadosCreados };
 }
 
 // --------------------------------------------------------------------------

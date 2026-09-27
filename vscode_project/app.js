@@ -10490,6 +10490,64 @@ function relojImprimir(){
   window.print();
 }
 
+// Feriados de ley (ver feriadoLeyEnFecha) sin ninguna marca dentro del
+// rango: se crean como "Día laboral" pendiente (0h extra, sin marcas) para
+// cada empleado activo y sin puesto de confianza que ya hubiera ingresado
+// para esa fecha — se presume que sí le tocaba trabajar (paga doble, ver
+// diasFeriadosTrabajados en calcularResumenQuincena) en vez de quedar
+// invisible para la planilla, a menos que ya exista CUALQUIER registro ahí
+// (con marca, ya reclasificado a día libre/vacaciones/incapacidad/permiso,
+// o ya decidido) — en ese caso no se toca. Jefatura/gerencia puede
+// reclasificarlo a mano después si en realidad no laboró.
+async function crearFeriadosSinMarcaDelReloj(desdeISO, hastaISO){
+  const feriadosEnRango = [];
+  const anioDesde = new Date(desdeISO + "T00:00:00").getFullYear();
+  const anioHasta = new Date(hastaISO + "T00:00:00").getFullYear();
+  for (let anio = anioDesde; anio <= anioHasta; anio++){
+    feriadosDeLeyDelAnio(anio).forEach(f => {
+      if (f.fecha >= desdeISO && f.fecha <= hastaISO) feriadosEnRango.push(f.fecha);
+    });
+  }
+  if (!feriadosEnRango.length) return 0;
+
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  const empKeys = (res && res.keys) || [];
+  const empleados = await Promise.all(empKeys.map(async k => {
+    const r = await window.storage.get(k, false);
+    return { key: k.replace(CATALOGS.empleados.prefix, ""), ...(r && r.value ? JSON.parse(r.value) : {}) };
+  }));
+
+  let creados = 0;
+  for (const emp of empleados){
+    if (emp.ARCHIVADO || esEmpleadoConfianza(emp)) continue;
+    const ingreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+    const ingresoISO = ingreso ? isoDeFechaLocal(ingreso) : null;
+    for (const fecha of feriadosEnRango){
+      if (ingresoISO && fecha < ingresoISO) continue; // todavía no había ingresado ese feriado
+      const key = HORAS_EXTRA_PREFIX + emp.key + ":" + fecha;
+      let existente = null;
+      try{ const r = await window.storage.get(key, false); existente = r && r.value ? JSON.parse(r.value) : null; }catch(e){ /* no existía */ }
+      if (existente) continue;
+      try{
+        await window.storage.set(key, JSON.stringify({
+          EMPLEADO_KEY: emp.key,
+          FECHA: fecha,
+          HORAS_EXTRA: 0,
+          MARCAS: [],
+          INCOMPLETO: false,
+          MARCA_SUELTA: null,
+          TIPO_DIA: "laboral",
+          ESTADO: "pendiente",
+          ORIGEN: "feriado_sin_marca",
+          IMPORTADO_EN: new Date().toISOString(),
+        }), false);
+        creados++;
+      }catch(e){ /* best effort — se puede agregar a mano después */ }
+    }
+  }
+  return creados;
+}
+
 // ---------- Enviar a Horas extras ----------
 // Siempre manda el rango COMPLETO, sin importar el buscador: filtrar a
 // medias haría que guardarFilasHorasExtra marcara como ausencia a quien
@@ -10531,7 +10589,15 @@ async function relojEnviarAHorasExtras(){
     v.personas.forEach(p => { fichaPorCodigo[p.codigo] = p.ficha ? p.ficha.key : ""; });
     filas.forEach(f => { f.FICHA_RELOJ = fichaPorCodigo[f.CODIGO] || ""; });
     const r = await guardarFilasHorasExtra(filas, `Reloj marcador ${relojCtx.desde} a ${relojCtx.hasta}`);
-    statusMsg(mensajeResultadoHorasExtra(r, turnosSinMarcar, sinPar, true) + " Revísalos en Planilla → Horas extras.");
+    // El reloj, a diferencia de una importación de archivo completo, nunca
+    // genera un registro para un día sin NINGUNA marca (no compara contra
+    // un turno esperado) — así que un feriado de ley sin marcar quedaba
+    // invisible para la planilla en vez de presumirse trabajado. Este
+    // chequeo aparte cierra ese hueco.
+    const feriadosCreados = await crearFeriadosSinMarcaDelReloj(relojCtx.desde, relojCtx.hasta);
+    statusMsg(mensajeResultadoHorasExtra(r, turnosSinMarcar, sinPar, true)
+      + (feriadosCreados ? ` ${feriadosCreados} feriado(s) sin ninguna marca se agregaron como día laboral (día doble) — revísalos.` : "")
+      + " Revísalos en Planilla → Horas extras.");
   }catch(e){
     statusMsg(e.message || "No se pudo enviar a Horas extras.", false);
   }finally{
@@ -11336,7 +11402,12 @@ async function renderHorasExtrasPanel(){
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
         </div>`;
 
-    if (puedeEditar){
+    // Corcovado ya tiene el Reloj marcador integrado (lee la máquina de
+    // marcación en vivo — ver Planilla → Reloj marcador) y no usa esta
+    // importación manual de archivo; se oculta ahí para no dejar dos rutas
+    // de carga activas al mismo tiempo. Las demás propiedades (sin reloj
+    // conectado) la siguen necesitando tal cual.
+    if (puedeEditar && currentPropiedadId !== "corcovado"){
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
         <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📥 Importar horas extra</div>
         <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Excel/CSV/PDF de la máquina de marcación. Se busca principalmente por número/código de empleado y por nombre (la cédula se usa solo si el archivo la trae y no encontró a nadie por esos dos), y por columna de fecha. Si el archivo ya trae "Horas extra" calculadas se usan tal cual; si solo trae horas trabajadas o entrada/salida (o un PDF de marcas sueltas de "Ingreso/Salida"), se comparan contra la jornada diaria del puesto de cada empleado (turno diurno, mixto o nocturno — la misma que se define al crear el puesto), a tiempo y medio (Art. 139 CT). Las marcas se emparejan en orden cronológico, así que un turno nocturno que cruza la medianoche se calcula bien.</p>
