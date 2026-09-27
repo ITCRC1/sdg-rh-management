@@ -14536,17 +14536,26 @@ function actualizarSelectorProrrogaIncapacidad(){
   ).join("");
 }
 
+// Cache del listado para el buscador de empleado del formulario de
+// incapacidad (ver renderFormularioIncapacidad/filtrarIncapacidadEmpleado) —
+// mismo patrón que incapacidadesCacheParaProrroga, para no re-consultar el
+// servidor en cada tecla.
+let incapacidadEmpleadosCache = [];
+
 function renderFormularioIncapacidad(empleadosDisponibles){
   const ordenados = empleadosDisponibles.slice().sort(compararPorApellido);
+  incapacidadEmpleadosCache = ordenados;
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📝 Registrar incapacidad</div>
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Es un registro directo para el cálculo de pago en colillas — no pasa por aprobación ni se puede anular. El salario diario se toma automático de la ficha del empleado (no se pide a mano). Pausa la acumulación de vacaciones mientras dure.</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
-        <select id="incapacidad-empleado" onchange="actualizarSelectorProrrogaIncapacidad()">
-          <option value="">— Elegí —</option>
-          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
-        </select>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:220px; position:relative;">Empleado
+        <input type="text" id="incapacidad-empleado-buscar" placeholder="🔍 Buscar por nombre o cédula…" autocomplete="off"
+               oninput="filtrarIncapacidadEmpleado(this.value)"
+               onfocus="filtrarIncapacidadEmpleado(this.value)"
+               onblur="setTimeout(() => { const l = document.getElementById('incapacidad-empleado-lista'); if (l) l.style.display = 'none'; }, 150)">
+        <input type="hidden" id="incapacidad-empleado">
+        <div id="incapacidad-empleado-lista" class="section-card" style="display:none; position:absolute; top:100%; left:0; right:0; z-index:20; max-height:240px; overflow:auto; margin-top:2px;"></div>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
         <select id="incapacidad-tipo">
@@ -14578,6 +14587,38 @@ function renderFormularioIncapacidad(empleadosDisponibles){
     <button class="btn primary" style="margin-top:10px;" onclick="confirmarRegistroIncapacidad();">✅ Registrar incapacidad</button>
     <div id="incapacidad-status" style="font-size:12px; margin-top:6px;"></div>
   </div></div>`;
+}
+
+// Filtra incapacidadEmpleadosCache por nombre o cédula y pinta los
+// resultados en el desplegable flotante — mismo criterio de búsqueda que ya
+// usa renderElegirEmpleadoGate en otras pantallas, para no tener que
+// escrolear un <select> nativo con decenas de empleados.
+function filtrarIncapacidadEmpleado(valor){
+  const lista = document.getElementById("incapacidad-empleado-lista");
+  if (!lista) return;
+  const termino = String(valor || "").toLowerCase().trim();
+  const coincide = e => !termino
+    || nombreCompletoEmpleado(e).toLowerCase().includes(termino)
+    || (e.IDENTIFICACION_EMP || "").toLowerCase().includes(termino);
+  const resultados = incapacidadEmpleadosCache.filter(coincide).slice(0, 30);
+  lista.style.display = "block";
+  lista.innerHTML = resultados.length
+    ? resultados.map(e => `<div class="catalog-item" style="cursor:pointer; padding:6px 10px;"
+        onmousedown="seleccionarIncapacidadEmpleado('${e.key.replace(/'/g,"\\'")}')">
+        <div class="name" style="font-size:12.5px;">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</div>
+        ${e.IDENTIFICACION_EMP ? `<div class="meta" style="font-size:11px;">${escapeHtml(e.IDENTIFICACION_EMP)}</div>` : ""}
+      </div>`).join("")
+    : `<div class="empty-state" style="padding:8px 10px;">Ningún empleado coincide.</div>`;
+}
+
+function seleccionarIncapacidadEmpleado(key){
+  const emp = incapacidadEmpleadosCache.find(e => e.key === key);
+  if (!emp) return;
+  document.getElementById("incapacidad-empleado").value = key;
+  document.getElementById("incapacidad-empleado-buscar").value = nombreCompletoEmpleado(emp) || key;
+  const lista = document.getElementById("incapacidad-empleado-lista");
+  if (lista) lista.style.display = "none";
+  actualizarSelectorProrrogaIncapacidad();
 }
 
 async function confirmarRegistroIncapacidad(){
