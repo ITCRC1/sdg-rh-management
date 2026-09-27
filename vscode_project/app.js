@@ -10674,13 +10674,25 @@ function rangoQuincenaActual(hoy){
 // reales que estuvo activo (mismo criterio del día 31 que no es día base),
 // para no pagarle días de una quincena en la que ni siquiera estaba
 // contratado. null si ni un día de la quincena cae dentro de su contrato.
+//
+// Vacaciones/días libres pendientes (sin disfrutar) al salir —
+// DIAS_PENDIENTES_LIQUIDACION, un total fijo calculado UNA vez al archivar
+// (ver confirmarArchivarEmpleado) — se pagan TODOS DE UNA SOLA VEZ, como
+// días base "de más", únicamente en la quincena en la que la fecha de
+// salida cae de verdad. A propósito NO se topan en 15 ni se reparten con
+// una quincena siguiente: como el empleado ya no vuelve a trabajar después,
+// no tiene sentido que reaparezca en otro reporte solo para cobrar el
+// resto — se liquida entero aquí, aunque "días laborados" termine pasando
+// de 15 esa vez en particular.
 function diasBaseParaEmpleadoEnQuincena(empleado, rango){
   const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   const salida = (empleado && empleado.ARCHIVADO) ? parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO) : null;
   const inicioEfectivo = (ingreso && ingreso > rango.inicio) ? ingreso : rango.inicio;
   const finEfectivo = (salida && salida < rango.fin) ? salida : rango.fin;
   if (inicioEfectivo > finEfectivo) return null;
-  const activoTodaLaQuincena = inicioEfectivo.getTime() === rango.inicio.getTime() && finEfectivo.getTime() === rango.fin.getTime();
+  const salidaEstaEnEstaQuincena = salida && salida >= rango.inicio && salida <= rango.fin;
+  const diasPendientes = salidaEstaEnEstaQuincena ? (Number(empleado.DIAS_PENDIENTES_LIQUIDACION) || 0) : 0;
+  const activoTodaLaQuincena = inicioEfectivo.getTime() === rango.inicio.getTime() && finEfectivo.getTime() === rango.fin.getTime() && diasPendientes === 0;
   if (activoTodaLaQuincena) return { inicioEfectivo, finEfectivo, diasBase: DIAS_BASE_QUINCENA };
   let dias = 0;
   const cursor = new Date(inicioEfectivo);
@@ -10688,7 +10700,7 @@ function diasBaseParaEmpleadoEnQuincena(empleado, rango){
     if (cursor.getDate() !== 31) dias++;
     cursor.setDate(cursor.getDate() + 1);
   }
-  return { inicioEfectivo, finEfectivo, diasBase: Math.min(dias, DIAS_BASE_QUINCENA) };
+  return { inicioEfectivo, finEfectivo, diasBase: Math.min(dias, DIAS_BASE_QUINCENA) + diasPendientes };
 }
 
 // Por empleado, dentro de la quincena dada: horas extra aprobadas en todo el
@@ -18791,6 +18803,8 @@ function archivarEmpleado(key){
   if (hint) hint.textContent = "";
   const label = document.getElementById("archivar-pdf-label");
   if (label) label.textContent = "";
+  const fecha = document.getElementById("archivar-fecha");
+  if (fecha) fecha.value = isoDeHoy();
   document.getElementById("modal-archivar").classList.add("open");
 }
 
@@ -18826,6 +18840,11 @@ async function confirmarArchivarEmpleado(){
     statusMsg("Elige el tipo de salida antes de archivar al empleado.", false);
     return;
   }
+  const fechaSalidaISO = (document.getElementById("archivar-fecha") || {}).value || "";
+  if (!fechaSalidaISO){
+    statusMsg("Elige la fecha en que salió el empleado.", false);
+    return;
+  }
   try{
     const fullKey = CATALOGS.empleados.prefix + key;
     const res = await window.storage.get(fullKey, false);
@@ -18833,8 +18852,41 @@ async function confirmarArchivarEmpleado(){
     const emp = JSON.parse(res.value);
     emp.ARCHIVADO = true;
     emp.ESTADO_EMP = "Inactivo";
-    emp.FECHA_ARCHIVADO = fmtFecha(new Date().toISOString());
+    // La fecha de salida la elige quien archiva (por defecto hoy, pero
+    // editable) — antes siempre quedaba la fecha en que alguien HIZO CLIC en
+    // "Archivar", que no necesariamente es el día real en que la persona
+    // salió (ej. se despidió antier y recién hoy se registra en el
+    // sistema). diasBaseParaEmpleadoEnQuincena y las prestaciones estimadas
+    // ya usan FECHA_ARCHIVADO para prorratear/calcular, así que esto importa
+    // para la planilla, no solo para el registro.
+    emp.FECHA_ARCHIVADO = fmtFecha(fechaSalidaISO + "T00:00:00");
     emp.TIPO_SALIDA = tipoSalida;
+
+    // Vacaciones y días libres que le quedaban pendientes (sin disfrutar) a
+    // la fecha de salida se liquidan como días base "de más" en la planilla
+    // — sin importar el tipo de salida (a cualquiera se le deben los días ya
+    // acumulados). Se congela el TOTAL acá (nunca cambia después, aunque el
+    // saldo en pantalla siga moviéndose por otros motivos) y
+    // diasBaseParaEmpleadoEnQuincena hace el resto: los cuenta como días
+    // laborados, extendiendo la quincena en que salió (y, si no caben
+    // todos ahí, la siguiente) — ver esa función.
+    const fechaSalidaDate = new Date(fechaSalidaISO + "T00:00:00");
+    let diasPendientesLiquidacion = 0;
+    try{
+      const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([
+        listarSolicitudesAusencia(), listarRegistrosHorasExtra(),
+      ]);
+      const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === key && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
+      const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, key);
+      const saldoVacaciones = Math.max(0, calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidadPausan, fechaSalidaDate));
+      const diasOtorgadosLibres = registrosHorasExtraTodos
+        .filter(r => r.EMPLEADO_KEY === key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
+        .map(r => r.FECHA);
+      const saldoDiasLibres = Math.max(0, calcularSaldoDiasLibres(emp, diasOtorgadosLibres, fechaSalidaDate));
+      diasPendientesLiquidacion = Math.floor(saldoVacaciones) + Math.floor(saldoDiasLibres);
+    }catch(e){ /* si falla el cálculo de saldos, se archiva igual sin liquidar días pendientes — se puede ajustar a mano después */ }
+    emp.DIAS_PENDIENTES_LIQUIDACION = diasPendientesLiquidacion;
+
     if (archivarPendingPdfDataUrl){
       emp.SALIDA_PDF_FIRMADO = archivarPendingPdfDataUrl;
       emp.SALIDA_PDF_NOMBRE = archivarPendingPdfNombre;
@@ -18859,7 +18911,8 @@ async function confirmarArchivarEmpleado(){
     emp.HISTORIAL.unshift({
       fecha: emp.FECHA_ARCHIVADO,
       texto: `Archivado — ${tipoSalida}.` + (archivarPendingPdfDataUrl ? ` Carta firmada adjuntada ("${archivarPendingPdfNombre}").` : "") +
-        (saldoPrestamosPendientes > 0 ? ` Queda un saldo de préstamo/adelanto pendiente de ${fmtMontoColilla(saldoPrestamosPendientes, emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC")} por descontar de la liquidación.` : ""),
+        (saldoPrestamosPendientes > 0 ? ` Queda un saldo de préstamo/adelanto pendiente de ${fmtMontoColilla(saldoPrestamosPendientes, emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC")} por descontar de la liquidación.` : "") +
+        (diasPendientesLiquidacion > 0 ? ` ${diasPendientesLiquidacion} día(s) de vacaciones/días libres pendientes se liquidan de una vez, sumados a "Días laborados" en el reporte de planilla de esta quincena.` : ""),
     });
     await window.storage.set(fullKey, JSON.stringify(emp), false);
     cerrarModalArchivar();
@@ -18878,6 +18931,7 @@ async function reactivarEmpleado(key){
     const emp = JSON.parse(res.value);
     emp.ARCHIVADO = false;
     emp.ESTADO_EMP = "Activo";
+    delete emp.DIAS_PENDIENTES_LIQUIDACION; // ya no aplica — sigue activo, no hay nada que liquidar
     // Reactiva SOLO las deducciones recurrentes que este mismo archivado
     // había apagado (ver confirmarArchivarEmpleado) — una que ya estaba
     // desactivada de antes por otro motivo se queda como estaba.

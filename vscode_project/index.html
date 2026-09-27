@@ -228,6 +228,11 @@
         <div class="hint-error" id="hint-archivar-tipo-salida"></div>
       </div>
       <div class="field">
+        <label>Fecha de salida</label>
+        <input type="date" id="archivar-fecha">
+        <div class="hint">Por defecto es hoy — cámbiala si el archivado se está registrando días después de que la persona ya salió.</div>
+      </div>
+      <div class="field">
         <label>Carta de renuncia o despido firmada (PDF, opcional)</label>
         <button type="button" class="btn" style="width:100%;" onclick="document.getElementById('archivar-pdf-input').click()">📎 Elegir PDF firmado</button>
         <input type="file" id="archivar-pdf-input" accept="application/pdf" style="display:none;" onchange="onArchivarPdfSelected(this)">
