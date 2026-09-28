@@ -2589,6 +2589,23 @@ function hintBancoIban(valorCrudo, esIban){
   return "⚠️ IBAN de un banco distinto a BNCR (código " + info.codigoBanco + ") — revisar a mano para la planilla bancaria.";
 }
 
+// Formato de "cuenta electrónica" (cuenta cliente) que se digita a mano:
+// xxx-xx-xxx-xxxxxxx — 15 dígitos agrupados 3-2-3-7. Se reconstruyen los
+// guiones en cada tecleo a partir de los dígitos crudos, para no depender
+// de que el usuario los escriba bien.
+function formatearCuentaElectronicaCR(valorCrudo){
+  const digitos = String(valorCrudo || "").replace(/[^0-9]/g, "").slice(0, 15);
+  const grupos = [3, 2, 3, 7];
+  let i = 0;
+  const partes = [];
+  for (const largo of grupos){
+    if (i >= digitos.length) break;
+    partes.push(digitos.slice(i, i + largo));
+    i += largo;
+  }
+  return partes.join("-");
+}
+
 function catalogFieldHtml(meta){
   const [id, type, label, hint] = meta;
   const val = (catalogEditing.values[id] || "");
@@ -2709,6 +2726,7 @@ function catalogFieldHtml(meta){
     const esIban = tipoCuenta === "iban";
     const valCuenta = catalogEditing.values.NUMERO_CUENTA_EMP || "";
     const okIban = /^CR\d{20}$/.test(valCuenta.replace(/\s/g,"").toUpperCase());
+    const okCliente = /^\d{3}-\d{2}-\d{3}-\d{7}$/.test(valCuenta);
     control = `<select onchange="
         catalogEditing.values.TIPO_CUENTA_EMP = this.value;
         catalogEditing.values.CUENTA_IBAN_EMP = this.value === 'iban' ? (catalogEditing.values.NUMERO_CUENTA_EMP || '') : '';
@@ -2718,9 +2736,9 @@ function catalogFieldHtml(meta){
         <option value="iban" ${esIban?"selected":""}>Cuenta IBAN (CR + 20 dígitos)</option>
         <option value="cliente" ${!esIban?"selected":""}>Cuenta electrónica (número de cuenta)</option>
       </select>
-      <input type="text" value="${escapeHtml(valCuenta)}" placeholder="${esIban ? "CR + 20 dígitos" : "Número de cuenta"}" oninput="
+      <input type="text" value="${escapeHtml(valCuenta)}" placeholder="${esIban ? "CR + 20 dígitos" : "xxx-xx-xxx-xxxxxxx"}" oninput="
         let v = this.value;
-        ${esIban ? "v = v.toUpperCase().replace(/\\s/g,'');" : "v = v.replace(/[^0-9]/g,'');"}
+        ${esIban ? "v = v.toUpperCase().replace(/\\s/g,'');" : "v = formatearCuentaElectronicaCR(v);"}
         this.value = v;
         catalogEditing.values['${id}'] = v;
         // Se guardan en espejo en los campos viejos para que el resto de la app
@@ -2729,10 +2747,14 @@ function catalogFieldHtml(meta){
         catalogEditing.values.CUENTA_CLIENTE_EMP = ${esIban} ? '' : v;
         document.getElementById('hint-${id}').textContent = ${esIban}
           ? (/^CR\\d{20}$/.test(v) ? '' : 'Incompleto — debe ser CR + 20 dígitos.')
-          : '';
+          : (/^\\d{3}-\\d{2}-\\d{3}-\\d{7}$/.test(v) ? '' : 'Incompleto — deben ser 15 dígitos (xxx-xx-xxx-xxxxxxx).');
         document.getElementById('hintbanco-${id}').textContent = hintBancoIban(v, ${esIban});
       ">
-      <div class="hint-error" id="hint-${id}">${esIban && valCuenta ? (okIban ? "" : "Incompleto — debe ser CR + 20 dígitos.") : ""}</div>
+      <div class="hint-error" id="hint-${id}">${
+        esIban
+          ? (valCuenta && !okIban ? "Incompleto — debe ser CR + 20 dígitos." : "")
+          : (valCuenta && !okCliente ? "Incompleto — deben ser 15 dígitos (xxx-xx-xxx-xxxxxxx)." : "")
+      }</div>
       <div class="hint" id="hintbanco-${id}">${escapeHtml(hintBancoIban(valCuenta, esIban))}</div>`;
   } else if (type === "file_adjunto_emp"){
     // Tres estados posibles: vacío, referencia al almacén ("doc:<id>"), o un
