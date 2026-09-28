@@ -9261,6 +9261,19 @@ function marcasComoTexto(marcas){
   return (Array.isArray(marcas) ? marcas : []).map(m => `${m.entrada||"?"} → ${m.salida||"?"}`).join(", ");
 }
 
+// Arma la entrada/salida de una jornada completa a partir de UNA marca
+// suelta + la jornada del puesto — mismo cálculo que ya usa a mano "⚡ Marcar
+// jornada completa" (marcarJornadaCompletaTurno), reutilizado acá para
+// autocompletar sin intervención humana el "día de salida" (ver
+// guardarFilasHorasExtra). Devuelve null si la marca no se pudo leer.
+function marcasJornadaCompletaDesde(marcaSuelta, jornadaHoras){
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(marcaSuelta || "");
+  if (!m) return null;
+  const entradaTs = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const salidaTs = entradaTs + Math.round(jornadaHoras * 60) * 60000;
+  return { entrada: mostrarFechaHoraCorta(marcaSuelta), salida: mostrarFechaHoraCorta(isoLocalDesdeTs(salidaTs)) };
+}
+
 async function guardarFilasHorasExtra(rows, nombreArchivo){
   const cols = detectarColumnasHorasExtra(rows);
   if (!cols.codigo && !cols.nombre && !cols.cedula) throw new Error("No se encontró una columna de número/código de empleado, nombre, ni cédula en ese archivo.");
@@ -9403,6 +9416,27 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
   // pasar en silencio.
   const cambiosDeHoras = [];
   let confianzaOmitidos = 0;
+
+  // "Día de salida": el último día que le tocaba trabajar a alguien antes de
+  // que arranque una vacación/día libre/permiso sin goce YA APROBADO — mismo
+  // cálculo que ya usa el calendario de Días Libres y Vacaciones para la
+  // etiqueta "SALE" (ver etiquetaCalendarioParaDia). Si el reloj solo
+  // capturó una marca ese día, lo más probable es que se fue sin marcar
+  // salida porque al día siguiente ya no venía — no es una marca faltante
+  // por descuido, es un día que otro módulo ya explica, así que se
+  // autocompleta de una vez (sin pasar por jefatura) en vez de quedar
+  // atascado en "⚠️ Turno sin marcar". Gerencia sigue pudiendo corregirlo
+  // después si la marca suelta no era en realidad eso (ver "aprobada_jefatura"
+  // && puedeEditar en renderHorasExtrasPanel).
+  const diasSaleAprobados = new Set();
+  (await listarSolicitudesAusencia()).forEach(s => {
+    if (s.ESTADO !== "aprobada" || !s.FECHA_INICIO || !s.EMPLEADO_KEY) return;
+    if (s.TIPO !== "vacaciones" && s.TIPO !== "dia_libre" && s.TIPO !== "permiso_sin_goce") return;
+    const diaAntes = new Date(s.FECHA_INICIO + "T00:00:00");
+    diaAntes.setDate(diaAntes.getDate() - 1);
+    diasSaleAprobados.add(s.EMPLEADO_KEY + "|" + isoDeFechaLocal(diaAntes));
+  });
+
   for (const info of Object.values(acumulado)){
     // Puesto de confianza: no marca asistencia ni genera horas extra — se
     // omite del archivo de marcación por completo, aunque su código/nombre
@@ -9419,7 +9453,9 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // suposición, así que en la práctica se aprobaba como si el día hubiera
     // estado completo). Se deja INCOMPLETO/MARCA_SUELTA tal cual, para que
     // pase por "⚠️ Turno sin marcar" en el panel (ver mostrarModalCompletarTurno)
-    // y sea jefatura/gerencia quien decida la hora de salida, no el importador.
+    // y sea jefatura/gerencia quien decida la hora de salida, no el importador
+    // — EXCEPTO cuando ese día ya está explicado por otro módulo (ver
+    // diasSaleAprobados más arriba): ahí sí se autocompleta solo, más abajo.
     // Si el archivo ya trajo "horas extra" calculada para este día, se usa
     // tal cual — NUNCA se le suma además el excedente de horas_trabajadas
     // sobre la jornada, porque esa cuenta ya viene incluida en la columna
@@ -9434,6 +9470,14 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // o con horas trabajadas ya se guarda igual (con HORAS_EXTRA en 0).
     const huboTrabajo = info.HORAS_TRABAJADAS > 0 || info.HORAS_EXTRA_DIRECTA > 0 || (Array.isArray(info.MARCAS) && info.MARCAS.length > 0);
     if (!huboTrabajo && !info.INCOMPLETO) continue;
+
+    // ¿Es el día de salida de una ausencia ya aprobada para este mismo
+    // empleado? Si la marca suelta no se puede leer, se deja tal cual
+    // (INCOMPLETO) para que "✏️ Completar" la resuelva a mano.
+    const marcasSiSalida = (info.INCOMPLETO && info.EMPLEADO_KEY && info.MARCA_SUELTA
+        && diasSaleAprobados.has(info.EMPLEADO_KEY + "|" + info.FECHA))
+      ? marcasJornadaCompletaDesde(info.MARCA_SUELTA, jornada)
+      : null;
 
     const key = HORAS_EXTRA_PREFIX + (info.EMPLEADO_KEY || ("sinmatch-" + info.IDENT_RAW)) + ":" + info.FECHA;
     let existente = null;
@@ -9492,6 +9536,18 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
       ORIGEN_ARCHIVO: nombreArchivo,
       IMPORTADO_EN: new Date().toISOString(),
     };
+    if (marcasSiSalida){
+      value.HORAS_EXTRA = 0;
+      value.MARCAS = [marcasSiSalida];
+      value.INCOMPLETO = false;
+      value.MARCA_SUELTA = null;
+      value.AUTOCOMPLETADO = true;
+      value.AUTOCOMPLETADO_DIA_SALIDA = true;
+      value.TIPO_DIA = "laboral";
+      value.ESTADO = "aprobada_jefatura";
+      value.APROBADO_POR = "Sistema (día de salida)";
+      value.FECHA_DECISION = new Date().toISOString();
+    }
     await window.storage.set(key, JSON.stringify(value), false);
     if (!info.EMPLEADO_KEY) sinMatch++;
     else if (existente) actualizadas++;
@@ -11638,7 +11694,7 @@ async function renderHorasExtrasPanel(){
       const infoLinea = (r.ESTADO === "pendiente" && r.INCOMPLETO)
         ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
         : (tipoDia === "laboral"
-          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}${r.AUTOCOMPLETADO ? ` · 🤖 autocompletado (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")}, se asumió la jornada completa)` : ""}`
+          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}${r.AUTOCOMPLETADO_DIA_SALIDA ? ` · ✈️ autocompletado — último día antes de una ausencia aprobada (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")})` : (r.AUTOCOMPLETADO ? ` · 🤖 autocompletado (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")}, se asumió la jornada completa)` : "")}`
           : `${etiquetaTipo}${puesto ? " · " + escapeHtml(puesto) : ""}${r.ORIGEN === "permiso_sin_goce" ? " · generado desde la acción de personal" : ""}${r.ORIGEN_ARCHIVO ? ` · reclasificado desde marcación (${escapeHtml(r.ORIGEN_ARCHIVO)})` : ""}`);
       return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">

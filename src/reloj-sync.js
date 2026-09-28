@@ -41,6 +41,7 @@ const OFFSET_MS = OFFSET_MIN * 60000;
 const HORAS_EXTRA_PREFIX = "horas_extra:";
 const EMPLEADO_PREFIX = "cat_empleado:";
 const PUESTO_PREFIX = "cat_puesto:";
+const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
 const RELOJ_ANULACION_PREFIX = "reloj_anulacion:";
 const RELOJ_MANUAL_PREFIX = "reloj_manual:";
 const SYNC_ESTADO_CLAVE = "config:reloj_sync_estado";
@@ -332,8 +333,21 @@ function marcasComoTexto(marcas) {
   return (Array.isArray(marcas) ? marcas : []).map((m) => `${m.entrada || "?"} → ${m.salida || "?"}`).join(", ");
 }
 
-async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
+// Réplica de marcasJornadaCompletaDesde (app.js) — arma entrada/salida de
+// una jornada completa a partir de UNA marca suelta + la jornada del
+// puesto, para autocompletar el "día de salida" (ver guardarFilas). null si
+// la marca no se pudo leer.
+function marcasJornadaCompletaDesde(marcaSuelta, jornadaHoras) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(marcaSuelta || "");
+  if (!m) return null;
+  const entradaTs = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const salidaTs = entradaTs + Math.round(jornadaHoras * 60) * 60000;
+  return { entrada: formatoFechaHoraCortaUTC(entradaTs), salida: formatoFechaHoraCortaUTC(salidaTs) };
+}
+
+async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo, diasSaleAprobados) {
   let creadas = 0, actualizadas = 0, omitidas = 0, sinMatch = 0, confianzaOmitidos = 0;
+  diasSaleAprobados = diasSaleAprobados || new Set();
 
   for (const fila of filas) {
     const empleado = fila.FICHA_RELOJ ? porKey[fila.FICHA_RELOJ] || null : null;
@@ -350,13 +364,22 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
     // marca real. Se deja INCOMPLETO/MARCA_SUELTA tal cual, para que la fila
     // pase por "⚠️ Turno sin marcar" en el panel de Horas extras y sea
     // jefatura/gerencia quien decida la hora de salida (ver
-    // mostrarModalCompletarTurno en app.js), no el envío automático.
+    // mostrarModalCompletarTurno en app.js), no el envío automático —
+    // EXCEPTO cuando ese día ya es el "día de salida" de una ausencia
+    // aprobada para este mismo empleado (ver diasSaleAprobados, armado en
+    // sincronizarReloj más abajo, réplica exacta de guardarFilasHorasExtra
+    // en app.js): ahí sí se autocompleta solo, más abajo.
 
     const horasTrabajadas = fila.HORAS_TRABAJADAS || 0;
     const excedente = horasTrabajadas > jornada ? horasTrabajadas - jornada : 0;
     const horasExtra = aplicarToleranciaCortesia(excedente);
     const huboTrabajo = horasTrabajadas > 0 || marcas.length > 0;
     if (!huboTrabajo && !incompleto) continue;
+
+    const marcasSiSalida = (incompleto && empleado && marcaSuelta
+        && diasSaleAprobados.has(empleado.key + "|" + fila.FECHA))
+      ? marcasJornadaCompletaDesde(marcaSuelta, jornada)
+      : null;
 
     const identificador = normalizarCodigoEmpleado(fila.CODIGO) || normalizarNombreParaMatch(fila.NOMBRE) || "";
     const key = HORAS_EXTRA_PREFIX + (empleado ? empleado.key : "sinmatch-" + identificador) + ":" + fila.FECHA;
@@ -398,6 +421,18 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
       ORIGEN_ARCHIVO: nombreArchivo,
       IMPORTADO_EN: new Date().toISOString(),
     };
+    if (marcasSiSalida) {
+      valor.HORAS_EXTRA = 0;
+      valor.MARCAS = [marcasSiSalida];
+      valor.INCOMPLETO = false;
+      valor.MARCA_SUELTA = null;
+      valor.AUTOCOMPLETADO = true;
+      valor.AUTOCOMPLETADO_DIA_SALIDA = true;
+      valor.TIPO_DIA = "laboral";
+      valor.ESTADO = "aprobada_jefatura";
+      valor.APROBADO_POR = "Sistema (día de salida)";
+      valor.FECHA_DECISION = new Date().toISOString();
+    }
     await guardarDocumento(key, valor);
     if (!empleado) sinMatch++;
     else if (existente) actualizadas++;
@@ -475,12 +510,24 @@ async function sincronizarRango(desde, hasta) {
     dispositivo: f.dispositivo || "",
   }));
 
-  const [empleadosDocs, puestosDocs, anulacionesDocs, manualesDocs] = await Promise.all([
+  const [empleadosDocs, puestosDocs, anulacionesDocs, manualesDocs, solicitudesDocs] = await Promise.all([
     listarPorPrefijo(EMPLEADO_PREFIX),
     listarPorPrefijo(PUESTO_PREFIX),
     listarPorPrefijo(RELOJ_ANULACION_PREFIX),
     listarPorPrefijo(RELOJ_MANUAL_PREFIX),
+    listarPorPrefijo(SOLICITUD_AUSENCIA_PREFIX),
   ]);
+  // "Día de salida": réplica exacta del cálculo que hace guardarFilasHorasExtra
+  // en app.js (y, para la pantalla, etiquetaCalendarioParaDia) — el día antes
+  // de que arranque una vacación/día libre/permiso sin goce YA APROBADO, para
+  // autocompletar sin esperar a jefatura un turno con una sola marca ese día.
+  const diasSaleAprobados = new Set();
+  solicitudesDocs.forEach((d) => {
+    const s = d.valor;
+    if (!s || s.ESTADO !== "aprobada" || !s.FECHA_INICIO || !s.EMPLEADO_KEY) return;
+    if (s.TIPO !== "vacaciones" && s.TIPO !== "dia_libre" && s.TIPO !== "permiso_sin_goce") return;
+    diasSaleAprobados.add(s.EMPLEADO_KEY + "|" + relojSumarDias(s.FECHA_INICIO, -1));
+  });
   const empleados = empleadosDocs.map((d) => ({ key: d.clave.slice(EMPLEADO_PREFIX.length), ...d.valor }));
   const porKey = {};
   empleados.forEach((e) => { porKey[e.key] = e; });
@@ -516,7 +563,7 @@ async function sincronizarRango(desde, hasta) {
   });
 
   const nombreArchivo = `Reloj marcador (automático) ${desde} a ${hasta}`;
-  const resultado = await guardarFilas(filas, porKey, puestoPorKey, nombreArchivo);
+  const resultado = await guardarFilas(filas, porKey, puestoPorKey, nombreArchivo, diasSaleAprobados);
   return { configurado: true, ...resultado, creadas: resultado.creadas + feriadosCreados, feriadosCreados };
 }
 
