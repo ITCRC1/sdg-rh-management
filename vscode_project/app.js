@@ -655,13 +655,13 @@ const CAMPOS_EXPORTAR_EMPLEADOS_POR_DEFECTO = new Set(
 // vez que se escribe o se elige a alguien (mismo motivo que gateBusquedaTexto
 // para renderElegirEmpleadoGate). Se reinicia cada vez que se abre el modal
 // para no arrastrar una selección de una vuelta anterior.
-let extraerEmpSeleccionado = null; // { key, nombre } | null
+let extraerEmpSeleccionados = new Map(); // key -> nombre
 let extraerEmpBusquedaTexto = "";
 
 function abrirModalExtraerEmpleadosExcel(){
   const modal = document.getElementById("modal-incompletos");
   const body = document.getElementById("modal-incompletos-body");
-  extraerEmpSeleccionado = null;
+  extraerEmpSeleccionados = new Map();
   extraerEmpBusquedaTexto = "";
   modal.querySelector(".modal-head span").textContent = "📊 Extraer datos de Empleados";
   body.innerHTML = `
@@ -678,7 +678,7 @@ function abrirModalExtraerEmpleadosExcel(){
       <button class="btn" onclick="marcarTodosCamposExtraer(false)">Ninguno</button>
     </div>
     <div style="margin-bottom:12px;">
-      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:4px;">O elegí un empleado específico (en vez del filtro de arriba) — descarga solo esa fila</label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:4px;">O elegí uno o varios empleados específicos (en vez del filtro de arriba) — descarga solo esas filas</label>
       <div id="extraer-emp-seleccion">${renderExtraerEmpSeleccion()}</div>
     </div>
     ${CAMPOS_EXPORTAR_EMPLEADOS.map(g => `
@@ -732,20 +732,25 @@ function valorCampoExportarEmpleado(emp, campo){
   return info.esBNCR ? "" : "⚠️ Cuenta de otro banco (código " + info.codigoBanco + ") — revisar a mano para el depósito";
 }
 
-// Alterna entre el buscador (nadie elegido todavía) y la "ficha" de quien ya
-// se eligió — nunca los dos a la vez, para que quede claro que elegir un
-// empleado reemplaza al filtro "Empleados a incluir" de arriba, no lo suma.
+// El buscador y la lista de marcados conviven siempre — se puede buscar,
+// marcar, seguir buscando otro nombre y marcar más, sin perder lo ya
+// elegido. Tener uno o más marcados reemplaza al filtro "Empleados a
+// incluir" de arriba, no lo suma (ver descargarExcelEmpleadosSeleccionado).
 function renderExtraerEmpSeleccion(){
-  if (extraerEmpSeleccionado){
-    return `<div class="catalog-item">
-      <div class="row1">
-        <div class="info"><div class="name">${escapeHtml(extraerEmpSeleccionado.nombre)}</div></div>
-        <div class="actions"><button class="btn" onclick="quitarExtraerEmpSeleccion()">✕ Quitar</button></div>
-      </div>
-    </div>`;
-  }
-  return `<input type="text" id="extraer-emp-busqueda" placeholder="🔍 Buscar por nombre, cédula o puesto…" value="${escapeHtml(extraerEmpBusquedaTexto)}" oninput="filtrarExtraerEmpBusqueda(this.value)" style="margin-bottom:8px;">
+  return `<div id="extraer-emp-chips">${renderExtraerEmpChips()}</div>
+    <input type="text" id="extraer-emp-busqueda" placeholder="🔍 Buscar por nombre, cédula o puesto…" value="${escapeHtml(extraerEmpBusquedaTexto)}" oninput="filtrarExtraerEmpBusqueda(this.value)" style="margin-bottom:8px;">
     <div id="extraer-emp-lista"><div class="empty-state">Cargando…</div></div>`;
+}
+
+function renderExtraerEmpChips(){
+  if (!extraerEmpSeleccionados.size) return "";
+  return `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+    ${Array.from(extraerEmpSeleccionados.entries()).map(([key, nombre]) => `
+      <span style="display:inline-flex; align-items:center; gap:6px; background:var(--bg-soft, #eef0f2); border-radius:999px; padding:3px 10px; font-size:12px;">
+        ${escapeHtml(nombre)}
+        <button onclick="quitarExtraerEmpSeleccionado('${key.replace(/'/g,"\\'")}')" style="border:none; background:none; cursor:pointer; font-size:12px; line-height:1; padding:0; color:var(--ink-soft);">✕</button>
+      </span>`).join("")}
+  </div>`;
 }
 
 // Busca entre TODOS los empleados (activos y archivados) — a diferencia del
@@ -765,14 +770,20 @@ async function renderListaExtraerEmpBusqueda(){
       cont.innerHTML = `<div class="empty-state">Ningún empleado coincide con la búsqueda.</div>`;
       return;
     }
-    cont.innerHTML = ordenados.slice(0, 50).map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="seleccionarExtraerEmpEmpleado('${e.key.replace(/'/g,"\\'")}')">
-      <div class="row1">
-        <div class="info">
-          <div class="name">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}${e.ARCHIVADO ? ' <span style="color:var(--ink-soft); font-weight:400;">(archivado)</span>' : ""}</div>
-          <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
-        </div>
-      </div>
-    </div>`).join("");
+    cont.innerHTML = ordenados.slice(0, 50).map(e => {
+      const nombre = nombreCompletoEmpleado(e) || e.key;
+      const keyEsc = e.key.replace(/'/g, "\\'");
+      const nombreEsc = nombre.replace(/'/g, "\\'");
+      return `<div class="catalog-item">
+        <label class="row1" style="cursor:pointer; justify-content:flex-start; align-items:center; gap:8px;">
+          <input type="checkbox" data-key="${escapeHtml(e.key)}" ${extraerEmpSeleccionados.has(e.key) ? "checked" : ""} onchange="toggleExtraerEmpSeleccionado('${keyEsc}', '${nombreEsc}', this.checked)">
+          <div class="info">
+            <div class="name">${escapeHtml(nombre)}${e.ARCHIVADO ? ' <span style="color:var(--ink-soft); font-weight:400;">(archivado)</span>' : ""}</div>
+            <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
+          </div>
+        </label>
+      </div>`;
+    }).join("");
   }catch(e){
     cont.innerHTML = `<div class="empty-state">No se pudo cargar la lista de empleados.</div>`;
   }
@@ -787,20 +798,21 @@ function filtrarExtraerEmpBusqueda(val){
   _renderExtraerEmpListaDebounced();
 }
 
-async function seleccionarExtraerEmpEmpleado(key){
-  const empleados = await cargarEmpleadosDB();
-  const e = empleados.find(x => x.key === key);
-  extraerEmpSeleccionado = { key, nombre: (e && nombreCompletoEmpleado(e)) || key };
-  const wrap = document.getElementById("extraer-emp-seleccion");
-  if (wrap) wrap.innerHTML = renderExtraerEmpSeleccion();
+function toggleExtraerEmpSeleccionado(key, nombre, checked){
+  if (checked) extraerEmpSeleccionados.set(key, nombre);
+  else extraerEmpSeleccionados.delete(key);
+  const chips = document.getElementById("extraer-emp-chips");
+  if (chips) chips.innerHTML = renderExtraerEmpChips();
 }
 
-function quitarExtraerEmpSeleccion(){
-  extraerEmpSeleccionado = null;
-  extraerEmpBusquedaTexto = "";
-  const wrap = document.getElementById("extraer-emp-seleccion");
-  if (wrap) wrap.innerHTML = renderExtraerEmpSeleccion();
-  setTimeout(() => renderListaExtraerEmpBusqueda(), 0);
+function quitarExtraerEmpSeleccionado(key){
+  extraerEmpSeleccionados.delete(key);
+  const chips = document.getElementById("extraer-emp-chips");
+  if (chips) chips.innerHTML = renderExtraerEmpChips();
+  // Destildar el checkbox en la lista de resultados, si esa fila sigue visible.
+  document.querySelectorAll('#extraer-emp-lista input[data-key]').forEach(cb => {
+    if (cb.dataset.key === key) cb.checked = false;
+  });
 }
 
 async function descargarExcelEmpleadosSeleccionado(){
@@ -819,17 +831,17 @@ async function descargarExcelEmpleadosSeleccionado(){
   try{
     const estadoFiltro = (document.getElementById("extraer-emp-estado") || {}).value || "activos";
     const empleados = await cargarEmpleadosDB();
-    // Un empleado específico elegido con el buscador reemplaza al filtro de
-    // arriba (activos/archivados/todos) — no tiene sentido combinarlos.
-    const filtrados = extraerEmpSeleccionado
-      ? empleados.filter(e => e.key === extraerEmpSeleccionado.key)
+    // Uno o más empleados elegidos a mano con el buscador reemplazan al
+    // filtro de arriba (activos/archivados/todos) — no tiene sentido combinarlos.
+    const filtrados = extraerEmpSeleccionados.size
+      ? empleados.filter(e => extraerEmpSeleccionados.has(e.key)).sort(compararPorApellido)
       : empleados
           .filter(e => estadoFiltro === "activos" ? !e.ARCHIVADO : estadoFiltro === "archivados" ? !!e.ARCHIVADO : true)
           .sort(compararPorApellido);
 
     if (!filtrados.length){
-      status.textContent = extraerEmpSeleccionado
-        ? "Ese empleado ya no existe — elegí otro."
+      status.textContent = extraerEmpSeleccionados.size
+        ? "Ninguno de los empleados elegidos existe ya — elegí otros."
         : "No hay ningún empleado que coincida con ese filtro.";
       return;
     }
@@ -853,12 +865,14 @@ async function descargarExcelEmpleadosSeleccionado(){
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const nombreArchivo = extraerEmpSeleccionado
-      ? `empleado_${extraerEmpSeleccionado.nombre.trim().replace(/\s+/g,"_")}_${new Date().toISOString().slice(0,10)}.xlsx`
+    const nombreArchivo = extraerEmpSeleccionados.size
+      ? (extraerEmpSeleccionados.size === 1
+          ? `empleado_${Array.from(extraerEmpSeleccionados.values())[0].trim().replace(/\s+/g,"_")}_${new Date().toISOString().slice(0,10)}.xlsx`
+          : `empleados_seleccionados_${new Date().toISOString().slice(0,10)}.xlsx`)
       : `empleados_${estadoFiltro}_${new Date().toISOString().slice(0,10)}.xlsx`;
     descargarBlobComoArchivo(blob, nombreArchivo);
-    status.textContent = extraerEmpSeleccionado
-      ? `Descargado: ${extraerEmpSeleccionado.nombre}, ${seleccionados.length} columna(s).`
+    status.textContent = extraerEmpSeleccionados.size
+      ? `Descargado: ${filtrados.length} empleado(s) elegido(s), ${seleccionados.length} columna(s).`
       : `Descargado: ${filtrados.length} empleado(s), ${seleccionados.length} columna(s).`;
   }catch(e){
     if (status) status.textContent = "No se pudo generar el Excel: " + (e.message || "");
