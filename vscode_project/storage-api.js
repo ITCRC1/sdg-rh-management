@@ -336,6 +336,20 @@
       });
     },
 
+    // Bandeja de firma de contratos — ver migrations/009_firma_contratos.sql.
+    async enviarContratoAFirma(id) {
+      return pedir("/documentos/" + encodeURIComponent(id) + "/enviar-firma", { method: "PATCH" });
+    },
+    async firmarContrato(id) {
+      return pedir("/documentos/" + encodeURIComponent(id) + "/firmar", { method: "PATCH" });
+    },
+    async rechazarContrato(id, motivo) {
+      return pedir("/documentos/" + encodeURIComponent(id) + "/rechazar-firma", {
+        method: "PATCH",
+        body: JSON.stringify({ motivo }),
+      });
+    },
+
     // Reloj marcador (SmartPSS de Corcovado) — lectura directa de su base.
     // Las correcciones NO pasan por aquí: se guardan con window.storage
     // (reloj_anulacion:/reloj_manual:) como cualquier otro dato.

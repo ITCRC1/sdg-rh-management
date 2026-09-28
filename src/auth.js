@@ -362,8 +362,9 @@ async function requiereSesion(req, res, next) {
 //                PUEDEN_ESCRIBIR). usuarios.puede_firmar_contratos marca,
 //                dentro de este rol, a la única cuenta (el contador jefe)
 //                que además podrá firmar/rechazar contratos — esa es una
-//                capacidad angosta y aparte (bandeja de firma, todavía sin
-//                construir), nunca escritura general.
+//                capacidad angosta y aparte (requiereFirmaContratos, no
+//                requiereEscritura: ver PATCH /api/documentos/:id/firmar y
+//                /rechazar-firma en rutas-datos.js), nunca escritura general.
 //
 // Estas comprobaciones son las que de verdad mandan. Que el front esconda
 // botones es comodidad visual: quien manipule la petición choca aquí.
@@ -393,6 +394,22 @@ function requiereEscritura(req, res, next) {
     return res.status(403).json({
       error: "Tu cuenta es de solo lectura. Pide a un administrador o gerente que haga este cambio.",
       codigo: "solo_lectura",
+    });
+  }
+  next();
+}
+
+// Capacidad angosta y aparte de PUEDEN_ESCRIBIR (ver el comentario de
+// 'consultor' arriba): firmar/rechazar contratos es lo único que puede
+// escribir una cuenta consultor, y ni siquiera todas — solo la marcada con
+// usuarios.puede_firmar_contratos (el contador jefe). requiereEscritura no
+// sirve acá porque dejaría pasar a master/gerente, que no deben firmar sus
+// propios contratos.
+function requiereFirmaContratos(req, res, next) {
+  if (req.usuario?.rol !== "consultor" || !req.usuario?.puedeFirmarContratos) {
+    return res.status(403).json({
+      error: "Tu cuenta no tiene habilitada la firma de contratos.",
+      codigo: "sin_firma_contratos",
     });
   }
   next();
@@ -432,6 +449,7 @@ module.exports = {
   requiereSesion,
   requiereAdmin,
   requiereEscritura,
+  requiereFirmaContratos,
   exigeCambioPassword,
   rolValido,
   ROLES,

@@ -329,6 +329,13 @@ function aplicarModoSegunRol(rol){
   const btnCambiarPropiedad = document.getElementById("nav-btn-cambiar-propiedad");
   if (btnCambiarPropiedad) btnCambiarPropiedad.style.display = (rol === "master" || rol === "consultor") ? "block" : "none";
 
+  // Bandeja de firma de contratos: solo la cuenta consultor marcada con
+  // usuarios.puede_firmar_contratos (el contador líder) — el resto de
+  // cuentas consultor (RRHH/planillas) no la ven. El servidor ya la
+  // bloquea aparte (A.requiereFirmaContratos); esto es solo la navegación.
+  const btnFirmaContratos = document.getElementById("navbtn-firma-contratos");
+  if (btnFirmaContratos) btnFirmaContratos.style.display = (window.sdgApi && window.sdgApi.puedeFirmarContratos()) ? "block" : "none";
+
   // Jefatura no tiene "página de RH" — solo Horas extras, el módulo de Días
   // Libres y Vacaciones (ahí sí necesita entrar: la especificación dice que
   // el líder/jefatura es quien solicita ausencias para su equipo), e
@@ -4889,6 +4896,7 @@ function showTab(which){
   document.getElementById("empleados-panel").style.display = which === "empleados" ? "block" : "none";
   document.getElementById("archivo-panel").style.display = which === "archivo" ? "block" : "none";
   document.getElementById("perfil-panel").style.display = which === "perfil" ? "block" : "none";
+  document.getElementById("firmacontratos-panel").style.display = which === "firmacontratos" ? "block" : "none";
   document.getElementById("miperfil-panel").style.display = which === "miperfil" ? "block" : "none";
   document.getElementById("reporte-panel").style.display = which === "reporte" ? "block" : "none";
   document.getElementById("faq-panel").style.display = which === "faq" ? "block" : "none";
@@ -4921,6 +4929,7 @@ function showTab(which){
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
     empleados:"empleados", archivo:"empleados",
     perfil:"expedientes",
+    firmacontratos:"contratos",
     despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos", constanciasalarialform:"documentos",
     datos:"datos",
     planilla:"planilla",
@@ -4944,6 +4953,7 @@ function showTab(which){
   if (which === "empleados") renderCatalogTab("empleados");
   if (which === "archivo") renderArchivoList();
   if (which === "perfil") renderPerfilEmpleado();
+  if (which === "firmacontratos") renderBandejaFirmaContratos();
   if (which === "miperfil") renderMiPerfilEmpleado();
   if (which === "reporte") renderReporteMensual();
   if (which === "faq") renderFaqLaboral();
@@ -17752,7 +17762,23 @@ const TIPOS_DOCUMENTO_EXPEDIENTE = {
   recomendacion: { emoji: "📝", label: "Recomendación laboral" },
   amonestacion: { emoji: "⚠️", label: "Amonestación" },
   colilla_pago: { emoji: "💰", label: "Colilla de pago" },
+  documento_externo: { emoji: "📎", label: "Documento externo" },
 };
+
+// Categorías que se ofrecen al subir un documento externo a mano desde el
+// expediente (mostrarModalAgregarDocumentoExpediente) — a diferencia de los
+// tipos de arriba, estos no los genera la app, los sube una persona (copia
+// de cédula, título, certificado médico, etc.), así que "tipo" acá es solo
+// una etiqueta para poder filtrar/reconocer el documento después, no un tipo
+// interno que algo más del sistema interprete.
+const TIPOS_DOCUMENTO_EXTERNO_SUBIBLE = [
+  { value: "documento_externo", label: "Documento externo (general)" },
+  { value: "copia_cedula", label: "Copia de cédula" },
+  { value: "titulo_certificado", label: "Título o certificado" },
+  { value: "certificado_medico", label: "Certificado médico" },
+  { value: "referencia_laboral", label: "Referencia laboral" },
+  { value: "otro", label: "Otro" },
+];
 
 // Todos los documentos archivados de un empleado (cualquier tipo), ya
 // vienen del servidor ordenados por fecha reciente primero (GET
@@ -17781,7 +17807,88 @@ async function anularDocumentoDesdeExpediente(id){
   await anularDocumentoConMotivo(id, renderPerfilEmpleado);
 }
 
-function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes){
+// Bloque de estado + acciones de la bandeja de firma para UN documento de
+// tipo=contrato (ver migrations/009_firma_contratos.sql) — lo usan tanto el
+// expediente del empleado (un contrato a la vez) como la Bandeja de firma de
+// contratos (todos los pendientes de todas las propiedades, ver
+// renderBandejaFirmaContratos). `origen` decide qué función llaman los
+// botones y qué pantalla se vuelve a pintar después de la acción.
+function renderBloqueFirmaContrato(d, origen){
+  if (d.tipo !== "contrato") return "";
+  const idEsc = String(d.id).replace(/'/g, "\\'");
+  const sufijo = origen === "bandeja" ? "DesdeBandeja" : "DesdeExpediente";
+  const puedeEnviar = !!(window.sdgApi && window.sdgApi.puedeEditar());
+  const puedeFirmar = !!(window.sdgApi && window.sdgApi.puedeFirmarContratos());
+
+  if (d.firmado_en){
+    return `<div style="margin-top:2px;"><span class="meta" style="color:#2e7d32;">✅ Firmado por ${escapeHtml((d.firmado_por_email||"").split("@")[0]||"—")} el ${fmtFecha(d.firmado_en)}</span></div>`;
+  }
+  if (d.rechazado_firma_en){
+    const reenviar = puedeEnviar ? `<button class="btn" style="padding:3px 8px; font-size:10.5px; margin-top:3px;" onclick="enviarContratoAFirma${sufijo}('${idEsc}')">📤 Reenviar a firma</button>` : "";
+    return `<div style="margin-top:2px;">
+      <div><span class="meta" style="color:#B3261E;">❌ Rechazado por ${escapeHtml((d.rechazado_firma_por_email||"").split("@")[0]||"—")}: ${escapeHtml(d.rechazado_firma_motivo||"")}</span></div>
+      ${reenviar}
+    </div>`;
+  }
+  if (d.enviado_firma_en){
+    const acciones = puedeFirmar
+      ? `<div style="margin-top:3px; display:flex; gap:6px;">
+          <button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="firmarContrato${sufijo}('${idEsc}')">✍️ Firmar</button>
+          <button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="rechazarContrato${sufijo}('${idEsc}')">❌ Rechazar</button>
+        </div>`
+      : "";
+    return `<div style="margin-top:2px;">
+      <span class="meta" style="color:#9a8759;">⏳ Pendiente de firma (enviado ${fmtFecha(d.enviado_firma_en)})</span>
+      ${acciones}
+    </div>`;
+  }
+  // Todavía no se ha enviado a firma.
+  return puedeEnviar
+    ? `<div style="margin-top:2px;"><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="enviarContratoAFirma${sufijo}('${idEsc}')">📤 Enviar a firma</button></div>`
+    : "";
+}
+
+// Confirmar/rechazar/enviar comparten el mismo aviso de éxito/error;
+// `alConfirmar` es qué pantalla se vuelve a pintar después (Expediente o la
+// Bandeja de firma), igual que ya hace anularDocumentoConMotivo arriba.
+async function enviarContratoAFirmaConConfirmacion(id, alConfirmar){
+  if (!confirm("¿Enviar este contrato a la bandeja de firma del contador líder?")) return;
+  try{
+    await window.sdgApi.enviarContratoAFirma(id);
+    statusMsg("Contrato enviado a firma.");
+    if (alConfirmar) await alConfirmar();
+  }catch(e){ statusMsg("No se pudo enviar a firma: " + (e.message || "error"), false); }
+}
+
+async function firmarContratoConConfirmacion(id, alConfirmar){
+  if (!confirm("¿Firmar este contrato? Esta acción queda registrada y no se puede deshacer.")) return;
+  try{
+    await window.sdgApi.firmarContrato(id);
+    statusMsg("Contrato firmado.");
+    if (alConfirmar) await alConfirmar();
+  }catch(e){ statusMsg("No se pudo firmar: " + (e.message || "error"), false); }
+}
+
+async function rechazarContratoConMotivo(id, alConfirmar){
+  const motivo = prompt("Motivo del rechazo (ej. \"falta la fecha de inicio\"):", "");
+  if (motivo === null) return; // canceló el prompt
+  if (!motivo.trim()){ statusMsg("Escribe un motivo antes de rechazar.", false); return; }
+  try{
+    await window.sdgApi.rechazarContrato(id, motivo.trim());
+    statusMsg("Contrato rechazado.");
+    if (alConfirmar) await alConfirmar();
+  }catch(e){ statusMsg("No se pudo rechazar: " + (e.message || "error"), false); }
+}
+
+async function enviarContratoAFirmaDesdeExpediente(id){ await enviarContratoAFirmaConConfirmacion(id, renderPerfilEmpleado); }
+async function firmarContratoDesdeExpediente(id){ await firmarContratoConConfirmacion(id, renderPerfilEmpleado); }
+async function rechazarContratoDesdeExpediente(id){ await rechazarContratoConMotivo(id, renderPerfilEmpleado); }
+
+async function enviarContratoAFirmaDesdeBandeja(id){ await enviarContratoAFirmaConConfirmacion(id, renderBandejaFirmaContratos); }
+async function firmarContratoDesdeBandeja(id){ await firmarContratoConConfirmacion(id, renderBandejaFirmaContratos); }
+async function rechazarContratoDesdeBandeja(id){ await rechazarContratoConMotivo(id, renderBandejaFirmaContratos); }
+
+function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes, emp, empKey){
   // Los anulados (duplicados eliminados vía "Buscar y eliminar duplicados",
   // correcciones, anulados a mano desde este expediente, etc.) nunca se
   // borran de la base — documentos_emitidos es de solo-inserción — pero ya
@@ -17790,9 +17897,20 @@ function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes){
   // alguna vez hace falta auditar qué se anuló y por qué, eso se consulta
   // directo en la base, no mezclado en este listado.
   const documentos = documentosSinFiltrar.filter(d => !d.anulado_en);
+  // Subir un documento externo (copia de cédula, título, certificado
+  // médico, etc.) requiere el mismo permiso de escritura que cualquier otro
+  // cambio del expediente, y solo tiene sentido con backend — sin él no hay
+  // dónde archivar el archivo (ver onAdjuntoEmpChange, mismo criterio).
+  const puedeSubir = !!(CON_BACKEND && window.sdgApi && window.sdgApi.puedeEditar() && empKey);
+  const botonAgregar = puedeSubir
+    ? `<button class="btn" style="padding:5px 10px; font-size:11px;" onclick="mostrarModalAgregarDocumentoExpediente('${String(empKey).replace(/'/g,"\\'")}', '${String((emp&&emp.IDENTIFICACION_EMP)||"").replace(/'/g,"\\'")}', '${String((emp&&nombreCompletoEmpleado(emp))||"").replace(/'/g,"\\'")}')">📎 Agregar documento</button>`
+    : "";
   if (!documentos.length){
     return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
-      <div style="font-weight:700; margin-bottom:6px;">📁 Todos los documentos</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;">
+        <div style="font-weight:700;">📁 Todos los documentos</div>
+        ${botonAgregar}
+      </div>
       <div style="font-size:12px; color:var(--ink-soft);">Sin documentos archivados todavía.</div>
     </div></div>`;
   }
@@ -17809,7 +17927,10 @@ function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes){
   (solicitudes || []).forEach(s => { if (s.DOCUMENTO_ID) solicitudPorDocId[s.DOCUMENTO_ID] = s; });
 
   return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
-    <div style="font-weight:700; margin-bottom:8px;">📁 Todos los documentos (${documentos.length})</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+      <div style="font-weight:700;">📁 Todos los documentos (${documentos.length})</div>
+      ${botonAgregar}
+    </div>
     ${documentos.map(d => {
       const info = TIPOS_DOCUMENTO_EXPEDIENTE[d.tipo] || { emoji: "📄", label: d.tipo || "Documento" };
       const s = solicitudPorDocId[d.id];
@@ -17826,6 +17947,7 @@ function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes){
           <div style="color:var(--ink-soft);">${escapeHtml(d.titulo || "")}</div>
           <div style="color:var(--ink-soft); font-size:11px;">${d.emitido_en ? fmtFecha(d.emitido_en) : ""}</div>
           ${bloqueConfirmacion}
+          ${renderBloqueFirmaContrato(d, "expediente")}
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0;">
           <a class="btn" style="padding:5px 10px; font-size:11px; text-decoration:none;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">👁️ Ver</a>
@@ -17834,6 +17956,139 @@ function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes){
       </div>`;
     }).join("")}
   </div></div>`;
+}
+
+// ---------- Modal "Agregar documento" (desde el Expediente) ----------
+// Mismo mecanismo de archivo que los adjuntos del formulario de empleado
+// (onAdjuntoEmpChange → window.sdgApi.congelarDocumento), pero de acá se
+// puede subir cualquier documento suelto (copia de cédula, título,
+// certificado médico...) con su propio título y categoría, no solo los tres
+// campos fijos de "Adjuntos" del formulario. Reutiliza el modal genérico
+// #modal-incompletos, mismo patrón que "Agregar deducción recurrente".
+let nuevoDocumentoExpedienteCtx = null;
+
+function mostrarModalAgregarDocumentoExpediente(empKey, cedula, nombre){
+  nuevoDocumentoExpedienteCtx = { empKey, cedula: cedula || "", nombre: nombre || "", tipo: "documento_externo", titulo: "", file: null };
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "📎 Agregar documento";
+  renderModalAgregarDocumentoExpediente();
+  document.getElementById("modal-incompletos").classList.add("open");
+}
+
+function renderModalAgregarDocumentoExpediente(){
+  const body = document.getElementById("modal-incompletos-body");
+  if (!body || !nuevoDocumentoExpedienteCtx) return;
+  const ctx = nuevoDocumentoExpedienteCtx;
+  body.innerHTML = `
+    <div class="field" style="margin-bottom:8px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;">Categoría</label>
+      <select onchange="nuevoDocumentoExpedienteCtx.tipo=this.value;">
+        ${TIPOS_DOCUMENTO_EXTERNO_SUBIBLE.map(o => `<option value="${o.value}" ${ctx.tipo===o.value?"selected":""}>${o.label}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:8px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;">Título (opcional — si se deja vacío se usa el nombre del archivo)</label>
+      <input type="text" value="${escapeHtml(ctx.titulo)}" placeholder="Ej. Copia de cédula" oninput="nuevoDocumentoExpedienteCtx.titulo=this.value;">
+    </div>
+    <div class="field" style="margin-bottom:8px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;">Archivo (máx. 15 MB)</label>
+      <input type="file" onchange="onArchivoDocumentoExpedienteChange(this)">
+      ${ctx.file ? `<div class="hint">${escapeHtml(ctx.file.name)} (${(ctx.file.size/1024/1024).toFixed(2)} MB)</div>` : ""}
+    </div>
+    <div id="nuevo-documento-status" style="font-size:12px; margin-bottom:8px;"></div>
+    <button class="btn primary" style="width:100%;" onclick="confirmarAgregarDocumentoExpediente();">📎 Subir documento</button>
+  `;
+}
+
+function onArchivoDocumentoExpedienteChange(inputEl){
+  const ctx = nuevoDocumentoExpedienteCtx;
+  if (!ctx) return;
+  const file = inputEl.files && inputEl.files[0];
+  const status = document.getElementById("nuevo-documento-status");
+  if (file && file.size > MAX_ADJUNTO_BYTES){
+    if (status) status.innerHTML = `<span style="color:#B3261E;">El archivo supera el límite de 15 MB.</span>`;
+    inputEl.value = "";
+    ctx.file = null;
+    return;
+  }
+  if (status) status.textContent = "";
+  ctx.file = file || null;
+}
+
+async function confirmarAgregarDocumentoExpediente(){
+  const ctx = nuevoDocumentoExpedienteCtx;
+  if (!ctx) return;
+  const status = document.getElementById("nuevo-documento-status");
+  if (!ctx.file){
+    if (status) status.innerHTML = `<span style="color:#B3261E;">Elegí un archivo primero.</span>`;
+    return;
+  }
+  if (status) status.textContent = "Subiendo…";
+  try{
+    await window.sdgApi.congelarDocumento(ctx.file, {
+      tipo: ctx.tipo || "documento_externo",
+      titulo: ctx.titulo.trim() || ctx.file.name,
+      nombreArchivo: ctx.file.name,
+      claveOrigen: CATALOGS.empleados.prefix + ctx.empKey,
+      empleadoCedula: ctx.cedula || null,
+      empleadoNombre: ctx.nombre || null,
+    });
+    nuevoDocumentoExpedienteCtx = null;
+    cerrarModalIncompletos();
+    statusMsg("Documento agregado al expediente.");
+    await renderPerfilEmpleado();
+  }catch(e){
+    if (status) status.innerHTML = `<span style="color:#B3261E;">${escapeHtml("No se pudo subir el archivo: " + (e.message || "error"))}</span>`;
+  }
+}
+
+// ---------- Bandeja de firma de contratos ----------
+// Panel exclusivo de la cuenta con usuarios.puede_firmar_contratos (el
+// contador líder) — ver migrations/009_firma_contratos.sql y el comentario
+// del rol 'consultor' en src/auth.js. Lista los contratos pendientes de
+// firma de la propiedad activa (igual que el resto de la app para
+// master/consultor: se cambia de propiedad con el selector del menú, no hay
+// una vista que junte las 5 a la vez).
+async function renderBandejaFirmaContratos(){
+  const panel = document.getElementById("firmacontratos-panel");
+  if (!panel) return;
+  if (!(window.sdgApi && window.sdgApi.puedeFirmarContratos())){
+    panel.innerHTML = `<div class="empty-state">Tu cuenta no tiene habilitada la firma de contratos.</div>`;
+    return;
+  }
+  panel.innerHTML = `<div class="empty-state">Cargando bandeja de firma…</div>`;
+  try{
+    // Los "resueltos" salen de los últimos 30 CONTRATOS emitidos (no de los
+    // últimos 30 resueltos) filtrados a firmado/rechazado — una simplificación
+    // razonable para una bitácora reciente, no para auditar todo el histórico.
+    const [pendientes, ultimosContratos] = await Promise.all([
+      window.sdgApi.documentos({ tipo: "contrato", estadoFirma: "pendiente", limite: 500 }),
+      window.sdgApi.documentos({ tipo: "contrato", limite: 30 }),
+    ]);
+    const resueltos = ultimosContratos.filter(d => d.firmado_en || d.rechazado_firma_en);
+
+    const filaDoc = d => `<div style="font-size:12px; padding:8px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+      <div>
+        <b>📄 ${escapeHtml(d.titulo || "Contrato")}</b>
+        <div style="color:var(--ink-soft);">${escapeHtml(d.empleado_nombre || "")}${d.empleado_cedula ? " · " + escapeHtml(d.empleado_cedula) : ""}</div>
+        <div style="color:var(--ink-soft); font-size:11px;">Generado: ${d.emitido_en ? fmtFecha(d.emitido_en) : ""}</div>
+        ${renderBloqueFirmaContrato(d, "bandeja")}
+      </div>
+      <a class="btn" style="padding:5px 10px; font-size:11px; text-decoration:none; flex-shrink:0;" href="${window.sdgApi.urlDescarga(d.id)}" target="_blank" rel="noopener">👁️ Ver</a>
+    </div>`;
+
+    panel.innerHTML = `
+      <div class="section-card"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:8px;">✍️ Pendientes de firma (${pendientes.length})</div>
+        ${pendientes.length ? pendientes.map(filaDoc).join("") : `<div style="font-size:12px; color:var(--ink-soft);">No hay contratos pendientes de firma en esta propiedad.</div>`}
+      </div></div>
+      <div class="section-card" style="margin-top:10px;"><div class="section-body">
+        <div style="font-weight:700; margin-bottom:8px;">📜 Resueltos recientemente</div>
+        ${resueltos.length ? resueltos.map(filaDoc).join("") : `<div style="font-size:12px; color:var(--ink-soft);">Todavía no hay contratos firmados ni rechazados.</div>`}
+      </div></div>
+    `;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar la bandeja de firma.</div>`;
+  }
 }
 
 // Colillas de pago de ESTE empleado en particular, directo en su expediente
@@ -18597,7 +18852,7 @@ async function renderPerfilEmpleado(){
 
       ${renderSeccionColillasEmpleado(documentosEmpleado, perfilActualKey)}
 
-      ${renderSeccionDocumentosEmpleado(documentosEmpleado, solicitudesDeEsteEmpleado)}
+      ${renderSeccionDocumentosEmpleado(documentosEmpleado, solicitudesDeEsteEmpleado, emp, perfilActualKey)}
 
       ${Array.isArray(emp.PERMISOS_HISTORIAL) && emp.PERMISOS_HISTORIAL.length > 0 ? `
       <div class="section-card" style="margin-top:10px;"><div class="section-body">

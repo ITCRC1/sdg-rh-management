@@ -790,12 +790,25 @@ emitidos.get("/", async (req, res, next) => {
       params.push(String(req.query.tipo));
       filtros.push("tipo = $" + params.length);
     }
+    // estadoFirma es solo para tipo=contrato (ver PATCH .../enviar-firma,
+    // /firmar, /rechazar-firma más abajo) — filtra la bandeja del contador
+    // jefe sin tener que traer todos los documentos y filtrar en el cliente.
+    if (req.query.estadoFirma === "pendiente") {
+      filtros.push("enviado_firma_en IS NOT NULL AND firmado_en IS NULL AND rechazado_firma_en IS NULL");
+    } else if (req.query.estadoFirma === "firmado") {
+      filtros.push("firmado_en IS NOT NULL");
+    } else if (req.query.estadoFirma === "rechazado") {
+      filtros.push("rechazado_firma_en IS NOT NULL");
+    }
     params.push(limite);
 
     const { rows } = await query(
       `SELECT id, clave_origen, tipo, titulo, empleado_cedula, empleado_nombre,
               nombre_archivo, mime, tamano_bytes, sha256,
-              emitido_por_email, emitido_en, anulado_en, anulado_motivo
+              emitido_por_email, emitido_en, anulado_en, anulado_motivo,
+              enviado_firma_en, enviado_firma_por_email,
+              firmado_en, firmado_por_email,
+              rechazado_firma_en, rechazado_firma_por_email, rechazado_firma_motivo
          FROM documentos_emitidos
         WHERE ${filtros.join(" AND ")}
         ORDER BY emitido_en DESC
@@ -854,6 +867,111 @@ emitidos.patch("/:id/anular", A.requiereEscritura, async (req, res, next) => {
       [req.params.id, req.usuario.id, motivo]
     );
     if (!rows[0]) return res.status(404).json({ error: "Documento no encontrado o ya anulado." });
+    res.json(rows[0]);
+  } catch (e) {
+    if (e.code === "22P02") return res.status(400).json({ error: "Identificador inválido." });
+    next(e);
+  }
+});
+
+// ---- Bandeja de firma de contratos (ver migrations/009_firma_contratos.sql) ----
+//
+// A diferencia de /anular arriba, estas tres rutas sí verifican la
+// propiedad del documento a mano (fetch-then-check, igual que ya hace GET
+// /:id/archivo): el firmante (consultor, ve las 5 propiedades) necesita
+// poder tocar contratos de cualquiera, pero un gerente solo debe poder
+// mandar a firma los de la suya.
+async function documentoDeContratoConAcceso(req, res) {
+  const { rows } = await query(
+    `SELECT id, propiedad_id, tipo FROM documentos_emitidos WHERE id = $1`,
+    [req.params.id]
+  );
+  const d = rows[0];
+  if (!d) {
+    res.status(404).json({ error: "Documento no encontrado." });
+    return null;
+  }
+  const propiedad = propiedadDe(req);
+  if (d.propiedad_id !== propiedad && !puedeVerCualquierPropiedad(req.usuario.rol)) {
+    res.status(403).json({ error: "Ese documento pertenece a otra propiedad." });
+    return null;
+  }
+  if (d.tipo !== "contrato") {
+    res.status(400).json({ error: "Esta acción solo aplica a contratos." });
+    return null;
+  }
+  return d;
+}
+
+// PATCH /api/documentos/:id/enviar-firma — RRHH/gerencia manda un contrato
+// ya generado a la bandeja del contador jefe. También sirve para reenviarlo
+// después de un rechazo: limpia el rechazo anterior en vez de acumularlo.
+emitidos.patch("/:id/enviar-firma", A.requiereEscritura, async (req, res, next) => {
+  try {
+    const d = await documentoDeContratoConAcceso(req, res);
+    if (!d) return;
+
+    const { rows } = await query(
+      `UPDATE documentos_emitidos
+          SET enviado_firma_en = now(), enviado_firma_por = $2, enviado_firma_por_email = $3,
+              rechazado_firma_en = NULL, rechazado_firma_por = NULL,
+              rechazado_firma_por_email = NULL, rechazado_firma_motivo = NULL
+        WHERE id = $1 AND anulado_en IS NULL AND firmado_en IS NULL
+        RETURNING id, enviado_firma_en`,
+      [req.params.id, req.usuario.id, req.usuario.email]
+    );
+    if (!rows[0]) return res.status(409).json({ error: "Este contrato ya está firmado o fue anulado." });
+    res.json(rows[0]);
+  } catch (e) {
+    if (e.code === "22P02") return res.status(400).json({ error: "Identificador inválido." });
+    next(e);
+  }
+});
+
+// PATCH /api/documentos/:id/firmar — solo la cuenta con
+// usuarios.puede_firmar_contratos. Exige que ya se haya enviado a firma
+// antes (no se firma cualquier documento suelto sin pasar por ahí).
+emitidos.patch("/:id/firmar", A.requiereFirmaContratos, async (req, res, next) => {
+  try {
+    const d = await documentoDeContratoConAcceso(req, res);
+    if (!d) return;
+
+    const { rows } = await query(
+      `UPDATE documentos_emitidos
+          SET firmado_en = now(), firmado_por = $2, firmado_por_email = $3
+        WHERE id = $1 AND enviado_firma_en IS NOT NULL AND firmado_en IS NULL
+              AND rechazado_firma_en IS NULL AND anulado_en IS NULL
+        RETURNING id, firmado_en`,
+      [req.params.id, req.usuario.id, req.usuario.email]
+    );
+    if (!rows[0]) return res.status(409).json({ error: "Este contrato no está pendiente de firma." });
+    res.json(rows[0]);
+  } catch (e) {
+    if (e.code === "22P02") return res.status(400).json({ error: "Identificador inválido." });
+    next(e);
+  }
+});
+
+// PATCH /api/documentos/:id/rechazar-firma — igual que firmar, pero deja
+// constancia del motivo para que RRHH sepa qué corregir antes de reenviarlo.
+emitidos.patch("/:id/rechazar-firma", A.requiereFirmaContratos, async (req, res, next) => {
+  try {
+    const motivo = String(req.body?.motivo || "").trim();
+    if (!motivo) return res.status(400).json({ error: "Indica el motivo del rechazo." });
+
+    const d = await documentoDeContratoConAcceso(req, res);
+    if (!d) return;
+
+    const { rows } = await query(
+      `UPDATE documentos_emitidos
+          SET rechazado_firma_en = now(), rechazado_firma_por = $2,
+              rechazado_firma_por_email = $3, rechazado_firma_motivo = $4
+        WHERE id = $1 AND enviado_firma_en IS NOT NULL AND firmado_en IS NULL
+              AND rechazado_firma_en IS NULL AND anulado_en IS NULL
+        RETURNING id, rechazado_firma_en`,
+      [req.params.id, req.usuario.id, req.usuario.email, motivo]
+    );
+    if (!rows[0]) return res.status(409).json({ error: "Este contrato no está pendiente de firma." });
     res.json(rows[0]);
   } catch (e) {
     if (e.code === "22P02") return res.status(400).json({ error: "Identificador inválido." });
