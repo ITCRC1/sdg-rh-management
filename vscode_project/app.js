@@ -17410,23 +17410,31 @@ async function guardarBorradorRecomendacion(){
 // solo-inserción) — se anula a mano ahí si ya no aplica.
 function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado, tieneConstanciaSalarial }){
   const esMaster = !!(window.sdgApi && window.sdgApi.esMaster());
+  // Consultor (contador líder y demás cuentas de Consultants) es de solo
+  // lectura en todo — el servidor ya rechaza cualquiera de estos botones si
+  // los toca (PUEDEN_ESCRIBIR en src/auth.js), pero mostrárselos igual solo
+  // invita a un error de permiso confuso en vez de simplemente no ofrecer lo
+  // que no puede usar. "Calcular liquidación" y "Descargar datos CCSS" son
+  // las dos únicas de esta lista que son de solo lectura/exportación, así
+  // que esas quedan visibles para cualquiera.
+  const puedeEditar = !!(window.sdgApi && window.sdgApi.puedeEditar());
   const n = i => numerado ? `${i}. ` : "";
   const botones = [];
-  botones.push(`<button onclick="generarDespidoDeEmpleado('${empKey}')">${n(1)}⚖️ Carta de despido</button>`);
+  if (puedeEditar) botones.push(`<button onclick="generarDespidoDeEmpleado('${empKey}')">${n(1)}⚖️ Carta de despido</button>`);
   botones.push(`<button onclick="abrirCalculadoraLiquidacion('${empKey}')">${n(2)}🧮 Calcular liquidación</button>`);
-  botones.push(`<button onclick="generarAmonestacionDeEmpleado('${empKey}')">${n(3)}⚠️ Amonestación</button>`);
-  if (archivado) botones.push(`<button onclick="generarRecomendacionDeEmpleado('${empKey}')">📝 Recomendación laboral</button>`);
-  botones.push(`<button onclick="actualizarContratoDeEmpleado('${empKey}')">${n(4)}📄 ${(contratosVinculados && contratosVinculados.length) ? "Actualizar" : "Crear"} contrato</button>`);
-  if (!archivado) botones.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">${n(5)}🗓️ Permiso sin goce salarial</button>`);
-  if (!archivado) botones.push(`<button onclick="generarVacacionesDeEmpleado('${empKey}')">${n(6)}🏖️ Vacaciones</button>`);
-  botones.push(`<button onclick="openCatalogForm('empleados','${empKey}')">${n(7)}✏️ Editar datos (puesto, salario, contacto...)</button>`);
-  botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(8)}✍️ Confirmar handbook</button>`);
-  botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(9)}📎 Subir contrato firmado (PDF)</button>`);
+  if (puedeEditar) botones.push(`<button onclick="generarAmonestacionDeEmpleado('${empKey}')">${n(3)}⚠️ Amonestación</button>`);
+  if (puedeEditar && archivado) botones.push(`<button onclick="generarRecomendacionDeEmpleado('${empKey}')">📝 Recomendación laboral</button>`);
+  if (puedeEditar) botones.push(`<button onclick="actualizarContratoDeEmpleado('${empKey}')">${n(4)}📄 ${(contratosVinculados && contratosVinculados.length) ? "Actualizar" : "Crear"} contrato</button>`);
+  if (puedeEditar && !archivado) botones.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">${n(5)}🗓️ Permiso sin goce salarial</button>`);
+  if (puedeEditar && !archivado) botones.push(`<button onclick="generarVacacionesDeEmpleado('${empKey}')">${n(6)}🏖️ Vacaciones</button>`);
+  if (puedeEditar) botones.push(`<button onclick="openCatalogForm('empleados','${empKey}')">${n(7)}✏️ Editar datos (puesto, salario, contacto...)</button>`);
+  if (puedeEditar) botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(8)}✍️ Confirmar handbook</button>`);
+  if (puedeEditar) botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(9)}📎 Subir contrato firmado (PDF)</button>`);
   botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(10)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
-  if (!archivado) botones.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">${tieneConstanciaSalarial ? "🔄 Actualizar constancia salarial" : "💵 Constancia salarial"}</button>`);
+  if (puedeEditar && !archivado) botones.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">${tieneConstanciaSalarial ? "🔄 Actualizar constancia salarial" : "💵 Constancia salarial"}</button>`);
   if (esMaster && !archivado) botones.push(`<button onclick="mostrarModalDesignarJefatura('${empKey}')">👑 Designar como jefatura</button>`);
-  if (!archivado) botones.push(`<button onclick="mostrarCredencialesEmpleado('${empKey}')">🔑 Ver/generar credenciales de acceso</button>`);
-  if (!archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(11)}🗄️ Archivar</button>`);
+  if (puedeEditar && !archivado) botones.push(`<button onclick="mostrarCredencialesEmpleado('${empKey}')">🔑 Ver/generar credenciales de acceso</button>`);
+  if (puedeEditar && !archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(11)}🗄️ Archivar</button>`);
   return botones.join("");
 }
 
