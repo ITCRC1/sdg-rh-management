@@ -12768,6 +12768,26 @@ async function renderContractsList(){
       listEl.innerHTML = `<div class="empty-state">Todavía no hay contratos guardados.<br>Usa “➕ Crear contrato nuevo” para empezar.</div>`;
       return;
     }
+    // Estado de firma de cada contrato (ver "Enviar a firma" en Expediente,
+    // mismo mecanismo) — una sola consulta para toda la lista, no una por
+    // fila. Se enlaza por clave_origen (exacto, desde que descargarPDFConNombre
+    // empezó a guardarlo) y, para contratos archivados antes de ese cambio,
+    // por cédula como respaldo (menos preciso: dos borradores distintos
+    // pueden compartir cédula, ej. uno duplicado del otro — en ese caso se
+    // les atribuye el mismo documento, es lo mejor que se puede hacer sin esa
+    // referencia). Ya vienen ordenados por fecha reciente primero (GET
+    // /api/documentos), así que el primero que aparece para cada clave es el
+    // vigente.
+    let docPorClaveOrigen = {}, docPorCedula = {};
+    if (window.sdgApi){
+      try{
+        const documentosContratos = (await window.sdgApi.documentos({ tipo: "contrato", limite: 1000 })).filter(d => !d.anulado_en);
+        documentosContratos.forEach(d => {
+          if (d.clave_origen && !docPorClaveOrigen[d.clave_origen]) docPorClaveOrigen[d.clave_origen] = d;
+          if (d.empleado_cedula && !docPorCedula[d.empleado_cedula]) docPorCedula[d.empleado_cedula] = d;
+        });
+      }catch(e){ /* sin esto la lista sigue funcionando, solo sin el estado de firma */ }
+    }
     let items = await Promise.all(keys.map(async k => {
       try{
         const r = await window.storage.get(k, false);
@@ -12776,9 +12796,10 @@ async function renderContractsList(){
         return {
           key: k, name: k.replace("contrato:", ""), puesto: d.PUESTO || "", empresa: d.EMPRESA || "",
           updatedAt: d._updatedAt || "", vencimiento: estadoVencimiento(d), completo: !!completo,
+          docFirma: docPorClaveOrigen[k] || (d.IDENTIFICACION ? docPorCedula[d.IDENTIFICACION] : null) || null,
         };
       }catch(e){
-        return { key: k, name: k.replace("contrato:", ""), puesto: "", empresa: "", updatedAt: "", vencimiento: null, completo: false };
+        return { key: k, name: k.replace("contrato:", ""), puesto: "", empresa: "", updatedAt: "", vencimiento: null, completo: false, docFirma: null };
       }
     }));
     if (contractsSearchTerm){
@@ -12812,6 +12833,7 @@ async function renderContractsList(){
           <button onclick="duplicarContrato('${it.key.replace(/'/g,"\\'")}')">Duplicar</button>
           <button onclick="descargarConstanciaDeContrato('${it.key.replace(/'/g,"\\'")}')">📋 HB Firma</button>
           <button onclick="descargarDespidoDeContrato('${it.key.replace(/'/g,"\\'")}')">⚖️ Despido</button>
+          ${renderBotonFirmaContrato(it.docFirma)}
           <button class="del" onclick="deleteContract('${it.key.replace(/'/g,"\\'")}')">Eliminar</button>
         </div>
       </div>`;
@@ -12924,6 +12946,11 @@ function descargarPDFConNombre(){
     tipo: "contrato",
     titulo: "Contrato de trabajo — " + (data.NOMBRE_TRABAJADOR || "sin nombre"),
     nombreArchivo: nombreArchivoContrato(),
+    // Sin esto no había forma confiable de enlazar un contrato archivado con
+    // su fila en "Ver contratos guardados" — solo quedaba la cédula, que dos
+    // borradores distintos pueden compartir (ej. uno duplicado del otro). Ver
+    // renderContractsList, que usa esto para mostrar el estado de firma.
+    claveOrigen: currentKey || null,
     empleadoCedula: data.IDENTIFICACION || null,
     empleadoNombre: data.NOMBRE_TRABAJADOR || null,
   });
@@ -18022,6 +18049,31 @@ async function rechazarContratoDesdeExpediente(id){ await rechazarContratoConMot
 async function enviarContratoAFirmaDesdeBandeja(id){ await enviarContratoAFirmaConConfirmacion(id, renderBandejaFirmaContratos); }
 async function firmarContratoDesdeBandeja(id){ await firmarContratoConConfirmacion(id, renderBandejaFirmaContratos); }
 async function rechazarContratoDesdeBandeja(id){ await rechazarContratoConMotivo(id, renderBandejaFirmaContratos); }
+
+async function enviarContratoAFirmaDesdeContratos(id){ await enviarContratoAFirmaConConfirmacion(id, renderContractsList); }
+
+// Botón compacto de estado de firma para "Ver contratos guardados" — a
+// diferencia de renderBloqueFirmaContrato (Expediente/Bandeja, que muestra
+// texto + varios botones), acá es UN solo botón que cambia de color según el
+// estado, para verlo de un vistazo en la lista sin entrar a cada contrato:
+// gris = todavía no se envió, rojo = ya se envió y sigue esperando al
+// contador líder (o lo rechazó), verde = ya lo firmó.
+function renderBotonFirmaContrato(d){
+  if (!d){
+    return `<button onclick="statusMsg('Primero descargá este contrato (se archiva solo al descargarlo) antes de poder enviarlo a firma.', false)">📤 Enviar a firma</button>`;
+  }
+  const idEsc = String(d.id).replace(/'/g, "\\'");
+  if (d.firmado_en){
+    return `<button style="color:#2e7d32; border-color:#bfe3c4; cursor:default;" title="Firmado por ${escapeHtml((d.firmado_por_email||"").split("@")[0]||"—")} el ${fmtFecha(d.firmado_en)}">✅ Firmado</button>`;
+  }
+  if (d.rechazado_firma_en){
+    return `<button class="del" title="Rechazado: ${escapeHtml(d.rechazado_firma_motivo||"")} — clic para reenviar" onclick="enviarContratoAFirmaDesdeContratos('${idEsc}')">❌ Rechazado</button>`;
+  }
+  if (d.enviado_firma_en){
+    return `<button class="del" style="cursor:default;" title="Enviado el ${fmtFecha(d.enviado_firma_en)} — esperando al contador líder">⏳ Pendiente de firma</button>`;
+  }
+  return `<button onclick="enviarContratoAFirmaDesdeContratos('${idEsc}')">📤 Enviar a firma</button>`;
+}
 
 function renderSeccionDocumentosEmpleado(documentosSinFiltrar, solicitudes, emp, empKey){
   // Los anulados (duplicados eliminados vía "Buscar y eliminar duplicados",
