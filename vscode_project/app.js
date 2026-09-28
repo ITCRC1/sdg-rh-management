@@ -1319,9 +1319,16 @@ function fieldHtml(meta){
       ? ["Soltero(a)","Casado(a)","Divorciado(a)","Viudo(a)","Unión de hecho"]
       : ["Cédula de identidad","DIMEX","Pasaporte","Cédula de residencia"];
     const dict = type === "select_nacionalidad" ? NACIONALIDAD_EN : type === "select_estado_civil" ? ESTADO_CIVIL_EN : TIPO_IDENTIFICACION_EN;
-    const isManual = !!formManualFields[id];
+    const manualFlag = formManualFields[id];
     const matches = optionsEs.includes(val);
-    if (isManual || (val && !matches)){
+    // undefined = todavía no se decidió: si el valor no calza con ninguna
+    // opción (p. ej. vino de una importación vieja) se asume manual. Pero
+    // una vez que se aprieta "Elegir de la lista" esto queda en false
+    // explícito y debe respetarse aunque el valor siga sin calzar — si no,
+    // el botón no hacía nada (el valor viejo lo mandaba de vuelta a manual
+    // en cada render).
+    const isManual = manualFlag === true || (manualFlag === undefined && !!val && !matches);
+    if (isManual){
       control = `<input type="text" data-field="${id}" value="${escapeHtml(val)}" oninput="onInput('${id}', this.value)">
         <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="formManualFields['${id}']=false; renderForm();">📋 ${tr("Elegir de la lista","Choose from the list")}</button>`;
     } else {
@@ -1361,9 +1368,10 @@ function fieldHtml(meta){
     if (data.TIPO_DESPIDO !== "con_responsabilidad"){
       control = `<div class="hint">${tr("Solo aplica cuando el despido es con responsabilidad patronal (Art. 85 CT).","Only applies when the dismissal is with employer liability (Art. 85 LC).")}</div>`;
     } else {
-      const isManual = !!formManualFields[id];
+      const manualFlag = formManualFields[id];
       const matches = MOTIVOS_DESPIDO_CON.includes(val);
-      if (isManual || (val && !matches)){
+      const isManual = manualFlag === true || (manualFlag === undefined && !!val && !matches);
+      if (isManual){
         control = `<input type="text" data-field="${id}" value="${escapeHtml(val)}" oninput="onInput('${id}', this.value)">
           <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="formManualFields['${id}']=false; renderForm();">📋 ${tr("Elegir de la lista","Choose from the list")}</button>`;
       } else {
@@ -2694,9 +2702,10 @@ function catalogFieldHtml(meta){
       <div class="hint" id="letras-${id}">${escapeHtml(catalogEditing.values[id + "_LETRAS"] || "")}</div>
       <div class="hint" id="neto-${id}" style="margin-top:6px; font-weight:600;">${escapeHtml(netoTxt)}</div>`;
   } else if (type === "select_banco_cr"){
-    const isManual = !!(catalogEditing.manualFields && catalogEditing.manualFields[id]);
+    const manualFlag = catalogEditing.manualFields && catalogEditing.manualFields[id];
     const matches = BANCOS_CR.includes(val);
-    if (isManual || (val && !matches)){
+    const isManual = manualFlag === true || (manualFlag === undefined && !!val && !matches);
+    if (isManual){
       control = `<input type="text" value="${escapeHtml(val)}" oninput="catalogEditing.values['${id}']=this.value">
         <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="catalogEditing.manualFields=catalogEditing.manualFields||{}; catalogEditing.manualFields['${id}']=false; renderCatalogTab('empleados');">📋 Elegir de la lista</button>`;
     } else {
@@ -2917,9 +2926,10 @@ function catalogFieldHtml(meta){
         <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="onSelectPuestoCatalogo('__custom__')">✏️ No está en la lista (escribir abajo)</button>`;
     }
   } else if (type === "select_puesto_lider"){
-    const isManual = !!(catalogEditing.manualFields && catalogEditing.manualFields[id]);
+    const manualFlag = catalogEditing.manualFields && catalogEditing.manualFields[id];
     const matches = PUESTOS_LIDERAZGO.includes(val);
-    if (isManual || (val && !matches)){
+    const isManual = manualFlag === true || (manualFlag === undefined && !!val && !matches);
+    if (isManual){
       control = `<input type="text" value="${escapeHtml(val)}" placeholder="Ej. Gerente General, Director de Operaciones" oninput="catalogEditing.values['${id}']=this.value">
         <button type="button" class="btn" style="margin-top:6px; padding:6px 10px; font-size:11.5px;" onclick="catalogEditing.manualFields=catalogEditing.manualFields||{}; catalogEditing.manualFields['${id}']=false; renderCatalogTab('${catalogEditing.type}');">📋 Elegir de la lista de puestos</button>`;
     } else {
