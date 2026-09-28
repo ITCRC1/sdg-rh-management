@@ -8021,17 +8021,6 @@ async function generarReporteHorarioPlanilla(){
     });
     const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)", ...etiquetasDeduccion.map(clave => etiquetaDisplay[clave])];
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
-    const VERDE_HEADER = "FFB6D7A8", VERDE_CELDA = "FFE2F0D9";
-    const ROJO_HEADER = "FFEA9999", ROJO_CELDA = "FFFBE3E3";
-    // Verde = suma a favor del empleado (días/horas pagados de más);
-    // rojo = resta días base o es un descuento en colones — para
-    // distinguir ingresos de salidas de un vistazo, sin leer cada
-    // encabezado. Nombre/N° de empleado/Departamento quedan neutros (solo
-    // identifican a la persona). Las columnas de deducciones (al final,
-    // una por cada tipo — ver etiquetasDeduccion) son siempre rojas: se les
-    // asigna "rojo" con el .map de abajo en vez de listarlas una por una.
-    const TIPO_COLUMNA_FIJA = ["neutro","neutro","neutro","verde","rojo","rojo","rojo","rojo","verde","verde","verde","verde","verde"];
-    const tipoColumna = COLUMNAS.map((_, i) => TIPO_COLUMNA_FIJA[i] || "rojo");
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
 
@@ -8059,8 +8048,7 @@ async function generarReporteHorarioPlanilla(){
     COLUMNAS.forEach((titulo, i) => {
       const celda = filaHeader.getCell(i + 1);
       celda.value = titulo;
-      const colorHeader = tipoColumna[i] === "verde" ? VERDE_HEADER : tipoColumna[i] === "rojo" ? ROJO_HEADER : GRIS_HEADER;
-      celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colorHeader } };
+      celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GRIS_HEADER } };
       celda.font = { bold: true };
       celda.alignment = { horizontal: "center", vertical: "middle" };
       celda.border = bordeCelda;
@@ -8115,8 +8103,6 @@ async function generarReporteHorarioPlanilla(){
         celda.value = v;
         celda.border = bordeCelda;
         celda.alignment = { vertical: "middle", horizontal: i >= 3 ? "center" : "left" };
-        if (tipoColumna[i] === "verde") celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE_CELDA } };
-        else if (tipoColumna[i] === "rojo") celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ROJO_CELDA } };
       });
       filaActual++;
     });
