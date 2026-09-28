@@ -6,7 +6,7 @@ const { migrar, pool, query } = require("./db");
 const A = require("./auth");
 const rutasAuth = require("./rutas-auth");
 const { datos, historial, emitidos } = require("./rutas-datos");
-const { reloj, OFFSET_MIN: RELOJ_OFFSET_MIN } = require("./rutas-reloj");
+const { reloj } = require("./rutas-reloj");
 const { ejecutarSincronizacionDiaria } = require("./reloj-sync");
 const estatico = require("./estatico");
 
@@ -110,26 +110,26 @@ function tareasDiarias() {
   A.archivarUsuariosDeEmpleadosVencidos();
 }
 
-// Envío automático del Reloj marcador a Horas extra, una vez al día a
-// medianoche hora de Costa Rica (ver src/reloj-sync.js). A diferencia de
-// tareasDiarias (que corre cada 24h desde que arrancó el proceso), esto
-// necesita una hora de pared fija: si corriera a la hora de arranque no
-// tendría sentido para nadie ("se envían las marcas a las 3:47pm"). Un fallo
-// (reloj apagado, MySQL caído) solo se registra en el log — nunca debe
-// tumbar el servidor, y la próxima corrida vuelve a intentar el rango
-// completo pendiente.
-function msHastaProximaMedianocheCR() {
-  const horaUtcMedianocheCR = ((-RELOJ_OFFSET_MIN / 60) % 24 + 24) % 24;
-  const ahora = new Date();
-  const proxima = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate(), horaUtcMedianocheCR, 0, 0, 0));
-  if (proxima <= ahora) proxima.setUTCDate(proxima.getUTCDate() + 1);
-  return proxima - ahora;
-}
+// Envío automático del Reloj marcador a Horas extra — cada pocos minutos
+// (ver src/reloj-sync.js), para que una marca recién caída en el reloj se
+// refleje casi al instante en vez de esperar a medianoche. Antes esto corría
+// una sola vez al día a medianoche hora de Costa Rica; ya no hace falta esa
+// alineación de reloj de pared porque ejecutarSincronizacionDiaria siempre
+// sincroniza hasta HOY (nunca solo "ayer") y sabe descartar sola los turnos
+// de hoy que siguen abiertos — correr seguido es seguro y barato (consulta
+// una ventana acotada de días, no la tabla completa). Un fallo (reloj
+// apagado, MySQL caído) solo se registra en el log — nunca debe tumbar el
+// servidor, y la próxima corrida (a los pocos minutos) vuelve a intentarlo.
+const RELOJ_SYNC_INTERVALO_MS = 5 * 60 * 1000; // cada 5 minutos
 
 async function correrSincronizacionReloj() {
   try {
     const r = await ejecutarSincronizacionDiaria();
-    if (r.configurado && !r.saltado) {
+    // Corriendo cada 5 minutos, la enorme mayoría de las corridas no
+    // encuentran nada nuevo (nadie marcó desde la última vez) — registrar
+    // esas igual llenaría el log de líneas vacías. Solo se anota cuando de
+    // verdad creó o actualizó algo.
+    if (r.configurado && !r.saltado && ((r.creadas || 0) > 0 || (r.actualizadas || 0) > 0)) {
       console.log(
         `Reloj marcador → Horas extra: ${r.desde} a ${r.hasta} — ` +
           `${r.creadas || 0} creado(s), ${r.actualizadas || 0} actualizado(s), ${r.omitidas || 0} omitido(s) (ya decididos).`
@@ -141,11 +141,8 @@ async function correrSincronizacionReloj() {
 }
 
 function programarSincronizacionReloj() {
-  setTimeout(function disparar() {
-    correrSincronizacionReloj();
-    const proximo = setInterval(correrSincronizacionReloj, TAREAS_DIARIAS_MS);
-    proximo.unref();
-  }, msHastaProximaMedianocheCR()).unref();
+  const t = setInterval(correrSincronizacionReloj, RELOJ_SYNC_INTERVALO_MS);
+  t.unref();
 }
 
 async function arrancar() {
@@ -160,8 +157,8 @@ async function arrancar() {
   const tareasProgramadas = setInterval(tareasDiarias, TAREAS_DIARIAS_MS);
   tareasProgramadas.unref();
 
-  // Al arrancar (ej. tras un despliegue) se pone al día de una vez, sin
-  // esperar a la medianoche — y de ahí en adelante corre a medianoche CR.
+  // Al arrancar (ej. tras un despliegue) se pone al día de una vez, y de ahí
+  // en adelante corre cada RELOJ_SYNC_INTERVALO_MS mientras el proceso siga vivo.
   correrSincronizacionReloj();
   programarSincronizacionReloj();
 

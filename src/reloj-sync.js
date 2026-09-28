@@ -556,7 +556,19 @@ async function sincronizarRango(desde, hasta) {
 
   if (!eventos.length) return { configurado: true, creadas: feriadosCreados, actualizadas: 0, omitidas: 0, sinMatch: 0, confianzaOmitidos: 0, feriadosCreados };
 
-  const filas = filasDesdeEventosMarcacion(eventos, (codigo) => jornadaPorCodigoMap[codigo] || null);
+  const filasSinFiltrar = filasDesdeEventosMarcacion(eventos, (codigo) => jornadaPorCodigoMap[codigo] || null);
+  // El día de hoy (Costa Rica) sigue en curso — una sola marca todavía NO
+  // significa "turno sin marcar" (⚠️), puede ser que la persona simplemente
+  // no ha terminado su jornada. Se descartan esas filas incompletas de HOY
+  // sin escribir nada (ni "Turno sin marcar" ni, sobre todo, el
+  // autocompletado del "día de salida" — ver diasSaleAprobados: aprobar
+  // solo una jornada a medio terminar sería peor que no tocarla). Un turno
+  // ya completo (entrada+salida) de hoy sí se guarda de una vez, así Horas
+  // Extra se actualiza apenas cierra cada turno en vez de esperar a que el
+  // día completo termine. Mañana, cuando "hoy" ya sea "ayer", esta misma
+  // fila (si sigue sin la marca que falta) se procesa como INCOMPLETO normal.
+  const hoyCR = fechaCRDeAhora(0);
+  const filas = filasSinFiltrar.filter((f) => !(f.FECHA === hoyCR && f.INCOMPLETO));
   filas.forEach((f) => {
     const ficha = fichasDe(f.CODIGO, (usadasPorCodigo[f.CODIGO] || {}).nombreReloj);
     f.FICHA_RELOJ = ficha ? ficha.key : "";
@@ -568,26 +580,36 @@ async function sincronizarRango(desde, hasta) {
 }
 
 // --------------------------------------------------------------------------
-// Corrida diaria: calcula la ventana [desde, hasta] a partir del último
+// Corrida periódica: calcula la ventana [desde, hasta] a partir del último
 // bookmark guardado (o desde FECHA_INICIO_SYNC si es la primera vez) y la
-// sincroniza. Pensada para llamarse una vez al arrancar y luego una vez al
-// día — ver la programación en server.js.
+// sincroniza. "hasta" llega siempre hasta HOY (no solo hasta ayer) para que
+// una marca recién caída en el reloj se refleje en minutos — ver la
+// programación cada pocos minutos en server.js, y el filtro de turnos de
+// hoy que siguen abiertos dentro de sincronizarRango. El bookmark
+// (ULTIMA_FECHA) sí sigue anotando solo hasta "ayer": hoy nunca cuenta como
+// ya sincronizado del todo mientras siga en curso, así que cada corrida lo
+// vuelve a revisar con las marcas más recientes en vez de darlo por hecho.
 // --------------------------------------------------------------------------
 async function ejecutarSincronizacionDiaria() {
   if (!process.env.RELOJ_MYSQL_URL) return { configurado: false };
 
-  const hasta = fechaCRDeAhora(-1); // "ayer" en hora de Costa Rica
+  const hastaCerrado = fechaCRDeAhora(-1); // "ayer" — hasta acá avanza el bookmark
+  const hoy = fechaCRDeAhora(0);
   const estado = await obtenerDocumento(SYNC_ESTADO_CLAVE);
   const ultimaFecha = estado && estado.ULTIMA_FECHA;
   const desdeCatchUp = ultimaFecha ? relojSumarDias(ultimaFecha, 1) : FECHA_INICIO_SYNC;
   const desdeConMargen = ultimaFecha ? relojSumarDias(ultimaFecha, 1 - LOOKBACK_DIAS) : FECHA_INICIO_SYNC;
   const desde = desdeConMargen < FECHA_INICIO_SYNC ? FECHA_INICIO_SYNC : desdeConMargen;
 
-  if (desde > hasta) return { configurado: true, saltado: true };
+  if (desde > hoy) return { configurado: true, saltado: true };
 
-  const resultado = await sincronizarRango(desde, hasta);
-  if (resultado.configurado) await marcarUltimaFechaSincronizada(hasta, resultado);
-  return { desde, hasta, catchUpDesde: desdeCatchUp, ...resultado };
+  const resultado = await sincronizarRango(desde, hoy);
+  // Solo se adelanta el bookmark si de verdad se cubrió algún día ya
+  // cerrado (desde <= ayer) — si "desde" cayó después de ayer (ej. ya
+  // estaba al día y esta corrida solo repasó hoy), no hay ningún día nuevo
+  // que dar por sincronizado.
+  if (resultado.configurado && desde <= hastaCerrado) await marcarUltimaFechaSincronizada(hastaCerrado, resultado);
+  return { desde, hasta: hoy, catchUpDesde: desdeCatchUp, ...resultado };
 }
 
 // Actualiza el bookmark de la corrida diaria (ver arriba) — se expone aparte
