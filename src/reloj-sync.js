@@ -327,6 +327,11 @@ function filasDesdeEventosMarcacion(eventos, jornadaPorCodigo) {
 // los archivos subidos a mano: ese es solo un respaldo para cuando no se
 // conoce la ficha de antemano, y las filas del reloj siempre la traen.
 // --------------------------------------------------------------------------
+// Réplica de marcasComoTexto (app.js) — ver el aviso en guardarFilas.
+function marcasComoTexto(marcas) {
+  return (Array.isArray(marcas) ? marcas : []).map((m) => `${m.entrada || "?"} → ${m.salida || "?"}`).join(", ");
+}
+
 async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
   let creadas = 0, actualizadas = 0, omitidas = 0, sinMatch = 0, confianzaOmitidos = 0;
 
@@ -356,7 +361,26 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo) {
     const identificador = normalizarCodigoEmpleado(fila.CODIGO) || normalizarNombreParaMatch(fila.NOMBRE) || "";
     const key = HORAS_EXTRA_PREFIX + (empleado ? empleado.key : "sinmatch-" + identificador) + ":" + fila.FECHA;
     const existente = await obtenerDocumento(key);
-    if (existente && existente.ESTADO !== "pendiente") { omitidas++; continue; }
+    // Réplica exacta del aviso de guardarFilasHorasExtra (app.js): un
+    // registro ya decidido no se toca, pero si el reloj ya trae marcas
+    // reales distintas a las que se usaron para decidir (típico de un turno
+    // quebrado completado a mano con una sola marca, antes de que llegaran
+    // las que faltaban), se prende un aviso sin pisar ESTADO/HORAS_EXTRA.
+    if (existente && existente.ESTADO !== "pendiente") {
+      omitidas++;
+      if (Array.isArray(marcas) && marcas.length) {
+        const detalleFresco = marcasComoTexto(marcas);
+        if (detalleFresco !== marcasComoTexto(existente.MARCAS) && existente.ALERTA_MARCAS_NUEVAS_DETALLE !== detalleFresco) {
+          try {
+            existente.ALERTA_MARCAS_NUEVAS = true;
+            existente.ALERTA_MARCAS_NUEVAS_DETALLE = detalleFresco;
+            existente.ALERTA_MARCAS_NUEVAS_EN = new Date().toISOString();
+            await guardarDocumento(key, existente);
+          } catch (e) { /* no crítico: se reintenta en la próxima corrida */ }
+        }
+      }
+      continue;
+    }
 
     const valor = {
       CODIGO_ARCHIVO: fila.CODIGO,

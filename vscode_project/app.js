@@ -9251,6 +9251,16 @@ function isoDeFechaLocal(d){
 // El match prioriza número/código de empleado y nombre — lo que trae la
 // máquina de marcación — y solo recurre a cédula si el archivo la trae y las
 // dos anteriores no encontraron a nadie.
+// Para comparar "las marcas con las que se aprobó este día" contra "las
+// marcas que trae la importación/sincronización de ahora" — ver el aviso en
+// guardarFilasHorasExtra (y su réplica en reloj-sync.js: guardarFilas) más
+// abajo. Texto plano en vez de comparar arrays porque solo importa si
+// cambió lo que se le mostraría a jefatura/gerencia, no la identidad de
+// los objetos.
+function marcasComoTexto(marcas){
+  return (Array.isArray(marcas) ? marcas : []).map(m => `${m.entrada||"?"} → ${m.salida||"?"}`).join(", ");
+}
+
 async function guardarFilasHorasExtra(rows, nombreArchivo){
   const cols = detectarColumnasHorasExtra(rows);
   if (!cols.codigo && !cols.nombre && !cols.cedula) throw new Error("No se encontró una columna de número/código de empleado, nombre, ni cédula en ese archivo.");
@@ -9433,8 +9443,28 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     }catch(e){ /* no existía todavía */ }
 
     // Un registro ya aprobado o rechazado no se vuelve a tocar con una
-    // reimportación — la decisión ya se tomó, aunque el archivo cambie.
-    if (existente && existente.ESTADO !== "pendiente"){ omitidas++; continue; }
+    // reimportación — la decisión ya se tomó, aunque el archivo cambie. Pero
+    // si el archivo/reloj trae marcas reales distintas a las que se usaron
+    // para decidir (ej. un turno quebrado que se completó a mano con una
+    // sola marca, y después el reloj registró las que faltaban — ver caso
+    // reportado de ABARCA GARRO ISIDRO ORLANDO), eso no debe quedar en
+    // silencio: se prende un aviso en el registro ya decidido, sin tocar su
+    // ESTADO/HORAS_EXTRA, para que jefatura/gerencia lo revise a mano.
+    if (existente && existente.ESTADO !== "pendiente"){
+      omitidas++;
+      if (Array.isArray(info.MARCAS) && info.MARCAS.length){
+        const detalleFresco = marcasComoTexto(info.MARCAS);
+        if (detalleFresco !== marcasComoTexto(existente.MARCAS) && existente.ALERTA_MARCAS_NUEVAS_DETALLE !== detalleFresco){
+          try{
+            existente.ALERTA_MARCAS_NUEVAS = true;
+            existente.ALERTA_MARCAS_NUEVAS_DETALLE = detalleFresco;
+            existente.ALERTA_MARCAS_NUEVAS_EN = new Date().toISOString();
+            await window.storage.set(key, JSON.stringify(existente), false);
+          }catch(e){ /* no crítico: se reintenta en la próxima sincronización */ }
+        }
+      }
+      continue;
+    }
 
     const horasExtraRedondeadas = Math.round(horasExtraFinal * 100) / 100;
     if (existente && existente.ESTADO === "pendiente" && (existente.HORAS_EXTRA || 0) !== horasExtraRedondeadas){
@@ -11374,6 +11404,12 @@ async function renderHorasExtrasPanel(){
     const aprobadasJefatura = registros.filter(r => r.ESTADO === "aprobada_jefatura" && coincideNombreHorasExtra(r));
     const aprobadas = registros.filter(r => r.ESTADO === "aprobada" && enRangoHorasExtra(r.FECHA) && coincideNombreHorasExtra(r));
     const rechazadas = registros.filter(r => r.ESTADO === "rechazada" && enRangoHorasExtra(r.FECHA) && coincideNombreHorasExtra(r));
+    // Días ya decididos (aprobados o rechazados) donde después llegaron
+    // marcas del reloj distintas a las que se usaron para decidir — ver el
+    // aviso en guardarFilasHorasExtra/reloj-sync.js. Sin filtro de rango:
+    // aunque la fecha quede fuera del rango elegido, sigue siendo algo que
+    // alguien tiene que revisar.
+    const conAlertaMarcasNuevas = registros.filter(r => r.ALERTA_MARCAS_NUEVAS && coincideNombreHorasExtra(r));
     const horasAprobadasTotal = aprobadas.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
 
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
@@ -11453,18 +11489,20 @@ async function renderHorasExtrasPanel(){
     html += await renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado);
 
     html += esJefatura
-      ? `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+      ? `<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">Esperando aprobación de gerencia</div></div>
           <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
+          <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='alerta_marcas_nuevas'; renderHorasExtrasPanel();"><div class="ic">⚠️</div><div class="val">${conAlertaMarcasNuevas.length}</div><div class="lbl">Marcas nuevas tras decidir</div></div>
         </div>`
-      : `<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
+      : `<div class="kpi-grid" style="grid-template-columns:repeat(6,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">${puedeEditar ? "Por aprobar (tuyo)" : "Por aprobar (gerencia)"}</div></div>
           <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
+          <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='alerta_marcas_nuevas'; renderHorasExtrasPanel();"><div class="ic">⚠️</div><div class="val">${conAlertaMarcasNuevas.length}</div><div class="lbl">Marcas nuevas tras decidir</div></div>
         </div>`;
 
     // Corcovado ya tiene el Reloj marcador integrado (lee la máquina de
@@ -11499,6 +11537,7 @@ async function renderHorasExtrasPanel(){
       ["aprobada_jefatura", `Aprobación final (${aprobadasJefatura.length})`],
       ["aprobada", `Aprobadas (${aprobadas.length})`],
       ["rechazada", `Rechazadas (${rechazadas.length})`],
+      ["alerta_marcas_nuevas", `⚠️ Marcas nuevas (${conAlertaMarcasNuevas.length})`],
     ];
     if (esJefatura && horasExtraFiltro === "sinmatch") horasExtraFiltro = "pendiente";
     html += `<div class="field" style="margin-bottom:8px; max-width:320px;">
@@ -11513,6 +11552,7 @@ async function renderHorasExtrasPanel(){
     else if (horasExtraFiltro === "aprobada_jefatura") lista = aprobadasJefatura;
     else if (horasExtraFiltro === "aprobada") lista = aprobadas;
     else if (horasExtraFiltro === "rechazada") lista = rechazadas;
+    else if (horasExtraFiltro === "alerta_marcas_nuevas") lista = conAlertaMarcasNuevas;
     else lista = pendientes;
     lista = lista.slice().sort((a,b) => (b.FECHA || "").localeCompare(a.FECHA || ""));
 
@@ -11584,6 +11624,16 @@ async function renderHorasExtrasPanel(){
             </div>
           </details>`
         : "";
+      // Llegaron marcas del reloj distintas a las que se usaron para
+      // aprobar/rechazar este día (ver el aviso en guardarFilasHorasExtra) —
+      // nunca se pisa la decisión sola, así que se avisa acá para que
+      // jefatura/gerencia decida si hay que reabrirlo y recalcular a mano.
+      const bloqueAlertaMarcasNuevas = r.ALERTA_MARCAS_NUEVAS
+        ? `<div style="margin-top:4px; padding:6px 8px; background:#FFF4E5; border:1px solid #D9A54A; border-radius:6px; font-size:11px; color:#7a5a12;">
+            ⚠️ Llegaron marcas nuevas del reloj después de esta decisión — ahora el reloj muestra: <b>${escapeHtml(r.ALERTA_MARCAS_NUEVAS_DETALLE || "(sin marcas)")}</b>${r.ALERTA_MARCAS_NUEVAS_EN ? ` (detectado ${fmtFechaSimple(r.ALERTA_MARCAS_NUEVAS_EN.slice(0,10))})` : ""}.
+            ${puedeEditar ? `<div style="margin-top:3px;"><button class="btn" style="padding:2px 7px; font-size:10px;" onclick="descartarAlertaMarcasNuevas('${keyEsc}')">✔️ Revisado, quitar aviso</button></div>` : ""}
+          </div>`
+        : "";
       const etiquetaTipo = TIPOS_DIA_HORARIO[tipoDia] ? `${TIPOS_DIA_HORARIO[tipoDia].emoji} ${TIPOS_DIA_HORARIO[tipoDia].label}` : "";
       const infoLinea = (r.ESTADO === "pendiente" && r.INCOMPLETO)
         ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
@@ -11596,6 +11646,7 @@ async function renderHorasExtrasPanel(){
             <div class="name">${escapeHtml(nombre || r.CEDULA || "(sin nombre)")} — ${fmtFechaSimple(r.FECHA)}</div>
             <div class="meta">${infoLinea}</div>
             ${marcasHtml}
+            ${bloqueAlertaMarcasNuevas}
           </div>
           <div class="actions">${acciones}</div>
         </div>
@@ -11893,6 +11944,26 @@ async function reabrirHoraExtraRechazada(key){
     statusMsg("Día reabierto — vuelve a estar pendiente de aprobación.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo reabrir: " + e.message, false); }
+}
+
+// Quita el aviso de "llegaron marcas nuevas" (ver guardarFilasHorasExtra)
+// sin tocar la decisión ya tomada (ESTADO/HORAS_EXTRA/TIPO_DIA) — es solo
+// para que jefatura/gerencia confirme que ya lo revisó. Si de verdad hay
+// que recalcular las horas con las marcas nuevas, la corrección se hace
+// aparte (editando el campo de horas, o "↩️ Reabrir" si está rechazado).
+async function descartarAlertaMarcasNuevas(key){
+  if (!window.sdgApi.puedeEditar()) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    delete v.ALERTA_MARCAS_NUEVAS;
+    delete v.ALERTA_MARCAS_NUEVAS_DETALLE;
+    delete v.ALERTA_MARCAS_NUEVAS_EN;
+    await window.storage.set(key, JSON.stringify(v), false);
+    statusMsg("Aviso descartado.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo descartar el aviso: " + e.message, false); }
 }
 
 // Histórico de versiones de un registro de horas_extra: (quién lo creó,
