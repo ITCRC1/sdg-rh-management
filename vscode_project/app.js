@@ -4901,10 +4901,15 @@ function showTab(which){
   document.getElementById("empresas-panel").style.display = which === "empresas" ? "block" : "none";
   document.getElementById("puestos-panel").style.display = which === "puestos" ? "block" : "none";
   document.getElementById("propiedades-panel").style.display = which === "propiedades" ? "block" : "none";
+  // empleados-expediente-wrap envuelve empleados-panel + perfil-panel (ver
+  // index.html) — se togglea aparte porque es quien de verdad decide el
+  // layout (lado a lado en pantallas anchas, ver style.css); los dos hijos
+  // se dejan en "block" mientras el wrapper esté visible, nunca pasan a
+  // "none" por su cuenta — eso rompería el chequeo de reactivarEmpleado que
+  // lee empleados-panel.style.display para saber qué lista refrescar.
+  document.getElementById("empleados-expediente-wrap").style.display = which === "empleados" ? "" : "none";
   document.getElementById("empleados-panel").style.display = which === "empleados" ? "block" : "none";
   document.getElementById("archivo-panel").style.display = which === "archivo" ? "block" : "none";
-  // Fusionado con "empleados" (ver normalización arriba) — se muestra junto
-  // a la lista, no en su propia pestaña aparte.
   document.getElementById("perfil-panel").style.display = which === "empleados" ? "block" : "none";
   document.getElementById("firmacontratos-panel").style.display = which === "firmacontratos" ? "block" : "none";
   document.getElementById("miperfil-panel").style.display = which === "miperfil" ? "block" : "none";
@@ -18962,56 +18967,16 @@ function renderSeccionCumpleanosEmpleado(emp, empKey){
   </div></div>`;
 }
 
-// Buscador propio de Expedientes: antes, la única forma de llegar a
-// verPerfilEmpleado() era desde la pestaña Empleados (clic en el nombre) —
-// entrar directo a "3. Expedientes" desde el menú dejaba perfilActualKey en
-// null y mostraba "Selecciona un empleado desde la lista" SIN ninguna
-// lista real ahí. Aparte de empleadosSearchTerm (el buscador de la pestaña
-// Empleados) para no interferir entre sí si ambos quedan con texto a la vez.
-let perfilBusqueda = "";
-
-async function renderListaPerfilBusqueda(){
-  const cont = document.getElementById("perfil-busqueda-lista");
-  if (!cont) return;
-  try{
-    const empleados = await cargarEmpleadosDB();
-    const termino = perfilBusqueda.toLowerCase();
-    const filtrados = termino
-      ? empleados.filter(e => nombreCompletoEmpleado(e).toLowerCase().includes(termino) || (e.DEPARTAMENTO_EMP||"").toLowerCase().includes(termino) || (e.IDENTIFICACION_EMP||"").toLowerCase().includes(termino))
-      : empleados;
-    const ordenados = filtrados.slice().sort(compararPorApellido);
-    if (!ordenados.length){ cont.innerHTML = `<div class="empty-state">Ningún empleado coincide con la búsqueda.</div>`; return; }
-    cont.innerHTML = ordenados.map(e => `<div class="catalog-item" style="cursor:pointer;" onclick="verPerfilEmpleado('${e.key.replace(/'/g,"\\'")}')">
-      <div class="row1">
-        <div class="info">
-          <div class="name">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}${e.ARCHIVADO ? ` <span class="meta" style="color:var(--ink-soft);">(archivado)</span>` : ""}</div>
-          <div class="meta">${escapeHtml(e.DEPARTAMENTO_EMP||"")}${e.IDENTIFICACION_EMP ? " · " + escapeHtml(e.IDENTIFICACION_EMP) : ""}</div>
-        </div>
-      </div>
-    </div>`).join("");
-  }catch(e){ cont.innerHTML = `<div class="empty-state">No se pudo cargar la lista de empleados.</div>`; }
-}
-
-const _renderPerfilBusquedaDebounced = debounce(async function(){
-  await renderListaPerfilBusqueda();
-  restaurarFocoBusqueda("perfil-busqueda-search");
-}, 350);
-function filtrarPerfilBusquedaInput(val){
-  perfilBusqueda = val;
-  _renderPerfilBusquedaDebounced();
-}
-
+// Empleados y Expedientes quedaron fusionados en una sola pantalla (ver
+// showTab): el buscador propio de Expedientes que vivía acá quedó duplicando
+// el que ya tiene la lista de Empleados justo arriba (ambos buscaban sobre
+// los mismos empleados) — se quitó, y este espacio ahora solo invita a
+// elegir a alguien de esa lista.
 function renderSelectorPerfilEmpleado(){
   const panel = document.getElementById("perfil-panel");
   panel.innerHTML = `
-    <div style="font-size:18px; font-weight:800; color:var(--navy-deep); margin-bottom:4px;">📁 Expedientes</div>
-    <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Buscá un empleado (activo o archivado) para ver su expediente completo.</div>
-    <div class="field" style="margin-bottom:10px;">
-      <input type="text" id="perfil-busqueda-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(perfilBusqueda)}" oninput="filtrarPerfilBusquedaInput(this.value)">
-    </div>
-    <div id="perfil-busqueda-lista"><div class="empty-state">Cargando…</div></div>
+    <div class="empty-state" style="padding:16px 0;">📁 Elegí un empleado de la lista de arriba para ver su expediente completo.</div>
   `;
-  renderListaPerfilBusqueda();
 }
 
 // ==========================================================================
@@ -19449,6 +19414,12 @@ async function renderMiPerfilEmpleado(){
 }
 
 async function renderPerfilEmpleado(){
+  // Layout lado a lado (ver style.css .con-expediente): se decide acá, en
+  // el único lugar que de verdad sabe si hay un expediente abierto o no —
+  // así queda en sync sin importar por dónde se llegó (showTab, un clic en
+  // la lista, "✖ Cerrar expediente", etc.).
+  const wrap = document.getElementById("empleados-expediente-wrap");
+  if (wrap) wrap.classList.toggle("con-expediente", !!perfilActualKey);
   const panel = document.getElementById("perfil-panel");
   if (!perfilActualKey){ renderSelectorPerfilEmpleado(); return; }
   // Mismo motivo que en los demás paneles principales: preserva el scroll
@@ -19554,8 +19525,7 @@ async function renderPerfilEmpleado(){
     const historial = Array.isArray(emp.HISTORIAL) ? emp.HISTORIAL : [];
 
     panel.innerHTML = `
-      <button class="btn" onclick="perfilActualKey=null; renderPerfilEmpleado();" style="margin-bottom:12px;">🔍 Buscar otro empleado</button>
-      <button class="btn" onclick="showTab('empleados')" style="margin-bottom:12px;">← Volver a Empleados</button>
+      <button class="btn" onclick="perfilActualKey=null; renderPerfilEmpleado();" style="margin-bottom:12px;">✖ Cerrar expediente</button>
       <div class="section-card" style="border-color:var(--leaf);">
         <div class="section-body">
           <div style="font-size:19px; font-weight:800; color:var(--navy-deep);">${escapeHtml(nombreCompletoEmpleado(emp))}</div>

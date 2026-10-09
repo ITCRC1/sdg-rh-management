@@ -322,9 +322,15 @@
   <div id="empresas-panel" class="catalog-panel" style="display:none;"></div>
   <div id="puestos-panel" class="catalog-panel" style="display:none;"></div>
   <div id="propiedades-panel" class="catalog-panel" style="display:none;"></div>
-  <div id="empleados-panel" class="catalog-panel" style="display:none;"></div>
+  <!-- Empleados + Expedientes fusionados en una sola pantalla (ver showTab
+       en app.js) — este wrapper es lo que permite el layout lado a lado en
+       pantallas anchas cuando hay un expediente abierto (clase
+       "con-expediente", ver style.css); en pantallas angostas se apilan. -->
+  <div id="empleados-expediente-wrap" class="empleados-expediente-wrap" style="display:none;">
+    <div id="empleados-panel" class="catalog-panel"></div>
+    <div id="perfil-panel" class="catalog-panel"></div>
+  </div>
   <div id="archivo-panel" class="catalog-panel" style="display:none;"></div>
-  <div id="perfil-panel" class="catalog-panel" style="display:none;"></div>
   <div id="firmacontratos-panel" class="catalog-panel" style="display:none;"></div>
   <div id="miperfil-panel" class="catalog-panel" style="display:none;"></div>
   <div id="reporte-panel" class="catalog-panel" style="display:none;"></div>
