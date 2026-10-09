@@ -16080,6 +16080,22 @@ async function renderDiasLibresVacacionesPanel(){
       <div style="font-size:12px; color:var(--ink-soft);">Saldo acumulado (${ACUMULACION_MENSUAL_VACACIONES} día${ACUMULACION_MENSUAL_VACACIONES===1?"":"s"}/mes — primer año por aniversario de ingreso, luego por el ciclo fijo 1° dic al 30 nov —, tope interno de ${TOPE_SALDO_VACACIONES}), solicitudes con aprobación de gerencia/master, y calendario del equipo.</div>
     </div>`;
 
+    // Alerta de "días huérfanos": antes, corregir o eliminar una solicitud
+    // de vacaciones/día libre/permiso sin goce podía dejar en Horas Extra
+    // días que ya no correspondían a ningún rango vigente (ver
+    // guardarCorreccionSolicitud/eliminarSolicitudOtorgada) — eso infla el
+    // saldo "en adelanto" de un empleado sin que la solicitud que se ve en
+    // pantalla lo explique, y antes solo se descubría investigando a mano
+    // registro por registro. Usa los mismos solicitudes/registrosHorasExtra
+    // ya cargados para este panel — sin red de más — y se muestra a TODA la
+    // empresa (no solo al departamento filtrado), porque es un problema de
+    // datos que gerencia/master debe poder ver y corregir sin importar el
+    // filtro activo.
+    if (puedeAprobar){
+      const huerfanos = detectarDiasHuerfanos(solicitudes, registrosHorasExtra);
+      if (huerfanos.length) html += renderAlertaDiasHuerfanos(huerfanos, empleadosPorKey);
+    }
+
     if (!esJefatura){
       html += `<div style="margin-bottom:12px;">
         <select onchange="diasLibresFiltroDepto=this.value; renderDiasLibresVacacionesPanel();">
@@ -16553,6 +16569,60 @@ async function repararTodosLosDias(){
     statusMsg(`Listo. ${aprobadas.length} solicitud(es) revisada(s) — ${totalCreados} día(s) creado(s) en ${solicitudesConCreados} solicitud(es).${totalBloqueados ? ` ${totalBloqueados} día(s) en ${solicitudesConBloqueos} solicitud(es) ya tenían algo guardado y no se tocaron — usá "🔧 Reparar días" en cada una para ver el detalle.` : ""}`, true);
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
   }catch(e){ statusMsg("No se pudo reparar todo: " + e.message, false); }
+}
+
+// Un día de Horas Extra creado a partir de una solicitud ("solicitud_ausencia",
+// ver crearOJustificarDiaHorasExtra) es huérfano cuando la solicitud que lo
+// creó ya no lo respalda: o la solicitud ya no existe/no está aprobada, o
+// sigue aprobada pero con otro rango de fechas que ya no incluye este día.
+// Si alguien reclasificó el día a mano a un tipo distinto del que tenía la
+// solicitud (mismo resguardo que usan guardarCorreccionSolicitud/
+// eliminarSolicitudOtorgada), esa decisión se respeta y NO se marca como
+// huérfano. Este es el mecanismo real detrás de un "X día(s) en adelanto"
+// que no cuadra con lo que se ve en pantalla — antes solo se detectaba
+// investigando a mano registro por registro en la consola.
+function detectarDiasHuerfanos(solicitudes, registrosHorasExtra){
+  const solicitudesPorKey = {};
+  solicitudes.forEach(s => { solicitudesPorKey[s.key] = s; });
+  return registrosHorasExtra.filter(r => {
+    if (r.ORIGEN !== "solicitud_ausencia" || !r.SOLICITUD_KEY) return false;
+    const s = solicitudesPorKey[r.SOLICITUD_KEY];
+    if (!s || s.ESTADO !== "aprobada") return true;
+    if (r.TIPO_DIA !== s.TIPO) return false;
+    return !(r.FECHA >= s.FECHA_INICIO && r.FECHA <= s.FECHA_FIN);
+  });
+}
+
+function renderAlertaDiasHuerfanos(huerfanos, empleadosPorKey){
+  const porEmpleado = {};
+  huerfanos.forEach(r => { (porEmpleado[r.EMPLEADO_KEY] = porEmpleado[r.EMPLEADO_KEY] || []).push(r); });
+  const filas = Object.keys(porEmpleado).map(empKey => {
+    const emp = empleadosPorKey[empKey];
+    const nombre = (emp ? nombreCompletoEmpleado(emp) : empKey) || empKey;
+    const dias = porEmpleado[empKey].sort((a,b) => a.FECHA.localeCompare(b.FECHA));
+    const empKeyEsc = String(empKey).replace(/'/g, "\\'");
+    return `<div style="padding:5px 0; border-bottom:1px solid var(--paper-line); font-size:12px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+      <div><b>${escapeHtml(nombre)}</b> — ${etiquetaTipoDia(dias[0].TIPO_DIA)}, ${dias.length} día(s): ${dias.map(d => fmtFechaSimple(d.FECHA)).join(", ")}</div>
+      <button class="del" style="padding:3px 8px; font-size:10.5px;" onclick="eliminarDiasHuerfanosDeEmpleado('${empKeyEsc}')">🗑️ Eliminar estos</button>
+    </div>`;
+  }).join("");
+  return `<div class="section-card" style="margin-bottom:14px; border-color:#B3261E;"><div class="section-body">
+    <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">⚠️ ${huerfanos.length} día(s) huérfano(s) en Horas Extra</div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Días marcados como vacaciones/día libre/permiso sin goce que ya no corresponden a ninguna solicitud vigente — quedaron de una corrección o eliminación anterior y pueden estar inflando el saldo "en adelanto" de estos empleados sin que la solicitud que se ve en pantalla lo explique.</div>
+    ${filas}
+  </div></div>`;
+}
+
+async function eliminarDiasHuerfanosDeEmpleado(empKey){
+  if (!confirm("¿Eliminar estos días huérfanos de Horas Extra?\n\nYa no corresponden a ninguna solicitud vigente — esto solo corrige el saldo, no toca ninguna solicitud ni documento.")) return;
+  try{
+    const [solicitudes, registros] = await Promise.all([listarSolicitudesAusencia(), listarRegistrosHorasExtra()]);
+    const huerfanos = detectarDiasHuerfanos(solicitudes, registros).filter(r => r.EMPLEADO_KEY === empKey);
+    for (const h of huerfanos) await window.storage.delete(h.key, false);
+    await agregarBitacora(empKey, `${huerfanos.length} día(s) huérfano(s) de Horas Extra eliminados (ya no correspondían a ninguna solicitud vigente): ${huerfanos.map(h => fmtFechaSimple(h.FECHA)).join(", ")}.`);
+    statusMsg(`${huerfanos.length} día(s) huérfano(s) eliminado(s).`, true);
+    renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + e.message, false); }
 }
 
 // Vacaciones/días libres/días de viaje YA OTORGADOS (aprobados) — antes, una
