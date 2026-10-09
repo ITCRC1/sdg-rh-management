@@ -12621,6 +12621,92 @@ async function renderAppTopbar(){
     </div>`;
 }
 
+// "¿Quién sale y quién entra?" para los próximos días — pedido para que
+// gerencia/master y jefatura lo tengan a mano desde el Dashboard sin tener
+// que entrar al calendario de Días Libres y Vacaciones. Reutiliza el MISMO
+// criterio que ya pinta ese calendario día por día (ver
+// etiquetaCalendarioParaDia) en vez de recalcular la regla aparte, para que
+// nunca queden desincronizados. Exclusivo de Corcovado — las demás
+// propiedades no usan SALE/ENTRA (su gente vive en la zona, ver el
+// comentario en etiquetaCalendarioParaDia). Jefatura ve solo su propio
+// departamento, igual que el resto de paneles operativos.
+async function calcularSalidasYEntradasProximas(diasAdelante){
+  if (currentPropiedadId !== "corcovado") return [];
+  const [empleados, solicitudes, registrosHorasExtra] = await Promise.all([
+    cargarEmpleadosDB(),
+    listarSolicitudesAusencia(),
+    listarRegistrosHorasExtra(),
+  ]);
+
+  let visibles = empleados.filter(e => !e.ARCHIVADO);
+  const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
+  if (rolActual === "jefatura"){
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {};
+    puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const deptoJefatura = sesion ? (sesion.puesto || "") : "";
+    visibles = visibles.filter(e => {
+      const p = e.PUESTO_KEY ? puestosPorKey[e.PUESTO_KEY] : null;
+      return ((p && p.DEPARTAMENTO_MINISTERIO) || "Sin departamento") === deptoJefatura;
+    });
+  }
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const eventos = [];
+  visibles.forEach(emp => {
+    const solicitudesEmp = solicitudes.filter(s => s.EMPLEADO_KEY === emp.key);
+    const horasEmp = registrosHorasExtra.filter(r => r.EMPLEADO_KEY === emp.key);
+    for (let i = 0; i <= diasAdelante; i++){
+      const fecha = new Date(hoy);
+      fecha.setDate(fecha.getDate() + i);
+      const fechaISO = isoDeFechaLocal(fecha);
+      const etiqueta = etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, horasEmp);
+      if (etiqueta && (etiqueta.texto === "SALE" || etiqueta.texto === "ENTRA")){
+        eventos.push({ emp, fechaISO, tipo: etiqueta.texto });
+      }
+    }
+  });
+  eventos.sort((a, b) => a.fechaISO.localeCompare(b.fechaISO) || nombreCompletoEmpleado(a.emp).localeCompare(nombreCompletoEmpleado(b.emp), "es"));
+  return eventos;
+}
+
+// Devuelve solo el CONTENIDO (sin el section-card/dash-panel que lo rodea)
+// porque el único llamador (renderInicio) ya arma su propio dash-panel con
+// título — así evita duplicar ese envoltorio o tener que desarmarlo después.
+function renderSalidasYEntradasProximas(eventos, diasAdelante){
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const etiquetaDia = fechaISO => {
+    const dias = Math.round((new Date(fechaISO + "T00:00:00") - hoy) / 86400000);
+    if (dias === 0) return "Hoy";
+    if (dias === 1) return "Mañana";
+    return fmtFechaSimple(fechaISO);
+  };
+  const grupos = {};
+  eventos.forEach(ev => { (grupos[ev.fechaISO] = grupos[ev.fechaISO] || []).push(ev); });
+  const fechasOrdenadas = Object.keys(grupos).sort();
+
+  if (!fechasOrdenadas.length){
+    return `<div class="empty-state" style="padding:10px 0; font-size:12px;">Nadie sale ni entra en los próximos ${diasAdelante} días.</div>`;
+  }
+  return fechasOrdenadas.map(fechaISO => `
+    <div style="font-size:11px; font-weight:700; color:var(--ink-soft); margin:10px 0 2px;">${etiquetaDia(fechaISO)}</div>
+    ${grupos[fechaISO].map(ev => `<div class="dash-alert-row" style="cursor:default;">
+      <span class="sev" style="background:${ev.tipo === "SALE" ? "#8a6d1f" : "#2e7d32"};"></span>
+      <span class="txt">${escapeHtml(nombreCompletoEmpleado(ev.emp))}</span>
+      <span class="go" style="color:${ev.tipo === "SALE" ? "#8a6d1f" : "#2e7d32"};">${ev.tipo === "SALE" ? "Sale" : "Entra"}</span>
+    </div>`).join("")}
+  `).join("");
+}
+
 async function renderInicio(){
   const panel = document.getElementById("inicio-panel");
   panel.innerHTML = `<div class="empty-state">Cargando resumen…</div>`;
@@ -12735,18 +12821,30 @@ async function renderInicio(){
       </div>
     </div>`;
 
-    // "Solicitudes pendientes" y "Próximos eventos" del Dashboard aprobado
-    // dependen de Vacaciones/Días libres, que todavía no guardan datos
-    // propios — se muestran como Pendiente en vez de vacíos a secas, para
-    // que quede claro que el bloque existe a propósito.
+    // "Solicitudes pendientes" sigue pendiente de implementar — pero "Próximos
+    // eventos" ya se resolvió con el resumen de "Quién sale y quién entra"
+    // (ver calcularSalidasYEntradasProximas): pedido para que gerencia/master
+    // y jefatura lo tengan a mano para la operación diaria, sin entrar al
+    // calendario de Días Libres y Vacaciones. Exclusivo de Corcovado y de
+    // quien de verdad opera con esto (master/gerente/jefatura) — un
+    // "empleado"/"consultor" no necesita este control.
+    const DIAS_ADELANTE_SALIDAS_ENTRADAS = 7;
+    let bloqueSalidasEntradas = `<div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende del calendario de Vacaciones/Incapacidades.</div>`;
+    if (currentPropiedadId === "corcovado" && (rolActualInicio === "master" || rolActualInicio === "gerente" || rolActualInicio === "jefatura")){
+      try{
+        const eventosSalidasEntradas = await calcularSalidasYEntradasProximas(DIAS_ADELANTE_SALIDAS_ENTRADAS);
+        bloqueSalidasEntradas = renderSalidasYEntradasProximas(eventosSalidasEntradas, DIAS_ADELANTE_SALIDAS_ENTRADAS);
+      }catch(e){ bloqueSalidasEntradas = `<div class="empty-state" style="padding:10px 0; font-size:12px;">No se pudo calcular quién sale y quién entra.</div>`; }
+    }
+
     html += `<div class="dash-row">
       <div class="dash-panel">
         <div class="dash-panel-title">Solicitudes pendientes</div>
         <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende de los módulos de Vacaciones y Días libres.</div>
       </div>
       <div class="dash-panel">
-        <div class="dash-panel-title">Próximos eventos</div>
-        <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende del calendario de Vacaciones/Incapacidades.</div>
+        <div class="dash-panel-title">🚪 Quién sale y quién entra — próximos ${DIAS_ADELANTE_SALIDAS_ENTRADAS} días</div>
+        ${bloqueSalidasEntradas}
       </div>
     </div>`;
 
