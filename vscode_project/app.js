@@ -9490,6 +9490,19 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     diaAntes.setDate(diaAntes.getDate() - 1);
     diasSaleAprobados.add(s.EMPLEADO_KEY + "|" + isoDeFechaLocal(diaAntes));
   });
+  // Un cumpleaños ya otorgado (ver otorgarDiaCumpleanos) es UN SOLO DÍA, no
+  // una solicitud con rango — vive en horas_extra:, no en solicitudes — pero
+  // para este propósito es la misma situación: el día ANTES de un
+  // cumpleaños ya otorgado también es "el empleado sale" (mismo criterio
+  // que el día antes de vacaciones/día libre/permiso sin goce), así que
+  // cuenta igual para autocompletar una marca suelta sin dejarla atascada en
+  // "⚠️ Turno sin marcar".
+  (await listarRegistrosHorasExtra()).forEach(r => {
+    if (r.ESTADO !== "aprobada" || r.TIPO_DIA !== "cumpleanos" || !r.FECHA || !r.EMPLEADO_KEY) return;
+    const diaAntes = new Date(r.FECHA + "T00:00:00");
+    diaAntes.setDate(diaAntes.getDate() - 1);
+    diasSaleAprobados.add(r.EMPLEADO_KEY + "|" + isoDeFechaLocal(diaAntes));
+  });
 
   for (const info of Object.values(acumulado)){
     // Puesto de confianza: no marca asistencia ni genera horas extra — se
@@ -17243,6 +17256,24 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
       diaDespues.setDate(diaDespues.getDate() + 1);
       if (isoDeFechaLocal(diaDespues) === fechaISO) return { texto: "ENTRA", color: "FFD9D9D9" };
     }
+  }
+  // Cumpleaños (ver otorgarDiaCumpleanos) es UN SOLO DÍA, no una solicitud
+  // con rango — por eso no está en el bucle de arriba — pero para
+  // "SALE"/"ENTRA" es la misma situación: el día antes de un cumpleaños ya
+  // otorgado también es cuando el empleado sale, y el día después cuando
+  // vuelve a entrar, igual que con vacaciones/día libre/permiso sin goce. Va
+  // al final, después de las etiquetas directas (VAC/LIBRE/CITA/INCAP/CUMP/
+  // VIAJE de arriba) para que un día que cae DENTRO de otro tramo de
+  // ausencia siempre gane esa etiqueta en vez de "SALE"/"ENTRA".
+  for (const r of registrosHorasExtraEmp){
+    if (r.ESTADO !== "aprobada" || r.TIPO_DIA !== "cumpleanos" || !r.FECHA) continue;
+    const diaAntes = new Date(r.FECHA + "T00:00:00");
+    diaAntes.setDate(diaAntes.getDate() - 1);
+    if (isoDeFechaLocal(diaAntes) === fechaISO) return { texto: "SALE", color: "FFD9D9D9" };
+
+    const diaDespues = new Date(r.FECHA + "T00:00:00");
+    diaDespues.setDate(diaDespues.getDate() + 1);
+    if (isoDeFechaLocal(diaDespues) === fechaISO) return { texto: "ENTRA", color: "FFD9D9D9" };
   }
   return null;
 }
