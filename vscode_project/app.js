@@ -15938,6 +15938,40 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
   }catch(e){ statusMsg("No se pudo otorgar: " + e.message, false); return false; }
 }
 
+// "Otorgar día" no tenía forma de deshacerse: una vez marcado
+// CUMPLEANOS_OTORGADO_ANIOS[año] quedaba "ya otorgado este año" para
+// siempre, sin botón para corregirlo si la fecha quedó mal (ej. se otorgó
+// el fin de semana en vez del viernes anterior) — había que esperar al año
+// siguiente para volver a otorgarlo. Esto borra el día ya otorgado de Horas
+// Extra (si nadie lo reclasificó a mano a otro tipo distinto de
+// "cumpleanos" — esa reclasificación sí se respeta y no se toca) y limpia
+// la marca del año para que "Otorgar día" vuelva a aparecer con otra fecha.
+async function quitarDiaCumpleanos(empKey, anio){
+  if (!confirm("¿Quitar el día de cumpleaños ya otorgado este año?\n\nVas a poder volver a otorgarlo con otra fecha.")) return;
+  try{
+    const fullKey = CATALOGS.empleados.prefix + empKey;
+    const res = await window.storage.get(fullKey, false);
+    const emp = res && res.value ? JSON.parse(res.value) : null;
+    if (!emp){ statusMsg("Ese empleado ya no existe.", false); return; }
+
+    const todosLosRegistros = await listarRegistrosHorasExtra();
+    const diaOtorgado = todosLosRegistros.find(r => r.EMPLEADO_KEY === empKey && r.ORIGEN === "cumpleanos_otorgado" && r.TIPO_DIA === "cumpleanos" && r.FECHA && r.FECHA.slice(0,4) === String(anio));
+    if (diaOtorgado) await window.storage.delete(diaOtorgado.key, false);
+
+    if (emp.CUMPLEANOS_OTORGADO_ANIOS) delete emp.CUMPLEANOS_OTORGADO_ANIOS[String(anio)];
+    await window.storage.set(fullKey, JSON.stringify(emp), false);
+
+    await agregarBitacora(empKey, `Día de cumpleaños ${anio} quitado${diaOtorgado ? ` (era ${fmtFechaSimple(diaOtorgado.FECHA)})` : ""} — puede volver a otorgarse.`);
+    statusMsg(`Día de cumpleaños quitado.${!diaOtorgado ? " (El registro de Horas Extra de ese día ya no era de tipo cumpleaños — probablemente alguien lo reclasificó a mano; solo se limpió la marca del año.)" : ""}`, true);
+    renderDiasLibresVacacionesPanel();
+    // Igual que al otorgar: si el expediente de este empleado está abierto,
+    // se refresca también, no solo el panel de Días Libres y Vacaciones.
+    if (typeof perfilActualKey !== "undefined" && perfilActualKey === empKey && typeof renderPerfilEmpleado === "function"){
+      renderPerfilEmpleado();
+    }
+  }catch(e){ statusMsg("No se pudo quitar: " + e.message, false); }
+}
+
 let diasLibresFiltroDepto = "todos";
 let diasLibresMesCalendario = null; // "AAAA-MM" — se fija al mes actual la primera vez que se renderiza
 
@@ -18358,6 +18392,7 @@ function renderSeccionCumpleanosEmpleado(emp, empKey){
     <div style="font-size:12.5px;">Próximo: ${fmtFechaDesdeDate(prox.fecha)} (${prox.diasFaltan === 0 ? "hoy" : `en ${prox.diasFaltan} día(s)`})</div>
     <div style="font-size:12.5px; margin-top:4px;">${yaOtorgado ? "✅ Ya otorgado este año." : "⏳ Pendiente de otorgar este año."}</div>
     ${(!yaOtorgado && window.sdgApi && window.sdgApi.puedeEditar()) ? `<button class="btn primary" style="margin-top:6px;" onclick="abrirModalOtorgarCumpleanos('${empKey}', '${nombreCompletoEmpleado(emp).replace(/'/g,"\\'")}', '${isoDeFechaLocal(prox.fecha)}')">🎁 Otorgar día</button>` : ""}
+    ${(yaOtorgado && window.sdgApi && window.sdgApi.puedeEditar()) ? `<button class="btn" style="margin-top:6px;" onclick="quitarDiaCumpleanos('${empKey}', ${prox.fecha.getFullYear()})">✖ Quitar día otorgado</button>` : ""}
   </div></div>`;
 }
 
