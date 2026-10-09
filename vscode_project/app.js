@@ -4880,6 +4880,14 @@ function showTab(which){
   if (!TABS_PERMITIDAS_EMPLEADO.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "empleado"){
     which = "miperfil";
   }
+  // "Empleados" y "Expedientes" se fusionaron en una sola pantalla (la lista
+  // de empleados con el expediente del que se elija, justo debajo, en vez de
+  // dos pestañas separadas que llevaban al mismo lugar por caminos
+  // distintos — ver el dropdown "👥 Empleados" en index.html). Normalizar
+  // acá, antes de los toggles de display de abajo, hace que no importe cuál
+  // de los dos botones del menú se haya usado para llegar: el resultado es
+  // siempre el mismo tab combinado.
+  if (which === "perfil") which = "empleados";
   document.getElementById("inicio-panel").style.display = which === "inicio" ? "block" : "none";
   document.getElementById("contracts-panel").style.display = which === "contracts" ? "block" : "none";
   document.getElementById("form-panel").style.display = which === "form" ? "block" : "none";
@@ -4895,7 +4903,9 @@ function showTab(which){
   document.getElementById("propiedades-panel").style.display = which === "propiedades" ? "block" : "none";
   document.getElementById("empleados-panel").style.display = which === "empleados" ? "block" : "none";
   document.getElementById("archivo-panel").style.display = which === "archivo" ? "block" : "none";
-  document.getElementById("perfil-panel").style.display = which === "perfil" ? "block" : "none";
+  // Fusionado con "empleados" (ver normalización arriba) — se muestra junto
+  // a la lista, no en su propia pestaña aparte.
+  document.getElementById("perfil-panel").style.display = which === "empleados" ? "block" : "none";
   document.getElementById("firmacontratos-panel").style.display = which === "firmacontratos" ? "block" : "none";
   document.getElementById("miperfil-panel").style.display = which === "miperfil" ? "block" : "none";
   document.getElementById("reporte-panel").style.display = which === "reporte" ? "block" : "none";
@@ -4927,8 +4937,11 @@ function showTab(which){
   const groupOf = {
     inicio:"inicio",
     contracts:"contratos", form:"contratos", empresas:"contratos", puestos:"contratos", propiedades:"contratos", preview:"contratos", constancia:"contratos",
-    empleados:"empleados", archivo:"empleados",
-    perfil:"expedientes",
+    // "Expedientes" (perfil) se unió al mismo botón de nav que "Empleados"
+    // (un único dropdown con "Lista de empleados" y "Expedientes" adentro,
+    // ver index.html) — antes eran dos botones sueltos que llevaban al mismo
+    // destino (el perfil de un empleado) por caminos distintos.
+    empleados:"empleados", archivo:"empleados", perfil:"empleados",
     firmacontratos:"contratos",
     despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos", constanciasalarialform:"documentos",
     datos:"datos",
@@ -4937,7 +4950,7 @@ function showTab(which){
     reporte:"reportes",
     faq:"configuracion", manual:"configuracion",
   };
-  ["inicio","contratos","empleados","expedientes","documentos","datos","planilla","vacaciones","incapacidades","reportes","configuracion"].forEach(g => {
+  ["inicio","contratos","empleados","documentos","datos","planilla","vacaciones","incapacidades","reportes","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
@@ -4950,9 +4963,11 @@ function showTab(which){
   if (which === "empresas") renderCatalogTab("empresas");
   if (which === "puestos") renderCatalogTab("puestos");
   if (which === "propiedades") renderCatalogTab("propiedades");
-  if (which === "empleados") renderCatalogTab("empleados");
+  // Las dos mitades de la pantalla fusionada: la lista arriba, el expediente
+  // (o el buscador si todavía no se eligió a nadie, ver renderPerfilEmpleado/
+  // renderSelectorPerfilEmpleado) justo debajo.
+  if (which === "empleados"){ renderCatalogTab("empleados"); renderPerfilEmpleado(); }
   if (which === "archivo") renderArchivoList();
-  if (which === "perfil") renderPerfilEmpleado();
   if (which === "firmacontratos") renderBandejaFirmaContratos();
   if (which === "miperfil") renderMiPerfilEmpleado();
   if (which === "reporte") renderReporteMensual();
@@ -18479,10 +18494,20 @@ function buscarSalarioMinimoPorDepartamento(depto){
   return match || null;
 }
 
-async function verPerfilEmpleado(key){
+// Empleados/Expedientes quedaron fusionados en una sola pantalla (ver
+// showTab) — esto puede llamarse desde CUALQUIER pestaña (Contratos, el
+// buscador propio de Expedientes, etc.), así que sigue necesitando el
+// showTab completo (oculta lo que estuviera abierto, pinta la lista Y el
+// expediente). Lo único nuevo es el scroll: como ahora el expediente queda
+// debajo de la lista en la misma pantalla en vez de ser su propia pestaña,
+// sin esto la persona tendría que bajar a mano para ver lo que acaba de abrir.
+function verPerfilEmpleado(key){
   perfilActualKey = key;
-  await renderPerfilEmpleado();
-  showTab("perfil");
+  showTab("empleados");
+  requestAnimationFrame(() => {
+    const panel = document.getElementById("perfil-panel");
+    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 // Etiqueta de cada tipo de documento archivado (ver congelarEmitido) para

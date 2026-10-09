@@ -82,9 +82,13 @@
     </div>
   </div>
 
-  <button class="nav-dd-btn" id="navbtn-empleados" onclick="navCloseAndRun(function(){ showTab('empleados'); })">👥 Empleados</button>
-
-  <button class="nav-dd-btn" id="navbtn-expedientes" onclick="navCloseAndRun(function(){ showTab('perfil'); })">📁 Expedientes</button>
+  <div class="nav-dd">
+    <button class="nav-dd-btn" id="navbtn-empleados" onclick="toggleNavMenu('empleados')">👥 Empleados <span class="nav-caret">▾</span></button>
+    <div class="nav-dd-menu" id="navmenu-empleados">
+      <button onclick="navCloseAndRun(function(){ showTab('empleados'); })">📋 Lista de empleados</button>
+      <button onclick="navCloseAndRun(function(){ showTab('perfil'); })">📁 Expedientes</button>
+    </div>
+  </div>
 
   <div class="nav-dd">
     <button class="nav-dd-btn" id="navbtn-planilla" onclick="toggleNavMenu('planilla')">💰 Planilla <span class="nav-caret">▾</span></button>
