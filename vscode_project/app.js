@@ -12630,7 +12630,11 @@ async function renderAppTopbar(){
 // propiedades no usan SALE/ENTRA (su gente vive en la zona, ver el
 // comentario en etiquetaCalendarioParaDia). Jefatura ve solo su propio
 // departamento, igual que el resto de paneles operativos.
-async function calcularSalidasYEntradasProximas(diasAdelante){
+// `fechaInicioISO` deja elegir desde cuándo mirar (por defecto hoy) y
+// `diasVentana` cuántos días adelante desde esa fecha — pedido para poder
+// revisar un día puntual o un rango distinto al de "hoy en adelante" (ej.
+// planificar una semana específica del mes que viene).
+async function calcularSalidasYEntradas(fechaInicioISO, diasVentana){
   if (currentPropiedadId !== "corcovado") return [];
   const [empleados, solicitudes, registrosHorasExtra] = await Promise.all([
     cargarEmpleadosDB(),
@@ -12658,14 +12662,14 @@ async function calcularSalidasYEntradasProximas(diasAdelante){
     });
   }
 
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
+  const inicio = fechaInicioISO ? new Date(fechaInicioISO + "T00:00:00") : new Date();
+  inicio.setHours(0, 0, 0, 0);
   const eventos = [];
   visibles.forEach(emp => {
     const solicitudesEmp = solicitudes.filter(s => s.EMPLEADO_KEY === emp.key);
     const horasEmp = registrosHorasExtra.filter(r => r.EMPLEADO_KEY === emp.key);
-    for (let i = 0; i <= diasAdelante; i++){
-      const fecha = new Date(hoy);
+    for (let i = 0; i < diasVentana; i++){
+      const fecha = new Date(inicio);
       fecha.setDate(fecha.getDate() + i);
       const fechaISO = isoDeFechaLocal(fecha);
       const etiqueta = etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, horasEmp);
@@ -12680,8 +12684,11 @@ async function calcularSalidasYEntradasProximas(diasAdelante){
 
 // Devuelve solo el CONTENIDO (sin el section-card/dash-panel que lo rodea)
 // porque el único llamador (renderInicio) ya arma su propio dash-panel con
-// título — así evita duplicar ese envoltorio o tener que desarmarlo después.
-function renderSalidasYEntradasProximas(eventos, diasAdelante){
+// título y controles — así evita duplicar ese envoltorio o tener que
+// desarmarlo después. "Hoy"/"Mañana" se calculan contra la fecha real de
+// hoy, no contra la fecha elegida en el filtro — sigue siendo útil saber que
+// algo cae "hoy" aunque se esté mirando una ventana que arranca más adelante.
+function renderSalidasYEntradasProximas(eventos, diasVentana){
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const etiquetaDia = fechaISO => {
@@ -12695,7 +12702,7 @@ function renderSalidasYEntradasProximas(eventos, diasAdelante){
   const fechasOrdenadas = Object.keys(grupos).sort();
 
   if (!fechasOrdenadas.length){
-    return `<div class="empty-state" style="padding:10px 0; font-size:12px;">Nadie sale ni entra en los próximos ${diasAdelante} días.</div>`;
+    return `<div class="empty-state" style="padding:10px 0; font-size:12px;">Nadie sale ni entra en ese rango (${diasVentana} día${diasVentana === 1 ? "" : "s"}).</div>`;
   }
   return fechasOrdenadas.map(fechaISO => `
     <div style="font-size:11px; font-weight:700; color:var(--ink-soft); margin:10px 0 2px;">${etiquetaDia(fechaISO)}</div>
@@ -12705,6 +12712,38 @@ function renderSalidasYEntradasProximas(eventos, diasAdelante){
       <span class="go" style="color:${ev.tipo === "SALE" ? "#8a6d1f" : "#2e7d32"};">${ev.tipo === "SALE" ? "Sale" : "Entra"}</span>
     </div>`).join("")}
   `).join("");
+}
+
+// Estado del filtro del widget "Quién sale y quién entra" del Dashboard —
+// se acuerda mientras dura la sesión (como diasLibresMesCalendario) para que
+// quedarse viendo Inicio y que algo más lo repinte (otra alerta, etc.) no
+// devuelva el filtro a "hoy, 7 días" sin avisar.
+let salidasEntradasFechaDesde = null; // ISO "AAAA-MM-DD" — se fija a hoy la primera vez que se pinta
+let salidasEntradasDiasVentana = 7;
+
+function cambiarFechaSalidasYEntradas(valor){
+  salidasEntradasFechaDesde = valor || isoDeFechaLocal(new Date());
+  actualizarSalidasYEntradasDashboard();
+}
+
+function cambiarVentanaSalidasYEntradas(valor){
+  salidasEntradasDiasVentana = parseInt(valor, 10) || 7;
+  actualizarSalidasYEntradasDashboard();
+}
+
+// Repinta SOLO el cuerpo de la lista (no todo el Dashboard) al cambiar la
+// fecha o la ventana — así no se pierde el scroll ni se recalculan de nuevo
+// las demás tarjetas de Inicio por cambiar un filtro que no les afecta.
+async function actualizarSalidasYEntradasDashboard(){
+  const cont = document.getElementById("dash-salidas-entradas-cuerpo");
+  if (!cont) return;
+  cont.innerHTML = `<div class="empty-state" style="padding:10px 0; font-size:12px;">Calculando…</div>`;
+  try{
+    const eventos = await calcularSalidasYEntradas(salidasEntradasFechaDesde, salidasEntradasDiasVentana);
+    cont.innerHTML = renderSalidasYEntradasProximas(eventos, salidasEntradasDiasVentana);
+  }catch(e){
+    cont.innerHTML = `<div class="empty-state" style="padding:10px 0; font-size:12px;">No se pudo calcular quién sale y quién entra.</div>`;
+  }
 }
 
 async function renderInicio(){
@@ -12823,17 +12862,19 @@ async function renderInicio(){
 
     // "Solicitudes pendientes" sigue pendiente de implementar — pero "Próximos
     // eventos" ya se resolvió con el resumen de "Quién sale y quién entra"
-    // (ver calcularSalidasYEntradasProximas): pedido para que gerencia/master
-    // y jefatura lo tengan a mano para la operación diaria, sin entrar al
+    // (ver calcularSalidasYEntradas): pedido para que gerencia/master y
+    // jefatura lo tengan a mano para la operación diaria, con fecha de inicio
+    // y ventana elegibles (no solo "hoy en adelante"), sin entrar al
     // calendario de Días Libres y Vacaciones. Exclusivo de Corcovado y de
     // quien de verdad opera con esto (master/gerente/jefatura) — un
     // "empleado"/"consultor" no necesita este control.
-    const DIAS_ADELANTE_SALIDAS_ENTRADAS = 7;
+    const puedeVerSalidasEntradas = currentPropiedadId === "corcovado" && (rolActualInicio === "master" || rolActualInicio === "gerente" || rolActualInicio === "jefatura");
     let bloqueSalidasEntradas = `<div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende del calendario de Vacaciones/Incapacidades.</div>`;
-    if (currentPropiedadId === "corcovado" && (rolActualInicio === "master" || rolActualInicio === "gerente" || rolActualInicio === "jefatura")){
+    if (puedeVerSalidasEntradas){
+      if (!salidasEntradasFechaDesde) salidasEntradasFechaDesde = isoDeFechaLocal(new Date());
       try{
-        const eventosSalidasEntradas = await calcularSalidasYEntradasProximas(DIAS_ADELANTE_SALIDAS_ENTRADAS);
-        bloqueSalidasEntradas = renderSalidasYEntradasProximas(eventosSalidasEntradas, DIAS_ADELANTE_SALIDAS_ENTRADAS);
+        const eventosSalidasEntradas = await calcularSalidasYEntradas(salidasEntradasFechaDesde, salidasEntradasDiasVentana);
+        bloqueSalidasEntradas = renderSalidasYEntradasProximas(eventosSalidasEntradas, salidasEntradasDiasVentana);
       }catch(e){ bloqueSalidasEntradas = `<div class="empty-state" style="padding:10px 0; font-size:12px;">No se pudo calcular quién sale y quién entra.</div>`; }
     }
 
@@ -12843,8 +12884,22 @@ async function renderInicio(){
         <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende de los módulos de Vacaciones y Días libres.</div>
       </div>
       <div class="dash-panel">
-        <div class="dash-panel-title">🚪 Quién sale y quién entra — próximos ${DIAS_ADELANTE_SALIDAS_ENTRADAS} días</div>
-        ${bloqueSalidasEntradas}
+        <div class="dash-panel-title">🚪 Quién sale y quién entra</div>
+        ${puedeVerSalidasEntradas ? `
+        <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:8px;">
+          <label style="font-size:11px; color:var(--ink-soft); display:flex; flex-direction:column; gap:2px;">Desde
+            <input type="date" value="${salidasEntradasFechaDesde}" style="font-size:11.5px; padding:3px 6px;" onchange="cambiarFechaSalidasYEntradas(this.value)">
+          </label>
+          <label style="font-size:11px; color:var(--ink-soft); display:flex; flex-direction:column; gap:2px;">Ventana
+            <select style="font-size:11.5px; padding:3px 6px;" onchange="cambiarVentanaSalidasYEntradas(this.value)">
+              <option value="1"${salidasEntradasDiasVentana === 1 ? " selected" : ""}>1 día</option>
+              <option value="7"${salidasEntradasDiasVentana === 7 ? " selected" : ""}>7 días</option>
+              <option value="15"${salidasEntradasDiasVentana === 15 ? " selected" : ""}>15 días</option>
+              <option value="30"${salidasEntradasDiasVentana === 30 ? " selected" : ""}>30 días</option>
+            </select>
+          </label>
+        </div>` : ""}
+        <div id="dash-salidas-entradas-cuerpo">${bloqueSalidasEntradas}</div>
       </div>
     </div>`;
 
