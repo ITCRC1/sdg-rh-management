@@ -15881,7 +15881,19 @@ function otorgadoEsteAnio(emp, anio){
 let otorgarCumpleanosCtx = null;
 
 function abrirModalOtorgarCumpleanos(empKey, nombreEmp, fechaSugeridaISO){
-  otorgarCumpleanosCtx = { empKey, nombreEmp, fecha: fechaSugeridaISO };
+  otorgarCumpleanosCtx = { empKey, nombreEmp, fecha: fechaSugeridaISO, anioACorregir: null };
+  renderModalOtorgarCumpleanos();
+  document.getElementById("modal-otorgar-cumpleanos").classList.add("open");
+}
+
+// Mismo modal que "Otorgar día", reutilizado para corregir la fecha de un
+// cumpleaños YA otorgado (ver "✅ Días libres y vacaciones otorgados" en el
+// panel de Días Libres y Vacaciones) — antes solo se podía otorgar una vez
+// y la fecha quedaba fija para siempre ese año. anioACorregir marca el modo
+// corrección: confirmarOtorgarCumpleanos() borra primero el día viejo de
+// ese año antes de otorgar el nuevo.
+function abrirModalCorregirCumpleanos(empKey, nombreEmp, anio, fechaActualISO){
+  otorgarCumpleanosCtx = { empKey, nombreEmp, fecha: fechaActualISO, anioACorregir: anio };
   renderModalOtorgarCumpleanos();
   document.getElementById("modal-otorgar-cumpleanos").classList.add("open");
 }
@@ -15896,13 +15908,18 @@ function renderModalOtorgarCumpleanos(){
   const ctx = otorgarCumpleanosCtx;
   const body = document.getElementById("modal-otorgar-cumpleanos-body");
   if (!ctx || !body) return;
+  const corrigiendo = !!ctx.anioACorregir;
+  const tituloEl = document.querySelector("#modal-otorgar-cumpleanos .modal-head span");
+  if (tituloEl) tituloEl.textContent = corrigiendo ? "🎂 Corregir fecha de cumpleaños" : "🎂 Otorgar día de cumpleaños";
   body.innerHTML = `
-    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Elige el día que se le otorga a <b>${escapeHtml(ctx.nombreEmp)}</b> — ya viene con la fecha de su cumpleaños, ajústala si el día libre se toma otro día.</div>
+    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${corrigiendo
+      ? `Cambiá la fecha ya otorgada a <b>${escapeHtml(ctx.nombreEmp)}</b> para ${ctx.anioACorregir}.`
+      : `Elige el día que se le otorga a <b>${escapeHtml(ctx.nombreEmp)}</b> — ya viene con la fecha de su cumpleaños, ajústala si el día libre se toma otro día.`}</div>
     <div class="field">
       <label>Fecha a otorgar</label>
       <input type="date" value="${ctx.fecha}" onchange="otorgarCumpleanosCtx.fecha = this.value;">
     </div>
-    <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarOtorgarCumpleanos()">🎁 Otorgar día</button>
+    <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarOtorgarCumpleanos()">${corrigiendo ? "✏️ Guardar fecha" : "🎁 Otorgar día"}</button>
   `;
 }
 
@@ -15910,9 +15927,13 @@ async function confirmarOtorgarCumpleanos(){
   const ctx = otorgarCumpleanosCtx;
   if (!ctx) return;
   if (!ctx.fecha){ statusMsg("Elige una fecha.", false); return; }
-  const empKey = ctx.empKey, fecha = ctx.fecha;
+  const empKey = ctx.empKey, fecha = ctx.fecha, anioACorregir = ctx.anioACorregir;
   cerrarModalOtorgarCumpleanos();
-  await otorgarDiaCumpleanos(empKey, fecha);
+  if (anioACorregir){
+    await corregirFechaCumpleanos(empKey, anioACorregir, fecha);
+  } else {
+    await otorgarDiaCumpleanos(empKey, fecha);
+  }
 }
 
 async function otorgarDiaCumpleanos(empKey, fechaISO){
@@ -15936,6 +15957,33 @@ async function otorgarDiaCumpleanos(empKey, fechaISO){
     }
     return true;
   }catch(e){ statusMsg("No se pudo otorgar: " + e.message, false); return false; }
+}
+
+// Corrige la fecha de un cumpleaños YA otorgado ese año: borra el día viejo
+// de Horas Extra (y la marca CUMPLEANOS_OTORGADO_ANIOS, que otorgarDiaCumpleanos
+// vuelve a poner) y otorga el nuevo en la fecha elegida — así no hace falta
+// pasar por "Quitar" y luego "Otorgar día" por separado.
+async function corregirFechaCumpleanos(empKey, anio, fechaNuevaISO){
+  try{
+    const todosLosRegistros = await listarRegistrosHorasExtra();
+    const diaViejo = todosLosRegistros.find(r => r.EMPLEADO_KEY === empKey && r.ORIGEN === "cumpleanos_otorgado" && r.TIPO_DIA === "cumpleanos" && r.FECHA && r.FECHA.slice(0,4) === String(anio));
+    if (diaViejo && diaViejo.FECHA === fechaNuevaISO){ statusMsg("Esa ya es la fecha otorgada.", false); return; }
+    if (diaViejo) await window.storage.delete(diaViejo.key, false);
+
+    const fullKey = CATALOGS.empleados.prefix + empKey;
+    const res = await window.storage.get(fullKey, false);
+    const emp = res && res.value ? JSON.parse(res.value) : null;
+    if (emp && emp.CUMPLEANOS_OTORGADO_ANIOS){
+      delete emp.CUMPLEANOS_OTORGADO_ANIOS[String(anio)];
+      await window.storage.set(fullKey, JSON.stringify(emp), false);
+    }
+
+    const ok = await otorgarDiaCumpleanos(empKey, fechaNuevaISO);
+    if (ok){
+      await agregarBitacora(empKey, `Fecha del día de cumpleaños ${anio} corregida: ${diaViejo ? fmtFechaSimple(diaViejo.FECHA) : "—"} → ${fmtFechaSimple(fechaNuevaISO)}.`);
+      statusMsg("Fecha de cumpleaños corregida.", true);
+    }
+  }catch(e){ statusMsg("No se pudo corregir: " + e.message, false); }
 }
 
 // "Otorgar día" no tenía forma de deshacerse: una vez marcado
@@ -16020,6 +16068,12 @@ async function renderDiasLibresVacacionesPanel(){
     const empleadosVisibles = empleados.filter(e => !e.ARCHIVADO && (!deptoActivo || departamentoDeEmpleado(e) === deptoActivo));
     const empleadosVisiblesKeys = new Set(empleadosVisibles.map(e => e.key));
     const solicitudesVisibles = solicitudes.filter(s => empleadosVisiblesKeys.has(s.EMPLEADO_KEY));
+    // Los cumpleaños otorgados no se guardan como "solicitud" (se asignan
+    // directo a Horas Extra desde otorgarDiaCumpleanos, sin pasar por el
+    // flujo de solicitud/aprobación) — antes eso los dejaba invisibles en
+    // "✅ Días libres y vacaciones otorgados", así que no había dónde
+    // corregir la fecha si quedaba mal. Se identifican por su ORIGEN.
+    const cumpleanosOtorgadosVisibles = registrosHorasExtra.filter(r => r.ORIGEN === "cumpleanos_otorgado" && empleadosVisiblesKeys.has(r.EMPLEADO_KEY));
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🏖️ Días Libres y Vacaciones</div>
@@ -16053,7 +16107,7 @@ async function renderDiasLibresVacacionesPanel(){
 
     html += renderListaSolicitudesPendientes(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, puedeAprobar, esJefatura);
 
-    html += renderListaSolicitudesOtorgadas(solicitudesVisibles, empleadosPorKey, puedeAprobar);
+    html += renderListaSolicitudesOtorgadas(solicitudesVisibles, cumpleanosOtorgadosVisibles, empleadosPorKey, puedeAprobar);
 
     html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario);
 
@@ -16520,18 +16574,24 @@ function filtrarOtorgadosInput(val){
   _renderOtorgadosBuscadoDebounced();
 }
 
-function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeAprobar){
+function renderListaSolicitudesOtorgadas(solicitudes, cumpleanosOtorgados, empleadosPorKey, puedeAprobar){
   if (!puedeAprobar) return "";
+  // Cumpleaños se asigna directo a Horas Extra (ver otorgarDiaCumpleanos),
+  // nunca como "solicitud" — se normaliza acá a la misma forma { kind,
+  // EMPLEADO_KEY, FECHA_INICIO } que una solicitud para poder mezclarlo en
+  // una sola lista ordenada por fecha, con sus propias acciones más abajo.
   let todasOtorgadas = solicitudes
     .filter(s => s.ESTADO === "aprobada" && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "dia_viaje" || s.TIPO === "permiso_sin_goce"))
+    .map(s => ({ kind: "solicitud", s, EMPLEADO_KEY: s.EMPLEADO_KEY, FECHA_INICIO: s.FECHA_INICIO }))
+    .concat((cumpleanosOtorgados || []).map(r => ({ kind: "cumpleanos", r, EMPLEADO_KEY: r.EMPLEADO_KEY, FECHA_INICIO: r.FECHA })))
     .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""));
   // El buscador filtra ANTES de topar a 30 — si solo filtrara la tanda ya
   // recortada, una fecha vieja fuera de las 30 más recientes nunca
   // aparecería por más que coincidiera el nombre.
   if (filtroOtorgadosNombre){
-    todasOtorgadas = todasOtorgadas.filter(s => {
-      const emp = empleadosPorKey[s.EMPLEADO_KEY];
-      const nombre = (emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY) || "";
+    todasOtorgadas = todasOtorgadas.filter(item => {
+      const emp = empleadosPorKey[item.EMPLEADO_KEY];
+      const nombre = (emp ? nombreCompletoEmpleado(emp) : item.EMPLEADO_KEY) || "";
       return nombre.toLowerCase().includes(filtroOtorgadosNombre);
     });
   }
@@ -16548,7 +16608,28 @@ function renderListaSolicitudesOtorgadas(solicitudes, empleadosPorKey, puedeApro
     </div>
     ${!todasOtorgadas.length ? `<div class="empty-state" style="padding:10px 0;">Ningún empleado coincide con la búsqueda.</div>` : ""}
     <div style="max-height:320px; overflow-y:auto;">
-    ${otorgadas.map(s => {
+    ${otorgadas.map(item => {
+      if (item.kind === "cumpleanos"){
+        const r = item.r;
+        const emp = empleadosPorKey[r.EMPLEADO_KEY];
+        const nombreEmp = (emp ? nombreCompletoEmpleado(emp) : r.EMPLEADO_KEY) || r.EMPLEADO_KEY;
+        const anio = r.FECHA.slice(0,4);
+        const empKeyEsc = String(r.EMPLEADO_KEY).replace(/'/g, "\\'");
+        const nombreEsc = nombreEmp.replace(/'/g, "\\'");
+        return `<div class="catalog-item">
+          <div class="row1">
+            <div class="info">
+              <div class="name">${escapeHtml(nombreEmp)} — 🎂 Cumpleaños</div>
+              <div class="meta">${fmtFechaSimple(r.FECHA)} · 1 día</div>
+            </div>
+            <div class="actions">
+              <button class="use" onclick="abrirModalCorregirCumpleanos('${empKeyEsc}', '${nombreEsc}', ${anio}, '${r.FECHA}')">✏️ Corregir fecha</button>
+              <button class="del" onclick="quitarDiaCumpleanos('${empKeyEsc}', ${anio})">🗑️ Eliminar</button>
+            </div>
+          </div>
+        </div>`;
+      }
+      const s = item.s;
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
       const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
       const keyEsc = String(s.key).replace(/'/g, "\\'");
