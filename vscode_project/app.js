@@ -7287,6 +7287,15 @@ async function renderPlanillaPanel(){
       <div id="incidencias-status" style="font-size:12px;"></div>
     </div>`;
 
+    // El resumen de quincena (días laborados/vacaciones/días libres/horas
+    // extra por empleado) vivía en la pestaña Horas Extra — pero es
+    // información de PLANILLA, no de aprobar horas, así que se pide verla
+    // acá, junto al resto de reportes de planilla (y justo antes del
+    // generador de Excel del mismo período, para poder revisarlo en
+    // pantalla antes de descargarlo). Carga aparte (su propio contenedor)
+    // porque necesita datos que el resto del panel de Planilla no pide.
+    html += `<div id="resumen-quincena-planilla"></div>`;
+
     html += (() => {
       const rangoHoy = rangoQuincenaActual();
       const mesInputHoy = `${rangoHoy.inicio.getFullYear()}-${String(rangoHoy.inicio.getMonth() + 1).padStart(2, "0")}`;
@@ -7349,10 +7358,55 @@ async function renderPlanillaPanel(){
     panel.innerHTML = html;
     if (esCorcovado) await renderColillasImporter();
     await renderBuzonColillasPendientes();
+    await renderResumenQuincenaEnPlanilla();
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar la información de planilla.</div>`;
   }finally{
     requestAnimationFrame(() => window.scrollTo(0, _scrollY));
+  }
+}
+
+// Carga aparte lo que renderResumenQuincenaHorasExtra necesita (registros de
+// Horas Extra + empleados + departamentos) y lo pinta dentro de Planilla —
+// movido de la pestaña Horas Extra a pedido: es un reporte de PLANILLA
+// (días laborados/vacaciones/días libres/horas extra por empleado para la
+// quincena actual), no una herramienta para aprobar horas.
+async function renderResumenQuincenaEnPlanilla(){
+  const cont = document.getElementById("resumen-quincena-planilla");
+  if (!cont) return;
+  try{
+    const registros = await listarRegistrosHorasExtra();
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const empKeys = (res && res.keys) || [];
+    const empleados = await Promise.all(empKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix, ""), ...v };
+    }));
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {};
+    puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const departamentoDeEmpleado = emp => {
+      if (!emp || !emp.PUESTO_KEY) return "Sin departamento";
+      const p = puestosPorKey[emp.PUESTO_KEY];
+      return (p && p.DEPARTAMENTO_MINISTERIO) || "Sin departamento";
+    };
+
+    const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
+    const esJefatura = rolActual === "jefatura";
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
+
+    cont.innerHTML = (await renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado))
+      || `<div class="section-card" style="margin-bottom:14px;"><div class="section-body empty-state">Sin registros de Horas Extra todavía para esta quincena.</div></div>`;
+  }catch(e){
+    cont.innerHTML = `<div class="section-card" style="margin-bottom:14px;"><div class="section-body empty-state">No se pudo cargar el resumen de quincena.</div></div>`;
   }
 }
 
@@ -11692,7 +11746,9 @@ async function renderHorasExtrasPanel(){
       }
     }
 
-    html += await renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado);
+    // El resumen de quincena para planilla se movió a la pestaña Planilla
+    // (ver renderResumenQuincenaEnPlanilla) — acá es la pestaña de aprobar/
+    // corregir horas, no de reportes de planilla.
 
     html += esJefatura
       ? `<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
