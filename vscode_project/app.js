@@ -9969,7 +9969,9 @@ async function renderRelojPanel(){
       <div class="reloj-acciones reloj-acciones-sdg reloj-no-imprimir">
         <button class="btn" onclick="relojAbrirManual(null, null)">✎ Agregar marca manual</button>
         <button class="btn gold" id="reloj-btn-enviar" onclick="relojEnviarAHorasExtras()">📤 Enviar a Horas extras</button>
-      </div>` : ""}
+        <button class="btn" onclick="relojEscanearDiscrepancias()">🔍 Buscar horas no reflejadas</button>
+      </div>
+      <div class="reloj-no-imprimir" id="reloj-discrepancias"></div>` : ""}
     </div>
     <div class="reloj-tarjetas" id="reloj-tarjetas"></div>
     <div class="reloj-no-imprimir">${relojHtmlSinFicha(v, empleados, puedeEditar)}</div>
@@ -10748,6 +10750,154 @@ async function relojEnviarAHorasExtras(){
   }finally{
     if (btn){ btn.disabled = false; btn.textContent = "📤 Enviar a Horas extras"; }
   }
+}
+
+// Compara, PERSONA POR PERSONA, lo que el reloj tiene marcado para este
+// rango contra lo que de verdad quedó guardado en Horas Extra — a
+// diferencia de "Enviar a Horas extras" (que escribe, y por eso siempre
+// manda el rango completo sin importar el buscador, ver más arriba), esto
+// solo LEE y avisa, así que SÍ puede usarse con el buscador filtrado a una
+// sola persona sin ningún riesgo de generar ausencias falsas para nadie
+// más. Pensado para el caso real reportado (ABARCA GARRO ISIDRO ORLANDO,
+// ver guardarFilasHorasExtra): el reloj tenía más marcas que las que
+// terminaron reflejadas en Horas Extra, y eso solo se notaba si alguien
+// volvía a mandar el reloj y se fijaba en el aviso "⚠️ Llegaron marcas
+// nuevas" del registro ya decidido (ver ALERTA_MARCAS_NUEVAS). Esto lo
+// detecta sin tener que reenviar nada primero.
+async function relojEscanearDiscrepancias(){
+  const v = relojCtx && relojCtx.vista;
+  const cont = document.getElementById("reloj-discrepancias");
+  if (!v || !cont) return;
+  cont.innerHTML = `<div class="empty-state" style="padding:10px 0;">Comparando contra Horas Extra…</div>`;
+  try{
+    const registros = await listarRegistrosHorasExtra();
+    const registroDe = {};
+    registros.forEach(r => { registroDe[r.EMPLEADO_KEY + ":" + r.FECHA] = r; });
+
+    const marcasRelojATexto = pares => marcasComoTexto(pares.map(([e, sal]) => ({
+      entrada: formatoFechaHoraCortaUTC(Math.floor(e.ts / 60000) * 60000),
+      salida: formatoFechaHoraCortaUTC(Math.floor(sal.ts / 60000) * 60000),
+    })));
+
+    const hallazgos = [];
+    v.personas.forEach(p => {
+      if (!p.ficha) return; // sin ficha no hay con qué comparar en Horas Extra (ver "Sin identificar" aparte)
+      p.dias.forEach(d => {
+        if (!d.usadas.length) return;
+        const marcasRelojTexto = marcasRelojATexto(d.pares.filter(([, sal]) => sal));
+        const registro = registroDe[p.ficha.key + ":" + d.fecha];
+
+        if (!registro){
+          if (d.minutos > 0 || !d.completo){
+            hallazgos.push({ p, d, registro: null, puedeAplicar: true, motivo: "No existe ningún registro en Horas Extra para este día.", marcasReloj: marcasRelojTexto || "(turno sin marcar)", marcasRegistro: null });
+          }
+          return;
+        }
+        const marcasRegistroTexto = marcasComoTexto(registro.MARCAS);
+        if (d.completo && marcasRelojTexto && marcasRelojTexto !== marcasRegistroTexto){
+          // Solo se ofrece corregir con un clic cuando el día ya estaba
+          // clasificado como "laboral" — si es de otro tipo (vacaciones, día
+          // libre, incapacidad…) reclasificarlo es una decisión de una
+          // persona, no algo que este atajo deba resolver solo.
+          hallazgos.push({ p, d, registro, puedeAplicar: registro.TIPO_DIA === "laboral", motivo: `Horas Extra tiene guardado "${etiquetaTipoDia(registro.TIPO_DIA) || registro.TIPO_DIA || "?"}" (${registro.ESTADO}) con otras marcas.`, marcasReloj: marcasRelojTexto, marcasRegistro: marcasRegistroTexto || "(sin marcas)" });
+        } else if (!d.completo && registro.ESTADO !== "pendiente" && !registro.INCOMPLETO){
+          // Acá el reloj tiene MENOS marcas que lo ya decidido — aplicar
+          // "las horas del reloj" le quitaría horas en vez de agregarlas, así
+          // que no se ofrece el botón: hay que revisar por qué el reloj
+          // perdió una marca, no asumir que el reloj tiene la razón.
+          hallazgos.push({ p, d, registro, puedeAplicar: false, motivo: `El reloj todavía muestra un turno sin marcar ese día, pero Horas Extra ya lo tiene decidido como completo.`, marcasReloj: marcasRelojTexto || "(turno sin marcar)", marcasRegistro: marcasRegistroTexto || "(sin marcas)" });
+        }
+      });
+    });
+
+    if (!hallazgos.length){
+      cont.innerHTML = `<div class="section-card" style="margin-top:10px; border-color:#2e7d32;"><div class="section-body">
+        <div style="font-weight:700; color:#2e7d32;">✅ Sin discrepancias</div>
+        <div style="font-size:12px; color:var(--ink-soft);">Las marcas del reloj en este rango (de quienes tienen ficha identificada) coinciden con lo guardado en Horas Extra.</div>
+      </div></div>`;
+      return;
+    }
+
+    cont.innerHTML = `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
+      <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">⚠️ ${hallazgos.length} día(s) con horas del reloj que no están reflejadas en Horas Extra</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Esto solo compara — no cambia nada. Para corregirlo usá "📤 Enviar a Horas extras": no pisa decisiones ya tomadas, y si un día ya estaba aprobado/rechazado con marcas distintas, deja un aviso de "marcas nuevas" en ese registro sin tocar la decisión.</div>
+      ${hallazgos.map(h => {
+        const empKeyEsc = String(h.p.ficha.key).replace(/'/g, "\\'");
+        const accion = h.puedeAplicar
+          ? `<div style="margin-top:3px;"><button class="use" style="padding:3px 8px; font-size:10.5px;" onclick="aplicarHorasDelRelojHallazgo('${empKeyEsc}', '${h.d.fecha}')">✏️ Aplicar las horas del reloj</button></div>`
+          : (h.registro ? `<div style="margin-top:3px;"><span class="meta" style="color:#8a6d1f;">Ya clasificado como "${escapeHtml(etiquetaTipoDia(h.registro.TIPO_DIA))}" — corregir a mano en Horas Extra.</span></div>` : "");
+        return `<div style="padding:5px 0; border-bottom:1px solid var(--paper-line); font-size:12px;">
+        <b>${escapeHtml(h.p.nombre)}</b> — ${fmtFechaSimple(h.d.fecha)} (${relojHM(h.d.minutos)} h en el reloj)<br>
+        <span style="color:var(--ink-soft);">${escapeHtml(h.motivo)}</span><br>
+        <span style="color:var(--ink-soft);">Reloj: ${escapeHtml(h.marcasReloj || "—")}${h.marcasRegistro !== null ? ` · Horas Extra: ${escapeHtml(h.marcasRegistro || "—")}` : ""}</span>
+        ${accion}
+      </div>`;
+      }).join("")}
+    </div></div>`;
+  }catch(e){
+    cont.innerHTML = `<div class="empty-state" style="color:#B3261E;">No se pudo comparar: ${escapeHtml(e.message || "")}</div>`;
+  }
+}
+
+// Aplica directamente las horas/marcas que el reloj tiene para UN día
+// puntual detectado por relojEscanearDiscrepancias — evita tener que ir a
+// buscar el registro a mano en Horas Extra. Reutiliza los mismos datos ya
+// calculados para la pantalla (d.minutos/d.pares, ver relojArmarDia), nunca
+// vuelve a leer el reloj. Mantiene el ESTADO que ya tenía el registro (si
+// estaba "aprobada", sigue aprobada, solo con las horas correctas — mismo
+// efecto que editar la casilla de horas a mano, ver renderInputHorasExtra)
+// y limpia cualquier aviso de "marcas nuevas" que hubiera quedado. Si el
+// registro existente es de un tipo distinto de "laboral", la pantalla ya
+// no ofrece este botón (ver puedeAplicar en relojEscanearDiscrepancias) —
+// reclasificar un día así es una decisión de una persona, no de este atajo.
+async function aplicarHorasDelRelojHallazgo(empKey, fecha){
+  if (!window.sdgApi.puedeEditar()) return;
+  const v = relojCtx && relojCtx.vista;
+  const p = v && v.personas.find(pp => pp.ficha && pp.ficha.key === empKey);
+  const d = p && p.dias.find(dd => dd.fecha === fecha);
+  if (!p || !d){ statusMsg("Ya no se encuentra ese día en la vista actual del reloj — volvé a buscar.", false); return; }
+  if (!confirm(`¿Aplicar las horas del reloj a ${p.nombre} — ${fmtFechaSimple(fecha)}?\n\nEsto corrige las marcas y las horas de ese día en Horas Extra con lo que el reloj tiene ahora mismo.`)) return;
+
+  try{
+    const key = HORAS_EXTRA_PREFIX + empKey + ":" + fecha;
+    let existente = null;
+    try{ const r = await window.storage.get(key, false); existente = r && r.value ? JSON.parse(r.value) : null; }catch(e){ /* no existía */ }
+    if (existente && existente.TIPO_DIA && existente.TIPO_DIA !== "laboral"){
+      statusMsg(`Ese día ya está clasificado como "${etiquetaTipoDia(existente.TIPO_DIA)}" — corregilo a mano en Horas Extra, no se sobrescribe solo.`, false);
+      return;
+    }
+
+    const jornada = await jornadaDiariaDeEmpleado(p.ficha, {});
+    const horasTrabajadas = d.minutos / 60;
+    const excedente = horasTrabajadas > jornada ? horasTrabajadas - jornada : 0;
+    const horasExtra = Math.round(aplicarToleranciaCortesia(excedente) * 100) / 100;
+    const marcas = d.pares.filter(([, sal]) => sal).map(([e, sal]) => ({
+      entrada: formatoFechaHoraCortaUTC(Math.floor(e.ts / 60000) * 60000),
+      salida: formatoFechaHoraCortaUTC(Math.floor(sal.ts / 60000) * 60000),
+    }));
+
+    const quien = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    const value = {
+      ...(existente || {}),
+      EMPLEADO_KEY: empKey,
+      FECHA: fecha,
+      HORAS_EXTRA: horasExtra,
+      MARCAS: marcas,
+      INCOMPLETO: !d.completo,
+      MARCA_SUELTA: d.completo ? null : ((existente && existente.MARCA_SUELTA) || null),
+      TIPO_DIA: "laboral",
+      ESTADO: existente ? existente.ESTADO : "pendiente",
+      CORREGIDO_CON_RELOJ_POR: quien,
+      CORREGIDO_CON_RELOJ_EN: new Date().toISOString(),
+    };
+    delete value.ALERTA_MARCAS_NUEVAS;
+    delete value.ALERTA_MARCAS_NUEVAS_DETALLE;
+    delete value.ALERTA_MARCAS_NUEVAS_EN;
+    await window.storage.set(key, JSON.stringify(value), false);
+    await agregarBitacora(empKey, `Horas Extra del ${fmtFechaSimple(fecha)} corregidas con las marcas del reloj (${horasExtra} hora(s) extra, ${marcas.length} par(es) de marcas).`);
+    statusMsg("Horas corregidas con las marcas del reloj.", true);
+    relojEscanearDiscrepancias();
+  }catch(e){ statusMsg("No se pudo aplicar: " + e.message, false); }
 }
 
 // `propiedadOverride`: solo para "Mi información" de un master cuya propia
