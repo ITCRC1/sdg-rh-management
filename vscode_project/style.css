@@ -106,6 +106,19 @@
   .emp-acciones-menu button:hover{ background:var(--paper); }
   .emp-acciones-menu button:last-child{ grid-column:1 / -1; border-color:#D9A5A0; color:#8a3b34; }
 
+  /* Submenú "📁 Documentos" (ver toggleEmpDocSubmenu) — ocupa las dos
+     columnas de la grilla de Acciones, igual patrón que .snippets-menu. */
+  .emp-doc-submenu{
+    display:none; grid-column:1 / -1; grid-template-columns:1fr 1fr; gap:6px;
+    margin-top:2px; padding:8px; background:#FBF8EF; border:1px dashed var(--field-border); border-radius:8px;
+  }
+  .emp-doc-submenu.open{ display:grid; animation:dropIn .14s ease; }
+  .emp-doc-submenu button{
+    text-align:left; padding:8px 10px; font-size:12px; border-radius:8px;
+    border:1px solid var(--field-border); background:#fff; cursor:pointer; color:var(--ink);
+  }
+  .emp-doc-submenu button:hover{ background:var(--paper); }
+
   .snippets-menu{ display:none; margin-top:6px; border:1px solid var(--field-border); border-radius:8px; overflow:hidden; background:#fff; }
   .snippets-menu.open{ display:block; }
   .snippets-menu button{

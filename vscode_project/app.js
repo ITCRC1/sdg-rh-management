@@ -18096,23 +18096,45 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   // las dos únicas de esta lista que son de solo lectura/exportación, así
   // que esas quedan visibles para cualquiera.
   const puedeEditar = !!(window.sdgApi && window.sdgApi.puedeEditar());
-  const n = i => numerado ? `${i}. ` : "";
+  // Numeración por contador en vez de literales fijos (${n(1)}, ${n(2)}...):
+  // antes ya quedaban huecos a propósito (Recomendación laboral, Constancia
+  // salarial, Designar jefatura y Credenciales nunca tuvieron número, aunque
+  // "numerado" estuviera activo) — un contador reproduce lo mismo sin
+  // depender de qué tan largo quede el array final, así que agrupar varios
+  // botones en "📁 Documentos" de abajo no deja números salteados ni fuera
+  // de orden.
+  let contador = 0;
+  const n = () => numerado ? `${++contador}. ` : "";
   const botones = [];
-  if (puedeEditar) botones.push(`<button onclick="generarDespidoDeEmpleado('${empKey}')">${n(1)}⚖️ Carta de despido</button>`);
-  botones.push(`<button onclick="abrirCalculadoraLiquidacion('${empKey}')">${n(2)}🧮 Calcular liquidación</button>`);
-  if (puedeEditar) botones.push(`<button onclick="generarAmonestacionDeEmpleado('${empKey}')">${n(3)}⚠️ Amonestación</button>`);
-  if (puedeEditar && archivado) botones.push(`<button onclick="generarRecomendacionDeEmpleado('${empKey}')">📝 Recomendación laboral</button>`);
-  if (puedeEditar) botones.push(`<button onclick="actualizarContratoDeEmpleado('${empKey}')">${n(4)}📄 ${(contratosVinculados && contratosVinculados.length) ? "Actualizar" : "Crear"} contrato</button>`);
-  if (puedeEditar && !archivado) botones.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">${n(5)}🗓️ Permiso sin goce salarial</button>`);
-  if (puedeEditar && !archivado) botones.push(`<button onclick="generarVacacionesDeEmpleado('${empKey}')">${n(6)}🏖️ Vacaciones</button>`);
-  if (puedeEditar) botones.push(`<button onclick="openCatalogForm('empleados','${empKey}')">${n(7)}✏️ Editar datos (puesto, salario, contacto...)</button>`);
-  if (puedeEditar) botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n(8)}✍️ Confirmar handbook</button>`);
-  if (puedeEditar) botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n(9)}📎 Subir contrato firmado (PDF)</button>`);
-  botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n(10)}📊 Descargar datos para planilla CCSS (Excel)</button>`);
-  if (puedeEditar && !archivado) botones.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">${tieneConstanciaSalarial ? "🔄 Actualizar constancia salarial" : "💵 Constancia salarial"}</button>`);
+
+  // Generadores de documentos (despido, liquidación, amonestación,
+  // recomendación, permiso sin goce, constancia salarial) agrupados bajo un
+  // solo "📁 Documentos" — antes eran 5-6 botones sueltos en esta misma
+  // grilla, la mayoría de uso ocasional, y alargaban mucho la lista por
+  // cada empleado. El resto (contrato, vacaciones, editar, handbook,
+  // credenciales, archivar) se queda igual de visible que antes.
+  const documentos = [];
+  if (puedeEditar) documentos.push(`<button onclick="generarDespidoDeEmpleado('${empKey}')">⚖️ Carta de despido</button>`);
+  documentos.push(`<button onclick="abrirCalculadoraLiquidacion('${empKey}')">🧮 Calcular liquidación</button>`);
+  if (puedeEditar) documentos.push(`<button onclick="generarAmonestacionDeEmpleado('${empKey}')">⚠️ Amonestación</button>`);
+  if (puedeEditar && archivado) documentos.push(`<button onclick="generarRecomendacionDeEmpleado('${empKey}')">📝 Recomendación laboral</button>`);
+  if (puedeEditar && !archivado) documentos.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">🗓️ Permiso sin goce salarial</button>`);
+  if (puedeEditar && !archivado) documentos.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">${tieneConstanciaSalarial ? "🔄 Actualizar constancia salarial" : "💵 Constancia salarial"}</button>`);
+  if (documentos.length){
+    const subId = "emp-doc-submenu-" + empKey;
+    botones.push(`<button onclick="toggleEmpDocSubmenu('${subId}')">${n()}📁 Documentos ▾</button>`);
+    botones.push(`<div class="emp-doc-submenu" id="${subId}">${documentos.join("")}</div>`);
+  }
+
+  if (puedeEditar) botones.push(`<button onclick="actualizarContratoDeEmpleado('${empKey}')">${n()}📄 ${(contratosVinculados && contratosVinculados.length) ? "Actualizar" : "Crear"} contrato</button>`);
+  if (puedeEditar && !archivado) botones.push(`<button onclick="generarVacacionesDeEmpleado('${empKey}')">${n()}🏖️ Vacaciones</button>`);
+  if (puedeEditar) botones.push(`<button onclick="openCatalogForm('empleados','${empKey}')">${n()}✏️ Editar datos (puesto, salario, contacto...)</button>`);
+  if (puedeEditar) botones.push(`<button onclick="confirmarFirmaHandbook('${empKey}')">${n()}✍️ Confirmar handbook</button>`);
+  if (puedeEditar) botones.push(`<button onclick="subirContratoFirmado('${empKey}')">${n()}📎 Subir contrato firmado (PDF)</button>`);
+  botones.push(`<button onclick="descargarDatosCCSS('${empKey}')">${n()}📊 Descargar datos para planilla CCSS (Excel)</button>`);
   if (esMaster && !archivado) botones.push(`<button onclick="mostrarModalDesignarJefatura('${empKey}')">👑 Designar como jefatura</button>`);
   if (puedeEditar && !archivado) botones.push(`<button onclick="mostrarCredencialesEmpleado('${empKey}')">🔑 Ver/generar credenciales de acceso</button>`);
-  if (puedeEditar && !archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n(11)}🗄️ Archivar</button>`);
+  if (puedeEditar && !archivado) botones.push(`<button onclick="archivarEmpleado('${empKey}')">${n()}🗄️ Archivar</button>`);
   return botones.join("");
 }
 
@@ -19661,6 +19683,18 @@ function toggleEmpAcciones(key){
   if (!menu) return;
   const isOpen = menu.classList.contains("open");
   document.querySelectorAll(".emp-acciones-menu.open").forEach(m => m.classList.remove("open"));
+  if (!isOpen) menu.classList.add("open");
+}
+
+// Submenú "📁 Documentos" dentro de "Acciones" (ver renderBotonesAccionesEmpleado)
+// — mismo patrón que toggleSnippetsMenu/toggleEmpAcciones: cierra cualquier
+// otro que haya quedado abierto (de este mismo empleado o de otro, si la
+// lista de Empleados tiene varias filas desplegadas a la vez).
+function toggleEmpDocSubmenu(id){
+  const menu = document.getElementById(id);
+  if (!menu) return;
+  const isOpen = menu.classList.contains("open");
+  document.querySelectorAll(".emp-doc-submenu.open").forEach(m => m.classList.remove("open"));
   if (!isOpen) menu.classList.add("open");
 }
 
