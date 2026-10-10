@@ -12698,7 +12698,11 @@ async function calcularSalidasYEntradas(fechaInicioISO, diasVentana){
       }
     }
   });
-  eventos.sort((a, b) => a.fechaISO.localeCompare(b.fechaISO) || nombreCompletoEmpleado(a.emp).localeCompare(nombreCompletoEmpleado(b.emp), "es"));
+  // Dentro del mismo día, primero quienes SALEN y después quienes ENTRAN
+  // (pedido así para la vista — antes quedaban mezclados en orden alfabético).
+  eventos.sort((a, b) => a.fechaISO.localeCompare(b.fechaISO)
+    || (a.tipo === b.tipo ? 0 : a.tipo === "SALE" ? -1 : 1)
+    || nombreCompletoEmpleado(a.emp).localeCompare(nombreCompletoEmpleado(b.emp), "es"));
   return eventos;
 }
 
@@ -17554,16 +17558,28 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
   </div></div>`;
 }
 
-// "¿Cuánta gente va a estar trabajando cada día?" — pensado para planificar
-// un rango (ej. una semana) sabiendo cuántos activos tiene cada departamento
-// y a cuántos de esos les toca estar ausentes ese día puntual (vacaciones,
-// día libre, permiso sin goce, cita médica, incapacidad, cumpleaños o día de
+// "¿Cuánta gente va a estar trabajando cada día, y quiénes?" — pensado para
+// planificar un rango (ej. una semana) sabiendo a quiénes de cada
+// departamento les toca estar ausentes ese día puntual (vacaciones, día
+// libre, permiso sin goce, cita médica, incapacidad, cumpleaños o día de
 // viaje, ya aprobados). Reutiliza el MISMO criterio que ya pinta el
 // calendario (etiquetaCalendarioParaDia) para que nunca queden
 // desincronizados: un día "SALE"/"ENTRA" cuenta como trabajado (es el último
 // día antes de irse o el primero al volver), solo las etiquetas de abajo
 // restan de la dotación.
 const ETIQUETAS_AUSENCIA_DOTACION = new Set(["VAC", "LIBRE", "CITA", "INCAP", "CUMP", "VIAJE"]);
+
+// Mismo orden que el selector de departamento del panel (DEPARTAMENTOS_MINISTERIO)
+// — cualquier valor que no caiga en esa lista (ej. "Sin departamento") va al final.
+function ordenarDepartamentos(deptos){
+  return deptos.slice().sort((a, b) => {
+    const ia = DEPARTAMENTOS_MINISTERIO.indexOf(a), ib = DEPARTAMENTOS_MINISTERIO.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
 
 function calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO){
   const infoPorEmpleado = {};
@@ -17574,34 +17590,24 @@ function calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, dep
       horas: registrosHorasExtra.filter(r => r.EMPLEADO_KEY === e.key),
     };
   });
-  // Mismo orden que el selector de departamento del panel (DEPARTAMENTOS_MINISTERIO)
-  // — cualquier valor que no caiga en esa lista (ej. "Sin departamento") va al final.
-  const deptos = [...new Set(empleados.map(e => infoPorEmpleado[e.key].depto))].sort((a, b) => {
-    const ia = DEPARTAMENTOS_MINISTERIO.indexOf(a), ib = DEPARTAMENTOS_MINISTERIO.indexOf(b);
-    if (ia === -1 && ib === -1) return a.localeCompare(b);
-    if (ia === -1) return 1;
-    if (ib === -1) return -1;
-    return ia - ib;
-  });
+  const deptos = ordenarDepartamentos([...new Set(empleados.map(e => infoPorEmpleado[e.key].depto))]);
 
   const filas = [];
   for (let d = new Date(desdeISO + "T00:00:00"); d <= new Date(hastaISO + "T00:00:00"); d.setDate(d.getDate() + 1)){
     const fechaISO = isoDeFechaLocal(d);
-    let totalActivos = 0, totalPresentes = 0;
+    let totalPresentes = 0;
     const porDepto = deptos.map(depto => {
       const empleadosDepto = empleados.filter(e => infoPorEmpleado[e.key].depto === depto);
-      const ausentes = empleadosDepto.filter(e => {
+      const presentes = empleadosDepto.filter(e => {
         const info = infoPorEmpleado[e.key];
         const etiqueta = etiquetaCalendarioParaDia(fechaISO, info.solicitudes, info.horas);
-        return etiqueta && ETIQUETAS_AUSENCIA_DOTACION.has(etiqueta.texto);
+        return !(etiqueta && ETIQUETAS_AUSENCIA_DOTACION.has(etiqueta.texto));
       });
-      const activos = empleadosDepto.length;
-      const presentes = activos - ausentes.length;
-      totalActivos += activos;
-      totalPresentes += presentes;
-      return { depto, activos, presentes, ausentesNombres: ausentes.map(e => nombreCompletoEmpleado(e) || e.key) };
+      totalPresentes += presentes.length;
+      const presentesNombres = presentes.map(e => nombreCompletoEmpleado(e) || e.key).sort((a, b) => a.localeCompare(b, "es"));
+      return { depto, presentes: presentes.length, presentesNombres };
     });
-    filas.push({ fechaISO, porDepto, totalActivos, totalPresentes });
+    filas.push({ fechaISO, porDepto, totalPresentes });
   }
   return filas;
 }
@@ -17616,14 +17622,48 @@ function cambiarRangoDotacion(campo, valor){
   renderDiasLibresVacacionesPanel();
 }
 
+// Filtro de departamentos del widget: null = se muestran todos los
+// disponibles. En cuanto se desmarca el primero se arma el Set con todos los
+// que había disponibles EN ESE MOMENTO (dotacionDeptosDisponibles, que
+// renderSeccionDotacionPorDia mantiene al día en cada render) y de ahí en
+// adelante cada checkbox solo agrega/quita el suyo — así un mismo checklist
+// sirve tanto para "mostrar solo estos" (desmarcar todos menos los que
+// interesan) como para "excluir estos" (desmarcar solo esos).
+let dotacionDeptosFiltro = null;
+let dotacionDeptosDisponibles = [];
+
+function dotacionDeptoVisible(depto){
+  return !dotacionDeptosFiltro || dotacionDeptosFiltro.has(depto);
+}
+
+function toggleDotacionDepto(depto){
+  if (!dotacionDeptosFiltro) dotacionDeptosFiltro = new Set(dotacionDeptosDisponibles);
+  if (dotacionDeptosFiltro.has(depto)) dotacionDeptosFiltro.delete(depto);
+  else dotacionDeptosFiltro.add(depto);
+  renderDiasLibresVacacionesPanel();
+}
+
 const DIA_SEMANA_CORTO_DOTACION = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
 function renderSeccionDotacionPorDia(empleados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO){
   if (!empleados.length) return "";
-  const dias = calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO);
+  const deptosDisponibles = ordenarDepartamentos([...new Set(empleados.map(e => departamentoDeEmpleado(e) || "Sin departamento"))]);
+  dotacionDeptosDisponibles = deptosDisponibles;
+  const empleadosFiltrados = empleados.filter(e => dotacionDeptoVisible(departamentoDeEmpleado(e) || "Sin departamento"));
+  const dias = calcularDotacionPorDia(empleadosFiltrados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO);
+
+  const checkboxesHtml = deptosDisponibles.map(d => `
+    <label style="font-size:11px; display:flex; align-items:center; gap:4px; white-space:nowrap;">
+      <input type="checkbox" ${dotacionDeptoVisible(d) ? "checked" : ""} onchange="toggleDotacionDepto('${d.replace(/'/g, "\\'")}');">
+      ${escapeHtml(d)}
+    </label>`).join("");
+
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">👥 Dotación por día</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Cuántas personas van a estar trabajando cada día del rango, por departamento — según las vacaciones/días libres ya aprobados. Pasá el mouse sobre "Presentes" para ver quién está ausente ese día.</p>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Quiénes van a estar trabajando cada día del rango, por departamento — según las vacaciones/días libres ya aprobados. Desmarcá un departamento para excluirlo, o dejá marcados solo los que te interesan.</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; padding:8px; background:#F6F3EC; border-radius:6px;">
+      ${checkboxesHtml}
+    </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
         <input type="date" value="${escapeHtml(desdeISO)}" onchange="cambiarRangoDotacion('desde', this.value);">
@@ -17634,27 +17674,27 @@ function renderSeccionDotacionPorDia(empleados, solicitudes, registrosHorasExtra
       <button class="btn" onclick="exportarReporteDotacionPorDia();">⬇️ Exportar a Excel</button>
     </div>
     <div style="overflow-x:auto;">
-    <table style="border-collapse:collapse; font-size:11.5px; white-space:nowrap;">
+    <table style="border-collapse:collapse; font-size:11.5px;">
       <thead><tr>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Fecha</th>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Departamento</th>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Activos</th>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Presentes</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left; white-space:nowrap;">Fecha</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left; white-space:nowrap;">Departamento</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;">Presentes</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Nombres</th>
       </tr></thead>
       <tbody>
         ${dias.map(dia => {
           const fechaObj = new Date(dia.fechaISO + "T00:00:00");
           const etiquetaFecha = `${DIA_SEMANA_CORTO_DOTACION[fechaObj.getDay()]} ${fmtFechaSimple(dia.fechaISO)}`;
           const filasDepto = dia.porDepto.map((f, i) => `<tr>
-            ${i === 0 ? `<td rowspan="${dia.porDepto.length + 1}" style="padding:4px 8px; border:1px solid var(--paper-line); vertical-align:top; border-top:2px solid var(--navy-deep);">${escapeHtml(etiquetaFecha)}</td>` : ""}
-            <td style="padding:4px 8px; border:1px solid var(--paper-line);${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}">${escapeHtml(f.depto)}</td>
-            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}">${f.activos}</td>
-            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}" title="${f.ausentesNombres.length ? escapeHtml("Ausentes: " + f.ausentesNombres.join(", ")) : "Nadie ausente"}">${f.presentes}</td>
+            ${i === 0 ? `<td rowspan="${dia.porDepto.length + 1}" style="padding:4px 8px; border:1px solid var(--paper-line); vertical-align:top; white-space:nowrap; border-top:2px solid var(--navy-deep);">${escapeHtml(etiquetaFecha)}</td>` : ""}
+            <td style="padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}">${escapeHtml(f.depto)}</td>
+            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}">${f.presentes}</td>
+            <td style="padding:4px 8px; border:1px solid var(--paper-line); font-size:10.5px;${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}">${escapeHtml(f.presentesNombres.join(", "))}</td>
           </tr>`).join("");
           return filasDepto + `<tr style="font-weight:700; background:#F0ECE1;">
             <td colspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);">Total</td>
-            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${dia.totalActivos}</td>
             <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${dia.totalPresentes}</td>
+            <td style="padding:4px 8px; border:1px solid var(--paper-line);"></td>
           </tr>`;
         }).join("")}
       </tbody>
@@ -17689,8 +17729,12 @@ async function exportarReporteDotacionPorDia(){
 
     // Mismo alcance por rol que el resto del panel: jefatura fija a su propio
     // departamento; master/gerente respetan el filtro de departamento activo.
+    // Encima de eso, se respeta el checklist de departamentos del widget
+    // (dotacionDeptosFiltro) — lo que está desmarcado en pantalla tampoco
+    // sale en el Excel.
     const deptoActivo = deptoJefatura || (diasLibresFiltroDepto === "todos" ? null : diasLibresFiltroDepto);
-    const empleadosVisibles = empleados.filter(e => !e.ARCHIVADO && (!deptoActivo || departamentoDeEmpleado(e) === deptoActivo));
+    const empleadosVisibles = empleados.filter(e => !e.ARCHIVADO && (!deptoActivo || departamentoDeEmpleado(e) === deptoActivo)
+      && dotacionDeptoVisible(departamentoDeEmpleado(e) || "Sin departamento"));
     if (!empleadosVisibles.length){ if (status) status.innerHTML = "No hay empleados activos en ese alcance."; return; }
     const empleadosVisiblesKeys = new Set(empleadosVisibles.map(e => e.key));
     const solicitudesVisibles = solicitudes.filter(s => empleadosVisiblesKeys.has(s.EMPLEADO_KEY));
@@ -17700,13 +17744,13 @@ async function exportarReporteDotacionPorDia(){
 
     const prop = getPropiedadActual();
     const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
-    const COLUMNAS = ["Fecha","Departamento","Activos","Presentes","Ausentes (nombres)"];
+    const COLUMNAS = ["Fecha","Departamento","Presentes","Nombres"];
     const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9", GRIS_TOTAL="FFEFEFEF";
     const bordeFino = { style:"thin", color:{argb:"FF000000"} };
     const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("DOTACIÓN POR DÍA");
-    ws.columns = [{width:14},{width:22},{width:12},{width:12},{width:40}];
+    ws.columns = [{width:14},{width:22},{width:12},{width:50}];
     ws.mergeCells(1,1,1,COLUMNAS.length);
     const t = ws.getCell(1,1); t.value = nombrePropiedad; t.fill={type:"pattern",pattern:"solid",fgColor:{argb:NEGRO}}; t.font={color:{argb:BLANCO},bold:true,size:13}; t.alignment={horizontal:"center"};
     ws.mergeCells(2,1,2,COLUMNAS.length);
@@ -17716,11 +17760,11 @@ async function exportarReporteDotacionPorDia(){
     let fila = 4;
     dias.forEach(dia => {
       dia.porDepto.forEach(f => {
-        [dia.fechaISO, f.depto, f.activos, f.presentes, f.ausentesNombres.join(", ")].forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
+        [dia.fechaISO, f.depto, f.presentes, f.presentesNombres.join(", ")].forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
         fila++;
       });
       const filaTotal = ws.getRow(fila);
-      ["Total", "", dia.totalActivos, dia.totalPresentes, ""].forEach((v,i) => {
+      ["Total", "", dia.totalPresentes, ""].forEach((v,i) => {
         const cell = filaTotal.getCell(i+1); cell.value=v; cell.border=bordeCelda; cell.font={bold:true}; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_TOTAL}};
       });
       fila++;
