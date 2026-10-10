@@ -16611,35 +16611,49 @@ function renderSeccionCumpleanos(empleados, puedeOtorgar){
   </div></div>`;
 }
 
+// Hasta 3 líneas de Tipo/Desde/Hasta para el MISMO empleado, igual que el
+// formulario de asignación directa de gerencia/master (ver
+// renderFormularioAsignacionDirecta) — acá cada línea sigue siendo una
+// SOLICITUD independiente, con su cola de pendientes y su anticipación
+// mínima, no una asignación directa. Una línea se ignora si no tiene
+// ninguna fecha cargada; no hace falta llenar las 3.
+function actualizarFilaSolicitud(i){
+  const tipo = (document.getElementById(`solicitud-ausencia-tipo-${i}`)||{}).value;
+  const comprobanteWrap = document.getElementById(`solicitud-ausencia-comprobante-wrap-${i}`);
+  if (comprobanteWrap) comprobanteWrap.style.display = tipo === "ausencia_medica" ? "flex" : "none";
+}
+
 function renderFormularioSolicitud(empleadosDisponibles){
   const ordenados = empleadosDisponibles.slice().sort(compararPorApellido);
-  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">➕ Nueva solicitud</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación. Las citas médicas necesitan comprobante adjunto.</p>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px;">Empleado
-        <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'solicitud-ausencia-empleado')" style="margin-bottom:3px;">
-        <select id="solicitud-ausencia-empleado">
-          <option value="">— Elegí —</option>
-          ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
-        </select>
-      </label>
+  const filaHtml = (i) => `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; padding:6px 0;${i > 0 ? " border-top:1px dashed var(--paper-line); margin-top:4px;" : ""}">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
-        <select id="solicitud-ausencia-tipo" onchange="document.getElementById('solicitud-ausencia-comprobante-wrap').style.display = this.value === 'ausencia_medica' ? 'flex' : 'none';">
+        <select id="solicitud-ausencia-tipo-${i}" onchange="actualizarFilaSolicitud(${i});">
           ${tiposSolicitudAusenciaDisponibles().map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
-        <input type="date" id="solicitud-ausencia-desde">
+        <input type="date" id="solicitud-ausencia-desde-${i}">
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
-        <input type="date" id="solicitud-ausencia-hasta">
+        <input type="date" id="solicitud-ausencia-hasta-${i}">
       </label>
-      <label id="solicitud-ausencia-comprobante-wrap" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
-        <input type="file" id="solicitud-ausencia-comprobante" accept=".pdf,image/*">
+      <label id="solicitud-ausencia-comprobante-wrap-${i}" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
+        <input type="file" id="solicitud-ausencia-comprobante-${i}" accept=".pdf,image/*">
       </label>
-      <button class="btn primary" onclick="confirmarCrearSolicitudAusencia();">➕ Solicitar</button>
-    </div>
+    </div>`;
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">➕ Nueva solicitud</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación. Las citas médicas necesitan comprobante adjunto. Podés cargar hasta 3 rangos distintos para el mismo empleado y enviarlos todos de una vez.</p>
+    <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px; margin-bottom:4px;">Empleado
+      <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'solicitud-ausencia-empleado')" style="margin-bottom:3px;">
+      <select id="solicitud-ausencia-empleado">
+        <option value="">— Elegí —</option>
+        ${ordenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
+      </select>
+    </label>
+    ${[0, 1, 2].map(filaHtml).join("")}
+    <button class="btn primary" style="margin-top:8px;" onclick="confirmarCrearSolicitudAusencia();">➕ Solicitar</button>
     <div id="solicitud-ausencia-status" style="font-size:12px; margin-top:6px;"></div>
   </div></div>`;
 }
@@ -16647,24 +16661,44 @@ function renderFormularioSolicitud(empleadosDisponibles){
 async function confirmarCrearSolicitudAusencia(){
   const status = document.getElementById("solicitud-ausencia-status");
   const empKey = (document.getElementById("solicitud-ausencia-empleado")||{}).value;
-  const tipo = (document.getElementById("solicitud-ausencia-tipo")||{}).value;
-  const fechaInicio = (document.getElementById("solicitud-ausencia-desde")||{}).value;
-  const fechaFin = (document.getElementById("solicitud-ausencia-hasta")||{}).value;
-  const inputComprobante = document.getElementById("solicitud-ausencia-comprobante");
-  const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
-  try{
-    let comprobanteDataUrl = null, comprobanteNombre = null;
-    if (archivo){
-      if (archivo.size > 3.5*1024*1024) throw new Error("El comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
-      comprobanteDataUrl = await leerArchivoComoDataUrl(archivo);
-      comprobanteNombre = archivo.name;
-    }
-    await crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre });
-    statusMsg("Solicitud creada — pendiente de aprobación.");
-    renderDiasLibresVacacionesPanel();
-  }catch(e){
-    if (status) status.innerHTML = `<span style="color:#b23b3b;">${escapeHtml(e.message)}</span>`;
+  if (!empKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí un empleado.</span>`; return; }
+
+  const filas = [];
+  for (let i = 0; i < 3; i++){
+    const tipo = (document.getElementById(`solicitud-ausencia-tipo-${i}`)||{}).value;
+    const fechaInicio = (document.getElementById(`solicitud-ausencia-desde-${i}`)||{}).value;
+    const fechaFin = (document.getElementById(`solicitud-ausencia-hasta-${i}`)||{}).value;
+    if (!fechaInicio && !fechaFin) continue; // línea sin usar — se ignora, no hace falta llenar las 3
+    const inputComprobante = document.getElementById(`solicitud-ausencia-comprobante-${i}`);
+    const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
+    filas.push({ linea: i + 1, tipo, fechaInicio, fechaFin, archivo });
   }
+  if (!filas.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá al menos una fecha.</span>`; return; }
+
+  if (status) status.textContent = "Enviando…";
+  let ok = 0;
+  const errores = [];
+  for (const f of filas){
+    try{
+      let comprobanteDataUrl = null, comprobanteNombre = null;
+      if (f.archivo){
+        if (f.archivo.size > 3.5*1024*1024) throw new Error("el comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+        comprobanteDataUrl = await leerArchivoComoDataUrl(f.archivo);
+        comprobanteNombre = f.archivo.name;
+      }
+      await crearSolicitudAusencia({ empKey, tipo: f.tipo, fechaInicio: f.fechaInicio, fechaFin: f.fechaFin, comprobanteDataUrl, comprobanteNombre });
+      ok++;
+    }catch(e){ errores.push(`Línea ${f.linea}: ${e.message}`); }
+  }
+
+  // El resumen va por el toast (statusMsg), no por el <span> del formulario
+  // — si algo se creó, el panel se vuelve a pintar entero (reemplazando el
+  // formulario, con su status inline, por uno nuevo y vacío).
+  let resumen = ok ? `${ok} de ${filas.length} solicitud(es) creada(s) — pendiente(s) de aprobación.` : "No se pudo crear ninguna solicitud.";
+  if (errores.length) resumen += " " + errores.join(" ");
+  statusMsg(resumen, errores.length === 0);
+  if (ok) renderDiasLibresVacacionesPanel();
+  else if (status) status.innerHTML = `<span style="color:#b23b3b;">${errores.map(escapeHtml).join("<br>")}</span>`;
 }
 
 // Formulario aparte para gerencia/master: asigna ya aprobado, sin la cola de
