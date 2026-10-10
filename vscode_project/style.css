@@ -83,7 +83,7 @@
     box-shadow:0 8px 20px rgba(0,0,0,.12); z-index:30; overflow:hidden;
   }
   .nav-dd-menu.open{ display:block; }
-  #navmenu-empleados, #navmenu-documentos, #navmenu-datos, #navmenu-configuracion, #navmenu-planilla{ left:auto; right:0; }
+  #navmenu-documentos, #navmenu-datos, #navmenu-configuracion, #navmenu-planilla{ left:auto; right:0; }
   .nav-dd-menu button{
     display:block; width:100%; text-align:left; padding:11px 14px; font-size:13px;
     background:#fff; border:none; border-bottom:1px solid var(--paper-line); cursor:pointer; color:var(--ink);

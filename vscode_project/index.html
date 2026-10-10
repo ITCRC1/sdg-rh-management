@@ -82,13 +82,10 @@
     </div>
   </div>
 
-  <div class="nav-dd">
-    <button class="nav-dd-btn" id="navbtn-empleados" onclick="toggleNavMenu('empleados')">👥 Empleados <span class="nav-caret">▾</span></button>
-    <div class="nav-dd-menu" id="navmenu-empleados">
-      <button onclick="navCloseAndRun(function(){ showTab('empleados'); })">📋 Lista de empleados</button>
-      <button onclick="navCloseAndRun(function(){ showTab('perfil'); })">📁 Expedientes</button>
-    </div>
-  </div>
+  <!-- Un solo botón: Empleados y Expedientes son la misma pantalla fusionada
+       (ver showTab en app.js) — tener dos entradas de menú para el mismo
+       destino era justo la separación que se quería evitar. -->
+  <button class="nav-dd-btn" id="navbtn-empleados" onclick="navCloseAndRun(function(){ showTab('empleados'); })">👥 Empleados</button>
 
   <div class="nav-dd">
     <button class="nav-dd-btn" id="navbtn-planilla" onclick="toggleNavMenu('planilla')">💰 Planilla <span class="nav-caret">▾</span></button>
