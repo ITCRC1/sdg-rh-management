@@ -17563,11 +17563,12 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
 // departamento les toca estar ausentes ese día puntual (vacaciones, día
 // libre, permiso sin goce, cita médica, incapacidad, cumpleaños o día de
 // viaje, ya aprobados). Reutiliza el MISMO criterio que ya pinta el
-// calendario (etiquetaCalendarioParaDia) para que nunca queden
-// desincronizados: un día "SALE"/"ENTRA" cuenta como trabajado (es el último
-// día antes de irse o el primero al volver), solo las etiquetas de abajo
-// restan de la dotación.
-const ETIQUETAS_AUSENCIA_DOTACION = new Set(["VAC", "LIBRE", "CITA", "INCAP", "CUMP", "VIAJE"]);
+// calendario (etiquetaCalendarioParaDia), pero con una diferencia a propósito
+// para "SALE"/"ENTRA": "SALE" es el día que el empleado ya viene de salida de
+// la propiedad, así que para la dotación cuenta como ausente — pero "ENTRA"
+// sí cuenta como presente (ya está de vuelta trabajando), solo que se marca
+// con el prefijo "ENTRA" en el nombre para que se note que viene llegando.
+const ETIQUETAS_AUSENCIA_DOTACION = new Set(["VAC", "LIBRE", "CITA", "INCAP", "CUMP", "VIAJE", "SALE"]);
 
 // Mismo orden que el selector de departamento del panel (DEPARTAMENTOS_MINISTERIO)
 // — cualquier valor que no caiga en esa lista (ej. "Sin departamento") va al final.
@@ -17598,13 +17599,16 @@ function calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, dep
     let totalPresentes = 0;
     const porDepto = deptos.map(depto => {
       const empleadosDepto = empleados.filter(e => infoPorEmpleado[e.key].depto === depto);
-      const presentes = empleadosDepto.filter(e => {
+      const presentes = [];
+      empleadosDepto.forEach(e => {
         const info = infoPorEmpleado[e.key];
         const etiqueta = etiquetaCalendarioParaDia(fechaISO, info.solicitudes, info.horas);
-        return !(etiqueta && ETIQUETAS_AUSENCIA_DOTACION.has(etiqueta.texto));
+        if (etiqueta && ETIQUETAS_AUSENCIA_DOTACION.has(etiqueta.texto)) return; // ausente ese día
+        presentes.push({ nombre: nombreCompletoEmpleado(e) || e.key, entra: !!(etiqueta && etiqueta.texto === "ENTRA") });
       });
+      presentes.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
       totalPresentes += presentes.length;
-      const presentesNombres = presentes.map(e => nombreCompletoEmpleado(e) || e.key).sort((a, b) => a.localeCompare(b, "es"));
+      const presentesNombres = presentes.map(p => p.entra ? `ENTRA – ${p.nombre}` : p.nombre);
       return { depto, presentes: presentes.length, presentesNombres };
     });
     filas.push({ fechaISO, porDepto, totalPresentes });
