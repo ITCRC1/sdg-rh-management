@@ -5329,6 +5329,20 @@ function nombreCompletoEmpleado(emp){
   return apellidos ? `${apellidos} ${nombre}`.trim() : nombre;
 }
 
+// Versión corta para listas donde el espacio importa (ej. "Dotación por
+// día": muchos nombres en una sola celda) — primer nombre de pila completo,
+// apellidos reducidos a su inicial (ej. "ABARCA GARRO ISIDRO ORLANDO" →
+// "ISIDRO A.G."). Si falta nombre o apellido, cae de vuelta al nombre
+// completo normal.
+function nombreResumidoEmpleado(emp){
+  if (!emp) return "";
+  const primerNombre = (emp.NOMBRE_EMP || "").trim().split(/\s+/)[0] || "";
+  const inicialesApellidos = (emp.APELLIDOS_EMP || "").trim().split(/\s+/).filter(Boolean)
+    .map(p => p.charAt(0).toUpperCase() + ".").join("");
+  if (!primerNombre || !inicialesApellidos) return nombreCompletoEmpleado(emp);
+  return `${primerNombre} ${inicialesApellidos}`;
+}
+
 // Heurística para partir un nombre completo en texto libre (ej. el que trae
 // una colilla de pago externa, o la columna "NOMBRE" de un CSV de carga
 // masiva) en apellidos + nombre de pila: se asume el formato oficial
@@ -17604,9 +17618,13 @@ function calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, dep
         const info = infoPorEmpleado[e.key];
         const etiqueta = etiquetaCalendarioParaDia(fechaISO, info.solicitudes, info.horas);
         if (etiqueta && ETIQUETAS_AUSENCIA_DOTACION.has(etiqueta.texto)) return; // ausente ese día
-        presentes.push({ nombre: nombreCompletoEmpleado(e) || e.key, entra: !!(etiqueta && etiqueta.texto === "ENTRA") });
+        presentes.push({
+          nombreOrden: nombreCompletoEmpleado(e) || e.key,
+          nombre: nombreResumidoEmpleado(e) || e.key,
+          entra: !!(etiqueta && etiqueta.texto === "ENTRA"),
+        });
       });
-      presentes.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+      presentes.sort((a, b) => a.nombreOrden.localeCompare(b.nombreOrden, "es"));
       totalPresentes += presentes.length;
       const presentesNombres = presentes.map(p => p.entra ? `ENTRA – ${p.nombre}` : p.nombre);
       return { depto, presentes: presentes.length, presentesNombres };
