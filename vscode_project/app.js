@@ -16414,6 +16414,8 @@ async function quitarDiaCumpleanos(empKey, anio){
 
 let diasLibresFiltroDepto = "todos";
 let diasLibresMesCalendario = null; // "AAAA-MM" — se fija al mes actual la primera vez que se renderiza
+let dotacionDesde = null; // ISO — rango de "Dotación por día", se fija a hoy..hoy+6 la primera vez
+let dotacionHasta = null;
 
 async function renderDiasLibresVacacionesPanel(){
   const panel = document.getElementById("diaslibresvacaciones-panel");
@@ -16452,6 +16454,13 @@ async function renderDiasLibresVacacionesPanel(){
     if (!diasLibresMesCalendario){
       const hoy0 = new Date();
       diasLibresMesCalendario = `${hoy0.getFullYear()}-${String(hoy0.getMonth()+1).padStart(2,"0")}`;
+    }
+    if (!dotacionDesde || !dotacionHasta){
+      const hoy0 = new Date();
+      const hastaDefault = new Date(hoy0);
+      hastaDefault.setDate(hastaDefault.getDate() + 6);
+      dotacionDesde = isoDeFechaLocal(hoy0);
+      dotacionHasta = isoDeFechaLocal(hastaDefault);
     }
 
     // Ámbito por rol (sección 6.2): jefatura fija a su propio departamento;
@@ -16518,6 +16527,8 @@ async function renderDiasLibresVacacionesPanel(){
     html += renderListaSolicitudesOtorgadas(solicitudesVisibles, cumpleanosOtorgadosVisibles, empleadosPorKey, puedeAprobar);
 
     html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario);
+
+    html += renderSeccionDotacionPorDia(empleadosVisibles, solicitudesVisibles, registrosHorasExtra, departamentoDeEmpleado, dotacionDesde, dotacionHasta);
 
     html += renderSeccionReportesAusencias();
 
@@ -17541,6 +17552,184 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
     </table>
     </div>
   </div></div>`;
+}
+
+// "¿Cuánta gente va a estar trabajando cada día?" — pensado para planificar
+// un rango (ej. una semana) sabiendo cuántos activos tiene cada departamento
+// y a cuántos de esos les toca estar ausentes ese día puntual (vacaciones,
+// día libre, permiso sin goce, cita médica, incapacidad, cumpleaños o día de
+// viaje, ya aprobados). Reutiliza el MISMO criterio que ya pinta el
+// calendario (etiquetaCalendarioParaDia) para que nunca queden
+// desincronizados: un día "SALE"/"ENTRA" cuenta como trabajado (es el último
+// día antes de irse o el primero al volver), solo las etiquetas de abajo
+// restan de la dotación.
+const ETIQUETAS_AUSENCIA_DOTACION = new Set(["VAC", "LIBRE", "CITA", "INCAP", "CUMP", "VIAJE"]);
+
+function calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO){
+  const infoPorEmpleado = {};
+  empleados.forEach(e => {
+    infoPorEmpleado[e.key] = {
+      depto: departamentoDeEmpleado(e) || "Sin departamento",
+      solicitudes: solicitudes.filter(s => s.EMPLEADO_KEY === e.key),
+      horas: registrosHorasExtra.filter(r => r.EMPLEADO_KEY === e.key),
+    };
+  });
+  // Mismo orden que el selector de departamento del panel (DEPARTAMENTOS_MINISTERIO)
+  // — cualquier valor que no caiga en esa lista (ej. "Sin departamento") va al final.
+  const deptos = [...new Set(empleados.map(e => infoPorEmpleado[e.key].depto))].sort((a, b) => {
+    const ia = DEPARTAMENTOS_MINISTERIO.indexOf(a), ib = DEPARTAMENTOS_MINISTERIO.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
+  const filas = [];
+  for (let d = new Date(desdeISO + "T00:00:00"); d <= new Date(hastaISO + "T00:00:00"); d.setDate(d.getDate() + 1)){
+    const fechaISO = isoDeFechaLocal(d);
+    let totalActivos = 0, totalPresentes = 0;
+    const porDepto = deptos.map(depto => {
+      const empleadosDepto = empleados.filter(e => infoPorEmpleado[e.key].depto === depto);
+      const ausentes = empleadosDepto.filter(e => {
+        const info = infoPorEmpleado[e.key];
+        const etiqueta = etiquetaCalendarioParaDia(fechaISO, info.solicitudes, info.horas);
+        return etiqueta && ETIQUETAS_AUSENCIA_DOTACION.has(etiqueta.texto);
+      });
+      const activos = empleadosDepto.length;
+      const presentes = activos - ausentes.length;
+      totalActivos += activos;
+      totalPresentes += presentes;
+      return { depto, activos, presentes, ausentesNombres: ausentes.map(e => nombreCompletoEmpleado(e) || e.key) };
+    });
+    filas.push({ fechaISO, porDepto, totalActivos, totalPresentes });
+  }
+  return filas;
+}
+
+function cambiarRangoDotacion(campo, valor){
+  if (campo === "desde") dotacionDesde = valor; else dotacionHasta = valor;
+  // Si queda invertido (desde > hasta), se ajusta el otro extremo en vez de
+  // dejar un rango vacío sin avisar.
+  if (dotacionDesde && dotacionHasta && dotacionHasta < dotacionDesde){
+    if (campo === "desde") dotacionHasta = dotacionDesde; else dotacionDesde = dotacionHasta;
+  }
+  renderDiasLibresVacacionesPanel();
+}
+
+const DIA_SEMANA_CORTO_DOTACION = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+function renderSeccionDotacionPorDia(empleados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO){
+  if (!empleados.length) return "";
+  const dias = calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO);
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">👥 Dotación por día</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Cuántas personas van a estar trabajando cada día del rango, por departamento — según las vacaciones/días libres ya aprobados. Pasá el mouse sobre "Presentes" para ver quién está ausente ese día.</p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+        <input type="date" value="${escapeHtml(desdeISO)}" onchange="cambiarRangoDotacion('desde', this.value);">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+        <input type="date" value="${escapeHtml(hastaISO)}" onchange="cambiarRangoDotacion('hasta', this.value);">
+      </label>
+      <button class="btn" onclick="exportarReporteDotacionPorDia();">⬇️ Exportar a Excel</button>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="border-collapse:collapse; font-size:11.5px; white-space:nowrap;">
+      <thead><tr>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Fecha</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Departamento</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Activos</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Presentes</th>
+      </tr></thead>
+      <tbody>
+        ${dias.map(dia => {
+          const fechaObj = new Date(dia.fechaISO + "T00:00:00");
+          const etiquetaFecha = `${DIA_SEMANA_CORTO_DOTACION[fechaObj.getDay()]} ${fmtFechaSimple(dia.fechaISO)}`;
+          const filasDepto = dia.porDepto.map((f, i) => `<tr>
+            ${i === 0 ? `<td rowspan="${dia.porDepto.length + 1}" style="padding:4px 8px; border:1px solid var(--paper-line); vertical-align:top; border-top:2px solid var(--navy-deep);">${escapeHtml(etiquetaFecha)}</td>` : ""}
+            <td style="padding:4px 8px; border:1px solid var(--paper-line);${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}">${escapeHtml(f.depto)}</td>
+            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}">${f.activos}</td>
+            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;${i===0 ? " border-top:2px solid var(--navy-deep);" : ""}" title="${f.ausentesNombres.length ? escapeHtml("Ausentes: " + f.ausentesNombres.join(", ")) : "Nadie ausente"}">${f.presentes}</td>
+          </tr>`).join("");
+          return filasDepto + `<tr style="font-weight:700; background:#F0ECE1;">
+            <td colspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);">Total</td>
+            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${dia.totalActivos}</td>
+            <td style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${dia.totalPresentes}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+    </div>
+    <div id="dotacion-status" style="font-size:12px; margin-top:6px;"></div>
+  </div></div>`;
+}
+
+async function exportarReporteDotacionPorDia(){
+  const status = document.getElementById("dotacion-status");
+  if (typeof ExcelJS === "undefined"){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de Excel.</span>`; return; }
+  if (!dotacionDesde || !dotacionHasta){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí ambas fechas.</span>`; return; }
+  try{
+    const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
+    const esJefatura = rolActual === "jefatura";
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
+
+    const [empleados, solicitudes, registrosHorasExtra] = await Promise.all([
+      cargarEmpleadosDB(), listarSolicitudesAusencia(), listarRegistrosHorasExtra(),
+    ]);
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {}; puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const departamentoDeEmpleado = emp => departamentoDeEmpleadoGenerico(emp, puestosPorKey);
+
+    // Mismo alcance por rol que el resto del panel: jefatura fija a su propio
+    // departamento; master/gerente respetan el filtro de departamento activo.
+    const deptoActivo = deptoJefatura || (diasLibresFiltroDepto === "todos" ? null : diasLibresFiltroDepto);
+    const empleadosVisibles = empleados.filter(e => !e.ARCHIVADO && (!deptoActivo || departamentoDeEmpleado(e) === deptoActivo));
+    if (!empleadosVisibles.length){ if (status) status.innerHTML = "No hay empleados activos en ese alcance."; return; }
+    const empleadosVisiblesKeys = new Set(empleadosVisibles.map(e => e.key));
+    const solicitudesVisibles = solicitudes.filter(s => empleadosVisiblesKeys.has(s.EMPLEADO_KEY));
+
+    const dias = calcularDotacionPorDia(empleadosVisibles, solicitudesVisibles, registrosHorasExtra, departamentoDeEmpleado, dotacionDesde, dotacionHasta);
+    if (!dias.length){ if (status) status.innerHTML = "No hay días en ese rango."; return; }
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Fecha","Departamento","Activos","Presentes","Ausentes (nombres)"];
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9", GRIS_TOTAL="FFEFEFEF";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("DOTACIÓN POR DÍA");
+    ws.columns = [{width:14},{width:22},{width:12},{width:12},{width:40}];
+    ws.mergeCells(1,1,1,COLUMNAS.length);
+    const t = ws.getCell(1,1); t.value = nombrePropiedad; t.fill={type:"pattern",pattern:"solid",fgColor:{argb:NEGRO}}; t.font={color:{argb:BLANCO},bold:true,size:13}; t.alignment={horizontal:"center"};
+    ws.mergeCells(2,1,2,COLUMNAS.length);
+    const st = ws.getCell(2,1); st.value = `Dotación por día — del ${fmtFechaDesdeDate(new Date(dotacionDesde+"T00:00:00"))} al ${fmtFechaDesdeDate(new Date(dotacionHasta+"T00:00:00"))}`; st.font={italic:true,size:10}; st.alignment={horizontal:"center"};
+    const hdr = ws.getRow(3);
+    COLUMNAS.forEach((c,i) => { const cell = hdr.getCell(i+1); cell.value=c; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_HEADER}}; cell.font={bold:true}; cell.alignment={horizontal:"center"}; cell.border=bordeCelda; });
+    let fila = 4;
+    dias.forEach(dia => {
+      dia.porDepto.forEach(f => {
+        [dia.fechaISO, f.depto, f.activos, f.presentes, f.ausentesNombres.join(", ")].forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
+        fila++;
+      });
+      const filaTotal = ws.getRow(fila);
+      ["Total", "", dia.totalActivos, dia.totalPresentes, ""].forEach((v,i) => {
+        const cell = filaTotal.getCell(i+1); cell.value=v; cell.border=bordeCelda; cell.font={bold:true}; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_TOTAL}};
+      });
+      fila++;
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    descargarBlobComoArchivo(blob, `dotacion_por_dia_${dotacionDesde}_a_${dotacionHasta}.xlsx`);
+    if (status) status.innerHTML = "Descargado.";
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar: ${escapeHtml(e.message)}</span>`; }
 }
 
 function renderSeccionReportesAusencias(){
