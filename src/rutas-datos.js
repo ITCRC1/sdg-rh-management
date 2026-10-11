@@ -51,6 +51,12 @@ const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
 const INCAPACIDAD_PREFIX = "incapacidad:";
 const EMPLEADO_PREFIX = "cat_empleado:";
 const PUESTO_PREFIX = "cat_puesto:";
+// Marca "ya vi esta alerta" de la campana de consultor (empleado
+// archivado/nuevo ingreso — ver calcularAlertasRRHHConsultor en app.js). Es
+// la ÚNICA escritura de propósito general que tiene el rol consultor: sigue
+// siendo de solo lectura en todo lo demás (ver puedeEscribirClave), igual que
+// firmar/rechazar contratos es su única otra excepción, aparte y angosta.
+const ALERTA_VISTA_PREFIX = "rrhh_alerta_vista:";
 
 async function valorDeClave(propiedad, clave) {
   const { rows } = await query(
@@ -162,12 +168,14 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
     if (actual && actual.ESTADO === "aprobada") return false;
   }
   // Consultor (Consultants: RRHH/planillas/contador jefe) es de solo
-  // lectura en TODO — ni PUEDEN_ESCRIBIR lo incluye, ni hay ninguna
+  // lectura en TODO — ni PUEDEN_ESCRIBIR lo incluye, ni hay ninguna otra
   // excepción para él aquí abajo (a diferencia de jefatura). Ve cualquier
   // propiedad (ver propiedadDe) pero nunca crea ni edita nada por esta vía.
-  // La única escritura que tendrá, más adelante, es firmar/rechazar un
-  // contrato (usuarios.puede_firmar_contratos) — una acción angosta y
-  // aparte, todavía sin construir, que no pasa por este chequeo genérico.
+  // Tiene otras dos escrituras angostas y aparte de este chequeo genérico:
+  // firmar/rechazar un contrato (usuarios.puede_firmar_contratos, ver
+  // emitidos.patch más abajo) y la de acá debajo, marcar como vista su propia
+  // alerta de "empleado archivado/nuevo ingreso".
+  if (usuario.rol === "consultor" && clave.startsWith(ALERTA_VISTA_PREFIX)) return true;
   if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
     return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);

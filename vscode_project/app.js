@@ -6480,6 +6480,86 @@ function empleadoElegibleParaColilla(fechaIngresoStr, checkDate){
 
 // Compartido entre el modal "Ver faltantes" y el banner del portal — evita
 // duplicar la carga de empleados/documentos y la lógica de elegibilidad.
+// --------------------------------------------------------------------------
+// Alertas de RR.HH. para consultor: "empleado archivado" / "nuevo ingreso".
+// A diferencia de colillas faltantes o contratos por vencer (que se resuelven
+// solos cuando alguien sube la colilla o renueva el contrato), archivar o dar
+// de alta a alguien es un hecho puntual — no hay nada que "se resuelva solo".
+// Por eso la alerta persiste hasta que consultor la marca a mano como
+// atendida (rrhh_alerta_vista:<tipo>:<empleadoKey>:<fechaISO del evento>,
+// ver marcarAlertaRRHHAtendida) — es la ÚNICA escritura de propósito general
+// que tiene ese rol (ver puedeEscribirClave en rutas-datos.js; la otra es
+// firmar/rechazar contratos, aparte y angosta también).
+//
+// ALERTAS_RRHH_DESDE_ISO es la fecha a partir de la cual un archivado/ingreso
+// genera alerta — sin este corte, activar esto por primera vez explotaría
+// con TODO el historial de la planilla (cada empleado que alguna vez se
+// archivó o fue contratado) de una sola vez. Lo de antes de esa fecha se
+// considera "historial", no "pendiente de revisar".
+const ALERTA_VISTA_PREFIX = "rrhh_alerta_vista:";
+const ALERTAS_RRHH_DESDE_ISO = "2026-10-11";
+
+async function calcularAlertasRRHHConsultor(){
+  const [empleados, vistasRes] = await Promise.all([
+    cargarEmpleadosDB(),
+    window.storage.list(ALERTA_VISTA_PREFIX, false),
+  ]);
+  const vistas = new Set((vistasRes && vistasRes.keys) || []);
+
+  const eventos = [];
+  empleados.forEach(emp => {
+    if (emp.ARCHIVADO && emp.FECHA_ARCHIVADO){
+      const fecha = parsearFechaEmpleado(emp.FECHA_ARCHIVADO);
+      const fechaEventoISO = fecha ? isoDeFechaLocal(fecha) : null;
+      if (fechaEventoISO && fechaEventoISO >= ALERTAS_RRHH_DESDE_ISO){
+        const eventKey = `${ALERTA_VISTA_PREFIX}archivado:${emp.key}:${fechaEventoISO}`;
+        if (!vistas.has(eventKey)) eventos.push({ tipo: "archivado", emp, fechaISO: fechaEventoISO, eventKey });
+      }
+    }
+    if (emp.FECHA_INGRESO_EMP){
+      const fecha = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+      const fechaEventoISO = fecha ? isoDeFechaLocal(fecha) : null;
+      if (fechaEventoISO && fechaEventoISO >= ALERTAS_RRHH_DESDE_ISO){
+        const eventKey = `${ALERTA_VISTA_PREFIX}ingreso:${emp.key}:${fechaEventoISO}`;
+        if (!vistas.has(eventKey)) eventos.push({ tipo: "ingreso", emp, fechaISO: fechaEventoISO, eventKey });
+      }
+    }
+  });
+  eventos.sort((a, b) => b.fechaISO.localeCompare(a.fechaISO));
+  return eventos;
+}
+
+async function abrirModalAlertasRRHH(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔔 Empleados archivados / nuevos ingresos";
+  body.innerHTML = `<div class="empty-state">Revisando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const eventos = await calcularAlertasRRHHConsultor();
+    if (!eventos.length){
+      body.innerHTML = `<div style="color:var(--leaf); font-weight:700;">✅ No hay empleados archivados ni ingresos nuevos sin revisar.</div>`;
+      return;
+    }
+    body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${eventos.length} evento(s) sin marcar como atendido(s).</div>` +
+      eventos.map(ev => `
+        <div id="alerta-rrhh-${escapeHtml(ev.eventKey)}" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+          <div style="font-size:12.5px;"><b>${escapeHtml(nombreCompletoEmpleado(ev.emp) || ev.emp.key)}</b> — ${ev.tipo === "archivado" ? "🗄️ archivado" : "🆕 nuevo ingreso"} el ${fmtFechaSimple(ev.fechaISO)}</div>
+          <div style="display:flex; gap:6px; flex-shrink:0;">
+            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="showTab('empleados');">Ver →</button>
+            <button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="marcarAlertaRRHHAtendida('${ev.eventKey}');">Marcar como atendida</button>
+          </div>
+        </div>`).join("");
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista: ${escapeHtml(e.message)}</div>`; }
+}
+
+async function marcarAlertaRRHHAtendida(eventKey){
+  try{
+    await window.storage.set(eventKey, "1", false);
+    await abrirModalAlertasRRHH();
+    if (typeof renderAppTopbar === "function") renderAppTopbar();
+  }catch(e){ statusMsg("No se pudo marcar como atendida: " + e.message, false); }
+}
+
 async function evaluarColillasFaltantes(){
   const hoy = new Date();
   const checkpoint = checkpointActualPlanilla(hoy);
@@ -12639,6 +12719,10 @@ async function renderAppTopbar(){
       const { faltantes } = await evaluarColillasFaltantes();
       alertas += faltantes.length;
     }
+    if (rol === "consultor"){
+      const eventosRRHH = await calcularAlertasRRHHConsultor();
+      alertas += eventosRRHH.length;
+    }
     const contratosRes = await window.storage.list("contrato:", false);
     const contratoKeys = (contratosRes && contratosRes.keys) || [];
     const contratos = await Promise.all(contratoKeys.map(async k => {
@@ -12752,6 +12836,59 @@ function renderSalidasYEntradasProximas(eventos, diasVentana){
   `).join("");
 }
 
+// Resumen de solicitudes pendientes (Días Libres y Vacaciones) para el
+// Dashboard — mismo alcance por departamento que el módulo real (jefatura
+// solo ve lo de su propio departamento; master/gerente ven todo). Muestra
+// como mucho MAX_FILAS para no inflar el panel; el resto se resume con un
+// enlace a "Ver todas" que lleva al módulo completo (showTab('vacaciones')).
+async function renderResumenSolicitudesPendientesInicio(rolActualInicio){
+  const MAX_FILAS = 6;
+  const esJefatura = rolActualInicio === "jefatura";
+  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+  const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : "";
+
+  const [empleados, solicitudes] = await Promise.all([cargarEmpleadosDB(), listarSolicitudesAusencia()]);
+  let visibles = empleados.filter(e => !e.ARCHIVADO);
+  if (esJefatura){
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {};
+    puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    visibles = visibles.filter(e => departamentoDeEmpleadoGenerico(e, puestosPorKey) === deptoJefatura);
+  }
+  const empleadosPorKey = {};
+  visibles.forEach(e => { empleadosPorKey[e.key] = e; });
+
+  const pendientes = solicitudes
+    .filter(s => s.ESTADO === "pendiente" && empleadosPorKey[s.EMPLEADO_KEY])
+    .sort((a, b) => (a.FECHA_INICIO || "").localeCompare(b.FECHA_INICIO || ""));
+
+  if (!pendientes.length){
+    return `<div class="empty-state" style="padding:10px 0; font-size:12px;">No hay solicitudes pendientes.</div>`;
+  }
+
+  const filasHtml = pendientes.slice(0, MAX_FILAS).map(s => {
+    const emp = empleadosPorKey[s.EMPLEADO_KEY];
+    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+    return `<div class="dash-alert-row" onclick="showTab('vacaciones');">
+      <span class="sev w"></span>
+      <span class="txt">${escapeHtml(nombreCompletoEmpleado(emp) || s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)} (${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)})</span>
+      <span class="go">Ver →</span>
+    </div>`;
+  }).join("");
+
+  const restantes = pendientes.length - MAX_FILAS;
+  const verTodas = restantes > 0
+    ? `<div class="dash-alert-row" style="font-weight:700;" onclick="showTab('vacaciones');"><span class="sev w"></span><span class="txt">+${restantes} más</span><span class="go">Ver todas →</span></div>`
+    : "";
+  return filasHtml + verTodas;
+}
+
 // Estado del filtro del widget "Quién sale y quién entra" del Dashboard —
 // se acuerda mientras dura la sesión (como diasLibresMesCalendario) para que
 // quedarse viendo Inicio y que algo más lo repinte (otra alerta, etc.) no
@@ -12861,6 +12998,17 @@ async function renderInicio(){
     if (colillasFaltantesCount > 0){
       alertRows.push(`<div class="dash-alert-row" onclick="mostrarModalColillasFaltantes();"><span class="sev w"></span><span class="txt">${colillasFaltantesCount} empleado(s) sin colilla del período actual</span><span class="go">Ver →</span></div>`);
     }
+    // Exclusivo de consultor (ver calcularAlertasRRHHConsultor) — master/
+    // gerente ya ven estos cambios directo en "Empleados"/"Archivo", así que
+    // no se les duplica acá.
+    if (rolActualInicio === "consultor"){
+      try{
+        const eventosRRHHConsultor = await calcularAlertasRRHHConsultor();
+        if (eventosRRHHConsultor.length > 0){
+          alertRows.push(`<div class="dash-alert-row" onclick="abrirModalAlertasRRHH();"><span class="sev w"></span><span class="txt">${eventosRRHHConsultor.length} empleado(s) archivado(s)/con ingreso nuevo sin revisar</span><span class="go">Ver →</span></div>`);
+        }
+      }catch(e){ /* si falla el conteo, no se muestra esta alerta — nunca debe romper el Inicio */ }
+    }
     if (rolActualInicio === "master" || rolActualInicio === "gerente" || rolActualInicio === "jefatura"){
       try{
         const registrosHorasExtra = await listarRegistrosHorasExtra();
@@ -12898,9 +13046,8 @@ async function renderInicio(){
       </div>
     </div>`;
 
-    // "Solicitudes pendientes" sigue pendiente de implementar — pero "Próximos
-    // eventos" ya se resolvió con el resumen de "Quién sale y quién entra"
-    // (ver calcularSalidasYEntradas): pedido para que gerencia/master y
+    // "Próximos eventos" se resolvió con el resumen de "Quién sale y quién
+    // entra" (ver calcularSalidasYEntradas): pedido para que gerencia/master y
     // jefatura lo tengan a mano para la operación diaria, con fecha de inicio
     // y ventana elegibles (no solo "hoy en adelante"), sin entrar al
     // calendario de Días Libres y Vacaciones. Exclusivo de Corcovado y de
@@ -12916,10 +13063,24 @@ async function renderInicio(){
       }catch(e){ bloqueSalidasEntradas = `<div class="empty-state" style="padding:10px 0; font-size:12px;">No se pudo calcular quién sale y quién entra.</div>`; }
     }
 
+    // Resumen de "Solicitudes pendientes" (Días Libres y Vacaciones) para no
+    // tener que entrar a ese módulo solo para ver si hay algo por aprobar —
+    // mismo público que "Quién sale y quién entra" (master/gerente/jefatura),
+    // pero sin restringir a Corcovado: vacaciones/días libres aplica a
+    // cualquier propiedad. jefatura ve solo lo de su propio departamento,
+    // igual que en el módulo real (ver renderDiasLibresVacacionesPanel).
+    const puedeVerSolicitudesPendientesInicio = rolActualInicio === "master" || rolActualInicio === "gerente" || rolActualInicio === "jefatura";
+    let bloqueSolicitudesPendientes = `<div class="empty-state" style="padding:10px 0; font-size:12px;">Disponible solo para master, gerencia y jefatura.</div>`;
+    if (puedeVerSolicitudesPendientesInicio){
+      try{
+        bloqueSolicitudesPendientes = await renderResumenSolicitudesPendientesInicio(rolActualInicio);
+      }catch(e){ bloqueSolicitudesPendientes = `<div class="empty-state" style="padding:10px 0; font-size:12px;">No se pudieron cargar las solicitudes pendientes.</div>`; }
+    }
+
     html += `<div class="dash-row">
       <div class="dash-panel">
-        <div class="dash-panel-title">Solicitudes pendientes</div>
-        <div class="empty-state" style="padding:10px 0; font-size:12px;">⏳ Pendiente — depende de los módulos de Vacaciones y Días libres.</div>
+        <div class="dash-panel-title">📋 Solicitudes pendientes</div>
+        ${bloqueSolicitudesPendientes}
       </div>
       <div class="dash-panel">
         <div class="dash-panel-title">🚪 Quién sale y quién entra</div>
