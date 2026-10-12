@@ -4932,6 +4932,7 @@ function showTab(which){
   document.getElementById("pendiente-panel").style.display = MODULOS_PENDIENTES[which] ? "block" : "none";
   document.getElementById("diaslibresvacaciones-panel").style.display = which === "vacaciones" ? "block" : "none";
   document.getElementById("incapacidades-panel").style.display = which === "incapacidades" ? "block" : "none";
+  document.getElementById("horarios-panel").style.display = which === "horarios" ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
   document.getElementById("liquidacionform-toolbar").style.display = (which === "liquidacionform") ? "flex" : "none";
@@ -4952,10 +4953,11 @@ function showTab(which){
     datos:"datos",
     planilla:"planilla",
     vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla", reloj:"planilla",
+    horarios:"horarios",
     reporte:"reportes",
     faq:"configuracion", manual:"configuracion",
   };
-  ["inicio","contratos","empleados","documentos","datos","planilla","vacaciones","incapacidades","reportes","configuracion"].forEach(g => {
+  ["inicio","contratos","empleados","documentos","datos","planilla","vacaciones","incapacidades","horarios","reportes","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
@@ -4992,6 +4994,7 @@ function showTab(which){
   if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
   if (which === "vacaciones") renderDiasLibresVacacionesPanel();
   if (which === "incapacidades") renderIncapacidadesPanel();
+  if (which === "horarios") renderHorariosPanel();
 }
 
 // ---------- dropdown navbar ----------
@@ -15472,6 +15475,305 @@ async function eliminarIncapacidad(key){
     statusMsg("Incapacidad eliminada.");
     renderIncapacidadesPanel();
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
+}
+
+// ==========================================================================
+// Horarios — turnos fijos por departamento (catálogo) + asignación día a día
+// por empleado. jefatura crea/asigna solo para su propio departamento;
+// master/gerente ven y gestionan todos, o uno a la vez con el mismo filtro
+// de departamento que ya usa Días Libres y Vacaciones (ver
+// renderDiasLibresVacacionesPanel). El servidor es quien de verdad impone el
+// alcance de jefatura (ver puedeEscribirClave/filtrarFilasPorEquipo en
+// rutas-datos.js); el filtro de acá es solo para no mostrarle a nadie una
+// pantalla con datos que de todas formas el servidor le negaría.
+// ==========================================================================
+const HORARIO_PREFIX = "cat_horario:";
+const HORARIO_ASIGNADO_PREFIX = "horario_asignado:";
+
+let horariosFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
+let horariosSemanaDesde = null; // ISO del lunes de la semana activa en la grilla de asignación
+let horariosDeptoActivoActual = null; // departamento efectivo del último render (ver guardarNuevoHorario)
+
+async function listarHorarios(){
+  const res = await window.storage.list(HORARIO_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const horarios = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return horarios.filter(Boolean);
+}
+
+async function listarHorariosAsignados(){
+  const res = await window.storage.list(HORARIO_ASIGNADO_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const asignados = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return asignados.filter(Boolean);
+}
+
+// Lunes de la semana de `d` (0=domingo…6=sábado en Date#getDay) — la grilla
+// de asignación siempre arranca en lunes, sin importar qué día es hoy.
+function lunesDeLaSemana(d){
+  const date = new Date(d);
+  const dia = date.getDay();
+  const offset = dia === 0 ? -6 : 1 - dia;
+  date.setDate(date.getDate() + offset);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+async function guardarNuevoHorario(){
+  const status = document.getElementById("horarios-status");
+  const nombre = ((document.getElementById("horario-nuevo-nombre")||{}).value || "").trim();
+  const inicio = (document.getElementById("horario-nuevo-inicio")||{}).value;
+  const fin = (document.getElementById("horario-nuevo-fin")||{}).value;
+  const selectorDepto = document.getElementById("horario-nuevo-depto");
+  const depto = selectorDepto ? selectorDepto.value : horariosDeptoActivoActual;
+  if (!nombre || !inicio || !fin){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá nombre, hora de inicio y hora de fin.</span>`; return; }
+  if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
+  try{
+    const key = HORARIO_PREFIX + "h" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, HORA_INICIO: inicio, HORA_FIN: fin, DEPARTAMENTO_MINISTERIO: depto }), false);
+    statusMsg("Turno creado.");
+    renderHorariosPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
+}
+
+// Exclusivo de master/gerente (ver puedeEliminar en renderSeccionTurnosFijos)
+// — jefatura nunca puede borrar nada vía DELETE (A.requiereEscritura en el
+// servidor la excluye por completo, sin importar la clave).
+async function eliminarHorario(key){
+  if (!confirm("¿Eliminar este turno fijo? Los días ya asignados con él quedan sin turno (no se borran, pero dejan de mostrar un nombre).")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Turno eliminado.");
+    renderHorariosPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
+}
+
+// Guarda/quita la asignación de un empleado para un día puntual. Vacío
+// ("") significa "sin asignar" — ni jefatura ni nadie más borra la clave acá
+// (jefatura no puede hacer DELETE de todas formas); simplemente se guarda
+// vacía, y listarHorariosAsignados ya la trata como inexistente. Separada de
+// guardarHorarioAsignado (que sí avisa con el toast) para que
+// aplicarHorarioASemana pueda llamarla 7 veces seguidas sin spamear 7 avisos.
+async function fijarHorarioAsignado(empKey, fechaISO, horarioKey){
+  const key = `${HORARIO_ASIGNADO_PREFIX}${empKey}:${fechaISO}`;
+  if (!horarioKey){
+    await window.storage.set(key, "", false);
+  } else {
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    await window.storage.set(key, JSON.stringify({
+      HORARIO_KEY: horarioKey,
+      ASIGNADO_POR: sesion ? sesion.email : "",
+      ASIGNADO_EN: new Date().toISOString(),
+    }), false);
+  }
+}
+
+async function guardarHorarioAsignado(empKey, fechaISO, horarioKey){
+  try{
+    await fijarHorarioAsignado(empKey, fechaISO, horarioKey);
+    statusMsg("Horario actualizado.");
+  }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
+}
+
+// Botón "📋 Semana" de cada fila: toma el turno elegido en el <select> de
+// esa fila y lo replica en los 7 días de la semana que está en pantalla —
+// pensado para quien tiene horario fijo (mismo turno todos los días), para
+// no tener que elegirlo 7 veces. Sobrescribe lo que hubiera asignado esos
+// días; por eso pide confirmación antes.
+async function aplicarHorarioASemana(empKey){
+  const sel = document.getElementById(`replicar-horario-${empKey}`);
+  const horarioKey = sel ? sel.value : "";
+  if (!horarioKey){ statusMsg("Elegí un turno para aplicar a toda la semana.", false); return; }
+  if (!confirm("¿Aplicar este turno a los 7 días de esta semana para este empleado? Sobrescribe lo que ya tenía asignado esos días.")) return;
+  try{
+    for (let i = 0; i < 7; i++){
+      const d = new Date(horariosSemanaDesde + "T00:00:00");
+      d.setDate(d.getDate() + i);
+      await fijarHorarioAsignado(empKey, isoDeFechaLocal(d), horarioKey);
+    }
+    statusMsg("Turno aplicado a toda la semana.");
+    renderHorariosPanel();
+  }catch(e){ statusMsg("No se pudo aplicar a toda la semana: " + e.message, false); }
+}
+
+function renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar, puedeEliminar){
+  const necesitaSelectorDepto = !deptoActivo;
+  const filasHtml = horariosVisibles.length
+    ? horariosVisibles.slice()
+        .sort((a, b) => (a.DEPARTAMENTO_MINISTERIO||"").localeCompare(b.DEPARTAMENTO_MINISTERIO||"") || (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"))
+        .map(h => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+          <div style="font-size:12.5px;"><b>${escapeHtml(h.NOMBRE||"")}</b> — ${escapeHtml(h.HORA_INICIO||"")} a ${escapeHtml(h.HORA_FIN||"")}${necesitaSelectorDepto ? ` · ${escapeHtml(h.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
+          ${puedeEliminar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarHorario('${h.key}')">🗑️ Eliminar</button>` : ""}
+        </div>`).join("")
+    : `<div class="empty-state" style="padding:8px 0;">No hay turnos fijos creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
+
+  const formHtml = puedeGestionar ? `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre del turno
+        <input type="text" id="horario-nuevo-nombre" placeholder="Ej. Turno Mañana" style="min-width:160px;">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de inicio
+        <input type="time" id="horario-nuevo-inicio">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de fin
+        <input type="time" id="horario-nuevo-fin">
+      </label>
+      ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
+        <select id="horario-nuevo-depto">
+          <option value="">— Elegí —</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </label>` : ""}
+      <button class="btn primary" onclick="guardarNuevoHorario();">➕ Agregar turno</button>
+    </div>` : "";
+
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🕐 Turnos fijos${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
+    ${filasHtml}
+    ${formHtml}
+    <div id="horarios-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
+}
+
+const DIA_SEMANA_CORTO_HORARIOS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados, departamentoDeEmpleado, semanaDesdeISO, puedeGestionar){
+  const dias = [];
+  for (let i = 0; i < 7; i++){
+    const d = new Date(semanaDesdeISO + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    dias.push(isoDeFechaLocal(d));
+  }
+  const asignadosPorClave = {};
+  asignados.forEach(a => { if (a.HORARIO_KEY) asignadosPorClave[a.key] = a.HORARIO_KEY; });
+
+  const empleadosOrdenados = empleadosVisibles.slice().sort(compararPorApellido);
+  const semanaAnterior = new Date(semanaDesdeISO + "T00:00:00"); semanaAnterior.setDate(semanaAnterior.getDate() - 7);
+  const semanaSiguiente = new Date(semanaDesdeISO + "T00:00:00"); semanaSiguiente.setDate(semanaSiguiente.getDate() + 7);
+  const semanaAnteriorISO = isoDeFechaLocal(semanaAnterior);
+  const semanaSiguienteISO = isoDeFechaLocal(semanaSiguiente);
+
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+      <div style="font-weight:700; color:var(--navy-deep);">📅 Asignar horario — semana del ${fmtFechaSimple(semanaDesdeISO)}</div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn" onclick="horariosSemanaDesde='${semanaAnteriorISO}'; renderHorariosPanel();">← Semana anterior</button>
+        <button class="btn" onclick="horariosSemanaDesde='${semanaSiguienteISO}'; renderHorariosPanel();">Semana siguiente →</button>
+      </div>
+    </div>
+    ${!empleadosOrdenados.length ? `<div class="empty-state">No hay empleados activos en este alcance.</div>` : `
+    <div style="overflow-x:auto;">
+    <table style="border-collapse:collapse; font-size:11px;">
+      <thead><tr>
+        <th style="position:sticky; left:0; background:var(--paper); padding:4px 8px; text-align:left; border:1px solid var(--paper-line);">Empleado</th>
+        ${dias.map(d => { const dObj = new Date(d + "T00:00:00"); return `<th style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${DIA_SEMANA_CORTO_HORARIOS[dObj.getDay()]}<br>${dObj.getDate()}</th>`; }).join("")}
+      </tr></thead>
+      <tbody>
+        ${empleadosOrdenados.map(emp => {
+          const deptoEmp = departamentoDeEmpleado(emp) || "Sin departamento";
+          const horariosDelDepto = horarios.filter(h => h.DEPARTAMENTO_MINISTERIO === deptoEmp);
+          return `<tr>
+            <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;">
+              <div>${escapeHtml(nombreCompletoEmpleado(emp)||emp.key)}</div>
+              ${puedeGestionar && horariosDelDepto.length ? `
+              <div style="display:flex; gap:4px; margin-top:4px;">
+                <select id="replicar-horario-${emp.key}" style="font-size:9.5px; max-width:96px; padding:1px;" title="Elegí un turno para aplicar a toda la semana">
+                  <option value="">Turno…</option>
+                  ${horariosDelDepto.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)}</option>`).join("")}
+                </select>
+                <button class="btn" style="font-size:9.5px; padding:1px 6px;" onclick="aplicarHorarioASemana('${emp.key}')" title="Aplica el turno elegido a los 7 días de esta semana">📋 Semana</button>
+              </div>` : ""}
+            </td>
+            ${dias.map(fechaISO => {
+              const claveAsignado = `${HORARIO_ASIGNADO_PREFIX}${emp.key}:${fechaISO}`;
+              const horarioKeyActual = asignadosPorClave[claveAsignado] || "";
+              if (!puedeGestionar){
+                const h = horariosDelDepto.find(x => x.key === horarioKeyActual);
+                return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${h ? escapeHtml(h.NOMBRE) : "—"}</td>`;
+              }
+              return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">
+                <select style="font-size:10.5px; max-width:120px;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}', this.value)">
+                  <option value="">—</option>
+                  ${horariosDelDepto.map(h => `<option value="${h.key}"${h.key===horarioKeyActual?" selected":""}>${escapeHtml(h.NOMBRE)}</option>`).join("")}
+                </select>
+              </td>`;
+            }).join("")}
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+    </div>`}
+  </div></div>`;
+}
+
+async function renderHorariosPanel(){
+  const panel = document.getElementById("horarios-panel");
+  if (!panel) return;
+  const _scrollY = window.scrollY;
+  panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
+    const esJefatura = rolActual === "jefatura";
+    const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
+
+    const [empleados, puestos, horarios, asignados] = await Promise.all([
+      cargarEmpleadosDB(),
+      cargarPuestosDB(),
+      listarHorarios(),
+      listarHorariosAsignados(),
+    ]);
+    const puestosPorKey = {};
+    puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const departamentoDeEmpleado = emp => departamentoDeEmpleadoGenerico(emp, puestosPorKey);
+
+    if (!horariosSemanaDesde) horariosSemanaDesde = isoDeFechaLocal(lunesDeLaSemana(new Date()));
+
+    // Ámbito por rol, mismo criterio que Días Libres y Vacaciones: jefatura
+    // fija a su propio departamento; master/gerente eligen "todos" o uno
+    // específico.
+    const deptoActivo = deptoJefatura || (horariosFiltroDepto === "todos" ? null : horariosFiltroDepto);
+    horariosDeptoActivoActual = deptoActivo;
+    const empleadosVisibles = empleados.filter(e => !e.ARCHIVADO && (!deptoActivo || departamentoDeEmpleado(e) === deptoActivo));
+    const horariosVisibles = horarios.filter(h => !deptoActivo || h.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const puedeGestionar = esJefatura || puedeAprobar;
+
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🕐 Horarios</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Turnos fijos por departamento y su asignación día a día para el equipo.</div>
+    </div>`;
+
+    if (!esJefatura){
+      html += `<div style="margin-bottom:12px;">
+        <select onchange="horariosFiltroDepto=this.value; renderHorariosPanel();">
+          <option value="todos"${horariosFiltroDepto==="todos"?" selected":""}>Todos los departamentos</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}"${horariosFiltroDepto===d?" selected":""}>${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </div>`;
+    }
+
+    html += renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar, puedeAprobar);
+    html += renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados, departamentoDeEmpleado, horariosSemanaDesde, puedeGestionar);
+
+    panel.innerHTML = html;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo: ${escapeHtml(e.message || "")}</div>`;
+  }finally{
+    requestAnimationFrame(() => window.scrollTo(0, _scrollY));
+  }
 }
 
 async function renderIncapacidadesPanel(){

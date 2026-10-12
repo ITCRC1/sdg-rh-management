@@ -57,6 +57,15 @@ const PUESTO_PREFIX = "cat_puesto:";
 // siendo de solo lectura en todo lo demás (ver puedeEscribirClave), igual que
 // firmar/rechazar contratos es su única otra excepción, aparte y angosta.
 const ALERTA_VISTA_PREFIX = "rrhh_alerta_vista:";
+// Módulo "Horarios" (ver renderHorariosPanel en app.js): cat_horario: es el
+// catálogo de turnos fijos (plantillas con nombre/hora inicio/hora fin), cada
+// uno etiquetado con el departamento al que pertenece. horario_asignado:
+// <empleadoKey>:<fechaISO> guarda qué turno le toca a ese empleado ese día
+// puntual. jefatura puede crear/editar ambos, pero SOLO dentro de su propio
+// departamento — igual alcance que ya tiene para horas_extra:/
+// solicitud_ausencia: (ver puedeEscribirClave y filtrarFilasPorEquipo).
+const HORARIO_PREFIX = "cat_horario:";
+const HORARIO_ASIGNADO_PREFIX = "horario_asignado:";
 
 async function valorDeClave(propiedad, clave) {
   const { rows } = await query(
@@ -139,6 +148,22 @@ async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departam
   return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
 }
 
+// Igual que arriba, para horario_asignado:<empleadoKey>:<fechaISO>.
+async function horarioAsignadoPerteneceAEquipo(propiedad, claveAsignado, departamentoLider, cedulaPropia) {
+  const empleadoKey = claveAsignado.split(":")[1] || "";
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
+}
+
+// A diferencia de los de arriba, cat_horario: no es un dato "de" un empleado
+// — es una plantilla de turno (nombre + hora inicio/fin) que jefatura crea
+// para SU departamento. Acá se compara el departamento que trae el propio
+// registro del turno contra el de la jefatura, no el de ningún empleado.
+async function horarioPerteneceAEquipo(propiedad, claveHorario, departamentoLider) {
+  if (!departamentoLider) return false;
+  const horario = await valorDeClave(propiedad, claveHorario);
+  return !!horario && horario.DEPARTAMENTO_MINISTERIO === departamentoLider;
+}
+
 // ¿Puede este usuario escribir en esta clave? master/gerente: todo, como
 // siempre. jefatura: solo horas_extra: de su propio departamento (guardado
 // en usuarios.puesto — pese al nombre de la columna, para una cuenta de
@@ -201,6 +226,24 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   // nunca registrar ni editar una incapacidad — no es una decisión de la
   // empresa, así que ni siquiera master/gerente la "aprueban", y jefatura
   // queda completamente afuera de escribirla.
+  // Horarios: jefatura puede crear/editar turnos fijos (cat_horario:) y
+  // asignarlos día a día (horario_asignado:) — pero únicamente dentro de su
+  // propio departamento. Para cat_horario: el departamento sale del payload
+  // que está guardando (todavía no existe un registro previo si es un turno
+  // nuevo); para horario_asignado: sale de a qué equipo pertenece el
+  // empleado de esa clave, igual que el resto de prefijos de arriba.
+  if (usuario.rol === "jefatura" && clave.startsWith(HORARIO_PREFIX) && typeof valorNuevo === "string") {
+    let nuevo = null;
+    try {
+      nuevo = JSON.parse(valorNuevo);
+    } catch (e) {
+      return false;
+    }
+    return !!nuevo && nuevo.DEPARTAMENTO_MINISTERIO === usuario.puesto;
+  }
+  if (usuario.rol === "jefatura" && clave.startsWith(HORARIO_ASIGNADO_PREFIX)) {
+    return horarioAsignadoPerteneceAEquipo(propiedad, clave, usuario.puesto);
+  }
   return false;
 }
 
@@ -218,6 +261,10 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
       ? await incapacidadPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
       : fila.clave.startsWith(EMPLEADO_PREFIX)
       ? await empleadoClavePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
+      : fila.clave.startsWith(HORARIO_ASIGNADO_PREFIX)
+      ? await horarioAsignadoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
+      : fila.clave.startsWith(HORARIO_PREFIX)
+      ? await horarioPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
       : await horaExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula);
     if (pertenece) resultado.push(fila);
   }
@@ -225,14 +272,15 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
 }
 
 // Una jefatura no ve "la página de Recursos Humanos" — solo horas extra, el
-// módulo de días libres/vacaciones, y (solo lectura) el historial de
-// incapacidades de su equipo, para el cálculo de pago en colillas. Por eso
-// su lectura queda limitada a estos 5 prefijos: horas_extra:,
+// módulo de días libres/vacaciones, horarios de su equipo, y (solo lectura)
+// el historial de incapacidades de su equipo, para el cálculo de pago en
+// colillas. Por eso su lectura queda limitada a estos prefijos: horas_extra:,
 // solicitud_ausencia: e incapacidad: (lo suyo, filtrado por equipo — ver
-// filtrarFilasPorEquipo), y cat_empleado:/cat_puesto: (para poder resolver
-// nombre, puesto y departamento de su propio equipo — nada de contratos,
-// documentos, otros catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX];
+// filtrarFilasPorEquipo), cat_horario:/horario_asignado: (ídem), y
+// cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
+// departamento de su propio equipo — nada de contratos, documentos, otros
+// catálogos, etc.).
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, HORARIO_ASIGNADO_PREFIX];
 
 // Un "empleado" (portal de autoservicio) no tiene "página de RH" tampoco —
 // solo su propio expediente (cat_empleado:<su clave>, exacta, nunca la lista
@@ -393,7 +441,7 @@ router.get("/", async (req, res, next) => {
     // nombre de gente de otros departamentos no aparezca ni siquiera en
     // pantallas que solo listan empleados, como el calendario de Días Libres.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
-      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX));
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX));
     // Un empleado solo ve sus propias filas — nunca las de un compañero,
     // aunque pida el mismo prefijo que vería un master/gerente.
     const filtrarPropias = req.usuario.rol === "empleado" &&
@@ -468,6 +516,14 @@ router.get("/:clave(*)", async (req, res, next) => {
     if (req.usuario.rol === "jefatura" && clave.startsWith(EMPLEADO_PREFIX)) {
       const enSuEquipo = await empleadoClavePerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese empleado no es de tu equipo.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(HORARIO_ASIGNADO_PREFIX)) {
+      const enSuEquipo = await horarioAsignadoPerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(HORARIO_PREFIX)) {
+      const enSuEquipo = await horarioPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese turno no es de tu departamento.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "empleado" && !esClavePropiaDeEmpleado(clave, req.usuario.empleadoClave)) {
       return res.status(403).json({ error: "Ese registro no es tuyo.", codigo: "sin_permiso" });
