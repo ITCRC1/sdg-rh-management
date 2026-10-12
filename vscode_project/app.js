@@ -15552,6 +15552,7 @@ const HORARIO_ASIGNADO_PREFIX = "horario_asignado:";
 let horariosFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
 let horariosSemanaDesde = null; // ISO del lunes de la semana activa en la grilla de asignación
 let horariosDeptoActivoActual = null; // departamento efectivo del último render (ver guardarNuevoHorario/guardarNuevoLugarTrabajo)
+let horariosCacheParaModal = { empleadosVisibles: [], horariosVisibles: [], lugaresVisibles: [], deptoActivo: null, semanaDesdeISO: null }; // ver abrirModalAsignacionMasiva
 
 // `propiedadOverride` existe para que "Mi información" (construirHtmlMiInformacion)
 // pueda resolver el horario de un master/gerente cuya propia ficha vive en
@@ -15947,6 +15948,108 @@ async function confirmarAsignacionRapida(){
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo asignar: ${escapeHtml(e.message)}</span>`; }
 }
 
+function marcarTodosLosCheckbox(selector, marcar){
+  document.querySelectorAll(selector).forEach(cb => { cb.checked = marcar; });
+}
+
+// Modal "➕ Añadir a varios" — reutiliza el modal genérico #modal-incompletos
+// (mismo patrón que "Colillas de pago faltantes" y otros). A diferencia de
+// "⚡ Asignación rápida" (un solo empleado a la vez), acá se elige lugar +
+// turno + días UNA vez y se aplica a TODOS los empleados marcados de la
+// lista — pensado para cuando varios comparten exactamente el mismo
+// lugar/turno esa semana (ej. todo el turno de mañana de Seguridad).
+function abrirModalAsignacionMasiva(){
+  const { empleadosVisibles, horariosVisibles, lugaresVisibles, deptoActivo, semanaDesdeISO } = horariosCacheParaModal;
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "👥 Asignar horario a varios empleados";
+  const body = document.getElementById("modal-incompletos-body");
+
+  if (!deptoActivo){
+    body.innerHTML = `<div class="empty-state">Elegí un departamento específico arriba (no "Todos los departamentos") para usar esto.</div>`;
+    document.getElementById("modal-incompletos").classList.add("open");
+    return;
+  }
+  if (!lugaresVisibles.length || !horariosVisibles.length){
+    body.innerHTML = `<div class="empty-state">Creá primero al menos un lugar de trabajo y un turno para ${escapeHtml(deptoActivo)}.</div>`;
+    document.getElementById("modal-incompletos").classList.add("open");
+    return;
+  }
+  if (!empleadosVisibles.length){
+    body.innerHTML = `<div class="empty-state">No hay empleados activos en este departamento.</div>`;
+    document.getElementById("modal-incompletos").classList.add("open");
+    return;
+  }
+
+  const empleadosOrdenados = empleadosVisibles.slice().sort(compararPorApellido);
+  const dias = [];
+  for (let i = 0; i < 7; i++){
+    const d = new Date(semanaDesdeISO + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    const fechaISO = isoDeFechaLocal(d);
+    dias.push({ fechaISO, etiqueta: `${DIA_SEMANA_CORTO_HORARIOS[d.getDay()]} ${fmtFechaSimple(fechaISO)}` });
+  }
+
+  body.innerHTML = `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Lugar de trabajo
+        <select id="asignacion-masiva-lugar">
+          <option value="">— Elegí —</option>
+          ${lugaresVisibles.map(l => `<option value="${l.key}">${escapeHtml(l.NOMBRE)}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Turno
+        <select id="asignacion-masiva-turno">
+          <option value="">— Elegí —</option>
+          ${horariosVisibles.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:4px;">¿Qué días de esta semana?</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+      ${dias.map(d => `<label style="font-size:11px; display:flex; align-items:center; gap:3px;">
+        <input type="checkbox" class="asignacion-masiva-dia" value="${d.fechaISO}"> ${d.etiqueta}
+      </label>`).join("")}
+      <button class="btn" style="padding:3px 9px; font-size:11px;" onclick="marcarTodosLosCheckbox('.asignacion-masiva-dia', true)">Toda la semana</button>
+      <button class="btn" style="padding:3px 9px; font-size:11px;" onclick="marcarTodosLosCheckbox('.asignacion-masiva-dia', false)">Ninguno</button>
+    </div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+      <span>¿A quiénes?</span>
+      <span>
+        <button class="btn" style="padding:3px 9px; font-size:11px;" onclick="marcarTodosLosCheckbox('.asignacion-masiva-empleado', true)">Marcar todos</button>
+        <button class="btn" style="padding:3px 9px; font-size:11px;" onclick="marcarTodosLosCheckbox('.asignacion-masiva-empleado', false)">Ninguno</button>
+      </span>
+    </div>
+    <div style="max-height:220px; overflow-y:auto; border:1px solid var(--paper-line); border-radius:6px; padding:8px; margin-bottom:10px;">
+      ${empleadosOrdenados.map(e => `<label style="font-size:12px; display:flex; align-items:center; gap:6px; padding:3px 0;">
+        <input type="checkbox" class="asignacion-masiva-empleado" value="${e.key}"> ${escapeHtml(nombreCompletoEmpleado(e) || e.key)}
+      </label>`).join("")}
+    </div>
+    <button class="btn primary" onclick="confirmarAsignacionMasiva();">✅ Asignar a los marcados</button>
+    <div id="asignacion-masiva-status" style="font-size:12px; margin-top:8px;"></div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+}
+
+async function confirmarAsignacionMasiva(){
+  const status = document.getElementById("asignacion-masiva-status");
+  const lugarKey = (document.getElementById("asignacion-masiva-lugar")||{}).value;
+  const horarioKey = (document.getElementById("asignacion-masiva-turno")||{}).value;
+  const dias = Array.from(document.querySelectorAll(".asignacion-masiva-dia:checked")).map(cb => cb.value);
+  const empleadosKeys = Array.from(document.querySelectorAll(".asignacion-masiva-empleado:checked")).map(cb => cb.value);
+  if (!lugarKey || !horarioKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí lugar y turno.</span>`; return; }
+  if (!dias.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Marcá al menos un día.</span>`; return; }
+  if (!empleadosKeys.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Marcá al menos un empleado.</span>`; return; }
+  if (!confirm(`¿Asignar a ${empleadosKeys.length} empleado(s) en ${dias.length} día(s)? Esto sobrescribe lo que ya tuvieran asignado esos días.`)) return;
+  try{
+    for (const empKey of empleadosKeys){
+      for (const fechaISO of dias){
+        await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
+      }
+    }
+    statusMsg(`Asignado a ${empleadosKeys.length} empleado(s).`);
+    cerrarModalIncompletos();
+    renderHorariosPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo asignar: ${escapeHtml(e.message)}</span>`; }
+}
+
 function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, semanaDesdeISO, puedeGestionar){
   const dias = [];
   for (let i = 0; i < 7; i++){
@@ -15967,6 +16070,7 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
       <div style="font-weight:700; color:var(--navy-deep);">📅 Asignar horario — semana del ${fmtFechaSimple(semanaDesdeISO)}</div>
       <div style="display:flex; gap:6px;">
+        ${puedeGestionar ? `<button class="btn primary" onclick="abrirModalAsignacionMasiva();">➕ Añadir a varios</button>` : ""}
         <button class="btn" onclick="horariosSemanaDesde='${semanaAnteriorISO}'; renderHorariosPanel();">← Semana anterior</button>
         <button class="btn" onclick="horariosSemanaDesde='${semanaSiguienteISO}'; renderHorariosPanel();">Semana siguiente →</button>
       </div>
@@ -16108,6 +16212,12 @@ async function renderHorariosPanel(){
     const horariosVisibles = horarios.filter(h => !deptoActivo || h.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const lugaresVisibles = lugares.filter(l => !deptoActivo || l.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const puedeGestionar = esJefatura || puedeAprobar;
+
+    // Cache para el modal "➕ Añadir a varios" (abrirModalAsignacionMasiva) —
+    // ese modal se abre desde un onclick suelto en el HTML ya pintado, sin
+    // acceso directo a estas variables locales, así que quedan acá para que
+    // las lea al construirse.
+    horariosCacheParaModal = { empleadosVisibles, horariosVisibles, lugaresVisibles, deptoActivo, semanaDesdeISO: horariosSemanaDesde };
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🕐 Horarios</div>
