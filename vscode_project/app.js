@@ -7205,7 +7205,7 @@ function renderManualPanel(){
         <ol style="padding-left:18px;">
           <li><b>Reporte de incidencias por fechas</b> — Excel con ingresos y salidas de personal entre dos fechas.</li>
           <li><b>Reporte de horarios para pago de planilla</b> — por empleado: días laborados, incapacidad/PSG/cita/ausencia, horas extra y días libres/vacaciones, para el mes y quincena elegidos (con rango de datos real aparte, si la marcación no calza con el calendario de la quincena).</li>
-          <li><b>Generar colillas de pago (nuevo)</b> — arma la colilla ahí mismo (Ordinario + feriado doble + horas extra − CCSS 10.83% = Neto). Para Corcovado es una alternativa a subir un PDF externo (migración gradual); para las demás propiedades es LA única forma de generar colillas. No incluye deducciones aparte de CCSS — esas se agregan a mano por persona (ver Deducciones recurrentes en Expedientes).</li>
+          <li><b>Generar colillas de pago (nuevo)</b> — arma la colilla ahí mismo (Ordinario + feriado doble + horas extra − CCSS 10.83% = Neto). No se muestra en Corcovado (ahí ya se suben los PDF del proveedor externo); para las demás propiedades es LA única forma de generar colillas. No incluye deducciones aparte de CCSS — esas se agregan a mano por persona (ver Deducciones recurrentes en Expedientes).</li>
         </ol>`,
     },
     {
@@ -7470,7 +7470,12 @@ async function renderPlanillaPanel(){
     </div>`;
     })();
 
-    html += (() => {
+    // Desactivada a propósito solo para Corcovado — ahí ya tiene el método
+    // de subir colillas en PDF de su proveedor externo (renderColillasImporter,
+    // más abajo), así que esta tarjeta es redundante para esa propiedad. Las
+    // demás (Oxygen, Ojochal, Amarena) la siguen viendo: es la ÚNICA forma
+    // que tienen de generar colillas, quitársela las dejaría sin ninguna.
+    if (!esCorcovado) html += (() => {
       const rangoHoy = rangoQuincenaActual();
       const mesInputHoy = `${rangoHoy.inicio.getFullYear()}-${String(rangoHoy.inicio.getMonth() + 1).padStart(2, "0")}`;
       return `<div class="dash-panel" style="margin-bottom:14px; border-color:var(--leaf);">
@@ -19207,6 +19212,12 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   let contador = 0;
   const n = () => numerado ? `${++contador}. ` : "";
   const botones = [];
+
+  // El expediente ya se puede abrir haciendo clic en el nombre del empleado
+  // (ver verPerfilEmpleado, línea "name" de la lista), pero esa interacción
+  // no es obvia — nada en el texto avisa que es cliqueable. Se repite acá,
+  // bien visible dentro de "Acciones", para que no haya que adivinarlo.
+  botones.push(`<button onclick="verPerfilEmpleado('${empKey}')">${n()}👁️ Ver expediente</button>`);
 
   // Generadores de documentos (despido, liquidación, amonestación,
   // recomendación, permiso sin goce, constancia salarial) agrupados bajo un
