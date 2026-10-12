@@ -720,6 +720,12 @@ function marcarTodosCamposExtraer(marcar){
 // planilla bancaria (BNCR) y cuál necesita depósito aparte (otro banco) o ni
 // siquiera tiene cuenta registrada.
 function valorCampoExportarEmpleado(emp, campo){
+  // FECHA_NACIMIENTO_EMP: por un bug ya corregido (ver type "date_nacimiento_emp"
+  // en catalogFieldHtml), algunos expedientes viejos quedaron guardados en
+  // ISO en vez de DD/MM/AAAA — fmtFechaEmpleado los interpreta igual y
+  // siempre exporta en el formato correcto, sin importar cómo haya quedado
+  // guardado el dato.
+  if (campo === "FECHA_NACIMIENTO_EMP") return fmtFechaEmpleado(emp.FECHA_NACIMIENTO_EMP);
   if (campo !== "__CUENTA_ELECTRONICA_BNCR" && campo !== "__ALERTA_CUENTA_BANCARIA"){
     return emp[campo] || "";
   }
@@ -983,7 +989,7 @@ const CATALOGS = {
       ["HIJOS_EMP","select_sino_cantidad","12. Hijos",""],
       ["ENFERMEDAD_CRONICA_EMP","select_sino_detalle","13. Padece alguna enfermedad crónica",""],
       ["MEDICAMENTOS_CRONICOS_EMP","select_sino_detalle","¿Toma medicamentos para enfermedades crónicas?",""],
-      ["FECHA_NACIMIENTO_EMP","date","14. Fecha de nacimiento",""],
+      ["FECHA_NACIMIENTO_EMP","date_nacimiento_emp","14. Fecha de nacimiento",""],
       ["grp", "Contacto de emergencia"],
       ["CONTACTO_EMERGENCIA_NOMBRE","text","15. Nombre del contacto de emergencia","","mayus"],
       ["CONTACTO_EMERGENCIA_TIPO_ID","select_tipo_identificacion_emp","Tipo de identificación del contacto de emergencia",""],
@@ -2687,6 +2693,21 @@ function catalogFieldHtml(meta){
     }
     control = `<input type="date" value="${isoVal}" onchange="onFechaIngresoEmpChange(this.value)">
       ${catalogEditing.values.FECHA_INGRESO_EMP ? `<div class="hint">${escapeHtml(catalogEditing.values.FECHA_INGRESO_EMP)}${catalogEditing.values.FECHA_INGRESO_LETRAS_EMP ? " — " + escapeHtml(catalogEditing.values.FECHA_INGRESO_LETRAS_EMP) : ""}</div>` : ""}`;
+  } else if (type === "date_nacimiento_emp"){
+    // Mismo criterio que date_ingreso_emp arriba: el selector interpreta y
+    // reescribe la fecha con parsearFechaEmpleado (día/mes primero) y la
+    // guarda como texto DD/MM/AAAA — nunca el ISO nativo del
+    // <input type="date">. Antes este campo usaba el tipo genérico "date",
+    // que guardaba `this.value` tal cual (ISO), lo que rompía el cálculo de
+    // cumpleaños (parsearFechaDDMMYYYY exige "/", no "-") y se exportaba
+    // crudo a Excel.
+    let isoValNac = "";
+    if (catalogEditing.values.FECHA_NACIMIENTO_EMP){
+      const dNac = parsearFechaEmpleado(catalogEditing.values.FECHA_NACIMIENTO_EMP);
+      if (dNac) isoValNac = `${dNac.getFullYear()}-${String(dNac.getMonth()+1).padStart(2,"0")}-${String(dNac.getDate()).padStart(2,"0")}`;
+    }
+    control = `<input type="date" value="${isoValNac}" onchange="onFechaNacimientoEmpChange(this.value)">
+      ${catalogEditing.values.FECHA_NACIMIENTO_EMP ? `<div class="hint">${escapeHtml(fmtFechaEmpleado(catalogEditing.values.FECHA_NACIMIENTO_EMP))}</div>` : ""}`;
   } else if (type === "select_moneda_salario_emp"){
     const moneda = catalogEditing.values.MONEDA_SALARIO_EMP || "CRC";
     control = `<div class="sino-toggle">
@@ -3199,6 +3220,13 @@ function onFechaIngresoEmpChange(isoDate){
   const dt = new Date(y, m-1, d);
   catalogEditing.values.FECHA_INGRESO_EMP = `${String(d).padStart(2,"0")}/${String(m).padStart(2,"0")}/${y}`;
   catalogEditing.values.FECHA_INGRESO_LETRAS_EMP = `${numeroALetrasEs(d)} de ${MESES[m-1]} del ${numeroALetrasEs(y)}`;
+  renderCatalogTab("empleados");
+}
+
+function onFechaNacimientoEmpChange(isoDate){
+  if (!isoDate) return;
+  const [y,m,d] = isoDate.split("-").map(Number);
+  catalogEditing.values.FECHA_NACIMIENTO_EMP = `${String(d).padStart(2,"0")}/${String(m).padStart(2,"0")}/${y}`;
   renderCatalogTab("empleados");
 }
 
@@ -3855,7 +3883,7 @@ async function guardarFilasContactoEmpleados(rows){
     const cambios = {};
     const correo = String(row["CORREO"] || "").trim(); if (correo) cambios.CORREO_EMP = correo;
     const celular = String(row["CELULAR PERSONAL"] || "").trim(); if (celular) cambios.CELULAR_EMP = celular;
-    const nacimiento = String(row["FECHA DE NACIMIENTO"] || "").trim(); if (nacimiento) cambios.FECHA_NACIMIENTO_EMP = nacimiento;
+    const nacimiento = normalizarFechaImportada(row["FECHA DE NACIMIENTO"]); if (nacimiento) cambios.FECHA_NACIMIENTO_EMP = nacimiento;
     const direccion = String(row["DIRECCION"] || "").trim(); if (direccion) cambios.DIRECCION_EMP = direccion;
     const banco = String(row["BANCO DE ORIGEN"] || "").trim(); if (banco) cambios.BANCO_EMP = banco;
     const cuenta = extraerCuentaBancariaDeFila(row); if (cuenta) Object.assign(cambios, cuenta);
@@ -7984,6 +8012,17 @@ function parsearFechaEmpleado(str){
   if (directa) return directa;
   const s = String(str == null ? "" : str).trim();
   if (!s) return null;
+  // Defensivo: un campo guardado sin pasar por el selector correcto de la
+  // app (ej. un <input type="date"> genérico que escribió el ISO nativo del
+  // navegador en vez de convertirlo a DD/MM/AAAA) puede haber quedado en
+  // "AAAA-MM-DD". Se arma con año/mes/día LOCALES explícitos — nunca con
+  // `new Date(str)` a secas, que interpreta un ISO sin hora como UTC y puede
+  // correrse un día según la zona horaria (en Costa Rica, un día atrás).
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (iso){
+    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    if (!isNaN(d.getTime())) return d;
+  }
   if (/^\d+(\.\d+)?$/.test(s)){
     const serial = Number(s);
     if (serial > 0 && serial < 100000){
@@ -8146,6 +8185,18 @@ async function generarReporteIncidencias(){
 
 function fmtFechaDesdeDate(d){
   return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+}
+
+// Para mostrar/exportar un campo de fecha de empleado (FECHA_NACIMIENTO_EMP,
+// FECHA_INGRESO_EMP, etc.) siempre en DD/MM/AAAA sin importar cómo haya
+// quedado guardado — reutiliza el respaldo de parsearFechaEmpleado para
+// datos viejos que por un bug anterior o una importación de Excel hayan
+// quedado en otro formato (ISO, serial de Excel, etc.). Si de verdad no se
+// puede interpretar, devuelve el texto tal cual en vez de esconderlo.
+function fmtFechaEmpleado(str){
+  if (!str) return "";
+  const d = parsearFechaEmpleado(str);
+  return d ? fmtFechaDesdeDate(d) : String(str);
 }
 
 // Reporte de horarios para pago de planilla: por empleado, días laborados
@@ -14909,7 +14960,6 @@ const TOPE_SALDO_VACACIONES = 12;
 // esta fecha, TODOS siguen acumulando por su propio aniversario, sin
 // importar cuánta antigüedad tengan.
 const INICIO_CICLO_FIJO_VACACIONES = new Date(2026, 11, 1);
-const ANTICIPACION_MINIMA_DIAS_SOLICITUD = 15;
 const DIA_CORTE_MENSUAL_SOLICITUD = 30;
 
 // SCP Corcovado Wilderness Lodge acumuló excedentes de vacaciones muy
@@ -15478,28 +15528,36 @@ async function eliminarIncapacidad(key){
 }
 
 // ==========================================================================
-// Horarios — turnos fijos por departamento (catálogo) + asignación día a día
-// por empleado. jefatura crea/asigna solo para su propio departamento;
-// master/gerente ven y gestionan todos, o uno a la vez con el mismo filtro
-// de departamento que ya usa Días Libres y Vacaciones (ver
-// renderDiasLibresVacacionesPanel). El servidor es quien de verdad impone el
-// alcance de jefatura (ver puedeEscribirClave/filtrarFilasPorEquipo en
-// rutas-datos.js); el filtro de acá es solo para no mostrarle a nadie una
-// pantalla con datos que de todas formas el servidor le negaría.
+// Horarios — turnos fijos y lugares de trabajo por departamento (dos
+// catálogos independientes) + asignación día a día por empleado de AMBOS
+// (dónde trabaja ese día y en qué turno — ej. Seguridad: Hotel/Playa/
+// Hacienda, cada uno con sus propios turnos). jefatura crea/asigna solo para
+// su propio departamento; master/gerente ven y gestionan todos, o uno a la
+// vez con el mismo filtro de departamento que ya usa Días Libres y
+// Vacaciones (ver renderDiasLibresVacacionesPanel). El servidor es quien de
+// verdad impone el alcance de jefatura (ver puedeEscribirClave/
+// filtrarFilasPorEquipo en rutas-datos.js); el filtro de acá es solo para no
+// mostrarle a nadie una pantalla con datos que de todas formas el servidor
+// le negaría.
 // ==========================================================================
 const HORARIO_PREFIX = "cat_horario:";
+const LUGAR_TRABAJO_PREFIX = "cat_lugar_trabajo:";
 const HORARIO_ASIGNADO_PREFIX = "horario_asignado:";
 
 let horariosFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
 let horariosSemanaDesde = null; // ISO del lunes de la semana activa en la grilla de asignación
-let horariosDeptoActivoActual = null; // departamento efectivo del último render (ver guardarNuevoHorario)
+let horariosDeptoActivoActual = null; // departamento efectivo del último render (ver guardarNuevoHorario/guardarNuevoLugarTrabajo)
 
-async function listarHorarios(){
-  const res = await window.storage.list(HORARIO_PREFIX, false);
+// `propiedadOverride` existe para que "Mi información" (construirHtmlMiInformacion)
+// pueda resolver el horario de un master/gerente cuya propia ficha vive en
+// otra propiedad distinta a la que tiene activa — el resto de llamadores
+// (renderHorariosPanel) lo dejan sin pasar y usan la propiedad activa normal.
+async function listarHorarios(propiedadOverride){
+  const res = await window.storage.list(HORARIO_PREFIX, propiedadOverride);
   const keys = (res && res.keys) || [];
   const horarios = await Promise.all(keys.map(async k => {
     try{
-      const r = await window.storage.get(k, false);
+      const r = await window.storage.get(k, false, propiedadOverride);
       const v = r && r.value ? JSON.parse(r.value) : {};
       return { key: k, ...v };
     }catch(e){ return null; }
@@ -15507,12 +15565,25 @@ async function listarHorarios(){
   return horarios.filter(Boolean);
 }
 
-async function listarHorariosAsignados(){
-  const res = await window.storage.list(HORARIO_ASIGNADO_PREFIX, false);
+async function listarLugaresTrabajo(propiedadOverride){
+  const res = await window.storage.list(LUGAR_TRABAJO_PREFIX, propiedadOverride);
+  const keys = (res && res.keys) || [];
+  const lugares = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false, propiedadOverride);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return lugares.filter(Boolean);
+}
+
+async function listarHorariosAsignados(propiedadOverride){
+  const res = await window.storage.list(HORARIO_ASIGNADO_PREFIX, propiedadOverride);
   const keys = (res && res.keys) || [];
   const asignados = await Promise.all(keys.map(async k => {
     try{
-      const r = await window.storage.get(k, false);
+      const r = await window.storage.get(k, false, propiedadOverride);
       const v = r && r.value ? JSON.parse(r.value) : {};
       return { key: k, ...v };
     }catch(e){ return null; }
@@ -15534,15 +15605,30 @@ function lunesDeLaSemana(d){
 async function guardarNuevoHorario(){
   const status = document.getElementById("horarios-status");
   const nombre = ((document.getElementById("horario-nuevo-nombre")||{}).value || "").trim();
-  const inicio = (document.getElementById("horario-nuevo-inicio")||{}).value;
-  const fin = (document.getElementById("horario-nuevo-fin")||{}).value;
+  const tipo = (document.getElementById("horario-nuevo-tipo")||{}).value || "fijo";
   const selectorDepto = document.getElementById("horario-nuevo-depto");
   const depto = selectorDepto ? selectorDepto.value : horariosDeptoActivoActual;
-  if (!nombre || !inicio || !fin){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá nombre, hora de inicio y hora de fin.</span>`; return; }
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre del turno.</span>`; return; }
   if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
+
+  const valor = { NOMBRE: nombre, TIPO: tipo, DEPARTAMENTO_MINISTERIO: depto };
+  if (tipo === "quebrado"){
+    const inicio1 = (document.getElementById("horario-nuevo-inicio1")||{}).value;
+    const fin1 = (document.getElementById("horario-nuevo-fin1")||{}).value;
+    const inicio2 = (document.getElementById("horario-nuevo-inicio2")||{}).value;
+    const fin2 = (document.getElementById("horario-nuevo-fin2")||{}).value;
+    if (!inicio1 || !fin1 || !inicio2 || !fin2){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá los dos bloques de horario (entrada y salida).</span>`; return; }
+    Object.assign(valor, { HORA_INICIO_1: inicio1, HORA_FIN_1: fin1, HORA_INICIO_2: inicio2, HORA_FIN_2: fin2 });
+  } else {
+    const inicio = (document.getElementById("horario-nuevo-inicio")||{}).value;
+    const fin = (document.getElementById("horario-nuevo-fin")||{}).value;
+    if (!inicio || !fin){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Completá hora de inicio y hora de fin.</span>`; return; }
+    Object.assign(valor, { HORA_INICIO: inicio, HORA_FIN: fin });
+  }
+
   try{
     const key = HORARIO_PREFIX + "h" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, HORA_INICIO: inicio, HORA_FIN: fin, DEPARTAMENTO_MINISTERIO: depto }), false);
+    await window.storage.set(key, JSON.stringify(valor), false);
     statusMsg("Turno creado.");
     renderHorariosPanel();
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
@@ -15560,19 +15646,45 @@ async function eliminarHorario(key){
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
-// Guarda/quita la asignación de un empleado para un día puntual. Vacío
-// ("") significa "sin asignar" — ni jefatura ni nadie más borra la clave acá
-// (jefatura no puede hacer DELETE de todas formas); simplemente se guarda
-// vacía, y listarHorariosAsignados ya la trata como inexistente. Separada de
-// guardarHorarioAsignado (que sí avisa con el toast) para que
-// aplicarHorarioASemana pueda llamarla 7 veces seguidas sin spamear 7 avisos.
-async function fijarHorarioAsignado(empKey, fechaISO, horarioKey){
+async function guardarNuevoLugarTrabajo(){
+  const status = document.getElementById("lugares-status");
+  const nombre = ((document.getElementById("lugar-nuevo-nombre")||{}).value || "").trim();
+  const selectorDepto = document.getElementById("lugar-nuevo-depto");
+  const depto = selectorDepto ? selectorDepto.value : horariosDeptoActivoActual;
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre del lugar.</span>`; return; }
+  if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
+  try{
+    const key = LUGAR_TRABAJO_PREFIX + "l" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, DEPARTAMENTO_MINISTERIO: depto }), false);
+    statusMsg("Lugar de trabajo creado.");
+    renderHorariosPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
+}
+
+async function eliminarLugarTrabajo(key){
+  if (!confirm("¿Eliminar este lugar de trabajo? Los días ya asignados con él quedan sin lugar (no se borran, pero dejan de mostrar un nombre).")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Lugar de trabajo eliminado.");
+    renderHorariosPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
+}
+
+// Guarda/quita la asignación de un empleado para un día puntual. Lugar y
+// turno son obligatorios JUNTOS: si falta cualquiera de los dos se guarda
+// vacío ("" = "sin asignar"). Ni jefatura ni nadie más borra la clave acá
+// (jefatura no puede hacer DELETE de todas formas); listarHorariosAsignados
+// ya trata el valor vacío como inexistente. Separada de guardarHorarioAsignado
+// (que sí avisa con el toast) para que aplicarHorarioASemana pueda llamarla 7
+// veces seguidas sin spamear 7 avisos.
+async function fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey){
   const key = `${HORARIO_ASIGNADO_PREFIX}${empKey}:${fechaISO}`;
-  if (!horarioKey){
+  if (!lugarKey || !horarioKey){
     await window.storage.set(key, "", false);
   } else {
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
     await window.storage.set(key, JSON.stringify({
+      LUGAR_KEY: lugarKey,
       HORARIO_KEY: horarioKey,
       ASIGNADO_POR: sesion ? sesion.email : "",
       ASIGNADO_EN: new Date().toISOString(),
@@ -15580,32 +15692,65 @@ async function fijarHorarioAsignado(empKey, fechaISO, horarioKey){
   }
 }
 
-async function guardarHorarioAsignado(empKey, fechaISO, horarioKey){
+// Lee los dos <select> de un día (lugar y turno) directo del DOM — onchange
+// de cualquiera de los dos llama acá con el mismo empKey/fechaISO, así que
+// siempre se evalúan los dos juntos, nunca uno solo.
+async function guardarHorarioAsignado(empKey, fechaISO){
+  const selLugar = document.getElementById(`lugar-asignado-${empKey}-${fechaISO}`);
+  const selTurno = document.getElementById(`turno-asignado-${empKey}-${fechaISO}`);
+  const lugarKey = selLugar ? selLugar.value : "";
+  const horarioKey = selTurno ? selTurno.value : "";
+  if (lugarKey && !horarioKey){ statusMsg("Falta elegir el turno de ese día.", false); return; }
+  if (!lugarKey && horarioKey){ statusMsg("Falta elegir el lugar de trabajo de ese día.", false); return; }
   try{
-    await fijarHorarioAsignado(empKey, fechaISO, horarioKey);
-    statusMsg("Horario actualizado.");
+    await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
+    statusMsg(lugarKey && horarioKey ? "Horario actualizado." : "Día sin asignar.");
   }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
 }
 
-// Botón "📋 Semana" de cada fila: toma el turno elegido en el <select> de
-// esa fila y lo replica en los 7 días de la semana que está en pantalla —
-// pensado para quien tiene horario fijo (mismo turno todos los días), para
-// no tener que elegirlo 7 veces. Sobrescribe lo que hubiera asignado esos
-// días; por eso pide confirmación antes.
+// Botón "📋 Semana" de cada fila: toma el lugar y el turno elegidos en los
+// <select> de esa fila y los replica en los 7 días de la semana que está en
+// pantalla — pensado para quien tiene horario fijo (mismo lugar y turno
+// todos los días), para no tener que elegirlos 7 veces. Sobrescribe lo que
+// hubiera asignado esos días; por eso pide confirmación antes.
 async function aplicarHorarioASemana(empKey){
-  const sel = document.getElementById(`replicar-horario-${empKey}`);
-  const horarioKey = sel ? sel.value : "";
-  if (!horarioKey){ statusMsg("Elegí un turno para aplicar a toda la semana.", false); return; }
-  if (!confirm("¿Aplicar este turno a los 7 días de esta semana para este empleado? Sobrescribe lo que ya tenía asignado esos días.")) return;
+  const selLugar = document.getElementById(`replicar-lugar-${empKey}`);
+  const selTurno = document.getElementById(`replicar-horario-${empKey}`);
+  const lugarKey = selLugar ? selLugar.value : "";
+  const horarioKey = selTurno ? selTurno.value : "";
+  if (!lugarKey || !horarioKey){ statusMsg("Elegí lugar de trabajo y turno para aplicar a toda la semana.", false); return; }
+  if (!confirm("¿Aplicar este lugar y turno a los 7 días de esta semana para este empleado? Sobrescribe lo que ya tenía asignado esos días.")) return;
   try{
     for (let i = 0; i < 7; i++){
       const d = new Date(horariosSemanaDesde + "T00:00:00");
       d.setDate(d.getDate() + i);
-      await fijarHorarioAsignado(empKey, isoDeFechaLocal(d), horarioKey);
+      await fijarHorarioAsignado(empKey, isoDeFechaLocal(d), lugarKey, horarioKey);
     }
-    statusMsg("Turno aplicado a toda la semana.");
+    statusMsg("Lugar y turno aplicados a toda la semana.");
     renderHorariosPanel();
   }catch(e){ statusMsg("No se pudo aplicar a toda la semana: " + e.message, false); }
+}
+
+// Texto legible de un turno según su TIPO: "fijo" es un solo rango de hora;
+// "quebrado" (jornada partida, ej. mañana + noche con un hueco al medio del
+// día) son dos rangos independientes guardados aparte, no un rango que cruza
+// la medianoche ni nada calculado — los captura la persona tal cual.
+function textoHorarioTurno(h){
+  if (h.TIPO === "quebrado"){
+    return `${escapeHtml(h.HORA_INICIO_1||"")}–${escapeHtml(h.HORA_FIN_1||"")} y ${escapeHtml(h.HORA_INICIO_2||"")}–${escapeHtml(h.HORA_FIN_2||"")} (quebrado)`;
+  }
+  return `${escapeHtml(h.HORA_INICIO||"")} a ${escapeHtml(h.HORA_FIN||"")}`;
+}
+
+// Muestra el par de campos de hora según el tipo elegido en el formulario de
+// "Agregar turno" — un solo rango para "fijo", dos rangos independientes
+// (con su propio hueco al medio) para "quebrado".
+function actualizarCamposTipoTurno(){
+  const tipo = (document.getElementById("horario-nuevo-tipo")||{}).value || "fijo";
+  const wrapFijo = document.getElementById("horario-nuevo-fijo-wrap");
+  const wrapQuebrado = document.getElementById("horario-nuevo-quebrado-wrap");
+  if (wrapFijo) wrapFijo.style.display = tipo === "quebrado" ? "none" : "flex";
+  if (wrapQuebrado) wrapQuebrado.style.display = tipo === "quebrado" ? "flex" : "none";
 }
 
 function renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar, puedeEliminar){
@@ -15614,7 +15759,7 @@ function renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar,
     ? horariosVisibles.slice()
         .sort((a, b) => (a.DEPARTAMENTO_MINISTERIO||"").localeCompare(b.DEPARTAMENTO_MINISTERIO||"") || (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"))
         .map(h => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-          <div style="font-size:12.5px;"><b>${escapeHtml(h.NOMBRE||"")}</b> — ${escapeHtml(h.HORA_INICIO||"")} a ${escapeHtml(h.HORA_FIN||"")}${necesitaSelectorDepto ? ` · ${escapeHtml(h.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
+          <div style="font-size:12.5px;"><b>${escapeHtml(h.NOMBRE||"")}</b> — ${textoHorarioTurno(h)}${necesitaSelectorDepto ? ` · ${escapeHtml(h.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
           ${puedeEliminar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarHorario('${h.key}')">🗑️ Eliminar</button>` : ""}
         </div>`).join("")
     : `<div class="empty-state" style="padding:8px 0;">No hay turnos fijos creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
@@ -15624,12 +15769,34 @@ function renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar,
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre del turno
         <input type="text" id="horario-nuevo-nombre" placeholder="Ej. Turno Mañana" style="min-width:160px;">
       </label>
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de inicio
-        <input type="time" id="horario-nuevo-inicio">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
+        <select id="horario-nuevo-tipo" onchange="actualizarCamposTipoTurno();">
+          <option value="fijo">Fijo (un solo rango)</option>
+          <option value="quebrado">Quebrado (dos rangos con hueco al medio)</option>
+        </select>
       </label>
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de fin
-        <input type="time" id="horario-nuevo-fin">
-      </label>
+      <div id="horario-nuevo-fijo-wrap" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de inicio
+          <input type="time" id="horario-nuevo-inicio">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de fin
+          <input type="time" id="horario-nuevo-fin">
+        </label>
+      </div>
+      <div id="horario-nuevo-quebrado-wrap" style="display:none; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 1 — entrada
+          <input type="time" id="horario-nuevo-inicio1">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 1 — salida
+          <input type="time" id="horario-nuevo-fin1">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 2 — entrada
+          <input type="time" id="horario-nuevo-inicio2">
+        </label>
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 2 — salida
+          <input type="time" id="horario-nuevo-fin2">
+        </label>
+      </div>
       ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
         <select id="horario-nuevo-depto">
           <option value="">— Elegí —</option>
@@ -15647,9 +15814,135 @@ function renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar,
   </div></div>`;
 }
 
+// Mismo patrón que renderSeccionTurnosFijos, para el catálogo de lugares de
+// trabajo (ej. Hotel/Playa/Hacienda en Seguridad) — un lugar es solo un
+// nombre + el departamento al que pertenece, sin horas propias (el turno es
+// un dato aparte e independiente, ver cabecera del módulo).
+function renderSeccionLugaresTrabajo(lugaresVisibles, deptoActivo, puedeGestionar, puedeEliminar){
+  const necesitaSelectorDepto = !deptoActivo;
+  const filasHtml = lugaresVisibles.length
+    ? lugaresVisibles.slice()
+        .sort((a, b) => (a.DEPARTAMENTO_MINISTERIO||"").localeCompare(b.DEPARTAMENTO_MINISTERIO||"") || (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"))
+        .map(l => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+          <div style="font-size:12.5px;"><b>${escapeHtml(l.NOMBRE||"")}</b>${necesitaSelectorDepto ? ` · ${escapeHtml(l.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
+          ${puedeEliminar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarLugarTrabajo('${l.key}')">🗑️ Eliminar</button>` : ""}
+        </div>`).join("")
+    : `<div class="empty-state" style="padding:8px 0;">No hay lugares de trabajo creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
+
+  const formHtml = puedeGestionar ? `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre del lugar
+        <input type="text" id="lugar-nuevo-nombre" placeholder="Ej. Playa" style="min-width:160px;">
+      </label>
+      ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
+        <select id="lugar-nuevo-depto">
+          <option value="">— Elegí —</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </label>` : ""}
+      <button class="btn primary" onclick="guardarNuevoLugarTrabajo();">➕ Agregar lugar</button>
+    </div>` : "";
+
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📍 Lugares de trabajo${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
+    ${filasHtml}
+    ${formHtml}
+    <div id="lugares-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
+}
+
 const DIA_SEMANA_CORTO_HORARIOS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
-function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados, departamentoDeEmpleado, semanaDesdeISO, puedeGestionar){
+// "⚡ Asignación rápida" — formulario guiado (Lugar → Empleado → Días →
+// Turno) para asignar sin tener que tocar la grilla celda por celda: pensado
+// para cuando ya sabés exactamente a quién le toca qué, en vez de ir
+// revisando la tabla completa. Solo tiene sentido con UN departamento activo
+// (si master/gerente están en "todos" no hay un catálogo de lugares/turnos
+// único para ofrecer, así que se pide elegir un departamento arriba primero
+// — ver deptoActivo en renderHorariosPanel). No reemplaza la grilla, que
+// sigue sirviendo para ver y editar todo el equipo de un vistazo.
+function renderSeccionAsignacionRapida(empleadosVisibles, horarios, lugares, deptoActivo, semanaDesdeISO, puedeGestionar){
+  if (!puedeGestionar) return "";
+  if (!deptoActivo){
+    return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">⚡ Asignación rápida</div>
+      <div class="empty-state" style="padding:4px 0;">Elegí un departamento específico arriba (no "Todos los departamentos") para usar este atajo.</div>
+    </div></div>`;
+  }
+  if (!lugares.length || !horarios.length){
+    return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">⚡ Asignación rápida</div>
+      <div class="empty-state" style="padding:4px 0;">Creá primero al menos un lugar de trabajo y un turno para ${escapeHtml(deptoActivo)}.</div>
+    </div></div>`;
+  }
+  const empleadosOrdenados = empleadosVisibles.slice().sort(compararPorApellido);
+  const dias = [];
+  for (let i = 0; i < 7; i++){
+    const d = new Date(semanaDesdeISO + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    const fechaISO = isoDeFechaLocal(d);
+    dias.push({ fechaISO, etiqueta: `${DIA_SEMANA_CORTO_HORARIOS[d.getDay()]} ${fmtFechaSimple(fechaISO)}` });
+  }
+
+  return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">⚡ Asignación rápida</div>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Elegí lugar, empleado, en qué días de esta semana aplica (o todos de una vez) y el turno — se guarda de una sola vez.</p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Lugar de trabajo
+        <select id="asignacion-rapida-lugar">
+          <option value="">— Elegí —</option>
+          ${lugares.map(l => `<option value="${l.key}">${escapeHtml(l.NOMBRE)}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1 1 220px;">Empleado
+        <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-rapida-empleado')" style="margin-bottom:3px;">
+        <select id="asignacion-rapida-empleado">
+          <option value="">— Elegí —</option>
+          ${empleadosOrdenados.map(e => `<option value="${e.key}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}</option>`).join("")}
+        </select>
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Turno
+        <select id="asignacion-rapida-turno">
+          <option value="">— Elegí —</option>
+          ${horarios.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:4px;">¿Qué días de esta semana?</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+      ${dias.map(d => `<label style="font-size:11px; display:flex; align-items:center; gap:3px;">
+        <input type="checkbox" class="asignacion-rapida-dia" value="${d.fechaISO}"> ${d.etiqueta}
+      </label>`).join("")}
+      <button class="btn" style="padding:3px 9px; font-size:11px;" onclick="marcarTodosLosDiasAsignacionRapida(true)">Toda la semana</button>
+      <button class="btn" style="padding:3px 9px; font-size:11px;" onclick="marcarTodosLosDiasAsignacionRapida(false)">Ninguno</button>
+    </div>
+    <button class="btn primary" onclick="confirmarAsignacionRapida();">✅ Asignar</button>
+    <div id="asignacion-rapida-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
+}
+
+function marcarTodosLosDiasAsignacionRapida(marcar){
+  document.querySelectorAll(".asignacion-rapida-dia").forEach(cb => { cb.checked = marcar; });
+}
+
+async function confirmarAsignacionRapida(){
+  const status = document.getElementById("asignacion-rapida-status");
+  const lugarKey = (document.getElementById("asignacion-rapida-lugar")||{}).value;
+  const empKey = (document.getElementById("asignacion-rapida-empleado")||{}).value;
+  const horarioKey = (document.getElementById("asignacion-rapida-turno")||{}).value;
+  const diasElegidos = Array.from(document.querySelectorAll(".asignacion-rapida-dia:checked")).map(cb => cb.value);
+  if (!lugarKey || !empKey || !horarioKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí lugar, empleado y turno.</span>`; return; }
+  if (!diasElegidos.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Marcá al menos un día.</span>`; return; }
+  try{
+    for (const fechaISO of diasElegidos){
+      await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
+    }
+    statusMsg(`Asignado a ${diasElegidos.length} día(s).`);
+    renderHorariosPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo asignar: ${escapeHtml(e.message)}</span>`; }
+}
+
+function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, semanaDesdeISO, puedeGestionar){
   const dias = [];
   for (let i = 0; i < 7; i++){
     const d = new Date(semanaDesdeISO + "T00:00:00");
@@ -15657,7 +15950,7 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados,
     dias.push(isoDeFechaLocal(d));
   }
   const asignadosPorClave = {};
-  asignados.forEach(a => { if (a.HORARIO_KEY) asignadosPorClave[a.key] = a.HORARIO_KEY; });
+  asignados.forEach(a => { if (a.LUGAR_KEY && a.HORARIO_KEY) asignadosPorClave[a.key] = a; });
 
   const empleadosOrdenados = empleadosVisibles.slice().sort(compararPorApellido);
   const semanaAnterior = new Date(semanaDesdeISO + "T00:00:00"); semanaAnterior.setDate(semanaAnterior.getDate() - 7);
@@ -15673,6 +15966,7 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados,
         <button class="btn" onclick="horariosSemanaDesde='${semanaSiguienteISO}'; renderHorariosPanel();">Semana siguiente →</button>
       </div>
     </div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Por cada día se elige primero el <b>lugar de trabajo</b> y después el <b>turno</b> — los dos son obligatorios juntos.</div>
     ${!empleadosOrdenados.length ? `<div class="empty-state">No hay empleados activos en este alcance.</div>` : `
     <div style="overflow-x:auto;">
     <table style="border-collapse:collapse; font-size:11px;">
@@ -15684,28 +15978,45 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados,
         ${empleadosOrdenados.map(emp => {
           const deptoEmp = departamentoDeEmpleado(emp) || "Sin departamento";
           const horariosDelDepto = horarios.filter(h => h.DEPARTAMENTO_MINISTERIO === deptoEmp);
+          const lugaresDelDepto = lugares.filter(l => l.DEPARTAMENTO_MINISTERIO === deptoEmp);
+          const faltaCatalogo = !horariosDelDepto.length || !lugaresDelDepto.length;
           return `<tr>
             <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;">
               <div>${escapeHtml(nombreCompletoEmpleado(emp)||emp.key)}</div>
-              ${puedeGestionar && horariosDelDepto.length ? `
-              <div style="display:flex; gap:4px; margin-top:4px;">
-                <select id="replicar-horario-${emp.key}" style="font-size:9.5px; max-width:96px; padding:1px;" title="Elegí un turno para aplicar a toda la semana">
+              ${puedeGestionar && !faltaCatalogo ? `
+              <div style="display:flex; flex-direction:column; gap:2px; margin-top:4px;">
+                <select id="replicar-lugar-${emp.key}" style="font-size:9px; max-width:100px; padding:1px;" title="Elegí un lugar para aplicar a toda la semana">
+                  <option value="">Lugar…</option>
+                  ${lugaresDelDepto.map(l => `<option value="${l.key}">${escapeHtml(l.NOMBRE)}</option>`).join("")}
+                </select>
+                <select id="replicar-horario-${emp.key}" style="font-size:9px; max-width:100px; padding:1px;" title="Elegí un turno para aplicar a toda la semana">
                   <option value="">Turno…</option>
                   ${horariosDelDepto.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)}</option>`).join("")}
                 </select>
-                <button class="btn" style="font-size:9.5px; padding:1px 6px;" onclick="aplicarHorarioASemana('${emp.key}')" title="Aplica el turno elegido a los 7 días de esta semana">📋 Semana</button>
+                <button class="btn" style="font-size:9px; padding:1px 6px;" onclick="aplicarHorarioASemana('${emp.key}')" title="Aplica el lugar y el turno elegidos a los 7 días de esta semana">📋 Semana</button>
               </div>` : ""}
             </td>
             ${dias.map(fechaISO => {
               const claveAsignado = `${HORARIO_ASIGNADO_PREFIX}${emp.key}:${fechaISO}`;
-              const horarioKeyActual = asignadosPorClave[claveAsignado] || "";
+              const actual = asignadosPorClave[claveAsignado] || null;
+              const lugarKeyActual = actual ? actual.LUGAR_KEY : "";
+              const horarioKeyActual = actual ? actual.HORARIO_KEY : "";
               if (!puedeGestionar){
+                const l = lugaresDelDepto.find(x => x.key === lugarKeyActual);
                 const h = horariosDelDepto.find(x => x.key === horarioKeyActual);
-                return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${h ? escapeHtml(h.NOMBRE) : "—"}</td>`;
+                const texto = l && h ? `${l.NOMBRE} — ${h.NOMBRE}` : "—";
+                return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(texto)}</td>`;
+              }
+              if (faltaCatalogo){
+                return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-size:9.5px; color:var(--ink-soft);">Faltan ${!lugaresDelDepto.length ? "lugares" : "turnos"}</td>`;
               }
               return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">
-                <select style="font-size:10.5px; max-width:120px;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}', this.value)">
-                  <option value="">—</option>
+                <select id="lugar-asignado-${emp.key}-${fechaISO}" style="font-size:9.5px; max-width:110px; display:block; margin:0 auto 2px;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}')">
+                  <option value="">Lugar…</option>
+                  ${lugaresDelDepto.map(l => `<option value="${l.key}"${l.key===lugarKeyActual?" selected":""}>${escapeHtml(l.NOMBRE)}</option>`).join("")}
+                </select>
+                <select id="turno-asignado-${emp.key}-${fechaISO}" style="font-size:9.5px; max-width:110px; display:block; margin:0 auto;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}')">
+                  <option value="">Turno…</option>
                   ${horariosDelDepto.map(h => `<option value="${h.key}"${h.key===horarioKeyActual?" selected":""}>${escapeHtml(h.NOMBRE)}</option>`).join("")}
                 </select>
               </td>`;
@@ -15715,6 +16026,46 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados,
       </tbody>
     </table>
     </div>`}
+  </div></div>`;
+}
+
+// Versión de solo lectura para un único empleado — usada por "Mi
+// información" (construirHtmlMiInformacion), tanto cuando el empleado mira
+// la suya propia como cuando jefatura/gerencia/master consulta la de otra
+// persona desde ahí. `asignadosPropios` ya viene filtrado a este empleado.
+function renderSeccionMiHorarioSemana(asignadosPropios, horarios, lugares, semanaDesdeISO){
+  const horariosPorKey = {}; horarios.forEach(h => { horariosPorKey[h.key] = h; });
+  const lugaresPorKey = {}; lugares.forEach(l => { lugaresPorKey[l.key] = l; });
+  const asignadosPorFecha = {};
+  asignadosPropios.forEach(a => {
+    if (!a.LUGAR_KEY || !a.HORARIO_KEY) return;
+    const fecha = a.key.slice(a.key.lastIndexOf(":") + 1);
+    asignadosPorFecha[fecha] = a;
+  });
+
+  const dias = [];
+  for (let i = 0; i < 7; i++){
+    const d = new Date(semanaDesdeISO + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    const fechaISO = isoDeFechaLocal(d);
+    const a = asignadosPorFecha[fechaISO];
+    const lugar = a ? lugaresPorKey[a.LUGAR_KEY] : null;
+    const turno = a ? horariosPorKey[a.HORARIO_KEY] : null;
+    dias.push({
+      fechaISO,
+      etiquetaDia: DIA_SEMANA_CORTO_HORARIOS[d.getDay()],
+      texto: (lugar && turno) ? `${lugar.NOMBRE} — ${turno.NOMBRE}` : "Sin asignar",
+    });
+  }
+
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🕐 Mi horario de esta semana</div>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      ${dias.map(d => `<div style="flex:1 1 120px; border:1px solid var(--paper-line); border-radius:6px; padding:6px 8px; text-align:center;">
+        <div style="font-size:11px; color:var(--ink-soft); font-weight:700;">${d.etiquetaDia} ${fmtFechaSimple(d.fechaISO)}</div>
+        <div style="font-size:11.5px; margin-top:2px;">${escapeHtml(d.texto)}</div>
+      </div>`).join("")}
+    </div>
   </div></div>`;
 }
 
@@ -15730,10 +16081,11 @@ async function renderHorariosPanel(){
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
     const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
 
-    const [empleados, puestos, horarios, asignados] = await Promise.all([
+    const [empleados, puestos, horarios, lugares, asignados] = await Promise.all([
       cargarEmpleadosDB(),
       cargarPuestosDB(),
       listarHorarios(),
+      listarLugaresTrabajo(),
       listarHorariosAsignados(),
     ]);
     const puestosPorKey = {};
@@ -15749,11 +16101,12 @@ async function renderHorariosPanel(){
     horariosDeptoActivoActual = deptoActivo;
     const empleadosVisibles = empleados.filter(e => !e.ARCHIVADO && (!deptoActivo || departamentoDeEmpleado(e) === deptoActivo));
     const horariosVisibles = horarios.filter(h => !deptoActivo || h.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const lugaresVisibles = lugares.filter(l => !deptoActivo || l.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const puedeGestionar = esJefatura || puedeAprobar;
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🕐 Horarios</div>
-      <div style="font-size:12px; color:var(--ink-soft);">Turnos fijos por departamento y su asignación día a día para el equipo.</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Lugares de trabajo y turnos fijos por departamento, y su asignación día a día para el equipo.</div>
     </div>`;
 
     if (!esJefatura){
@@ -15765,8 +16118,10 @@ async function renderHorariosPanel(){
       </div>`;
     }
 
+    html += renderSeccionLugaresTrabajo(lugaresVisibles, deptoActivo, puedeGestionar, puedeAprobar);
     html += renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar, puedeAprobar);
-    html += renderSeccionAsignacionHorarios(empleadosVisibles, horarios, asignados, departamentoDeEmpleado, horariosSemanaDesde, puedeGestionar);
+    html += renderSeccionAsignacionRapida(empleadosVisibles, horariosVisibles, lugaresVisibles, deptoActivo, horariosSemanaDesde, puedeGestionar);
+    html += renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, horariosSemanaDesde, puedeGestionar);
 
     panel.innerHTML = html;
   }catch(e){
@@ -16299,19 +16654,15 @@ async function justificarRangoISO(empKey, fechaInicioISO, fechaFinISO, tipoDia, 
 
 // Crea una solicitud de ausencia (vacaciones / permiso sin goce / ausencia
 // médica) — la crea jefatura/líder desde el perfil del colaborador, o
-// master/gerente. Valida la anticipación mínima (15 días) y, para citas
-// médicas, que venga comprobante adjunto. Queda "pendiente" hasta que
-// gerencia o master decidan (sección 4 de la especificación).
+// master/gerente. Sin anticipación mínima a propósito — se puede solicitar
+// el mismo día que se necesita. Para citas médicas, exige que venga
+// comprobante adjunto. Queda "pendiente" hasta que gerencia o master
+// decidan (sección 4 de la especificación).
 async function crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre }){
   if (!TIPOS_SOLICITUD_AUSENCIA[tipo]) throw new Error("Tipo de ausencia inválido.");
   if (!empKey) throw new Error("Elegí un empleado.");
   if (!fechaInicio || !fechaFin) throw new Error("Elegí las fechas.");
   if (fechaFin < fechaInicio) throw new Error("La fecha de fin no puede ser anterior a la de inicio.");
-  const diasAnticipacion = Math.round((new Date(fechaInicio + "T00:00:00") - new Date(isoDeHoy() + "T00:00:00")) / 86400000);
-  if (diasAnticipacion < ANTICIPACION_MINIMA_DIAS_SOLICITUD){
-    const faltan = ANTICIPACION_MINIMA_DIAS_SOLICITUD - diasAnticipacion;
-    throw new Error(`Esta solicitud necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación (faltan ${faltan} día(s) para cumplirlo).`);
-  }
   if (TIPOS_SOLICITUD_AUSENCIA[tipo].requiereComprobante && !comprobanteDataUrl){
     throw new Error("Este tipo de ausencia necesita un comprobante adjunto.");
   }
@@ -16602,9 +16953,7 @@ async function confirmarDocumentoSolicitud(key){
 // Asignación directa — exclusiva de gerencia/master. A diferencia de una
 // solicitud (la crea jefatura y queda "pendiente" hasta que gerencia/master
 // decida), esto lo crea gerencia/master directamente YA aprobado: no pasa
-// por la cola de pendientes ni exige los 15 días de anticipación (esa regla
-// es para la solicitud que pide jefatura, no para quien ya tiene la
-// autoridad final de aprobarla).
+// por la cola de pendientes que sí tiene la solicitud que pide jefatura.
 async function asignarAusenciaDirecta({ empKey, tipo, fechaInicio, fechaFin, comprobanteDataUrl, comprobanteNombre }){
   if (!TIPOS_SOLICITUD_AUSENCIA[tipo]) throw new Error("Tipo de ausencia inválido.");
   if (!empKey) throw new Error("Elegí un empleado.");
@@ -17106,9 +17455,9 @@ function renderSeccionCumpleanos(empleados, puedeOtorgar){
 // Hasta 3 líneas de Tipo/Desde/Hasta para el MISMO empleado, igual que el
 // formulario de asignación directa de gerencia/master (ver
 // renderFormularioAsignacionDirecta) — acá cada línea sigue siendo una
-// SOLICITUD independiente, con su cola de pendientes y su anticipación
-// mínima, no una asignación directa. Una línea se ignora si no tiene
-// ninguna fecha cargada; no hace falta llenar las 3.
+// SOLICITUD independiente, con su cola de pendientes, no una asignación
+// directa. Una línea se ignora si no tiene ninguna fecha cargada; no hace
+// falta llenar las 3.
 function actualizarFilaSolicitud(i){
   const tipo = (document.getElementById(`solicitud-ausencia-tipo-${i}`)||{}).value;
   const comprobanteWrap = document.getElementById(`solicitud-ausencia-comprobante-wrap-${i}`);
@@ -17136,7 +17485,7 @@ function renderFormularioSolicitud(empleadosDisponibles){
     </div>`;
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">➕ Nueva solicitud</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Necesita al menos ${ANTICIPACION_MINIMA_DIAS_SOLICITUD} días de anticipación. Las citas médicas necesitan comprobante adjunto. Podés cargar hasta 3 rangos distintos para el mismo empleado y enviarlos todos de una vez.</p>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Sin anticipación mínima — se puede pedir para el mismo día. Las citas médicas necesitan comprobante adjunto. Podés cargar hasta 3 rangos distintos para el mismo empleado y enviarlos todos de una vez.</p>
     <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1; min-width:180px; margin-bottom:4px;">Empleado
       <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'solicitud-ausencia-empleado')" style="margin-bottom:3px;">
       <select id="solicitud-ausencia-empleado">
@@ -17194,8 +17543,8 @@ async function confirmarCrearSolicitudAusencia(){
 }
 
 // Formulario aparte para gerencia/master: asigna ya aprobado, sin la cola de
-// pendientes ni la anticipación mínima de 15 días que sí exige la
-// solicitud de jefatura (ver renderFormularioSolicitud / asignarAusenciaDirecta).
+// pendientes que sí tiene la solicitud de jefatura (ver
+// renderFormularioSolicitud / asignarAusenciaDirecta).
 // Hasta 3 líneas de Tipo/Desde/Hasta para el MISMO empleado (varias salidas
 // del mes, o permisos de distinto tipo — ej. 2 días libres sueltos y una
 // incapacidad) — todas se asignan con un solo clic en "Asignar". Una línea
@@ -17238,7 +17587,7 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
     </div>`;
   return `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Asignar directamente</div>
-    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes ni anticipación mínima (eso es lo que usa jefatura al solicitar). Podés cargar hasta 3 rangos distintos para el mismo empleado (varias salidas del mes, permisos de distinto tipo, o un cumpleaños — de un solo día) y asignarlos todos de una vez.</p>
+    <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Queda aprobado de inmediato — sin cola de pendientes (eso es lo que usa jefatura al solicitar). Podés cargar hasta 3 rangos distintos para el mismo empleado (varias salidas del mes, permisos de distinto tipo, o un cumpleaños — de un solo día) y asignarlos todos de una vez.</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:4px;">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; flex:1 1 260px;">Empleado
         <input type="text" placeholder="🔎 Buscar…" oninput="filtrarSelectEmpleados(this, 'asignacion-directa-empleado')" style="margin-bottom:3px;">
@@ -18245,7 +18594,7 @@ async function exportarReporteDotacionPorDia(){
     let fila = 4;
     dias.forEach(dia => {
       dia.porDepto.forEach(f => {
-        [dia.fechaISO, f.depto, f.presentes, f.presentesNombres.join(", ")].forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
+        [fmtFechaSimple(dia.fechaISO), f.depto, f.presentes, f.presentesNombres.join(", ")].forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
         fila++;
       });
       const filaTotal = ws.getRow(fila);
@@ -18371,7 +18720,7 @@ async function exportarReporteAusenciasPorPersona(){
     filas.forEach(s => {
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
       const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
-      const valores = [emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY, tipoInfo.label, s.FECHA_INICIO, s.FECHA_FIN, s.DIAS, s.ESTADO, s.SOLICITADO_POR||"", s.FECHA_SOLICITUD ? fmtFecha(s.FECHA_SOLICITUD) : ""];
+      const valores = [emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY, tipoInfo.label, fmtFechaSimple(s.FECHA_INICIO), fmtFechaSimple(s.FECHA_FIN), s.DIAS, s.ESTADO, s.SOLICITADO_POR||"", s.FECHA_SOLICITUD ? fmtFecha(s.FECHA_SOLICITUD) : ""];
       valores.forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
       fila++;
     });
@@ -18746,7 +19095,7 @@ async function generarExcelCCSS(emp, tipoCambioInfo){
     "Cédula": emp.IDENTIFICACION_EMP || "",
     "Tipo de identificación": emp.TIPO_IDENTIFICACION_EMP || "",
     "Nombre completo": nombreCompletoEmpleado(emp),
-    "Fecha de nacimiento": emp.FECHA_NACIMIENTO_EMP || "",
+    "Fecha de nacimiento": fmtFechaEmpleado(emp.FECHA_NACIMIENTO_EMP),
     "Fecha de ingreso": emp.FECHA_INGRESO_EMP || "",
     "Puesto / Ocupación": emp.DEPARTAMENTO_EMP || "",
     "Salario bruto mensual": salarioTexto,
@@ -20097,6 +20446,23 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
       pendientesEnRangoMiInfo = registrosEnRangoMiInfo.filter(r => r.ESTADO === "pendiente" || r.ESTADO === "aprobada_jefatura").length;
     }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
+    // "Mi horario de esta semana" — lo que su jefatura le asignó en el
+    // módulo Horarios (lugar de trabajo + turno por día). Catálogos y
+    // asignaciones son lectura permitida para el propio rol empleado (ver
+    // esClavePropiaDeEmpleado en rutas-datos.js); acá solo se filtra a la
+    // semana en curso y a este empKey puntual.
+    let miHorarioSemanaHtml = "";
+    try{
+      const semanaDesdeISO = isoDeFechaLocal(lunesDeLaSemana(new Date()));
+      const [horariosMi, lugaresMi, asignadosMi] = await Promise.all([
+        listarHorarios(propiedadOverride),
+        listarLugaresTrabajo(propiedadOverride),
+        listarHorariosAsignados(propiedadOverride),
+      ]);
+      const asignadosPropios = asignadosMi.filter(a => a.key.startsWith(HORARIO_ASIGNADO_PREFIX + empKey + ":"));
+      miHorarioSemanaHtml = renderSeccionMiHorarioSemana(asignadosPropios, horariosMi, lugaresMi, semanaDesdeISO);
+    }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
+
     const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
     const salarioNum = Number(String(emp.SALARIO_EMP||"").replace(/[^0-9.]/g,""));
 
@@ -20139,6 +20505,8 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
         <div class="kpi-card c-warn"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
         <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (rango elegido)</div></div>
       </div>
+
+      ${miHorarioSemanaHtml}
 
       <div class="section-card" style="margin-top:10px;"><div class="section-body" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Rango de horas extra — desde
