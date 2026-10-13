@@ -650,6 +650,19 @@ const CAMPOS_EXPORTAR_EMPLEADOS = [
   ]},
 ];
 
+// Fotos adjuntas del expediente (ver type "file_adjunto_emp" en
+// catalogFieldHtml) — aparte de CAMPOS_EXPORTAR_EMPLEADOS porque no son
+// texto: para incluirlas hay que descargar cada archivo y pegarlo como
+// imagen dentro de la celda (ver descargarExcelEmpleadosSeleccionado /
+// cargarAdjuntoComoImagenExcel). Desmarcadas por defecto a propósito — con
+// muchos empleados, bajar cada foto una por una tarda bastante más que
+// exportar solo columnas de texto.
+const CAMPOS_EXPORTAR_EMPLEADOS_FOTOS = [
+  ["ADJUNTO_ID_EMP", "Foto de cédula/pasaporte (frente)"],
+  ["ADJUNTO_ID_DORSO_EMP", "Foto de cédula/pasaporte (reverso)"],
+  ["ADJUNTO_CUENTA_EMP", "Foto de cuenta bancaria"],
+];
+
 // Casillas marcadas por defecto: TODAS — el Excel debe traer toda la
 // información de una vez sin que haya que acordarse de presionar
 // "Seleccionar todo"; quien quiera menos columnas las destilda a mano.
@@ -699,6 +712,17 @@ function abrirModalExtraerEmpleadosExcel(){
             </label>`).join("")}
         </div>
       </div>`).join("")}
+    <div style="margin-bottom:10px;">
+      <div style="font-weight:700; font-size:12.5px; margin-bottom:4px; color:var(--navy-deep);">Adjuntos (fotos)</div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:4px;">Se incrustan como imagen dentro de la celda — con muchos empleados, el Excel tarda bastante más en generarse. Un adjunto en PDF no se puede incrustar como imagen; esa celda queda vacía.</div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px 16px;">
+        ${CAMPOS_EXPORTAR_EMPLEADOS_FOTOS.map(([campo, label]) => `
+          <label style="font-size:12px; display:flex; align-items:center; gap:5px;">
+            <input type="checkbox" data-foto-extraer="${campo}">
+            ${escapeHtml(label)}
+          </label>`).join("")}
+      </div>
+    </div>
     <button class="btn primary" style="width:100%; margin-top:8px;" onclick="descargarExcelEmpleadosSeleccionado()">⬇️ Descargar Excel</button>
     <div id="extraer-emp-status" style="font-size:12px; margin-top:8px;"></div>
   `;
@@ -711,6 +735,7 @@ function abrirModalExtraerEmpleadosExcel(){
 
 function marcarTodosCamposExtraer(marcar){
   document.querySelectorAll('#modal-incompletos-body input[data-campo-extraer]').forEach(cb => { cb.checked = marcar; });
+  document.querySelectorAll('#modal-incompletos-body input[data-foto-extraer]').forEach(cb => { cb.checked = marcar; });
 }
 
 // Las dos columnas "__CUENTA_ELECTRONICA_BNCR" y "__ALERTA_CUENTA_BANCARIA"
@@ -828,11 +853,58 @@ function quitarExtraerEmpSeleccionado(key){
   });
 }
 
+// Resuelve un valor de adjunto ("doc:<id>" archivado en el servidor, o un
+// "data:" heredado de antes del backend) a una imagen lista para incrustar
+// en una celda de Excel: base64 plano + extensión + tamaño ya escalado para
+// que quepa en una celda razonable sin distorsionarse. Devuelve null si el
+// adjunto no es una imagen (ej. un PDF — no se puede incrustar como imagen)
+// o si no se pudo descargar, para que el llamador simplemente deje esa
+// celda vacía en vez de romper el resto del export.
+async function cargarAdjuntoComoImagenExcel(valor){
+  let blob, extension;
+  if (typeof valor === "string" && valor.startsWith("doc:")){
+    const res = await fetch(window.sdgApi.urlDescarga(valor.slice(4)), { credentials: "same-origin" });
+    if (!res.ok) return null;
+    const tipo = (res.headers.get("content-type") || "").toLowerCase();
+    extension = tipo.includes("png") ? "png" : (tipo.includes("jpeg") || tipo.includes("jpg")) ? "jpeg" : tipo.includes("gif") ? "gif" : null;
+    if (!extension) return null;
+    blob = await res.blob();
+  } else if (typeof valor === "string" && valor.startsWith("data:")){
+    const m = /^data:image\/(png|jpe?g|gif);base64,/i.exec(valor);
+    if (!m) return null;
+    extension = m[1].toLowerCase() === "jpg" ? "jpeg" : m[1].toLowerCase();
+    blob = await (await fetch(valor)).blob();
+  } else {
+    return null;
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try{
+    const dims = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => reject(new Error("No se pudo leer la imagen."));
+      img.src = objectUrl;
+    });
+    const MAX_W = 160, MAX_H = 120;
+    const escala = Math.min(MAX_W / dims.w, MAX_H / dims.h, 1);
+    const width = Math.max(1, Math.round(dims.w * escala));
+    const height = Math.max(1, Math.round(dims.h * escala));
+    const dataUrl = await leerArchivoComoDataUrl(blob);
+    const base64 = String(dataUrl).split(",")[1] || "";
+    return { base64, extension, width, height };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 async function descargarExcelEmpleadosSeleccionado(){
   const status = document.getElementById("extraer-emp-status");
   const seleccionados = Array.from(document.querySelectorAll('#modal-incompletos-body input[data-campo-extraer]:checked'))
     .map(cb => cb.dataset.campoExtraer);
-  if (!seleccionados.length){
+  const fotosSeleccionadas = Array.from(document.querySelectorAll('#modal-incompletos-body input[data-foto-extraer]:checked'))
+    .map(cb => cb.dataset.fotoExtraer);
+  if (!seleccionados.length && !fotosSeleccionadas.length){
     if (status) status.textContent = "Elegí al menos una columna.";
     return;
   }
@@ -861,11 +933,16 @@ async function descargarExcelEmpleadosSeleccionado(){
 
     const etiquetasPorCampo = {};
     CAMPOS_EXPORTAR_EMPLEADOS.forEach(g => g.campos.forEach(([campo, label]) => { etiquetasPorCampo[campo] = label; }));
+    const etiquetasPorFoto = {};
+    CAMPOS_EXPORTAR_EMPLEADOS_FOTOS.forEach(([campo, label]) => { etiquetasPorFoto[campo] = label; });
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "SDG RH Management";
     const ws = wb.addWorksheet("EMPLEADOS");
-    ws.columns = seleccionados.map(campo => ({ header: etiquetasPorCampo[campo] || campo, key: campo, width: 22 }));
+    ws.columns = [
+      ...seleccionados.map(campo => ({ header: etiquetasPorCampo[campo] || campo, key: campo, width: 22 })),
+      ...fotosSeleccionadas.map(campo => ({ header: etiquetasPorFoto[campo] || campo, key: campo, width: 24 })),
+    ];
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9D9D9" } };
 
@@ -874,6 +951,36 @@ async function descargarExcelEmpleadosSeleccionado(){
       seleccionados.forEach(campo => { fila[campo] = valorCampoExportarEmpleado(emp, campo); });
       ws.addRow(fila);
     });
+
+    // Las fotos se pegan DESPUÉS de armar todas las filas de texto — así ya
+    // existe la fila/columna donde anclar cada imagen. Secuencial (no en
+    // paralelo) a propósito: son archivos potencialmente pesados y evita
+    // abrir demasiadas descargas a la vez; por eso el aviso de "puede tardar".
+    if (fotosSeleccionadas.length){
+      if (status) status.textContent = "Descargando fotos adjuntas (puede tardar)…";
+      const colBaseFotos = seleccionados.length;
+      for (let i = 0; i < filtrados.length; i++){
+        const emp = filtrados[i];
+        const filaExcel = i + 2; // la fila 1 es el encabezado
+        for (let j = 0; j < fotosSeleccionadas.length; j++){
+          const valor = emp[fotosSeleccionadas[j]];
+          if (!valor) continue;
+          try{
+            const img = await cargarAdjuntoComoImagenExcel(valor);
+            if (!img) continue; // no es imagen (ej. PDF) o no se pudo descargar — celda queda vacía
+            const imageId = wb.addImage({ base64: img.base64, extension: img.extension });
+            const alturaPt = Math.round(img.height * 0.75) + 6;
+            if (alturaPt > (ws.getRow(filaExcel).height || 15)) ws.getRow(filaExcel).height = alturaPt;
+            ws.addImage(imageId, {
+              tl: { col: colBaseFotos + j, row: filaExcel - 1 },
+              ext: { width: img.width, height: img.height },
+              editAs: "oneCell",
+            });
+          }catch(e){ /* una foto que falla no debe tumbar el resto del export */ }
+        }
+      }
+    }
+
     ws.views = [{ state: "frozen", ySplit: 1 }];
 
     const buffer = await wb.xlsx.writeBuffer();
@@ -884,9 +991,10 @@ async function descargarExcelEmpleadosSeleccionado(){
           : `empleados_seleccionados_${new Date().toISOString().slice(0,10)}.xlsx`)
       : `empleados_${estadoFiltro}_${new Date().toISOString().slice(0,10)}.xlsx`;
     descargarBlobComoArchivo(blob, nombreArchivo);
+    const detalleFotos = fotosSeleccionadas.length ? `, ${fotosSeleccionadas.length} foto(s) por empleado` : "";
     status.textContent = extraerEmpSeleccionados.size
-      ? `Descargado: ${filtrados.length} empleado(s) elegido(s), ${seleccionados.length} columna(s).`
-      : `Descargado: ${filtrados.length} empleado(s), ${seleccionados.length} columna(s).`;
+      ? `Descargado: ${filtrados.length} empleado(s) elegido(s), ${seleccionados.length} columna(s)${detalleFotos}.`
+      : `Descargado: ${filtrados.length} empleado(s), ${seleccionados.length} columna(s)${detalleFotos}.`;
   }catch(e){
     if (status) status.textContent = "No se pudo generar el Excel: " + (e.message || "");
   }
