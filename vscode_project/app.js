@@ -694,6 +694,13 @@ function abrirModalExtraerEmpleadosExcel(){
           <option value="todos">Todos</option>
         </select>
       </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Ordenar por
+        <select id="extraer-emp-orden">
+          <option value="apellido_asc" selected>Apellido (A → Z)</option>
+          <option value="fecha_reciente">Fecha de ingreso (más reciente primero)</option>
+          <option value="fecha_antigua">Fecha de ingreso (más antigua primero)</option>
+        </select>
+      </label>
       <button class="btn" onclick="marcarTodosCamposExtraer(true)">Seleccionar todo</button>
       <button class="btn" onclick="marcarTodosCamposExtraer(false)">Ninguno</button>
     </div>
@@ -915,14 +922,28 @@ async function descargarExcelEmpleadosSeleccionado(){
   if (status) status.textContent = "Generando…";
   try{
     const estadoFiltro = (document.getElementById("extraer-emp-estado") || {}).value || "activos";
+    const orden = (document.getElementById("extraer-emp-orden") || {}).value || "apellido_asc";
+    // Mismo criterio de "más reciente/más antigua" que ya usa el ordenamiento
+    // de la lista de Empleados (ver ordenarEmpleadosPor): sin fecha de
+    // ingreso registrada, al final sin importar la dirección — nunca se
+    // interpreta como "más vieja que todas".
+    const comparadorExtraer = (a, b) => {
+      if (orden === "apellido_asc") return compararPorApellido(a, b);
+      const fa = parsearFechaEmpleado(a.FECHA_INGRESO_EMP);
+      const fb = parsearFechaEmpleado(b.FECHA_INGRESO_EMP);
+      if (!fa && !fb) return compararPorApellido(a, b);
+      if (!fa) return 1;
+      if (!fb) return -1;
+      return orden === "fecha_reciente" ? (fb - fa) : (fa - fb);
+    };
     const empleados = await cargarEmpleadosDB();
     // Uno o más empleados elegidos a mano con el buscador reemplazan al
     // filtro de arriba (activos/archivados/todos) — no tiene sentido combinarlos.
     const filtrados = extraerEmpSeleccionados.size
-      ? empleados.filter(e => extraerEmpSeleccionados.has(e.key)).sort(compararPorApellido)
+      ? empleados.filter(e => extraerEmpSeleccionados.has(e.key)).sort(comparadorExtraer)
       : empleados
           .filter(e => estadoFiltro === "activos" ? !e.ARCHIVADO : estadoFiltro === "archivados" ? !!e.ARCHIVADO : true)
-          .sort(compararPorApellido);
+          .sort(comparadorExtraer);
 
     if (!filtrados.length){
       status.textContent = extraerEmpSeleccionados.size
