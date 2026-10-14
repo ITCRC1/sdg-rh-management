@@ -345,25 +345,38 @@ function aplicarModoSegunRol(rol){
   // servidor ya bloquea esos datos aparte; esto es para que la navegación
   // no ofrezca puertas cerradas).
   if (rol === "jefatura"){
-    ["navbtn-inicio","navbtn-empleados","navbtn-expedientes",
-     "navbtn-contratos","navbtn-documentos","navbtn-reportes","navbtn-datos"].forEach(id => {
+    // Dashboard SÍ se le deja — tiene widgets hechos específicamente para
+    // jefatura (Solicitudes pendientes, Quién sale y quién entra, horas
+    // extra por aprobar); sin el botón no tenía forma de volver ahí una vez
+    // que entraba a otra pestaña.
+    // "Incapacidades" (el historial del equipo) se quitó por pedido
+    // explícito — jefatura sigue viendo las PROPIAS en su "Mi información",
+    // el servidor ya no le entrega las del equipo aunque la pestaña
+    // estuviera visible (ver incapacidadEsPropia en rutas-datos.js).
+    ["navbtn-empleados","navbtn-expedientes",
+     "navbtn-contratos","navbtn-documentos","navbtn-reportes","navbtn-datos",
+     "navbtn-incapacidades"].forEach(id => {
       const el = document.getElementById(id);
       if (el) (el.closest(".nav-dd") || el).style.display = "none";
     });
     // "Horas extras" vive DENTRO del desplegable de Planilla — a diferencia
     // del resto de arriba, ese desplegable no se esconde completo (jefatura
-    // sí necesita llegar a Horas extras desde ahí); se esconden nada más
+    // sí necesita llegar a Reloj marcador desde ahí); se esconden nada más
     // "Ver planilla y colillas" e "Ir al menú Datos", que sí siguen siendo
-    // exclusivos de master/gerente.
+    // exclusivos de master/gerente. "Horas extras" en sí se esconde TAMBIÉN
+    // de ahí adentro porque jefatura ahora tiene su propio botón directo
+    // (navbtn-horasextra-directo, más abajo) — así no queda duplicado.
     // El reloj marcador SÍ se muestra a jefatura, pero de solo lectura y
     // filtrado a su propio departamento — el servidor (rutas-reloj.js) hace
     // ese filtro y de todas formas nunca le deja anular/agregar marcas ni
     // enviar a Horas extras (esas siguen exclusivas de master/gerente, ver
     // renderRelojPanel).
-    ["navlink-planilla-ver","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
+    ["navlink-planilla-ver","navlink-planilla-horasextras","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = "none";
     });
+    const btnHorasExtraDirecto = document.getElementById("navbtn-horasextra-directo");
+    if (btnHorasExtraDirecto) btnHorasExtraDirecto.style.display = "block";
   }
 
   // Empleado (Portal del Colaborador) no tiene ninguna "página de RH" — ni
@@ -5118,6 +5131,13 @@ function showTab(which){
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
+  // Atajo de jefatura (ver aplicarModoSegunRol) — no entra en groupOf porque
+  // esa tabla ya manda "horasextras" al grupo "planilla" (para cuando se
+  // llega ahí desde el desplegable, como sigue haciendo master/gerente). Se
+  // resalta aparte para que, entrando por el botón directo, también quede
+  // marcado como activo.
+  const btnHorasExtraDirecto = document.getElementById("navbtn-horasextra-directo");
+  if (btnHorasExtraDirecto) btnHorasExtraDirecto.classList.toggle("active", which === "horasextras");
   closeAllNavMenus();
   if (which === "preview") renderPreview();
   if (which === "constancia") renderConstancia();

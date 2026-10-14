@@ -146,12 +146,16 @@ async function empleadoClavePerteneceAEquipo(propiedad, claveEmpleado, departame
   return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
 }
 
-// Igual que arriba, para incapacidad:<empleadoKey>:<id> — a diferencia de
-// horas_extra: no existe un "sinmatch-" aquí (crearIncapacidad siempre exige
-// elegir un empleado ya identificado), así que no hace falta esa excepción.
-async function incapacidadPerteneceAEquipo(propiedad, claveIncapacidad, departamentoLider, cedulaPropia) {
+// A diferencia de horas_extra:/solicitud_ausencia:/horario_asignado: de
+// arriba, jefatura ya NO ve el historial de incapacidades de su EQUIPO (se
+// quitó por pedido explícito — "no es necesario que la tengan"): solo sigue
+// viendo las PROPIAS, igual que cualquier empleado en su "Mi información".
+// Por eso acá nunca se compara departamento — se llama a
+// empleadoPerteneceAEquipo sin departamentoLider (null), que deja activo
+// solo el chequeo de cédula propia.
+async function incapacidadEsPropia(propiedad, claveIncapacidad, cedulaPropia) {
   const empleadoKey = claveIncapacidad.split(":")[1] || "";
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, null, cedulaPropia);
 }
 
 // Igual que arriba, para horario_asignado:<empleadoKey>:<fechaISO>.
@@ -285,7 +289,7 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
     const pertenece = fila.clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)
       ? await solicitudPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
       : fila.clave.startsWith(INCAPACIDAD_PREFIX)
-      ? await incapacidadPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
+      ? await incapacidadEsPropia(propiedad, fila.clave, usuario.cedula)
       : fila.clave.startsWith(EMPLEADO_PREFIX)
       ? await empleadoClavePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
       : fila.clave.startsWith(HORARIO_ASIGNADO_PREFIX)
@@ -301,12 +305,14 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
 }
 
 // Una jefatura no ve "la página de Recursos Humanos" — solo horas extra, el
-// módulo de días libres/vacaciones, horarios de su equipo, y (solo lectura)
-// el historial de incapacidades de su equipo, para el cálculo de pago en
-// colillas. Por eso su lectura queda limitada a estos prefijos: horas_extra:,
-// solicitud_ausencia: e incapacidad: (lo suyo, filtrado por equipo — ver
-// filtrarFilasPorEquipo), cat_horario:/cat_lugar_trabajo:/horario_asignado:
-// (ídem), y cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
+// módulo de días libres/vacaciones y horarios, de su equipo. incapacidad:
+// queda SOLO para lo propio (nunca el historial del equipo — se le quitó esa
+// pestaña por pedido explícito), igual que ve cualquier empleado en su "Mi
+// información" (ver incapacidadEsPropia). Por eso su lectura queda limitada
+// a estos prefijos: horas_extra:, solicitud_ausencia: (filtrado por equipo —
+// ver filtrarFilasPorEquipo), incapacidad: (filtrado a lo propio),
+// cat_horario:/cat_lugar_trabajo:/horario_asignado: (filtrado por equipo), y
+// cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
 // departamento de su propio equipo — nada de contratos, documentos, otros
 // catálogos, etc.).
 const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX];
@@ -544,8 +550,8 @@ router.get("/:clave(*)", async (req, res, next) => {
       if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "jefatura" && clave.startsWith(INCAPACIDAD_PREFIX)) {
-      const enSuEquipo = await incapacidadPerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
-      if (!enSuEquipo) return res.status(403).json({ error: "Ese registro no es de tu equipo.", codigo: "sin_permiso" });
+      const esPropia = await incapacidadEsPropia(propiedad, clave, req.usuario.cedula);
+      if (!esPropia) return res.status(403).json({ error: "Ese registro no es tuyo.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "jefatura" && clave.startsWith(EMPLEADO_PREFIX)) {
       const enSuEquipo = await empleadoClavePerteneceAEquipo(propiedad, clave, req.usuario.puesto, req.usuario.cedula);
