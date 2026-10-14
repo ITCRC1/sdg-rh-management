@@ -38,13 +38,14 @@ function claveValida(clave) {
 }
 
 // --------------------------------------------------------------------------
-// Alcance de "jefatura": horas_extra: es lo único que ese rol puede escribir,
-// y solo lo de su propio equipo. incapacidad: se le suma como SOLO LECTURA
-// (registrarlas sigue siendo exclusivo de master/gerente — ver
-// puedeEscribirClave) para que pueda consultar el historial de su equipo.
-// Espeja los prefijos que usa el cliente (app.js: CATALOGS.empleados.prefix,
-// CATALOGS.puestos.prefix, HORAS_EXTRA_PREFIX, INCAPACIDAD_PREFIX) — si esos
-// cambian ahí, deben cambiar aquí también.
+// Alcance de "jefatura": horas_extra:/solicitud_ausencia:/cat_horario:/
+// cat_lugar_trabajo:/horario_asignado: son lo que ese rol puede escribir, y
+// solo lo de su propio equipo/departamento. incapacidad: es SOLO LECTURA y
+// SOLO LO PROPIO (ni siquiera el equipo — ver incapacidadEsPropia), igual
+// que ve cualquier empleado en su "Mi información". Espeja los prefijos que
+// usa el cliente (app.js: CATALOGS.empleados.prefix, CATALOGS.puestos.prefix,
+// HORAS_EXTRA_PREFIX, INCAPACIDAD_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX,
+// HORARIO_ASIGNADO_PREFIX) — si esos cambian ahí, deben cambiar aquí también.
 // --------------------------------------------------------------------------
 const HORAS_EXTRA_PREFIX = "horas_extra:";
 const SOLICITUD_AUSENCIA_PREFIX = "solicitud_ausencia:";
@@ -89,9 +90,13 @@ async function valorDeClave(propiedad, clave) {
 // ¿Este empleado pertenece al departamento que lidera esta jefatura? El
 // departamento sale de DEPARTAMENTO_MINISTERIO en el puesto del empleado
 // (ej. "COCINA" agrupa Cocinero A, Cocinero B, Panadero y Steward — así lo
-// clasifica el catálogo del Ministerio de Trabajo). Compartido por
-// horas_extra:, solicitud_ausencia: e incapacidad:, los únicos prefijos que
-// una jefatura puede llegar a tocar o consultar.
+// clasifica el catálogo del Ministerio de Trabajo). Compartido por todos los
+// prefijos "de un empleado" que jefatura puede llegar a tocar o consultar
+// por equipo (horas_extra:, solicitud_ausencia:, horario_asignado:) —
+// incapacidad: es la excepción: desde que se le quitó la vista de equipo,
+// llama a esta misma función pero SIN departamentoLider (ver
+// incapacidadEsPropia), dejando activo solo el chequeo de cédula propia de
+// abajo.
 // `cedulaPropia`, si viene, es SOLO para lectura ("Mi información" — ver
 // app.js): una jefatura siempre puede ver sus propias filas aunque su propio
 // puesto no caiga en el departamento que lidera. Quien llama a escribir o

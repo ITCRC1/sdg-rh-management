@@ -15868,6 +15868,33 @@ async function eliminarLugarTrabajo(key){
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
+// Etiquetas de etiquetaCalendarioParaDia que SÍ significan que ese día la
+// persona está ausente (vacaciones/día libre/cita/incapacidad/cumpleaños/día
+// de viaje ya aprobados) — a diferencia de ETIQUETAS_AUSENCIA_DOTACION (más
+// abajo, para "Dotación por día"), acá NO se incluye "SALE": ese día la
+// persona SÍ trabaja (es su último día antes de salir), así que no es un
+// conflicto asignarle turno.
+const ETIQUETAS_AUSENCIA_HORARIO = new Set(["VAC", "LIBRE", "CITA", "INCAP", "CUMP", "VIAJE"]);
+
+// Carga solicitudes/horas-extra UNA sola vez y devuelve una función liviana
+// para preguntar, por empleado+día, si ese día cae dentro de una ausencia ya
+// aprobada — pensado para los flujos que revisan varios días/empleados de
+// una vez (aplicarHorarioASemana, confirmarAsignacionRapida,
+// confirmarAsignacionMasiva), que si no repetirían esta misma carga completa
+// una vez por cada día que revisan.
+async function crearVerificadorConflictosHorario(){
+  const [solicitudes, registrosHorasExtra] = await Promise.all([
+    listarSolicitudesAusencia(),
+    listarRegistrosHorasExtra(),
+  ]);
+  return (empKey, fechaISO) => {
+    const solicitudesEmp = solicitudes.filter(s => s.EMPLEADO_KEY === empKey);
+    const horasEmp = registrosHorasExtra.filter(r => r.EMPLEADO_KEY === empKey);
+    const etiqueta = etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, horasEmp);
+    return (etiqueta && ETIQUETAS_AUSENCIA_HORARIO.has(etiqueta.texto)) ? etiqueta : null;
+  };
+}
+
 // Guarda/quita la asignación de un empleado para un día puntual. Lugar y
 // turno son obligatorios JUNTOS: si falta cualquiera de los dos se guarda
 // vacío ("" = "sin asignar"). Ni jefatura ni nadie más borra la clave acá
@@ -15901,6 +15928,16 @@ async function guardarHorarioAsignado(empKey, fechaISO){
   if (lugarKey && !horarioKey){ statusMsg("Falta elegir el turno de ese día.", false); return; }
   if (!lugarKey && horarioKey){ statusMsg("Falta elegir el lugar de trabajo de ese día.", false); return; }
   try{
+    if (lugarKey && horarioKey){
+      const verificar = await crearVerificadorConflictosHorario();
+      const conflicto = verificar(empKey, fechaISO);
+      if (conflicto && !confirm(`Ese día (${fmtFechaSimple(fechaISO)}) ya tiene "${conflicto.texto}" aprobado para este empleado. ¿Asignar el turno de todas formas?`)){
+        // Revierte el <select> al valor que tenía antes de este cambio, para
+        // no dejar en pantalla una elección que en realidad no se guardó.
+        renderHorariosPanel();
+        return;
+      }
+    }
     await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
     statusMsg(lugarKey && horarioKey ? "Horario actualizado." : "Día sin asignar.");
   }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
@@ -15917,12 +15954,22 @@ async function aplicarHorarioASemana(empKey){
   const lugarKey = selLugar ? selLugar.value : "";
   const horarioKey = selTurno ? selTurno.value : "";
   if (!lugarKey || !horarioKey){ statusMsg("Elegí lugar de trabajo y turno para aplicar a toda la semana.", false); return; }
-  if (!confirm("¿Aplicar este lugar y turno a los 7 días de esta semana para este empleado? Sobrescribe lo que ya tenía asignado esos días.")) return;
+  const diasISO = [];
+  for (let i = 0; i < 7; i++){
+    const d = new Date(horariosSemanaDesde + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    diasISO.push(isoDeFechaLocal(d));
+  }
   try{
-    for (let i = 0; i < 7; i++){
-      const d = new Date(horariosSemanaDesde + "T00:00:00");
-      d.setDate(d.getDate() + i);
-      await fijarHorarioAsignado(empKey, isoDeFechaLocal(d), lugarKey, horarioKey);
+    const verificar = await crearVerificadorConflictosHorario();
+    const conflictivos = diasISO.filter(f => verificar(empKey, f));
+    let mensaje = "¿Aplicar este lugar y turno a los 7 días de esta semana para este empleado? Sobrescribe lo que ya tenía asignado esos días.";
+    if (conflictivos.length){
+      mensaje = `⚠️ ${conflictivos.length} de esos 7 días ya tiene una ausencia aprobada (vacaciones/libre/incapacidad/etc.): ${conflictivos.map(fmtFechaSimple).join(", ")}.\n\n` + mensaje;
+    }
+    if (!confirm(mensaje)) return;
+    for (const fechaISO of diasISO){
+      await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
     }
     statusMsg("Lugar y turno aplicados a toda la semana.");
     renderHorariosPanel();
@@ -16132,6 +16179,11 @@ async function confirmarAsignacionRapida(){
   if (!lugarKey || !empKey || !horarioKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí lugar, empleado y turno.</span>`; return; }
   if (!diasElegidos.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Marcá al menos un día.</span>`; return; }
   try{
+    const verificar = await crearVerificadorConflictosHorario();
+    const conflictivos = diasElegidos.filter(f => verificar(empKey, f));
+    if (conflictivos.length && !confirm(`⚠️ ${conflictivos.length} de los días elegidos ya tiene una ausencia aprobada (vacaciones/libre/incapacidad/etc.) para este empleado: ${conflictivos.map(fmtFechaSimple).join(", ")}.\n\n¿Asignar el turno de todas formas en esos días?`)){
+      return;
+    }
     for (const fechaISO of diasElegidos){
       await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
     }
@@ -16229,8 +16281,25 @@ async function confirmarAsignacionMasiva(){
   if (!lugarKey || !horarioKey){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí lugar y turno.</span>`; return; }
   if (!dias.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Marcá al menos un día.</span>`; return; }
   if (!empleadosKeys.length){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Marcá al menos un empleado.</span>`; return; }
-  if (!confirm(`¿Asignar a ${empleadosKeys.length} empleado(s) en ${dias.length} día(s)? Esto sobrescribe lo que ya tuvieran asignado esos días.`)) return;
   try{
+    const verificar = await crearVerificadorConflictosHorario();
+    const empleadosPorKeyCache = {};
+    (horariosCacheParaModal.empleadosVisibles || []).forEach(e => { empleadosPorKeyCache[e.key] = e; });
+    const conflictos = [];
+    empleadosKeys.forEach(empKey => {
+      dias.forEach(fechaISO => {
+        if (verificar(empKey, fechaISO)){
+          const emp = empleadosPorKeyCache[empKey];
+          conflictos.push(`${nombreCompletoEmpleado(emp) || empKey} (${fmtFechaSimple(fechaISO)})`);
+        }
+      });
+    });
+    let mensaje = `¿Asignar a ${empleadosKeys.length} empleado(s) en ${dias.length} día(s)? Esto sobrescribe lo que ya tuvieran asignado esos días.`;
+    if (conflictos.length){
+      const detalle = conflictos.length > 6 ? conflictos.slice(0, 6).join(", ") + ` y ${conflictos.length - 6} más` : conflictos.join(", ");
+      mensaje = `⚠️ ${conflictos.length} de estas asignaciones caen en un día con ausencia ya aprobada (vacaciones/libre/incapacidad/etc.): ${detalle}.\n\n` + mensaje;
+    }
+    if (!confirm(mensaje)) return;
     for (const empKey of empleadosKeys){
       for (const fechaISO of dias){
         await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
@@ -16240,6 +16309,72 @@ async function confirmarAsignacionMasiva(){
     cerrarModalIncompletos();
     renderHorariosPanel();
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo asignar: ${escapeHtml(e.message)}</span>`; }
+}
+
+// Excel de la semana en pantalla — mismo alcance que el resto del módulo
+// (horariosCacheParaModal ya trae empleadosVisibles/deptoActivo/semanaDesdeISO
+// del último render de renderHorariosPanel). Pensado para imprimir y pegarlo
+// en la pared o mandarlo por WhatsApp — el horario individual de cada quien
+// ya se puede consultar dentro de la app (ver "Mi horario de esta semana" en
+// Mi información), así que esto es para la vista de equipo completo.
+async function exportarHorarioSemana(){
+  const { empleadosVisibles, deptoActivo, semanaDesdeISO } = horariosCacheParaModal;
+  if (typeof ExcelJS === "undefined"){ statusMsg("No se pudo cargar el generador de Excel.", false); return; }
+  if (!empleadosVisibles || !empleadosVisibles.length){ statusMsg("No hay empleados para exportar.", false); return; }
+  try{
+    const [horarios, lugares, asignados] = await Promise.all([
+      listarHorarios(), listarLugaresTrabajo(), listarHorariosAsignados(),
+    ]);
+    const horariosPorKey = {}; horarios.forEach(h => { horariosPorKey[h.key] = h; });
+    const lugaresPorKey = {}; lugares.forEach(l => { lugaresPorKey[l.key] = l; });
+    const asignadosPorClave = {}; asignados.forEach(a => { if (a.LUGAR_KEY && a.HORARIO_KEY) asignadosPorClave[a.key] = a; });
+
+    const dias = [];
+    for (let i = 0; i < 7; i++){
+      const d = new Date(semanaDesdeISO + "T00:00:00");
+      d.setDate(d.getDate() + i);
+      dias.push(isoDeFechaLocal(d));
+    }
+    const empleadosOrdenados = empleadosVisibles.slice().sort(compararPorApellido);
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Empleado", ...dias.map(f => { const dObj = new Date(f + "T00:00:00"); return `${DIA_SEMANA_CORTO_HORARIOS[dObj.getDay()]} ${fmtFechaSimple(f)}`; })];
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("HORARIOS");
+    ws.columns = [{ width: 26 }, ...dias.map(() => ({ width: 20 }))];
+    ws.mergeCells(1, 1, 1, COLUMNAS.length);
+    const t = ws.getCell(1, 1); t.value = nombrePropiedad; t.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NEGRO} }; t.font = { color:{argb:BLANCO}, bold:true, size:13 }; t.alignment = { horizontal:"center" };
+    ws.mergeCells(2, 1, 2, COLUMNAS.length);
+    const st = ws.getCell(2, 1); st.value = `Horario de la semana del ${fmtFechaSimple(semanaDesdeISO)}${deptoActivo ? " — " + deptoActivo : ""}`; st.font = { italic:true, size:10 }; st.alignment = { horizontal:"center" };
+    const hdr = ws.getRow(3);
+    COLUMNAS.forEach((c, i) => { const cell = hdr.getCell(i + 1); cell.value = c; cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; cell.font = { bold:true }; cell.alignment = { horizontal:"center" }; cell.border = bordeCelda; });
+
+    let fila = 4;
+    empleadosOrdenados.forEach(emp => {
+      const celdaNombre = ws.getRow(fila).getCell(1);
+      celdaNombre.value = nombreCompletoEmpleado(emp) || emp.key;
+      celdaNombre.border = bordeCelda;
+      dias.forEach((fechaISO, i) => {
+        const a = asignadosPorClave[`${HORARIO_ASIGNADO_PREFIX}${emp.key}:${fechaISO}`];
+        const lugar = a ? lugaresPorKey[a.LUGAR_KEY] : null;
+        const turno = a ? horariosPorKey[a.HORARIO_KEY] : null;
+        const cell = ws.getRow(fila).getCell(i + 2);
+        cell.value = (lugar && turno) ? `${lugar.NOMBRE} — ${turno.NOMBRE}` : "";
+        cell.border = bordeCelda;
+        cell.alignment = { horizontal:"center", wrapText:true };
+      });
+      fila++;
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    descargarBlobComoArchivo(blob, `horario_semana_${semanaDesdeISO}.xlsx`);
+    statusMsg("Horario de la semana descargado.");
+  }catch(e){ statusMsg("No se pudo exportar: " + (e.message || ""), false); }
 }
 
 function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, semanaDesdeISO, puedeGestionar){
@@ -16261,8 +16396,9 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
       <div style="font-weight:700; color:var(--navy-deep);">📅 Asignar horario — semana del ${fmtFechaSimple(semanaDesdeISO)}</div>
-      <div style="display:flex; gap:6px;">
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
         ${puedeGestionar ? `<button class="btn primary" onclick="abrirModalAsignacionMasiva();">➕ Añadir a varios</button>` : ""}
+        ${empleadosOrdenados.length ? `<button class="btn" onclick="exportarHorarioSemana();">⬇️ Exportar semana (Excel)</button>` : ""}
         <button class="btn" onclick="horariosSemanaDesde='${semanaAnteriorISO}'; renderHorariosPanel();">← Semana anterior</button>
         <button class="btn" onclick="horariosSemanaDesde='${semanaSiguienteISO}'; renderHorariosPanel();">Semana siguiente →</button>
       </div>
