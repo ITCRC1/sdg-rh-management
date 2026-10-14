@@ -9,7 +9,8 @@
       "PowerShell($git = \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.6.7\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; & $git status; \"---\"; & $git diff --stat)",
       "PowerShell($git = \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.6.7\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; & $git ls-files -- src/rutas-datos.js; \"---ls-files index.html---\"; & $git ls-files -- vscode_project/index.html; \"---check-ignore---\"; & $git check-ignore -v src/rutas-datos.js vscode_project/index.html; \"---diff rutas-datos---\"; & $git diff --stat -- src/rutas-datos.js; \"---diff index.html---\"; & $git diff --stat -- vscode_project/index.html)",
       "PowerShell($git = \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.6.7\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; & $git log --oneline -20; \"---\"; & $git log -1 --format=\"%H %ci %an\")",
-      "PowerShell(node --check src\\\\auth.js)"
+      "PowerShell(node --check src\\\\auth.js)",
+      "WebFetch(domain:valdrengames.com)"
     ]
   }
 }
