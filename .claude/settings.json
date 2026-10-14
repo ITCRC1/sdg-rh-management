@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)",
+      "PowerShell(npm start)"
+    ]
+  }
+}
