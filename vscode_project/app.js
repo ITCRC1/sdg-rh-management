@@ -12706,15 +12706,58 @@ async function marcarJornadaCompletaTurno(key){
   }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
 }
 
+// Qué fue la única marca registrada de "Turno sin marcar" ("entrada" o
+// "salida") — se resetea cada vez que se abre el modal (mostrarModalCompletarTurno)
+// para no arrastrar la elección de un registro anterior. Antes solo existía
+// el campo "Entrada" prellenado con la marca y había que "truquearlo" a
+// mano (escribir ahí la hora real de entrada y poner la marca registrada en
+// "Salida") — un pie de página explicaba el truco, pero no era obvio ni a
+// prueba de error. Este toggle lo hace explícito: decís qué fue la marca y
+// los campos Entrada/Salida se acomodan solos.
+let turnoCompletarTipoMarca = "entrada";
+
+// Repinta los dos campos de hora según turnoCompletarTipoMarca — la marca
+// registrada (guardada en el data-attribute del contenedor) va siempre del
+// lado que corresponda, y el otro campo queda vacío para completarlo.
+// Ambos campos siguen siendo editables a mano después: si hasta la marca
+// registrada estuviera mal (el reloj la tomó con la hora equivocada), se
+// corrige igual que cualquier otro campo.
+function renderCamposCompletarTurno(){
+  const wrap = document.getElementById("turno-completar-campos");
+  if (!wrap) return;
+  const esEntrada = turnoCompletarTipoMarca === "entrada";
+  const marcaRegistrada = wrap.dataset.marcaRegistrada || "";
+  wrap.innerHTML = `
+    <div class="field">
+      <label>Entrada</label>
+      <input type="datetime-local" id="turno-entrada" value="${esEntrada ? escapeHtml(marcaRegistrada) : ""}">
+    </div>
+    <div class="field">
+      <label>Salida</label>
+      <input type="datetime-local" id="turno-salida" value="${esEntrada ? "" : escapeHtml(marcaRegistrada)}">
+    </div>`;
+}
+
+function cambiarTipoMarcaCompletarTurno(tipo){
+  turnoCompletarTipoMarca = tipo;
+  const btnEntrada = document.getElementById("turno-tipo-entrada");
+  const btnSalida = document.getElementById("turno-tipo-salida");
+  if (btnEntrada) btnEntrada.classList.toggle("active", tipo === "entrada");
+  if (btnSalida) btnSalida.classList.toggle("active", tipo === "salida");
+  renderCamposCompletarTurno();
+}
+
 // "Turno sin marcar": el reloj registró una sola marca ese día (falta el
 // check-in o el check-out). Se le muestra a la jefatura la marca que sí
-// llegó, y completa la que falta a mano — o confirma que ese día no se
-// trabajó, si la marca fue un error del reloj.
+// llegó, le pide decir si fue la entrada o la salida, y completa la que
+// falta a mano — o confirma que ese día no se trabajó, si la marca fue un
+// error del reloj.
 async function mostrarModalCompletarTurno(key){
   const body = document.getElementById("modal-incompletos-body");
   document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "⚠️ Turno sin marcar";
   body.innerHTML = `<div class="empty-state">Cargando…</div>`;
   document.getElementById("modal-incompletos").classList.add("open");
+  turnoCompletarTipoMarca = "entrada";
   try{
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
@@ -12730,18 +12773,18 @@ async function mostrarModalCompletarTurno(key){
     body.innerHTML = `
       <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
         <b>${escapeHtml(nombre || "—")}</b> — el reloj marcador solo registró una marca ese día: <b>${escapeHtml(mostrarFechaHoraCorta(v.MARCA_SUELTA))}</b>.
-        Completa la hora que falta (lo más común es que haya olvidado marcar la salida).
       </div>
       <div class="field">
-        <label>Entrada</label>
-        <input type="datetime-local" id="turno-entrada" value="${escapeHtml(v.MARCA_SUELTA || "")}">
+        <label>¿Qué fue esa marca?</label>
+        <div class="sino-toggle">
+          <button type="button" id="turno-tipo-entrada" class="active" onclick="cambiarTipoMarcaCompletarTurno('entrada')">🟢 Fue la ENTRADA — faltó marcar la salida</button>
+          <button type="button" id="turno-tipo-salida" onclick="cambiarTipoMarcaCompletarTurno('salida')">🔴 Fue la SALIDA — faltó marcar la entrada</button>
+        </div>
       </div>
-      <div class="field">
-        <label>Salida</label>
-        <input type="datetime-local" id="turno-salida" value="">
-      </div>
+      <div id="turno-completar-campos" data-marca-registrada="${escapeHtml(v.MARCA_SUELTA || "")}"></div>
       <button class="btn primary" style="margin-top:8px;" onclick="confirmarCompletarTurno('${key.replace(/'/g,"\\'")}')">✅ Guardar y aprobar</button>
-      <div class="hint" style="margin-top:6px;">Si la marca fue de salida en vez de entrada, corrige el campo "Entrada" y llena "Salida" con la hora real de entrada — el sistema solo calcula la diferencia entre las dos.</div>`;
+      <div class="hint" style="margin-top:6px;">Las dos horas se pueden corregir a mano si hasta la marca registrada estuviera mal — el sistema solo calcula la diferencia entre Entrada y Salida.</div>`;
+    renderCamposCompletarTurno();
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
 }
 
