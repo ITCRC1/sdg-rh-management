@@ -5135,9 +5135,17 @@ function showTab(which){
   // esa tabla ya manda "horasextras" al grupo "planilla" (para cuando se
   // llega ahí desde el desplegable, como sigue haciendo master/gerente). Se
   // resalta aparte para que, entrando por el botón directo, también quede
-  // marcado como activo.
+  // marcado como activo — y si ese botón está visible (jefatura), "Planilla"
+  // NO debe quedar también marcado: antes del bloque de abajo, el forEach de
+  // arriba ya lo había encendido vía groupOf, dejando los dos resaltados al
+  // mismo tiempo, que es justo el bug reportado.
   const btnHorasExtraDirecto = document.getElementById("navbtn-horasextra-directo");
+  const horasExtraDirectoVisible = !!btnHorasExtraDirecto && btnHorasExtraDirecto.style.display !== "none";
   if (btnHorasExtraDirecto) btnHorasExtraDirecto.classList.toggle("active", which === "horasextras");
+  if (horasExtraDirectoVisible && which === "horasextras"){
+    const btnPlanilla = document.getElementById("navbtn-planilla");
+    if (btnPlanilla) btnPlanilla.classList.remove("active");
+  }
   closeAllNavMenus();
   if (which === "preview") renderPreview();
   if (which === "constancia") renderConstancia();
