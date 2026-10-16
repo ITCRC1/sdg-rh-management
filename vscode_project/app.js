@@ -5613,11 +5613,10 @@ function nombresSinRelacion(nombreColilla, nombreFicha){
   return true;
 }
 
-// porNumero guarda un ARRAY por número — el mismo número de planilla puede
-// tocarle a dos personas distintas cuando el sistema de origen numera por
-// interfaz separada de moneda (colones y dólares cada una por su cuenta, ver
-// emparejarRegistroColilla). Antes se guardaba un solo empleado por número:
-// si dos compartían número, el segundo pisaba al primero en el índice y esa
+// porNumero guarda un ARRAY por número — dentro de un mismo grupo de moneda
+// (ver construirIndicesPorMoneda) dos personas no deberían compartir número,
+// pero si pasa (un duplicado real de digitación) antes se guardaba un solo
+// empleado por número: el segundo pisaba al primero en el índice y esa
 // persona quedaba invisible para el emparejado por número desde ese momento.
 function construirIndicesEmpleados(empleadosDB){
   const porNumero = {}, porCedula = {}, porNombre = {};
@@ -5632,27 +5631,48 @@ function construirIndicesEmpleados(empleadosDB){
   return { porNumero, porCedula, porNombre };
 }
 
+// Separa a los empleados en dos "pilas" por moneda de salario
+// (MONEDA_SALARIO_EMP) y arma el índice de cada una por separado. Esto es lo
+// que de verdad resuelve el choque de números: las dos planillas de origen
+// (colones y dólares) numeran a su gente cada una por su cuenta empezando
+// de 1, así que el mismo número le toca a alguien distinto en cada una. Antes
+// se buscaba en TODOS los empleados juntos y había que desempatar después;
+// ahora, como cada botón de subida ya dice la moneda del lote (ver
+// renderColillasImporter/onColillasPdfSelected), una colilla en dólares
+// busca SOLO entre quienes ya están marcados como que cobran en dólares — el
+// número de un empleado en colones ni siquiera entra en la búsqueda, así que
+// no hay con qué chocar.
+function construirIndicesPorMoneda(empleadosDB){
+  const empleadosUsd = empleadosDB.filter(e => e.MONEDA_SALARIO_EMP === "USD");
+  const empleadosCrc = empleadosDB.filter(e => e.MONEDA_SALARIO_EMP !== "USD");
+  return {
+    USD: construirIndicesEmpleados(empleadosUsd),
+    CRC: construirIndicesEmpleados(empleadosCrc),
+    empleadosUsd, empleadosCrc,
+  };
+}
+
 // Mismo criterio de emparejado (número → cédula → nombre exacto → nombre con
 // pequeños errores de tipeo) usado tanto para actualizar salarios como para
-// archivar la colilla individual de cada quien.
-function emparejarRegistroColilla(p, indices, empleadosDB){
+// archivar la colilla individual de cada quien. `indicesPorMoneda` viene de
+// construirIndicesPorMoneda — la búsqueda queda acotada desde el principio a
+// la "pila" de empleados de la misma moneda que trae esta colilla.
+function emparejarRegistroColilla(p, indicesPorMoneda){
   let match = null, nombreCorregido = null, matchedBy = null, numeroAmbiguo = false;
+  const esUsd = p.moneda === "USD";
+  const indices = esUsd ? indicesPorMoneda.USD : indicesPorMoneda.CRC;
+  const empleadosDelGrupo = esUsd ? indicesPorMoneda.empleadosUsd : indicesPorMoneda.empleadosCrc;
   if (p.numero){
     const candidatos = indices.porNumero[p.numero.replace(/^0+/,"")] || [];
     if (candidatos.length === 1){
       match = candidatos[0];
       matchedBy = "número de empleado";
     } else if (candidatos.length > 1){
-      // Mismo número, dos o más fichas: desempata por la moneda que trae esta
-      // colilla (detectada del nombre del archivo — ver detectarMonedaArchivo)
-      // contra la moneda guardada en cada ficha (MONEDA_SALARIO_EMP).
-      const porMoneda = candidatos.filter(e => (e.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC") === p.moneda);
-      if (porMoneda.length === 1){
-        match = porMoneda[0];
-        matchedBy = "número de empleado (por moneda)";
-      } else {
-        numeroAmbiguo = true; // no se pudo desempatar con seguridad — sigue a cédula/nombre
-      }
+      // Dos fichas DE LA MISMA MONEDA comparten número — ya no es el choque
+      // típico colones/dólares (eso queda resuelto de raíz al separar por
+      // moneda antes de buscar), sino un duplicado real de digitación dentro
+      // del mismo grupo. Sigue a cédula/nombre en vez de adivinar cuál es.
+      numeroAmbiguo = true;
     }
   }
   if (!match && p.cedula && indices.porCedula[p.cedula.replace(/\D/g,"")]){
@@ -5664,7 +5684,7 @@ function emparejarRegistroColilla(p, indices, empleadosDB){
     if (match) matchedBy = "nombre";
   }
   if (!match){
-    const fuzzy = buscarCoincidenciaDifusa(p.nombre, empleadosDB);
+    const fuzzy = buscarCoincidenciaDifusa(p.nombre, empleadosDelGrupo);
     if (fuzzy){
       match = fuzzy;
       nombreCorregido = { anterior: nombreCompletoEmpleado(fuzzy), nuevo: p.nombre };
@@ -5698,11 +5718,17 @@ async function procesarColillas(){
     statusMsg("No se pudo cargar la lista de empleados/puestos para comparar: " + e.message, false);
     return;
   }
+  // Un archivado nunca debe ser candidato para emparejar una colilla de la
+  // planilla actual — sin este filtro, un número de empleado reasignado a
+  // alguien nuevo podía seguir emparejando con la persona que ya se fue
+  // (ver nombresSinRelacion/construirIndicesEmpleados: el número "coincide"
+  // mecánicamente contra cualquiera que lo haya tenido, archivado o no).
+  empleadosDB = empleadosDB.filter(e => !e.ARCHIVADO);
   window._puestosDBCache = puestosDB; // lo usa el selector de mapeo en renderColillasPreview
-  const indices = construirIndicesEmpleados(empleadosDB);
+  const indicesPorMoneda = construirIndicesPorMoneda(empleadosDB);
 
   colillasResultadosCache = parsed.map(p => {
-    const { match, nombreCorregido, matchedBy, numeroAmbiguo } = emparejarRegistroColilla(p, indices, empleadosDB);
+    const { match, nombreCorregido, matchedBy, numeroAmbiguo } = emparejarRegistroColilla(p, indicesPorMoneda);
     const puestoInfo = calcularPuestoInfo(p, match, mapaOcupaciones);
     // Un salario en colones que cae a menos de un tercio del que ya tenía
     // guardado (o que se triplica) casi nunca es un cambio real dentro de la
@@ -6119,11 +6145,15 @@ async function renderColillasImporter(){
   panel.innerHTML = `
     <div style="margin-bottom:12px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">🧾 Importación de colillas de pago</div>
-      <div style="font-size:12px; color:var(--ink-soft);">Sube el/los PDF con las colillas de pago (por ejemplo, uno en colones y otro en dólares — puedes elegir ambos a la vez). El sistema las reparte automáticamente, empareja por número de empleado, cédula o nombre, corrige nombres con errores de tipeo, y actualiza el salario de cada quien.</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Subí por separado el PDF de colones y el de dólares, con su botón correspondiente — así el sistema sabe la moneda de cada uno sin tener que adivinarla del nombre del archivo. Empareja por número de empleado, cédula o nombre, corrige nombres con errores de tipeo, y actualiza el salario de cada quien.</div>
       ${ultimaActualizacion ? `<div style="font-size:11px; color:var(--leaf); margin-top:6px; font-weight:600;">✅ Última actualización aplicada: ${escapeHtml(ultimaActualizacion)}</div>` : ""}
     </div>
-    <button class="btn primary" style="width:100%; margin-bottom:8px;" onclick="document.getElementById('colillas-pdf-input').click()">📄 Subir PDF(s) de colillas</button>
-    <input type="file" id="colillas-pdf-input" accept=".pdf" multiple style="display:none;" onchange="onColillasPdfSelected(this)">
+    <div style="display:flex; gap:8px; margin-bottom:8px;">
+      <button class="btn primary" style="flex:1;" onclick="document.getElementById('colillas-pdf-input-crc').click()">₡ Subir PDF(s) en COLONES</button>
+      <button class="btn primary" style="flex:1;" onclick="document.getElementById('colillas-pdf-input-usd').click()">$ Subir PDF(s) en DÓLARES</button>
+    </div>
+    <input type="file" id="colillas-pdf-input-crc" accept=".pdf" multiple style="display:none;" onchange="onColillasPdfSelected(this, 'CRC')">
+    <input type="file" id="colillas-pdf-input-usd" accept=".pdf" multiple style="display:none;" onchange="onColillasPdfSelected(this, 'USD')">
     <div id="colillas-pdf-status" style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;"></div>
     <div style="display:flex; gap:8px; margin-bottom:10px;">
       <button class="btn" style="flex:1;" onclick="mostrarModalColillasArchivadas()">📋 Ver colillas archivadas</button>
@@ -6299,8 +6329,12 @@ async function archivarColillasPDF(file, clavesYaArchivadas, moneda, clavesPendi
   }
   if (!registros.length) return { archivados: 0, duplicados: 0, sinCoincidencia: [], total: 0 };
 
-  const empleadosDB = await cargarEmpleadosDB();
-  const indices = construirIndicesEmpleados(empleadosDB);
+  // Mismo filtro que procesarColillas: un archivado nunca debe ser candidato
+  // para emparejar una colilla de la planilla actual (ver el comentario de
+  // allá para el caso concreto: número de empleado reasignado a alguien
+  // nuevo que seguía emparejando con quien ya se fue).
+  const empleadosDB = (await cargarEmpleadosDB()).filter(e => !e.ARCHIVADO);
+  const indicesPorMoneda = construirIndicesPorMoneda(empleadosDB);
   if (!clavesYaArchivadas) clavesYaArchivadas = await cargarClavesColillasArchivadas();
   if (!clavesPendientesYaGuardadas) clavesPendientesYaGuardadas = await cargarClavesColillasPendientes();
 
@@ -6311,7 +6345,7 @@ async function archivarColillasPDF(file, clavesYaArchivadas, moneda, clavesPendi
   let archivados = 0, duplicados = 0, pendientesNuevas = 0;
   const sinCoincidencia = [];
   for (const reg of registros){
-    const { match, matchedBy } = emparejarRegistroColilla(reg, indices, empleadosDB);
+    const { match, matchedBy } = emparejarRegistroColilla(reg, indicesPorMoneda);
     // Mismo criterio de seguridad que ya usa procesarColillas (ver
     // nombresSinRelacion): un número/cédula que "coincide" pero con un
     // nombre que no tiene nada que ver casi nunca es la misma persona (el
@@ -6363,7 +6397,11 @@ async function archivarColillasPDF(file, clavesYaArchivadas, moneda, clavesPendi
   return { archivados, duplicados, sinCoincidencia, total: registros.length, pendientesNuevas };
 }
 
-async function onColillasPdfSelected(inputEl){
+// `monedaForzada` ("CRC"/"USD"), cuando viene, gana siempre sobre
+// detectarMonedaArchivo — ya no hace falta adivinar la moneda del nombre del
+// archivo si quien sube el PDF ya la eligió con el botón correspondiente
+// (ver renderColillasImporter: un botón para colones, otro para dólares).
+async function onColillasPdfSelected(inputEl, monedaForzada){
   const files = inputEl.files ? Array.from(inputEl.files) : [];
   if (files.length === 0) return;
   const statusEl = document.getElementById("colillas-pdf-status");
@@ -6395,7 +6433,7 @@ async function onColillasPdfSelected(inputEl){
     // archiva) también lo necesita, y un const dentro del primer try no le
     // quedaba visible ahí — eso disparaba "moneda is not defined" apenas se
     // subía un PDF.
-    const moneda = detectarMonedaArchivo(file.name);
+    const moneda = monedaForzada || detectarMonedaArchivo(file.name);
     try{
       const texto = await extraerTextoPDF(file);
       textoCombinado += `\n[[MONEDA:${moneda}]]\n` + texto + "\n";
