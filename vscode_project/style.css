@@ -935,3 +935,32 @@ body.solo-lectura select{
   #bitacoras-panel table{ font-size:12.5px !important; }
   #bitacoras-panel .section-card{ padding:10px; }
 }
+
+/* Horarios — mismo motivo y mismo criterio que #bitacoras-panel arriba:
+   jefatura/empleados consultan y asignan turnos desde el teléfono, y la
+   grilla semanal/catálogos usan la misma fuente chiquita en línea. No cubre
+   el modal "👥 Asignar horario a varios empleados" (abrirModalAsignacionMasiva)
+   porque ese modal es el genérico #modal-incompletos, compartido por ~30
+   funciones de todo el programa — agrandarlo ahí afectaría pantallas fuera
+   de este pedido. */
+#horarios-panel table{ font-size:13px !important; }
+#horarios-panel th, #horarios-panel td{ padding:6px 8px !important; }
+#horarios-panel input, #horarios-panel select, #horarios-panel textarea{
+  font-size:15px !important;
+  min-height:38px;
+  box-sizing:border-box;
+}
+#horarios-panel input[type="checkbox"]{ min-height:auto; width:18px; height:18px; }
+#horarios-panel input[type="number"]{ width:68px !important; }
+#horarios-panel select{ min-width:74px; }
+#horarios-panel button, #horarios-panel .btn, #horarios-panel .del{
+  font-size:14px !important;
+  padding:9px 14px !important;
+  min-height:42px;
+}
+#horarios-panel div[style*="overflow-x:auto"]{ -webkit-overflow-scrolling:touch; }
+
+@media (max-width:760px){
+  #horarios-panel table{ font-size:12.5px !important; }
+  #horarios-panel .section-card{ padding:10px; }
+}
