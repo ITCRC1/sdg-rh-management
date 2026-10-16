@@ -370,28 +370,26 @@ function aplicarModoSegunRol(rol){
     // estuviera visible (ver incapacidadEsPropia en rutas-datos.js).
     ["navbtn-empleados","navbtn-expedientes",
      "navbtn-contratos","navbtn-documentos","navbtn-reportes","navbtn-datos",
-     "navbtn-incapacidades"].forEach(id => {
+     "navbtn-incapacidades","navbtn-planilla"].forEach(id => {
       const el = document.getElementById(id);
       if (el) (el.closest(".nav-dd") || el).style.display = "none";
     });
-    // "Horas extras" vive DENTRO del desplegable de Planilla — a diferencia
-    // del resto de arriba, ese desplegable no se esconde completo (jefatura
-    // sí necesita llegar a Reloj marcador desde ahí); se esconden nada más
-    // "Ver planilla y colillas" e "Ir al menú Datos", que sí siguen siendo
-    // exclusivos de master/gerente. "Horas extras" en sí se esconde TAMBIÉN
-    // de ahí adentro porque jefatura ahora tiene su propio botón directo
-    // (navbtn-horasextra-directo, más abajo) — así no queda duplicado.
-    // El reloj marcador SÍ se muestra a jefatura, pero de solo lectura y
-    // filtrado a su propio departamento — el servidor (rutas-reloj.js) hace
-    // ese filtro y de todas formas nunca le deja anular/agregar marcas ni
-    // enviar a Horas extras (esas siguen exclusivas de master/gerente, ver
-    // renderRelojPanel).
-    ["navlink-planilla-ver","navlink-planilla-horasextras","navsep-planilla-datos","navlink-planilla-datos"].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = "none";
-    });
+    // El desplegable "💰 Planilla" completo se esconde para jefatura (arriba,
+    // "navbtn-planilla") — pedido explícito del usuario: antes le quedaba un
+    // desplegable casi vacío (solo Reloj marcador adentro, ya que "Ver
+    // planilla y colillas"/"Ir al menú Datos" son exclusivos de master/
+    // gerente, y "Horas extras" ya tenía su propio botón directo abajo) al
+    // lado de un botón suelto de Horas extras — dos caminos separados a
+    // destinos relacionados, que se sentía duplicado. Ahora son dos botones
+    // directos, sin desplegable: Horas extras y Reloj marcador. El reloj
+    // marcador se muestra de solo lectura y filtrado a su propio
+    // departamento — el servidor (rutas-reloj.js) hace ese filtro y de todas
+    // formas nunca le deja anular/agregar marcas ni enviar a Horas extras
+    // (esas siguen exclusivas de master/gerente, ver renderRelojPanel).
     const btnHorasExtraDirecto = document.getElementById("navbtn-horasextra-directo");
     if (btnHorasExtraDirecto) btnHorasExtraDirecto.style.display = "block";
+    const btnRelojDirecto = document.getElementById("navbtn-reloj-directo");
+    if (btnRelojDirecto) btnRelojDirecto.style.display = "block";
   }
 
   // Empleado (Portal del Colaborador) no tiene ninguna "página de RH" — ni
@@ -5165,6 +5163,16 @@ function showTab(which){
   const horasExtraDirectoVisible = !!btnHorasExtraDirecto && btnHorasExtraDirecto.style.display !== "none";
   if (btnHorasExtraDirecto) btnHorasExtraDirecto.classList.toggle("active", which === "horasextras");
   if (horasExtraDirectoVisible && which === "horasextras"){
+    const btnPlanilla = document.getElementById("navbtn-planilla");
+    if (btnPlanilla) btnPlanilla.classList.remove("active");
+  }
+  // Mismo criterio que arriba, para el atajo directo de Reloj marcador
+  // (navbtn-reloj-directo) — jefatura ya no tiene el desplegable de Planilla
+  // para resaltar, así que este botón suelto necesita su propio estado activo.
+  const btnRelojDirecto = document.getElementById("navbtn-reloj-directo");
+  const relojDirectoVisible = !!btnRelojDirecto && btnRelojDirecto.style.display !== "none";
+  if (btnRelojDirecto) btnRelojDirecto.classList.toggle("active", which === "reloj");
+  if (relojDirectoVisible && which === "reloj"){
     const btnPlanilla = document.getElementById("navbtn-planilla");
     if (btnPlanilla) btnPlanilla.classList.remove("active");
   }

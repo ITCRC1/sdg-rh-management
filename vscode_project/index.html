@@ -98,12 +98,14 @@
     </div>
   </div>
 
-  <!-- Solo para jefatura (ver aplicarModoSegunRol en app.js): un atajo
-       directo a Horas Extra sin tener que abrir el desplegable de Planilla,
-       que para ese rol solo le serviría para llegar a esto y a Reloj
-       marcador. Oculto por defecto — master/gerente lo siguen usando desde
-       el desplegable de siempre (navlink-planilla-horasextras, arriba). -->
+  <!-- Solo para jefatura (ver aplicarModoSegunRol en app.js): el desplegable
+       "💰 Planilla" completo se le oculta (para ese rol solo le serviría para
+       llegar a esto y a Reloj marcador), y en su lugar quedan estos dos
+       atajos directos, sueltos, sin desplegable. Ocultos por defecto —
+       master/gerente los siguen usando desde el desplegable de siempre
+       (navlink-planilla-horasextras/navlink-planilla-reloj, arriba). -->
   <button class="nav-dd-btn" id="navbtn-horasextra-directo" style="display:none;" onclick="navCloseAndRun(function(){ showTab('horasextras'); })">⏱️ Horas extras</button>
+  <button class="nav-dd-btn" id="navbtn-reloj-directo" style="display:none;" onclick="navCloseAndRun(function(){ showTab('reloj'); })">🕐 Reloj marcador</button>
 
   <button class="nav-dd-btn" id="navbtn-vacaciones" onclick="navCloseAndRun(function(){ showTab('vacaciones'); })">🏖️ Días libres y Vacaciones</button>
   <button class="nav-dd-btn" id="navbtn-incapacidades" onclick="navCloseAndRun(function(){ showTab('incapacidades'); })">🤒 Incapacidades</button>
