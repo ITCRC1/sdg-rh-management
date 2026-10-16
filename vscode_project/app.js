@@ -336,17 +336,19 @@ function aplicarModoSegunRol(rol){
   const btnFirmaContratos = document.getElementById("navbtn-firma-contratos");
   if (btnFirmaContratos) btnFirmaContratos.style.display = (window.sdgApi && window.sdgApi.puedeFirmarContratos()) ? "block" : "none";
 
-  // Bitácoras: exclusivo de master/gerente/consultor y de la jefatura de
-  // Actividades (ver esJefaturaDeActividades en rutas-datos.js) — ninguna
-  // otra jefatura lo ve, a diferencia de Horarios que es para cualquier
-  // departamento. El servidor igual lo bloquea aparte; esto es solo para no
-  // ofrecerle a otra jefatura una puerta cerrada.
+  // Bitácoras: disponible para cualquier jefatura (cada una ve y gestiona
+  // solo las bitácoras de su propio departamento — ver botePerteneceAEquipo
+  // y afines en rutas-datos.js), además de master/gerente/consultor — igual
+  // que Horarios. Pero el módulo completo solo aplica a Corcovado (botes,
+  // rutas de lancha y maquinaria son operación de esa propiedad): en
+  // cualquier otra propiedad activa se oculta del todo, sin importar el
+  // rol. El servidor igual lo bloquea aparte; esto es solo para no
+  // ofrecer una puerta cerrada.
   const btnBitacoras = document.getElementById("navbtn-bitacoras");
   if (btnBitacoras){
-    const sesionActual = window.sdgApi && window.sdgApi.sesionActual();
-    const esJefaturaActividades = rol === "jefatura" && sesionActual && sesionActual.puesto === "ACTIVIDADES";
-    const puedeVerBitacoras = rol === "master" || rol === "gerente" || rol === "consultor" || esJefaturaActividades;
-    btnBitacoras.style.display = puedeVerBitacoras ? "block" : "none";
+    const puedeVerBitacoras = rol === "master" || rol === "gerente" || rol === "consultor" || rol === "jefatura";
+    const esCorcovadoActivo = currentPropiedadId === "corcovado";
+    btnBitacoras.style.display = (puedeVerBitacoras && esCorcovadoActivo) ? "block" : "none";
   }
 
   // Jefatura no tiene "página de RH" — solo Horas extras, el módulo de Días
@@ -4988,6 +4990,11 @@ async function seleccionarPropiedad(id){
   document.getElementById("propiedad-gate").classList.remove("open");
   renderPropiedadBadge();
   renderAppTopbar();
+  // Reevalúa la navegación: hay botones (como Bitácoras) que dependen de
+  // cuál es la propiedad activa, no solo del rol — aplicarModoSegunRol solo
+  // corre al iniciar sesión, así que sin esto quedaban con la visibilidad
+  // de la propiedad anterior hasta recargar la página.
+  aplicarModoSegunRol(window.sdgApi ? window.sdgApi.rol() : null);
   currentKey = null;
   currentEmpKeyForContract = null;
   currentEmpKeyForLetter = null;
@@ -16599,14 +16606,17 @@ async function renderHorariosPanel(){
 }
 
 // ==========================================================================
-// Bitácoras — exclusivo del departamento ACTIVIDADES (jefatura de ese
-// departamento + master/gerente/consultor, nunca otra jefatura — ver
-// esJefaturaDeActividades en rutas-datos.js). Primer reporte: "Reporte de
-// Botes — Operación diaria", inventario de combustible por bote y ruta
-// (entrada/devolución, con el gasto real calculado solo). Mismo patrón de
-// catálogos editables que ya usa Horarios (Lugares de trabajo/Turnos), pero
-// SIN el filtro por departamento — acá no hace falta, todo el módulo ya es
-// de un solo departamento fijo.
+// Bitácoras — reportes operativos de combustible por departamento, con el
+// mismo patrón de catálogos editables y ámbito por departamento que ya usa
+// Horarios (Lugares de trabajo/Turnos): cada bote/ruta/máquina queda
+// etiquetado con DEPARTAMENTO_MINISTERIO, cada jefatura ve y gestiona solo
+// el suyo, y master/gerente eligen "todos" o un departamento específico (ver
+// botePerteneceAEquipo y afines en rutas-datos.js). A diferencia de
+// Horarios, el módulo completo solo aplica a Corcovado — se oculta del todo
+// en cualquier otra propiedad activa (ver el chequeo de currentPropiedadId
+// en renderBitacorasPanel y en aplicarModoSegunRol). Primer reporte:
+// "Reporte de Botes — Operación diaria", inventario de combustible por bote
+// y ruta (entrada/devolución, con el gasto real calculado solo).
 // ==========================================================================
 const BOTE_PREFIX = "cat_bote:";
 const RUTA_BOTE_PREFIX = "cat_ruta_bote:";
@@ -16638,6 +16648,8 @@ const PRODUCTOS_MAQUINARIA = [
 ];
 
 let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
+let bitacorasFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
+let bitacorasDeptoActivoActual = null; // depto realmente en pantalla ahora (cache para guardarNuevoBote/Ruta/Maquina)
 
 async function listarBotes(){
   const res = await window.storage.list(BOTE_PREFIX, false);
@@ -16713,10 +16725,13 @@ async function listarBitacoraMaquinariaDelDia(fechaISO){
 async function guardarNuevoBote(){
   const status = document.getElementById("bitacoras-botes-status");
   const nombre = ((document.getElementById("bote-nuevo-nombre")||{}).value || "").trim();
+  const selectorDepto = document.getElementById("bote-nuevo-depto");
+  const depto = selectorDepto ? selectorDepto.value : bitacorasDeptoActivoActual;
   if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre del bote.</span>`; return; }
+  if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
   try{
     const key = BOTE_PREFIX + "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre }), false);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, DEPARTAMENTO_MINISTERIO: depto }), false);
     statusMsg("Bote creado.");
     renderBitacorasPanel();
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
@@ -16738,10 +16753,13 @@ async function guardarNuevaRutaBote(){
   const status = document.getElementById("bitacoras-rutas-status");
   const nombre = ((document.getElementById("ruta-nuevo-nombre")||{}).value || "").trim();
   const tieneHacienda = !!(document.getElementById("ruta-nuevo-hacienda")||{}).checked;
+  const selectorDepto = document.getElementById("ruta-nuevo-depto");
+  const depto = selectorDepto ? selectorDepto.value : bitacorasDeptoActivoActual;
   if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre de la ruta.</span>`; return; }
+  if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
   try{
     const key = RUTA_BOTE_PREFIX + "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda }), false);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda, DEPARTAMENTO_MINISTERIO: depto }), false);
     statusMsg("Ruta creada.");
     renderBitacorasPanel();
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
@@ -16756,35 +16774,43 @@ async function eliminarRutaBote(key){
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
-function renderSeccionBotes(botes, puedeGestionar){
+function renderSeccionBotes(botes, deptoActivo, puedeGestionar){
+  const necesitaSelectorDepto = !deptoActivo;
   const filasHtml = botes.length
     ? botes.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(b => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-        <div style="font-size:12.5px;"><b>${escapeHtml(b.NOMBRE||"")}</b></div>
+        <div style="font-size:12.5px;"><b>${escapeHtml(b.NOMBRE||"")}</b>${necesitaSelectorDepto ? ` · ${escapeHtml(b.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
         ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarBote('${b.key}')">🗑️ Eliminar</button>` : ""}
       </div>`).join("")
-    : `<div class="empty-state" style="padding:8px 0;">No hay botes creados todavía.</div>`;
+    : `<div class="empty-state" style="padding:8px 0;">No hay botes creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
   const formHtml = puedeGestionar ? `
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre del bote
         <input type="text" id="bote-nuevo-nombre" placeholder="Ej. Chulín" style="min-width:160px;">
       </label>
+      ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
+        <select id="bote-nuevo-depto">
+          <option value="">— Elegí —</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </label>` : ""}
       <button class="btn primary" onclick="guardarNuevoBote();">➕ Agregar bote</button>
     </div>` : "";
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🛶 Botes</div>
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🛶 Botes${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
     ${filasHtml}
     ${formHtml}
     <div id="bitacoras-botes-status" style="font-size:12px; margin-top:8px;"></div>
   </div></div>`;
 }
 
-function renderSeccionRutasBote(rutas, puedeGestionar){
+function renderSeccionRutasBote(rutas, deptoActivo, puedeGestionar){
+  const necesitaSelectorDepto = !deptoActivo;
   const filasHtml = rutas.length
     ? rutas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(r => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-        <div style="font-size:12.5px;"><b>${escapeHtml(r.NOMBRE||"")}</b>${r.TIENE_HACIENDA ? ` · incluye parada en Hacienda` : ""}</div>
+        <div style="font-size:12.5px;"><b>${escapeHtml(r.NOMBRE||"")}</b>${r.TIENE_HACIENDA ? ` · incluye parada en Hacienda` : ""}${necesitaSelectorDepto ? ` · ${escapeHtml(r.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
         ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarRutaBote('${r.key}')">🗑️ Eliminar</button>` : ""}
       </div>`).join("")
-    : `<div class="empty-state" style="padding:8px 0;">No hay rutas creadas todavía.</div>`;
+    : `<div class="empty-state" style="padding:8px 0;">No hay rutas creadas${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
   const formHtml = puedeGestionar ? `
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre de la ruta
@@ -16793,10 +16819,16 @@ function renderSeccionRutasBote(rutas, puedeGestionar){
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; padding-bottom:4px;">
         <input type="checkbox" id="ruta-nuevo-hacienda"> Incluye parada en Hacienda
       </label>
+      ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
+        <select id="ruta-nuevo-depto">
+          <option value="">— Elegí —</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </label>` : ""}
       <button class="btn primary" onclick="guardarNuevaRutaBote();">➕ Agregar ruta</button>
     </div>` : "";
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗺️ Rutas</div>
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗺️ Rutas${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
     ${filasHtml}
     ${formHtml}
     <div id="bitacoras-rutas-status" style="font-size:12px; margin-top:8px;"></div>
@@ -16806,10 +16838,13 @@ function renderSeccionRutasBote(rutas, puedeGestionar){
 async function guardarNuevaMaquina(){
   const status = document.getElementById("bitacoras-maquinas-status");
   const nombre = ((document.getElementById("maquina-nueva-nombre")||{}).value || "").trim();
+  const selectorDepto = document.getElementById("maquina-nueva-depto");
+  const depto = selectorDepto ? selectorDepto.value : bitacorasDeptoActivoActual;
   if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el tipo de máquina.</span>`; return; }
+  if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
   try{
     const key = MAQUINA_PREFIX + "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre }), false);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, DEPARTAMENTO_MINISTERIO: depto }), false);
     statusMsg("Máquina creada.");
     renderBitacorasPanel();
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
@@ -16824,22 +16859,29 @@ async function eliminarMaquina(key){
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
-function renderSeccionMaquinas(maquinas, puedeGestionar){
+function renderSeccionMaquinas(maquinas, deptoActivo, puedeGestionar){
+  const necesitaSelectorDepto = !deptoActivo;
   const filasHtml = maquinas.length
     ? maquinas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(m => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-        <div style="font-size:12.5px;"><b>${escapeHtml(m.NOMBRE||"")}</b></div>
+        <div style="font-size:12.5px;"><b>${escapeHtml(m.NOMBRE||"")}</b>${necesitaSelectorDepto ? ` · ${escapeHtml(m.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
         ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarMaquina('${m.key}')">🗑️ Eliminar</button>` : ""}
       </div>`).join("")
-    : `<div class="empty-state" style="padding:8px 0;">No hay máquinas/equipos creados todavía.</div>`;
+    : `<div class="empty-state" style="padding:8px 0;">No hay máquinas/equipos creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
   const formHtml = puedeGestionar ? `
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo de máquina o equipo
         <input type="text" id="maquina-nueva-nombre" placeholder="Ej. Motosierra" style="min-width:220px;">
       </label>
+      ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
+        <select id="maquina-nueva-depto">
+          <option value="">— Elegí —</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </label>` : ""}
       <button class="btn primary" onclick="guardarNuevaMaquina();">➕ Agregar máquina</button>
     </div>` : "";
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Máquinas y equipos</div>
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Máquinas y equipos${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
     ${filasHtml}
     ${formHtml}
     <div id="bitacoras-maquinas-status" style="font-size:12px; margin-top:8px;"></div>
@@ -17028,59 +17070,99 @@ async function renderBitacorasPanel(){
   const _scrollY = window.scrollY;
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
+    // El módulo entero es de operación de Corcovado (botes, rutas de
+    // lancha, maquinaria de esa propiedad) — en cualquier otra propiedad
+    // activa simplemente no hay nada que mostrar, sin importar el rol.
+    if (currentPropiedadId !== "corcovado"){
+      panel.innerHTML = `<div class="empty-state">Este módulo solo está disponible para Corcovado.</div>`;
+      return;
+    }
+
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
-    const sesion = window.sdgApi && window.sdgApi.sesionActual();
-    const esJefaturaActividades = rolActual === "jefatura" && sesion && sesion.puesto === "ACTIVIDADES";
+    const esJefatura = rolActual === "jefatura";
     const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente
-    const puedeGestionar = esJefaturaActividades || puedeAprobar;
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
+    const puedeGestionar = esJefatura || puedeAprobar;
 
     if (!bitacorasFechaActiva) bitacorasFechaActiva = isoDeHoy();
 
-    const [empleados, puestos, botes, rutas, entradasDiaria, entradasRebote, maquinas, entradasMaquinaria] = await Promise.all([
+    const [empleados, puestos, botes, rutas, maquinas] = await Promise.all([
       cargarEmpleadosDB(),
       cargarPuestosDB(),
       listarBotes(),
       listarRutasBote(),
-      listarBitacoraDelDia("diaria", bitacorasFechaActiva),
-      listarBitacoraDelDia("rebote", bitacorasFechaActiva),
       listarMaquinas(),
-      listarBitacoraMaquinariaDelDia(bitacorasFechaActiva),
     ]);
     const puestosPorKey = {};
     puestos.forEach(p => { puestosPorKey[p.key] = p; });
     const departamentoDeEmpleado = emp => departamentoDeEmpleadoGenerico(emp, puestosPorKey);
-    const capitanes = empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === "ACTIVIDADES");
+
+    // Ámbito por rol, mismo criterio que Horarios: jefatura fija a su propio
+    // departamento; master/gerente eligen "todos" o uno específico.
+    const deptoActivo = deptoJefatura || (bitacorasFiltroDepto === "todos" ? null : bitacorasFiltroDepto);
+    bitacorasDeptoActivoActual = deptoActivo;
+
+    const botesVisibles = botes.filter(b => !deptoActivo || b.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const rutasVisibles = rutas.filter(r => !deptoActivo || r.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const maquinasVisibles = maquinas.filter(m => !deptoActivo || m.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const capitanes = deptoActivo ? empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === deptoActivo) : [];
 
     let html = `<div style="margin-bottom:14px;">
-      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">📘 Bitácoras</div>
-      <div style="font-size:12px; color:var(--ink-soft);">Reportes operativos del departamento de Actividades.</div>
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">📘 Bitácoras${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Reportes operativos de combustible por departamento (disponible solo para Corcovado).</div>
     </div>`;
 
-    html += renderSeccionBotes(botes, puedeGestionar);
-    html += renderSeccionRutasBote(rutas, puedeGestionar);
-    html += renderSeccionMaquinas(maquinas, puedeGestionar);
+    if (!esJefatura){
+      html += `<div style="margin-bottom:12px;">
+        <select onchange="bitacorasFiltroDepto=this.value; renderBitacorasPanel();">
+          <option value="todos"${bitacorasFiltroDepto==="todos"?" selected":""}>Todos los departamentos</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}"${bitacorasFiltroDepto===d?" selected":""}>${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </div>`;
+    }
 
-    html += `<div style="margin-bottom:12px;">
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:200px;">Fecha (para los reportes de abajo)
-        <input type="date" value="${escapeHtml(bitacorasFechaActiva)}" onchange="bitacorasFechaActiva=this.value; renderBitacorasPanel();">
-      </label>
-    </div>`;
+    html += renderSeccionBotes(botesVisibles, deptoActivo, puedeGestionar);
+    html += renderSeccionRutasBote(rutasVisibles, deptoActivo, puedeGestionar);
+    html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
 
-    const avisoSinCapitanes = capitanes.length ? "" : " ⚠️ No hay empleados activos en el departamento ACTIVIDADES para elegir como capitán.";
-    const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
-    Object.keys(BITACORA_TIPOS).forEach(tipo => {
-      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">${BITACORA_TIPOS[tipo].titulo}</div>
-        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo.${avisoSinCapitanes}</div>
-        ${renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar)}
+    // Las grillas de reportes diarios necesitan UN departamento concreto
+    // (son columnas de botes/rutas específicas) — igual que "Asignación
+    // rápida" en Horarios, si está en "Todos los departamentos" se pide
+    // elegir uno primero en vez de mezclar botes de distintos equipos.
+    if (!deptoActivo){
+      html += `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
+        <div class="empty-state" style="padding:4px 0;">Elegí un departamento específico arriba (no "Todos los departamentos") para ver y cargar los reportes diarios.</div>
       </div></div>`;
-    });
+    } else {
+      const [entradasDiaria, entradasRebote, entradasMaquinaria] = await Promise.all([
+        listarBitacoraDelDia("diaria", bitacorasFechaActiva),
+        listarBitacoraDelDia("rebote", bitacorasFechaActiva),
+        listarBitacoraMaquinariaDelDia(bitacorasFechaActiva),
+      ]);
 
-    html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Consumo de Maquinaria</div>
-      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
-      ${renderGrillaBitacoraMaquinaria(maquinas, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
-    </div></div>`;
+      html += `<div style="margin-bottom:12px;">
+        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:200px;">Fecha (para los reportes de abajo)
+          <input type="date" value="${escapeHtml(bitacorasFechaActiva)}" onchange="bitacorasFechaActiva=this.value; renderBitacorasPanel();">
+        </label>
+      </div>`;
+
+      const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos en el departamento ${escapeHtml(deptoActivo)} para elegir como capitán.`;
+      const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
+      Object.keys(BITACORA_TIPOS).forEach(tipo => {
+        html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+          <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">${BITACORA_TIPOS[tipo].titulo}</div>
+          <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo.${avisoSinCapitanes}</div>
+          ${renderGrillaBitacoraBotes(tipo, botesVisibles, rutasVisibles, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar)}
+        </div></div>`;
+      });
+
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Consumo de Maquinaria</div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
+        ${renderGrillaBitacoraMaquinaria(maquinasVisibles, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
+      </div></div>`;
+    }
 
     panel.innerHTML = html;
   }catch(e){

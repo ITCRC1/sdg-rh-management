@@ -74,37 +74,32 @@ const HORARIO_PREFIX = "cat_horario:";
 const LUGAR_TRABAJO_PREFIX = "cat_lugar_trabajo:";
 const HORARIO_ASIGNADO_PREFIX = "horario_asignado:";
 
-// Módulo "Bitácoras" (ver renderBitacorasPanel en app.js) — a diferencia de
-// Horarios, esto NO es un patrón por departamento: es exclusivo del
-// departamento ACTIVIDADES, a propósito (pedido explícito — "apartado
-// exclusivo para la jefatura de Actividades"). cat_bote: y cat_ruta_bote:
-// son los catálogos (nombres de botes, y rutas con su bandera de si incluyen
-// parada en Hacienda); bitacora_bote:<fechaISO>:<boteKey> es el reporte
-// diario de combustible (entrada/devolución por ruta, capitán) de ese bote
-// ese día. Nadie más que master/gerente y la jefatura de Actividades
-// (usuario.puesto === "ACTIVIDADES") puede leer o escribir nada de esto — ni
-// siquiera otra jefatura, a diferencia de cómo funciona Horarios con
-// cualquier departamento.
+// Módulo "Bitácoras" (ver renderBitacorasPanel en app.js) — mismo patrón por
+// departamento que Horarios: cat_bote:/cat_ruta_bote:/cat_maquina: son
+// catálogos etiquetados con DEPARTAMENTO_MINISTERIO, bitacora_bote:
+// <fechaISO>:<boteKey> (y bitacora_rebote:, bitacora_maquinaria:) son los
+// reportes diarios de ese bote/máquina. Cada jefatura solo puede leer/
+// escribir lo de su propio departamento (ver botePerteneceAEquipo y afines
+// más abajo) — nunca el de otro. A diferencia de Horarios, el módulo entero
+// solo tiene sentido operativo en Corcovado: ese filtro lo hace el cliente
+// (currentPropiedadId en app.js), no el servidor — igual que cualquier otro
+// dato, cada propiedad ya tiene sus propias filas en `documentos`.
 const BOTE_PREFIX = "cat_bote:";
 const RUTA_BOTE_PREFIX = "cat_ruta_bote:";
 const BITACORA_BOTE_PREFIX = "bitacora_bote:";
 // Mismo esquema que bitacora_bote:, pero para "Rebotes" (viajes extra,
 // aparte de la operación normal del día) — se guarda aparte para no pisar el
 // reporte de operación diaria, aunque comparten el mismo catálogo de botes/
-// rutas y el mismo alcance (solo Actividades).
+// rutas y el mismo alcance por departamento.
 const BITACORA_REBOTE_PREFIX = "bitacora_rebote:";
 // Tercer reporte de Bitácoras: consumo de combustible/aceite por máquina o
 // equipo (motosierra, plantas eléctricas, vehículos internos, etc.) — más
 // simple que los de botes: una cantidad por producto, sin entrada/
 // devolución/ruta. cat_maquina: es el catálogo (editable, igual que
 // cat_bote:); bitacora_maquinaria:<fechaISO>:<maquinaKey> es el consumo de
-// ese día. Mismo alcance que todo lo demás de Bitácoras: solo Actividades.
+// ese día.
 const MAQUINA_PREFIX = "cat_maquina:";
 const BITACORA_MAQUINARIA_PREFIX = "bitacora_maquinaria:";
-
-function esJefaturaDeActividades(usuario) {
-  return usuario.rol === "jefatura" && usuario.puesto === "ACTIVIDADES";
-}
 
 async function valorDeClave(propiedad, clave) {
   const { rows } = await query(
@@ -220,6 +215,43 @@ async function lugarTrabajoPerteneceAEquipo(propiedad, claveLugar, departamentoL
   return !!lugar && lugar.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
 
+// Bitácoras (ver renderBitacorasPanel en app.js) — mismo criterio que
+// horarioPerteneceAEquipo/lugarTrabajoPerteneceAEquipo: cat_bote:/
+// cat_ruta_bote:/cat_maquina: son catálogos con su propio
+// DEPARTAMENTO_MINISTERIO, no datos "de" un empleado puntual.
+async function botePerteneceAEquipo(propiedad, claveBote, departamentoLider) {
+  if (!departamentoLider) return false;
+  const bote = await valorDeClave(propiedad, claveBote);
+  return !!bote && bote.DEPARTAMENTO_MINISTERIO === departamentoLider;
+}
+async function rutaBotePerteneceAEquipo(propiedad, claveRuta, departamentoLider) {
+  if (!departamentoLider) return false;
+  const ruta = await valorDeClave(propiedad, claveRuta);
+  return !!ruta && ruta.DEPARTAMENTO_MINISTERIO === departamentoLider;
+}
+async function maquinaPerteneceAEquipo(propiedad, claveMaquina, departamentoLider) {
+  if (!departamentoLider) return false;
+  const maquina = await valorDeClave(propiedad, claveMaquina);
+  return !!maquina && maquina.DEPARTAMENTO_MINISTERIO === departamentoLider;
+}
+
+// bitacora_bote:/bitacora_rebote:/bitacora_maquinaria: tampoco son "de" un
+// empleado y no traen su propio DEPARTAMENTO_MINISTERIO: el departamento
+// sale del bote/máquina al que apunta la clave. Se reconstruye con
+// slice(2).join(":") en vez de tomar solo el tercer segmento porque la clave
+// del catálogo (cat_bote:xxxx) ya trae un ":" propio — un split(":")[2] a
+// secas cortaría ese boteKey a la mitad.
+async function bitacoraBotePerteneceAEquipo(propiedad, claveBitacora, departamentoLider) {
+  const boteKey = claveBitacora.split(":").slice(2).join(":");
+  if (!boteKey) return false;
+  return botePerteneceAEquipo(propiedad, boteKey, departamentoLider);
+}
+async function bitacoraMaquinariaPerteneceAEquipo(propiedad, claveBitacora, departamentoLider) {
+  const maquinaKey = claveBitacora.split(":").slice(2).join(":");
+  if (!maquinaKey) return false;
+  return maquinaPerteneceAEquipo(propiedad, maquinaKey, departamentoLider);
+}
+
 // ¿Puede este usuario escribir en esta clave? master/gerente: todo, como
 // siempre. jefatura: solo horas_extra: de su propio departamento (guardado
 // en usuarios.puesto — pese al nombre de la columna, para una cuenta de
@@ -312,12 +344,28 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   if (usuario.rol === "jefatura" && clave.startsWith(HORARIO_ASIGNADO_PREFIX)) {
     return horarioAsignadoPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
-  // Bitácoras: exclusivo de la jefatura de Actividades (ver
-  // esJefaturaDeActividades arriba) — a diferencia de todo lo anterior, no
-  // depende de a qué equipo pertenece un empleado puntual, es un "sí" o "no"
-  // fijo según el departamento de la cuenta.
-  if (clave.startsWith(BOTE_PREFIX) || clave.startsWith(RUTA_BOTE_PREFIX) || clave.startsWith(BITACORA_BOTE_PREFIX) || clave.startsWith(BITACORA_REBOTE_PREFIX) || clave.startsWith(MAQUINA_PREFIX) || clave.startsWith(BITACORA_MAQUINARIA_PREFIX)) {
-    return esJefaturaDeActividades(usuario);
+  // Bitácoras: mismo criterio que cat_horario:/cat_lugar_trabajo: arriba —
+  // jefatura puede crear/editar botes, rutas y máquinas, pero únicamente
+  // dentro de su propio departamento. El departamento sale del payload para
+  // los tres catálogos (son plantillas nuevas, sin registro previo que
+  // consultar).
+  if (usuario.rol === "jefatura" && (clave.startsWith(BOTE_PREFIX) || clave.startsWith(RUTA_BOTE_PREFIX) || clave.startsWith(MAQUINA_PREFIX)) && typeof valorNuevo === "string") {
+    let nuevo = null;
+    try {
+      nuevo = JSON.parse(valorNuevo);
+    } catch (e) {
+      return false;
+    }
+    return !!nuevo && nuevo.DEPARTAMENTO_MINISTERIO === usuario.puesto;
+  }
+  // Los reportes diarios (bitacora_bote:/bitacora_rebote:/
+  // bitacora_maquinaria:) no traen su propio departamento: se resuelve a
+  // partir del bote/máquina al que apunta la clave.
+  if (usuario.rol === "jefatura" && (clave.startsWith(BITACORA_BOTE_PREFIX) || clave.startsWith(BITACORA_REBOTE_PREFIX))) {
+    return bitacoraBotePerteneceAEquipo(propiedad, clave, usuario.puesto);
+  }
+  if (usuario.rol === "jefatura" && clave.startsWith(BITACORA_MAQUINARIA_PREFIX)) {
+    return bitacoraMaquinariaPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
   return false;
 }
@@ -342,6 +390,16 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
       ? await horarioPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
       : fila.clave.startsWith(LUGAR_TRABAJO_PREFIX)
       ? await lugarTrabajoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
+      : fila.clave.startsWith(BOTE_PREFIX)
+      ? await botePerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
+      : fila.clave.startsWith(RUTA_BOTE_PREFIX)
+      ? await rutaBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
+      : fila.clave.startsWith(MAQUINA_PREFIX)
+      ? await maquinaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
+      : fila.clave.startsWith(BITACORA_BOTE_PREFIX) || fila.clave.startsWith(BITACORA_REBOTE_PREFIX)
+      ? await bitacoraBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
+      : fila.clave.startsWith(BITACORA_MAQUINARIA_PREFIX)
+      ? await bitacoraMaquinariaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
       : await horaExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula);
     if (pertenece) resultado.push(fila);
   }
@@ -355,11 +413,13 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
 // información" (ver incapacidadEsPropia). Por eso su lectura queda limitada
 // a estos prefijos: horas_extra:, solicitud_ausencia: (filtrado por equipo —
 // ver filtrarFilasPorEquipo), incapacidad: (filtrado a lo propio),
-// cat_horario:/cat_lugar_trabajo:/horario_asignado: (filtrado por equipo), y
-// cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
+// cat_horario:/cat_lugar_trabajo:/horario_asignado: (filtrado por equipo),
+// cat_bote:/cat_ruta_bote:/cat_maquina:/bitacora_bote:/bitacora_rebote:/
+// bitacora_maquinaria: (Bitácoras, filtrado por equipo igual que Horarios),
+// y cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
 // departamento de su propio equipo — nada de contratos, documentos, otros
 // catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX];
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX, BOTE_PREFIX, RUTA_BOTE_PREFIX, MAQUINA_PREFIX, BITACORA_BOTE_PREFIX, BITACORA_REBOTE_PREFIX, BITACORA_MAQUINARIA_PREFIX];
 
 // Un "empleado" (portal de autoservicio) no tiene "página de RH" tampoco —
 // solo su propio expediente (cat_empleado:<su clave>, exacta, nunca la lista
@@ -380,14 +440,6 @@ const PREFIJOS_LECTURA_EMPLEADO = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX
 // prefijo="" (listaría todo) ni un prefijo más corto que además matchee
 // catálogos ajenos.
 function puedeLeerClaveOPrefijo(usuario, claveOPrefijo) {
-  // Bitácoras: aparte del esquema "por equipo" de abajo — ni siquiera entra
-  // en PREFIJOS_LECTURA_JEFATURA, porque esto no depende de qué departamento
-  // sea, es un "sí" fijo solo para Actividades. Sin este chequeo PRIMERO,
-  // cualquier otra jefatura podría pedir prefijo="cat_bote:" y le llegaría
-  // (vacío o no) por el mismo camino genérico de abajo.
-  if (claveOPrefijo.startsWith(BOTE_PREFIX) || claveOPrefijo.startsWith(RUTA_BOTE_PREFIX) || claveOPrefijo.startsWith(BITACORA_BOTE_PREFIX) || claveOPrefijo.startsWith(BITACORA_REBOTE_PREFIX) || claveOPrefijo.startsWith(MAQUINA_PREFIX) || claveOPrefijo.startsWith(BITACORA_MAQUINARIA_PREFIX)) {
-    return usuario.rol === "master" || usuario.rol === "gerente" || usuario.rol === "consultor" || esJefaturaDeActividades(usuario);
-  }
   if (usuario.rol === "jefatura") {
     return PREFIJOS_LECTURA_JEFATURA.some((permitido) => claveOPrefijo.startsWith(permitido));
   }
@@ -533,7 +585,7 @@ router.get("/", async (req, res, next) => {
     // nombre de gente de otros departamentos no aparezca ni siquiera en
     // pantallas que solo listan empleados, como el calendario de Días Libres.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
-      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX));
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX) || prefijo.startsWith(BOTE_PREFIX) || prefijo.startsWith(RUTA_BOTE_PREFIX) || prefijo.startsWith(MAQUINA_PREFIX) || prefijo.startsWith(BITACORA_BOTE_PREFIX) || prefijo.startsWith(BITACORA_REBOTE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_PREFIX));
     // Un empleado solo ve sus propias filas — nunca las de un compañero,
     // aunque pida el mismo prefijo que vería un master/gerente.
     const filtrarPropias = req.usuario.rol === "empleado" &&
@@ -620,6 +672,26 @@ router.get("/:clave(*)", async (req, res, next) => {
     if (req.usuario.rol === "jefatura" && clave.startsWith(LUGAR_TRABAJO_PREFIX)) {
       const enSuEquipo = await lugarTrabajoPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese lugar de trabajo no es de tu departamento.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(BOTE_PREFIX)) {
+      const enSuEquipo = await botePerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese bote no es de tu departamento.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(RUTA_BOTE_PREFIX)) {
+      const enSuEquipo = await rutaBotePerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Esa ruta no es de tu departamento.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(MAQUINA_PREFIX)) {
+      const enSuEquipo = await maquinaPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Esa máquina no es de tu departamento.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && (clave.startsWith(BITACORA_BOTE_PREFIX) || clave.startsWith(BITACORA_REBOTE_PREFIX))) {
+      const enSuEquipo = await bitacoraBotePerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(BITACORA_MAQUINARIA_PREFIX)) {
+      const enSuEquipo = await bitacoraMaquinariaPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "empleado" && !esClavePropiaDeEmpleado(clave, req.usuario.empleadoClave)) {
       return res.status(403).json({ error: "Ese registro no es tuyo.", codigo: "sin_permiso" });
