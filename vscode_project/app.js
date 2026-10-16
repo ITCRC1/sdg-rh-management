@@ -16642,9 +16642,14 @@ const PRODUCTOS_MAQUINARIA = [
   ["GAS_REGULAR", "Gas Regular (gal)"],
   ["DIESEL", "Diesel (gal)"],
   ["ACEITE_MEZCLA", "Aceite Mezcla (oz)"],
-  ["ACEITE_15W40", "Aceite 15W40"],
+  ["ACEITE_15W40", "Aceite 15W40 (oz)"],
   ["OTROS", "Otros"],
 ];
+// Combustibles se reparten en galones (pichinga 5/18/20 gal); aceites se
+// miden en onzas, directo, sin pichinga — ver renderSeccionIngresoCombustible
+// y guardarBitacoraIngresoCombustibleDia, que usan este set para decidir qué
+// campos pedir por producto.
+const PRODUCTOS_EN_ONZAS = new Set(["ACEITE_MEZCLA", "ACEITE_15W40"]);
 
 // Cuarto reporte (el original de Bitácoras, antes de los de botes): el
 // ingreso de combustible/aceite al inventario de la propiedad, por producto
@@ -17112,16 +17117,20 @@ async function obtenerBitacoraIngresoCombustibleDelDia(departamento, fechaISO){
   }catch(e){ return null; }
 }
 
-// Recalcula en vivo el total en galones (pichinga × cantidad) de UN
-// producto, sin esperar a guardar — mismo criterio que
-// actualizarGastoBitacora. No aplica a Aceite Mezcla (ver
-// actualizarTotalIngresoCombustibleOnzas) — ese no usa pichinga.
+// Recalcula en vivo el total en galones de UN producto, sin esperar a
+// guardar — mismo criterio que actualizarGastoBitacora. Suma HASTA DOS
+// pichingas distintas (a veces entran dos tamaños el mismo día, ej. 18 Y 20
+// galones juntas) — una pichinga sin su cantidad (o viceversa) no suma nada.
+// No aplica a los aceites (ver actualizarTotalIngresoCombustibleOnzas).
 function actualizarTotalIngresoCombustible(campo){
-  const pichinga = Number((document.getElementById(`ingreso-combustible-${campo}-pichinga`)||{}).value || 0);
-  const cantidad = Number((document.getElementById(`ingreso-combustible-${campo}-cantidad`)||{}).value || 0);
-  const total = (pichinga && cantidad) ? pichinga * cantidad : null;
+  const p1 = Number((document.getElementById(`ingreso-combustible-${campo}-pichinga-1`)||{}).value || 0);
+  const c1 = Number((document.getElementById(`ingreso-combustible-${campo}-cantidad-1`)||{}).value || 0);
+  const p2 = Number((document.getElementById(`ingreso-combustible-${campo}-pichinga-2`)||{}).value || 0);
+  const c2 = Number((document.getElementById(`ingreso-combustible-${campo}-cantidad-2`)||{}).value || 0);
+  const total = (p1 && c1 ? p1 * c1 : 0) + (p2 && c2 ? p2 * c2 : 0);
+  const huboAlgo = (p1 && c1) || (p2 && c2);
   const celda = document.getElementById(`ingreso-combustible-${campo}-total`);
-  if (celda) celda.textContent = total === null ? "—" : total;
+  if (celda) celda.textContent = huboAlgo ? Math.round(total * 100) / 100 : "—";
 }
 
 // Aceite Mezcla se mide en onzas, no en galones — las pichingas de 5/18/20
@@ -17135,24 +17144,30 @@ function actualizarTotalIngresoCombustibleOnzas(campo){
 
 // Guarda de una vez la cantidad de los 5 productos para el departamento y
 // día activos — es un solo registro (no uno por producto), así que un solo
-// botón ya alcanza, sin la confusión de un botón por fila. Aceite Mezcla se
-// guarda distinto (CANTIDAD_OZ, sin pichinga) porque se mide en onzas.
+// botón ya alcanza, sin la confusión de un botón por fila. Los aceites
+// (PRODUCTOS_EN_ONZAS) se guardan distinto (CANTIDAD_OZ, sin pichinga)
+// porque se miden en onzas, no en galones. Los combustibles admiten HASTA
+// DOS pichingas distintas el mismo día (PICHINGA_GAL_1/2, CANTIDAD_1/2).
 async function guardarBitacoraIngresoCombustibleDia(departamento, fechaISO){
   const status = document.getElementById("bitacoras-ingreso-combustible-status");
   const valores = {};
   PRODUCTOS_MAQUINARIA.forEach(([campo]) => {
-    if (campo === "ACEITE_MEZCLA"){
+    if (PRODUCTOS_EN_ONZAS.has(campo)){
       const cantidadOz = (document.getElementById(`ingreso-combustible-${campo}-onzas`)||{}).value;
       if (cantidadOz === "") return; // sin tocar ese día — se ignora
       valores[campo] = { CANTIDAD_OZ: Number(cantidadOz) };
       return;
     }
-    const pichinga = (document.getElementById(`ingreso-combustible-${campo}-pichinga`)||{}).value;
-    const cantidad = (document.getElementById(`ingreso-combustible-${campo}-cantidad`)||{}).value;
-    if (pichinga === "" && cantidad === "") return; // producto sin tocar ese día — se ignora
+    const p1 = (document.getElementById(`ingreso-combustible-${campo}-pichinga-1`)||{}).value;
+    const c1 = (document.getElementById(`ingreso-combustible-${campo}-cantidad-1`)||{}).value;
+    const p2 = (document.getElementById(`ingreso-combustible-${campo}-pichinga-2`)||{}).value;
+    const c2 = (document.getElementById(`ingreso-combustible-${campo}-cantidad-2`)||{}).value;
+    if (p1 === "" && c1 === "" && p2 === "" && c2 === "") return; // producto sin tocar ese día — se ignora
     valores[campo] = {
-      PICHINGA_GAL: pichinga !== "" ? Number(pichinga) : null,
-      CANTIDAD: cantidad !== "" ? Number(cantidad) : null,
+      PICHINGA_GAL_1: p1 !== "" ? Number(p1) : null,
+      CANTIDAD_1: c1 !== "" ? Number(c1) : null,
+      PICHINGA_GAL_2: p2 !== "" ? Number(p2) : null,
+      CANTIDAD_2: c2 !== "" ? Number(c2) : null,
     };
   });
   try{
@@ -17171,50 +17186,68 @@ function renderSeccionIngresoCombustible(entrada, departamento, fechaISO, puedeG
   const filasHtml = PRODUCTOS_MAQUINARIA.map(([campo, label]) => {
     const val = (entrada && entrada[campo]) || {};
 
-    if (campo === "ACEITE_MEZCLA"){
+    if (PRODUCTOS_EN_ONZAS.has(campo)){
       const cantidadOz = val.CANTIDAD_OZ;
       const celdaCantidadOz = puedeGestionar
         ? `<input type="number" step="0.1" min="0" id="ingreso-combustible-${campo}-onzas" value="${(cantidadOz !== undefined && cantidadOz !== null) ? cantidadOz : ""}" style="width:65px; font-size:10.5px;" oninput="actualizarTotalIngresoCombustibleOnzas('${campo}')">`
         : `${(cantidadOz !== undefined && cantidadOz !== null) ? cantidadOz : "—"}`;
       return `<tr>
         <td style="padding:4px 8px; border:1px solid var(--paper-line);"><b>${escapeHtml(label)}</b></td>
-        <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; color:var(--ink-soft); font-size:10px;">no aplica</td>
-        <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaCantidadOz}</td>
+        <td colspan="4" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; color:var(--ink-soft); font-size:10px;">no aplica pichinga — cantidad directa: ${celdaCantidadOz}</td>
         <td id="ingreso-combustible-${campo}-total" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${(cantidadOz !== undefined && cantidadOz !== null && cantidadOz !== "") ? `${cantidadOz} oz` : "—"}</td>
       </tr>`;
     }
 
-    const pichinga = val.PICHINGA_GAL;
-    const cantidad = val.CANTIDAD;
-    const total = (pichinga && cantidad) ? pichinga * cantidad : null;
-    const celdaPichinga = puedeGestionar
-      ? `<select id="ingreso-combustible-${campo}-pichinga" style="font-size:10.5px;" onchange="actualizarTotalIngresoCombustible('${campo}')">
-          <option value="">—</option>
-          ${PICHINGA_GALONES_OPCIONES.map(g => `<option value="${g}"${pichinga===g?" selected":""}>${g} gal</option>`).join("")}
-        </select>`
-      : (pichinga ? `${pichinga} gal` : "—");
-    const celdaCantidad = puedeGestionar
-      ? `<input type="number" step="1" min="0" id="ingreso-combustible-${campo}-cantidad" value="${(cantidad !== undefined && cantidad !== null) ? cantidad : ""}" style="width:55px; font-size:10.5px;" oninput="actualizarTotalIngresoCombustible('${campo}')">`
-      : `${(cantidad !== undefined && cantidad !== null) ? cantidad : "—"}`;
+    // Combustibles: hasta DOS pichingas distintas el mismo día (ej. llegan
+    // juntas pichingas de 18 Y de 20 galones) — el total suma las dos.
+    const celdaPichinga = (num) => {
+      const pichinga = val[`PICHINGA_GAL_${num}`];
+      return puedeGestionar
+        ? `<select id="ingreso-combustible-${campo}-pichinga-${num}" style="font-size:10.5px;" onchange="actualizarTotalIngresoCombustible('${campo}')">
+            <option value="">—</option>
+            ${PICHINGA_GALONES_OPCIONES.map(g => `<option value="${g}"${pichinga===g?" selected":""}>${g} gal</option>`).join("")}
+          </select>`
+        : (pichinga ? `${pichinga} gal` : "—");
+    };
+    const celdaCantidad = (num) => {
+      const cantidad = val[`CANTIDAD_${num}`];
+      return puedeGestionar
+        ? `<input type="number" step="1" min="0" id="ingreso-combustible-${campo}-cantidad-${num}" value="${(cantidad !== undefined && cantidad !== null) ? cantidad : ""}" style="width:50px; font-size:10.5px;" oninput="actualizarTotalIngresoCombustible('${campo}')">`
+        : `${(cantidad !== undefined && cantidad !== null) ? cantidad : "—"}`;
+    };
+    const p1 = val.PICHINGA_GAL_1, c1 = val.CANTIDAD_1, p2 = val.PICHINGA_GAL_2, c2 = val.CANTIDAD_2;
+    const total = ((p1 && c1 ? p1 * c1 : 0) + (p2 && c2 ? p2 * c2 : 0)) || null;
+    const huboAlgo = (p1 && c1) || (p2 && c2);
     return `<tr>
       <td style="padding:4px 8px; border:1px solid var(--paper-line);"><b>${escapeHtml(label)}</b></td>
-      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaPichinga}</td>
-      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaCantidad}</td>
-      <td id="ingreso-combustible-${campo}-total" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${total === null ? "—" : total}</td>
+      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaPichinga(1)}</td>
+      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaCantidad(1)}</td>
+      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaPichinga(2)}</td>
+      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaCantidad(2)}</td>
+      <td id="ingreso-combustible-${campo}-total" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${huboAlgo ? Math.round(total * 100) / 100 : "—"}</td>
     </tr>`;
   }).join("");
 
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">⛽ Ingreso de Combustible</div>
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Pichinga = tamaño del envase que entró ese día. Total = galones (pichinga × cantidad), se calcula solo.</div>
+    <div style="font-size:11.5px; color:#8a5a00; background:#FBF6E8; border:1px solid var(--gold); border-radius:6px; padding:5px 8px; margin-bottom:8px;">⚠️ Combustibles (Gas Regular, Diesel) se registran en <b>galones</b>. Aceites (Aceite Mezcla, Aceite 15W40) se registran en <b>onzas</b> — no son la misma unidad, no se suman entre sí.</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Pichinga = tamaño del envase que entró ese día. Si entraron dos tamaños distintos el mismo día, usá las dos columnas. Total = galones (pichinga × cantidad de cada una, sumadas), se calcula solo (no aplica a los aceites, que van directo en onzas).</div>
     <div style="overflow-x:auto;">
     <table style="border-collapse:collapse; font-size:11px;">
-      <thead><tr>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Producto</th>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Pichinga</th>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Cantidad</th>
-        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Total (gal)</th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <th rowspan="2" style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Producto</th>
+          <th colspan="2" style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">Pichinga 1</th>
+          <th colspan="2" style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">Pichinga 2</th>
+          <th rowspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);">Total (gal)</th>
+        </tr>
+        <tr>
+          <th style="padding:2px 4px; border:1px solid var(--paper-line);">Pichinga</th>
+          <th style="padding:2px 4px; border:1px solid var(--paper-line);">Cantidad</th>
+          <th style="padding:2px 4px; border:1px solid var(--paper-line);">Pichinga</th>
+          <th style="padding:2px 4px; border:1px solid var(--paper-line);">Cantidad</th>
+        </tr>
+      </thead>
       <tbody>${filasHtml}</tbody>
     </table>
     </div>
@@ -17403,9 +17436,16 @@ async function renderBitacorasPanel(){
     const entradaIngreso = await obtenerBitacoraIngresoCombustibleDelDia(deptoActivo, bitacorasFechaActiva);
     html += renderSeccionIngresoCombustible(entradaIngreso, deptoActivo, bitacorasFechaActiva, puedeGestionar);
 
-    html += renderSeccionBotes(botesVisibles, deptoActivo, puedeGestionar);
-    html += renderSeccionRutasBote(rutasVisibles, deptoActivo, puedeGestionar);
-    html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
+    // Los catálogos de Botes/Rutas/Máquinas (crear, eliminar, ver la lista
+    // completa) quedan exclusivos de master/gerente — pedido explícito del
+    // usuario. Jefatura sigue usando los botes/rutas/máquinas que ya existen
+    // para cargar su reporte diario (más abajo), pero no ve ni administra el
+    // catálogo en sí.
+    if (puedeAprobar){
+      html += renderSeccionBotes(botesVisibles, deptoActivo, puedeGestionar);
+      html += renderSeccionRutasBote(rutasVisibles, deptoActivo, puedeGestionar);
+      html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
+    }
 
     const [entradasDiaria, entradasRebote, entradasMaquinaria] = await Promise.all([
       listarBitacoraDelDia("diaria", bitacorasFechaActiva),
@@ -17425,6 +17465,7 @@ async function renderBitacorasPanel(){
 
     html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Consumo de Maquinaria</div>
+      <div style="font-size:11.5px; color:#8a5a00; background:#FBF6E8; border:1px solid var(--gold); border-radius:6px; padding:5px 8px; margin-bottom:8px;">⚠️ Combustibles (Gas Regular, Diesel) se registran en <b>galones</b>. Aceites (Aceite Mezcla, Aceite 15W40) se registran en <b>onzas</b> — no son la misma unidad, no se suman entre sí.</div>
       <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
       ${renderGrillaBitacoraMaquinaria(maquinasVisibles, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
     </div></div>`;

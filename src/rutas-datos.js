@@ -78,12 +78,16 @@ const HORARIO_ASIGNADO_PREFIX = "horario_asignado:";
 // departamento que Horarios: cat_bote:/cat_ruta_bote:/cat_maquina: son
 // catálogos etiquetados con DEPARTAMENTO_MINISTERIO, bitacora_bote:
 // <fechaISO>:<boteKey> (y bitacora_rebote:, bitacora_maquinaria:) son los
-// reportes diarios de ese bote/máquina. Cada jefatura solo puede leer/
-// escribir lo de su propio departamento (ver botePerteneceAEquipo y afines
-// más abajo) — nunca el de otro. A diferencia de Horarios, el módulo entero
-// solo tiene sentido operativo en Corcovado: ese filtro lo hace el cliente
-// (currentPropiedadId en app.js), no el servidor — igual que cualquier otro
-// dato, cada propiedad ya tiene sus propias filas en `documentos`.
+// reportes diarios de ese bote/máquina. Jefatura solo puede leer/escribir lo
+// de su propio departamento en los reportes diarios (ver
+// bitacoraBotePerteneceAEquipo y afines más abajo) — nunca el de otro. Los
+// tres catálogos (cat_bote:/cat_ruta_bote:/cat_maquina:) son la excepción: a
+// diferencia de Horarios, jefatura solo los puede LEER — crearlos/editarlos/
+// borrarlos queda exclusivo de master/gerente (pedido explícito del
+// usuario). A diferencia de Horarios, el módulo entero solo tiene sentido
+// operativo en Corcovado: ese filtro lo hace el cliente (currentPropiedadId
+// en app.js), no el servidor — igual que cualquier otro dato, cada propiedad
+// ya tiene sus propias filas en `documentos`.
 const BOTE_PREFIX = "cat_bote:";
 const RUTA_BOTE_PREFIX = "cat_ruta_bote:";
 const BITACORA_BOTE_PREFIX = "bitacora_bote:";
@@ -360,20 +364,13 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   if (usuario.rol === "jefatura" && clave.startsWith(HORARIO_ASIGNADO_PREFIX)) {
     return horarioAsignadoPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
-  // Bitácoras: mismo criterio que cat_horario:/cat_lugar_trabajo: arriba —
-  // jefatura puede crear/editar botes, rutas y máquinas, pero únicamente
-  // dentro de su propio departamento. El departamento sale del payload para
-  // los tres catálogos (son plantillas nuevas, sin registro previo que
-  // consultar).
-  if (usuario.rol === "jefatura" && (clave.startsWith(BOTE_PREFIX) || clave.startsWith(RUTA_BOTE_PREFIX) || clave.startsWith(MAQUINA_PREFIX)) && typeof valorNuevo === "string") {
-    let nuevo = null;
-    try {
-      nuevo = JSON.parse(valorNuevo);
-    } catch (e) {
-      return false;
-    }
-    return !!nuevo && nuevo.DEPARTAMENTO_MINISTERIO === usuario.puesto;
-  }
+  // Bitácoras: a diferencia de cat_horario:/cat_lugar_trabajo:, los
+  // catálogos de botes/rutas/máquinas quedan EXCLUSIVOS de master/gerente
+  // (pedido explícito del usuario) — jefatura ya no puede crear ni editar
+  // ninguno de los tres, solo master/gerente (ver A.PUEDEN_ESCRIBIR arriba,
+  // que ya los deja pasar antes de llegar acá). Jefatura sigue pudiendo
+  // LEER estos catálogos (para armar su reporte diario — ver
+  // PREFIJOS_LECTURA_JEFATURA), solo no administrarlos.
   // Los reportes diarios (bitacora_bote:/bitacora_rebote:/
   // bitacora_maquinaria:) no traen su propio departamento: se resuelve a
   // partir del bote/máquina al que apunta la clave.
