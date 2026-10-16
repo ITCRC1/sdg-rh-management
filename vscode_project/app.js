@@ -16916,25 +16916,30 @@ function renderSeccionMaquinas(maquinas, deptoActivo, puedeGestionar){
   </div></div>`;
 }
 
-// Guarda de una vez las 6 cantidades de producto de UNA máquina para el día
-// activo — mismo criterio que guardarBitacoraBoteDia: se lee del DOM y se
-// guarda entero, no campo por campo.
-async function guardarBitacoraMaquinariaDia(maquinaKey, fechaISO){
+// Guarda de una sola vez las 6 cantidades de producto de TODAS las máquinas
+// para el día activo — un solo botón por tabla (no uno por fila, que
+// confundía: Ingreso de Combustible ya tenía un único botón para toda la
+// tabla, mientras que acá había uno por máquina). Una máquina sin ningún
+// producto tocado se salta, para no crear un registro vacío.
+async function guardarTodoReporteMaquinaria(fechaISO, maquinas){
   const status = document.getElementById("bitacoras-maquinaria-grilla-status");
-  const valores = {};
-  PRODUCTOS_MAQUINARIA.forEach(([campo]) => {
-    const v = (document.getElementById(`bitacora-maquinaria-${maquinaKey}-${campo}`)||{}).value;
-    if (v !== "") valores[campo] = Number(v);
-  });
   try{
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
-    const key = `${BITACORA_MAQUINARIA_PREFIX}${fechaISO}:${maquinaKey}`;
-    await window.storage.set(key, JSON.stringify({
-      ...valores,
-      ACTUALIZADO_POR: sesion ? sesion.email : "",
-      ACTUALIZADO_EN: new Date().toISOString(),
-    }), false);
-    statusMsg("Consumo de la máquina guardado.");
+    await Promise.all(maquinas.map(async maq => {
+      const valores = {};
+      PRODUCTOS_MAQUINARIA.forEach(([campo]) => {
+        const v = (document.getElementById(`bitacora-maquinaria-${maq.key}-${campo}`)||{}).value;
+        if (v !== "") valores[campo] = Number(v);
+      });
+      if (Object.keys(valores).length === 0) return; // máquina sin tocar ese día — se ignora
+      const key = `${BITACORA_MAQUINARIA_PREFIX}${fechaISO}:${maq.key}`;
+      await window.storage.set(key, JSON.stringify({
+        ...valores,
+        ACTUALIZADO_POR: sesion ? sesion.email : "",
+        ACTUALIZADO_EN: new Date().toISOString(),
+      }), false);
+    }));
+    statusMsg("Consumo de maquinaria guardado.");
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; else statusMsg("No se pudo guardar: " + e.message, false); }
 }
 
@@ -16944,13 +16949,13 @@ function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, pued
   const entradasPorClave = {};
   entradasDelDia.forEach(e => { entradasPorClave[e.key] = e; });
   const maquinasOrdenadas = maquinas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"));
+  const maquinasKeysJson = escapeHtml(JSON.stringify(maquinasOrdenadas.map(m => ({ key: m.key }))));
 
   return `<div style="overflow-x:auto;">
   <table style="border-collapse:collapse; font-size:11px;">
     <thead><tr>
       <th style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Tipo de máquina</th>
       ${PRODUCTOS_MAQUINARIA.map(([,label]) => `<th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(label)}</th>`).join("")}
-      ${puedeGestionar ? `<th style="padding:4px 8px; border:1px solid var(--paper-line);"></th>` : ""}
     </tr></thead>
     <tbody>
       ${maquinasOrdenadas.map(maq => {
@@ -16965,12 +16970,12 @@ function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, pued
               : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
             return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celda}</td>`;
           }).join("")}
-          ${puedeGestionar ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;"><button class="btn" style="padding:3px 8px; font-size:10px;" onclick="guardarBitacoraMaquinariaDia('${maq.key}', '${fechaISO}')">💾</button></td>` : ""}
         </tr>`;
       }).join("")}
     </tbody>
   </table>
   </div>
+  ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick='guardarTodoReporteMaquinaria("${fechaISO}", ${maquinasKeysJson})'>💾 Guardar</button></div>` : ""}
   <div id="bitacoras-maquinaria-grilla-status" style="font-size:12px; margin-top:8px;"></div>`;
 }
 
@@ -16997,36 +17002,39 @@ function actualizarGastoBitacora(tipo, boteKey, rutaKey){
   if (celda) celda.textContent = gasto === null ? "—" : gasto;
 }
 
-// Guarda de una vez el capitán + todas las rutas de UN bote para el día
-// activo, en el reporte "diaria" o "rebote" según `tipo` — se lee todo
-// directo del DOM (no hay edición campo por campo con guardado automático,
-// a propósito: con hasta 5 rutas × 3 campos por bote, guardar en cada tecla
-// sería demasiadas escrituras).
-async function guardarBitacoraBoteDia(tipo, boteKey, fechaISO, rutasKeys){
+// Guarda de una sola vez el capitán + todas las rutas de TODOS los botes
+// para el día activo, en el reporte "diaria" o "rebote" según `tipo` — un
+// solo botón por tabla (no uno por bote, que confundía al lado del único
+// botón de Ingreso de Combustible). Un bote sin capitán ni ninguna ruta
+// tocada se salta, para no crear un registro vacío.
+async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys){
   const status = document.getElementById(`bitacoras-${tipo}-grilla-status`);
-  const capitanKey = (document.getElementById(`bitacora-${tipo}-${boteKey}-capitan`)||{}).value || "";
-  const rutasValor = {};
-  rutasKeys.forEach(({ key: rutaKey, tieneHacienda }) => {
-    const ent = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-ent`)||{}).value;
-    const dev = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-dev`)||{}).value;
-    const hac = tieneHacienda ? (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-hac`)||{}).value : "";
-    if (ent === "" && dev === "" && hac === "") return; // ruta sin tocar ese día — se ignora
-    const fila = {};
-    if (hac !== "") fila.HAC = Number(hac);
-    if (ent !== "") fila.ENT = Number(ent);
-    if (dev !== "") fila.DEV = Number(dev);
-    rutasValor[rutaKey] = fila;
-  });
   try{
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
-    const key = `${BITACORA_TIPOS[tipo].prefix}${fechaISO}:${boteKey}`;
-    await window.storage.set(key, JSON.stringify({
-      CAPITAN_KEY: capitanKey,
-      RUTAS: rutasValor,
-      ACTUALIZADO_POR: sesion ? sesion.email : "",
-      ACTUALIZADO_EN: new Date().toISOString(),
-    }), false);
-    statusMsg("Reporte del bote guardado.");
+    await Promise.all(botes.map(async ({ key: boteKey }) => {
+      const capitanKey = (document.getElementById(`bitacora-${tipo}-${boteKey}-capitan`)||{}).value || "";
+      const rutasValor = {};
+      rutasKeys.forEach(({ key: rutaKey, tieneHacienda }) => {
+        const ent = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-ent`)||{}).value;
+        const dev = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-dev`)||{}).value;
+        const hac = tieneHacienda ? (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-hac`)||{}).value : "";
+        if (ent === "" && dev === "" && hac === "") return; // ruta sin tocar ese día — se ignora
+        const fila = {};
+        if (hac !== "") fila.HAC = Number(hac);
+        if (ent !== "") fila.ENT = Number(ent);
+        if (dev !== "") fila.DEV = Number(dev);
+        rutasValor[rutaKey] = fila;
+      });
+      if (!capitanKey && Object.keys(rutasValor).length === 0) return; // bote sin tocar ese día — se ignora
+      const key = `${BITACORA_TIPOS[tipo].prefix}${fechaISO}:${boteKey}`;
+      await window.storage.set(key, JSON.stringify({
+        CAPITAN_KEY: capitanKey,
+        RUTAS: rutasValor,
+        ACTUALIZADO_POR: sesion ? sesion.email : "",
+        ACTUALIZADO_EN: new Date().toISOString(),
+      }), false);
+    }));
+    statusMsg("Reporte guardado.");
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; else statusMsg("No se pudo guardar: " + e.message, false); }
 }
 
@@ -17047,6 +17055,8 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
   const rutasKeysJson = escapeHtml(JSON.stringify(rutasKeysInfo));
   const prefix = BITACORA_TIPOS[tipo].prefix;
 
+  const botesKeysJson = escapeHtml(JSON.stringify(botesOrdenados.map(b => ({ key: b.key }))));
+
   return `<div style="overflow-x:auto;">
   <table style="border-collapse:collapse; font-size:11px;">
     <thead>
@@ -17054,7 +17064,6 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
         <th rowspan="2" style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Bote</th>
         <th rowspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);">Capitán</th>
         ${rutasOrdenadas.map(r => `<th colspan="${r.TIENE_HACIENDA ? 4 : 3}" style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(r.NOMBRE)}</th>`).join("")}
-        ${puedeGestionar ? `<th rowspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);"></th>` : ""}
       </tr>
       <tr>
         ${rutasOrdenadas.map(r => `${r.TIENE_HACIENDA ? `<th style="padding:2px 4px; border:1px solid var(--paper-line);">HAC</th>` : ""}<th style="padding:2px 4px; border:1px solid var(--paper-line);">ENT</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">DEV</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">GAST</th>`).join("")}
@@ -17083,12 +17092,12 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
               : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
             return `${r.TIENE_HACIENDA ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("hac", val.HAC)}</td>` : ""}<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("ent", val.ENT)}</td><td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("dev", val.DEV)}</td><td id="bitacora-${tipo}-${bote.key}-${r.key}-gast" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${gasto === null ? "—" : gasto}</td>`;
           }).join("")}
-          ${puedeGestionar ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;"><button class="btn" style="padding:3px 8px; font-size:10px;" onclick='guardarBitacoraBoteDia("${tipo}", "${bote.key}", "${fechaISO}", ${rutasKeysJson})'>💾</button></td>` : ""}
         </tr>`;
       }).join("")}
     </tbody>
   </table>
   </div>
+  ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick='guardarTodoReporteBotes("${tipo}", "${fechaISO}", ${botesKeysJson}, ${rutasKeysJson})'>💾 Guardar</button></div>` : ""}
   <div id="bitacoras-${tipo}-grilla-status" style="font-size:12px; margin-top:8px;"></div>`;
 }
 
@@ -17115,8 +17124,8 @@ function actualizarTotalIngresoCombustible(campo){
 }
 
 // Guarda de una vez la pichinga + cantidad de los 6 productos para el
-// departamento y día activos — igual que guardarBitacoraMaquinariaDia, se
-// lee todo del DOM y se guarda entero.
+// departamento y día activos — es un solo registro (no uno por producto),
+// así que un solo botón ya alcanza, sin la confusión de un botón por fila.
 async function guardarBitacoraIngresoCombustibleDia(departamento, fechaISO){
   const status = document.getElementById("bitacoras-ingreso-combustible-status");
   const valores = {};
@@ -17266,11 +17275,16 @@ async function renderBitacorasPanel(){
       return;
     }
 
-    html += `<div style="margin-bottom:12px;">
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:200px;">Fecha (para los reportes de abajo)
-        <input type="date" value="${escapeHtml(bitacorasFechaActiva)}" onchange="bitacorasFechaActiva=this.value; renderBitacorasPanel();">
+    // Fecha madre: UNA sola fecha gobierna los cuatro reportes de abajo
+    // (Ingreso de Combustible, Botes, Rebotes, Maquinaria) — cambiarla acá
+    // recarga y vuelve a guardar todo contra ese mismo día, no hay una
+    // fecha distinta por sección.
+    html += `<div class="section-card" style="margin-bottom:14px; border-color:var(--navy-deep);"><div class="section-body" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <label style="font-size:13px; font-weight:700; color:var(--navy-deep); display:flex; align-items:center; gap:8px;">📅 Fecha de la bitácora
+        <input type="date" value="${escapeHtml(bitacorasFechaActiva)}" onchange="bitacorasFechaActiva=this.value; renderBitacorasPanel();" style="font-size:13px; font-weight:600;">
       </label>
-    </div>`;
+      <span style="font-size:11px; color:var(--ink-soft);">Todos los reportes de abajo se guardan y se leen contra esta misma fecha.</span>
+    </div></div>`;
 
     // "Ingreso de Combustible" es el reporte original del módulo — va de
     // primero. Los botes/rebotes/maquinaria se agregaron después, así que
