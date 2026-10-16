@@ -108,9 +108,9 @@
   <button class="nav-dd-btn" id="navbtn-vacaciones" onclick="navCloseAndRun(function(){ showTab('vacaciones'); })">🏖️ Días libres y Vacaciones</button>
   <button class="nav-dd-btn" id="navbtn-incapacidades" onclick="navCloseAndRun(function(){ showTab('incapacidades'); })">🤒 Incapacidades</button>
   <button class="nav-dd-btn" id="navbtn-horarios" onclick="navCloseAndRun(function(){ showTab('horarios'); })">🕐 Horarios</button>
-  <!-- Exclusivo de master/gerente/consultor y de la jefatura de Actividades
-       (ver aplicarModoSegunRol en app.js) — ninguna otra jefatura lo ve.
-       Oculto por defecto. -->
+  <!-- Master/gerente/consultor y cualquier jefatura (ver aplicarModoSegunRol
+       en app.js) — pero solo cuando la propiedad activa es Corcovado, el
+       módulo entero se oculta en cualquier otra. Oculto por defecto. -->
   <button class="nav-dd-btn" id="navbtn-bitacoras" style="display:none;" onclick="navCloseAndRun(function(){ showTab('bitacoras'); })">📘 Bitácoras</button>
 
   <div class="nav-dd">

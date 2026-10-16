@@ -16651,6 +16651,19 @@ const PRODUCTOS_MAQUINARIA = [
 // campos pedir por producto.
 const PRODUCTOS_EN_ONZAS = new Set(["ACEITE_MEZCLA", "ACEITE_15W40"]);
 
+// "Otros" en Consumo de Maquinaria NO es un producto más por máquina — pedido
+// explícito del usuario: repetir una casilla "¿Qué es?" en cada fila de cada
+// máquina no tenía sentido. En su lugar es una MÁQUINA extra, descrita a
+// mano (ver renderSeccionMaquinariaOtros/BITACORA_MAQUINARIA_OTROS_PREFIX más
+// abajo), con los mismos 4 productos reales que cualquier máquina del
+// catálogo. Ingreso de Combustible sí conserva su "Otros" tal cual (ahí es
+// un producto suelto del día, no algo que se repita por fila).
+const PRODUCTOS_MAQUINARIA_REALES = PRODUCTOS_MAQUINARIA.filter(([campo]) => campo !== "OTROS");
+// bitacora_maquinaria_otros:<fechaISO>:<departamento> — un registro por
+// departamento por día (mismo esquema que BITACORA_INGRESO_COMBUSTIBLE_PREFIX),
+// con un array ITEMS de máquinas/equipos descritos a mano ese día.
+const BITACORA_MAQUINARIA_OTROS_PREFIX = "bitacora_maquinaria_otros:";
+
 // Cuarto reporte (el original de Bitácoras, antes de los de botes): el
 // ingreso de combustible/aceite al inventario de la propiedad, por producto
 // — mismos 5 productos que Consumo de Maquinaria, para hablar el mismo
@@ -16926,20 +16939,16 @@ function renderSeccionMaquinas(maquinas, deptoActivo, puedeGestionar){
 // confundía: Ingreso de Combustible ya tenía un único botón para toda la
 // tabla, mientras que acá había uno por máquina). Una máquina sin ningún
 // producto tocado se salta, para no crear un registro vacío.
-async function guardarTodoReporteMaquinaria(fechaISO, maquinas){
+async function guardarTodoReporteMaquinaria(fechaISO, maquinas, departamento){
   const status = document.getElementById("bitacoras-maquinaria-grilla-status");
   try{
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
     await Promise.all(maquinas.map(async maq => {
       const valores = {};
-      PRODUCTOS_MAQUINARIA.forEach(([campo]) => {
+      PRODUCTOS_MAQUINARIA_REALES.forEach(([campo]) => {
         const v = (document.getElementById(`bitacora-maquinaria-${maq.key}-${campo}`)||{}).value;
         if (v !== "") valores[campo] = Number(v);
       });
-      // "Otros" es un cajón genérico — se pide describir qué combustible/
-      // aceite es en realidad, para que el número no quede sin explicación.
-      const otrosDesc = ((document.getElementById(`bitacora-maquinaria-${maq.key}-otros-desc`)||{}).value || "").trim();
-      if (otrosDesc) valores.OTROS_DESC = otrosDesc;
       if (Object.keys(valores).length === 0) return; // máquina sin tocar ese día — se ignora
       const key = `${BITACORA_MAQUINARIA_PREFIX}${fechaISO}:${maq.key}`;
       await window.storage.set(key, JSON.stringify({
@@ -16948,8 +16957,83 @@ async function guardarTodoReporteMaquinaria(fechaISO, maquinas){
         ACTUALIZADO_EN: new Date().toISOString(),
       }), false);
     }));
+
+    // Máquinas/equipos "Otros" — no están en el catálogo, se describen a
+    // mano para ese día nada más (ver renderSeccionMaquinariaOtros). Se leen
+    // todas las filas que queden en pantalla (las que el usuario no borró
+    // con el 🗑️ de cada una) y se guardan de una vez, reemplazando la lista
+    // completa anterior.
+    const filas = Array.from(document.querySelectorAll("#maquinaria-otros-filas .maquinaria-otros-fila"));
+    const items = [];
+    filas.forEach(fila => {
+      const id = fila.dataset.id;
+      const nombre = ((document.getElementById(`maquinaria-otros-${id}-nombre`)||{}).value || "").trim();
+      if (!nombre) return; // fila sin describir — se ignora
+      const item = { NOMBRE: nombre };
+      PRODUCTOS_MAQUINARIA_REALES.forEach(([campo]) => {
+        const v = (document.getElementById(`maquinaria-otros-${id}-${campo}`)||{}).value;
+        if (v !== "") item[campo] = Number(v);
+      });
+      items.push(item);
+    });
+    const keyOtros = `${BITACORA_MAQUINARIA_OTROS_PREFIX}${fechaISO}:${departamento}`;
+    await window.storage.set(keyOtros, JSON.stringify({
+      ITEMS: items,
+      ACTUALIZADO_POR: sesion ? sesion.email : "",
+      ACTUALIZADO_EN: new Date().toISOString(),
+    }), false);
+
     statusMsg("Consumo de maquinaria guardado.");
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; else statusMsg("No se pudo guardar: " + e.message, false); }
+}
+
+async function obtenerBitacoraMaquinariaOtrosDelDia(departamento, fechaISO){
+  if (!departamento) return [];
+  try{
+    const r = await window.storage.get(`${BITACORA_MAQUINARIA_OTROS_PREFIX}${fechaISO}:${departamento}`, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    return (v && Array.isArray(v.ITEMS)) ? v.ITEMS : [];
+  }catch(e){ return []; }
+}
+
+// Contador para que cada fila "Otros" tenga ids únicos en el DOM, tanto las
+// que vienen ya guardadas (renderSeccionMaquinariaOtros) como las que se
+// agregan al vuelo con el botón "➕ Agregar máquina no listada".
+let maquinariaOtrosContador = 0;
+
+function filaMaquinariaOtrosHtml(item, puedeGestionar){
+  const id = maquinariaOtrosContador++;
+  const nombre = (item && item.NOMBRE) || "";
+  return `<div class="maquinaria-otros-fila" data-id="${id}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; padding:6px 0; border-bottom:1px dashed var(--paper-line);">
+    <label style="font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:2px; flex:1; min-width:160px;">¿Qué máquina o equipo es?
+      <input type="text" id="maquinaria-otros-${id}-nombre" value="${escapeHtml(nombre)}" placeholder="Describí la máquina o equipo" ${!puedeGestionar?"disabled":""}>
+    </label>
+    ${PRODUCTOS_MAQUINARIA_REALES.map(([campo, label]) => {
+      const valor = item ? item[campo] : undefined;
+      return `<label style="font-size:10px; color:var(--ink-soft); display:flex; flex-direction:column; gap:2px;">${escapeHtml(label)}
+        <input type="number" step="0.01" id="maquinaria-otros-${id}-${campo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:65px; font-size:10.5px;" ${!puedeGestionar?"disabled":""}>
+      </label>`;
+    }).join("")}
+    ${puedeGestionar ? `<button class="del" style="padding:4px 8px; font-size:11px;" onclick="this.closest('.maquinaria-otros-fila').remove();" title="Quitar esta fila (no se guarda hasta hacer clic en Guardar)">🗑️</button>` : ""}
+  </div>`;
+}
+
+// Agrega una fila en blanco al vuelo, sin recargar todo el panel — las ya
+// guardadas no se tocan, solo se suma una más al final.
+function agregarFilaMaquinariaOtros(){
+  const cont = document.getElementById("maquinaria-otros-filas");
+  if (!cont) return;
+  cont.insertAdjacentHTML("beforeend", filaMaquinariaOtrosHtml(null, true));
+}
+
+function renderSeccionMaquinariaOtros(items, puedeGestionar){
+  const filasHtml = items.map(item => filaMaquinariaOtrosHtml(item, puedeGestionar)).join("");
+  return `<div style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--paper-line);">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px; font-size:12.5px;">➕ Otros (maquinaria no listada en el catálogo)</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Para equipos puntuales que no vale la pena agregar al catálogo — describí a mano cuál es y anotá su consumo, igual que cualquier máquina. Se guarda con el mismo botón de abajo.</div>
+    <div id="maquinaria-otros-filas">${filasHtml}</div>
+    ${puedeGestionar ? `<button class="btn" style="margin-top:8px; padding:4px 10px; font-size:11px;" onclick="agregarFilaMaquinariaOtros();">➕ Agregar máquina no listada</button>` : ""}
+  </div>`;
 }
 
 function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, puedeGestionar){
@@ -16958,13 +17042,12 @@ function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, pued
   const entradasPorClave = {};
   entradasDelDia.forEach(e => { entradasPorClave[e.key] = e; });
   const maquinasOrdenadas = maquinas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"));
-  const maquinasKeysJson = escapeHtml(JSON.stringify(maquinasOrdenadas.map(m => ({ key: m.key }))));
 
   return `<div style="overflow-x:auto;">
   <table style="border-collapse:collapse; font-size:11px;">
     <thead><tr>
       <th style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Tipo de máquina</th>
-      ${PRODUCTOS_MAQUINARIA.map(([,label]) => `<th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(label)}</th>`).join("")}
+      ${PRODUCTOS_MAQUINARIA_REALES.map(([,label]) => `<th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(label)}</th>`).join("")}
     </tr></thead>
     <tbody>
       ${maquinasOrdenadas.map(maq => {
@@ -16972,18 +17055,8 @@ function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, pued
         const actual = entradasPorClave[claveEntrada] || null;
         return `<tr>
           <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;"><b>${escapeHtml(maq.NOMBRE||"")}</b></td>
-          ${PRODUCTOS_MAQUINARIA.map(([campo]) => {
+          ${PRODUCTOS_MAQUINARIA_REALES.map(([campo]) => {
             const valor = actual ? actual[campo] : undefined;
-            if (campo === "OTROS"){
-              const desc = actual ? actual.OTROS_DESC : undefined;
-              const celda = puedeGestionar
-                ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:center;">
-                    <input type="number" step="0.01" id="bitacora-maquinaria-${maq.key}-${campo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:60px; font-size:10.5px;">
-                    <input type="text" id="bitacora-maquinaria-${maq.key}-otros-desc" value="${escapeHtml(desc||"")}" placeholder="¿Qué es?" style="width:70px; font-size:9.5px;">
-                  </div>`
-                : `${(valor !== undefined && valor !== null) ? valor : "—"}${desc ? ` (${escapeHtml(desc)})` : ""}`;
-              return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celda}</td>`;
-            }
             const celda = puedeGestionar
               ? `<input type="number" step="0.01" id="bitacora-maquinaria-${maq.key}-${campo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:60px; font-size:10.5px;">`
               : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
@@ -16993,9 +17066,7 @@ function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, pued
       }).join("")}
     </tbody>
   </table>
-  </div>
-  ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick='guardarTodoReporteMaquinaria("${fechaISO}", ${maquinasKeysJson})'>💾 Guardar</button></div>` : ""}
-  <div id="bitacoras-maquinaria-grilla-status" style="font-size:12px; margin-top:8px;"></div>`;
+  </div>`;
 }
 
 // ENT (combustible cargado) − DEV (combustible devuelto/sobrante) = gasto
@@ -17119,7 +17190,7 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
         </tr>
         <tr>
           <td colspan="${totalColumnas}" style="padding:4px 8px; border:1px solid var(--paper-line); background:#FAFAF7;">
-            <label style="font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Observaciones de ${escapeHtml(bote.NOMBRE||"")}
+            <label style="font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Observaciones
               ${puedeGestionar
                 ? `<textarea id="bitacora-${tipo}-${bote.key}-observaciones" rows="2" placeholder="Ej. avería, demora, cliente canceló, etc." style="width:100%; max-width:480px; font-size:11px; font-family:inherit; resize:vertical;">${escapeHtml((actual && actual.OBSERVACIONES) || "")}</textarea>`
                 : `<span>${escapeHtml((actual && actual.OBSERVACIONES) || "—")}</span>`}
@@ -17496,10 +17567,11 @@ async function renderBitacorasPanel(){
       html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
     }
 
-    const [entradasDiaria, entradasRebote, entradasMaquinaria] = await Promise.all([
+    const [entradasDiaria, entradasRebote, entradasMaquinaria, entradasMaquinariaOtros] = await Promise.all([
       listarBitacoraDelDia("diaria", bitacorasFechaActiva),
       listarBitacoraDelDia("rebote", bitacorasFechaActiva),
       listarBitacoraMaquinariaDelDia(bitacorasFechaActiva),
+      obtenerBitacoraMaquinariaOtrosDelDia(deptoActivo, bitacorasFechaActiva),
     ]);
 
     const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos con puesto de Capitán en el departamento ${escapeHtml(deptoActivo)}.`;
@@ -17512,11 +17584,15 @@ async function renderBitacorasPanel(){
       </div></div>`;
     });
 
+    const maquinasKeysJson = escapeHtml(JSON.stringify(maquinasVisibles.map(m => ({ key: m.key }))));
     html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Consumo de Maquinaria</div>
       <div style="font-size:11.5px; color:#8a5a00; background:#FBF6E8; border:1px solid var(--gold); border-radius:6px; padding:5px 8px; margin-bottom:8px;">⚠️ Combustibles (Gas Regular, Diesel) se registran en <b>galones</b>. Aceites (Aceite Mezcla, Aceite 15W40) se registran en <b>onzas</b> — no son la misma unidad, no se suman entre sí.</div>
       <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
       ${renderGrillaBitacoraMaquinaria(maquinasVisibles, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
+      ${renderSeccionMaquinariaOtros(entradasMaquinariaOtros, puedeGestionar)}
+      ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick='guardarTodoReporteMaquinaria("${bitacorasFechaActiva}", ${maquinasKeysJson}, "${deptoActivo}")'>💾 Guardar</button></div>` : ""}
+      <div id="bitacoras-maquinaria-grilla-status" style="font-size:12px; margin-top:8px;"></div>
     </div></div>`;
 
     // "Bitácoras guardadas" — resumen por mes para poder verificar si falta

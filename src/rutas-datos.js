@@ -111,6 +111,12 @@ const BITACORA_MAQUINARIA_PREFIX = "bitacora_maquinaria:";
 // clave (bitacora_ingreso_combustible:<fechaISO>:<departamento>) en vez de
 // resolverse contra un catálogo.
 const BITACORA_INGRESO_COMBUSTIBLE_PREFIX = "bitacora_ingreso_combustible:";
+// Máquinas/equipos "Otros" en Consumo de Maquinaria: no están en el
+// catálogo cat_maquina:, se describen a mano para ese día nada más — mismo
+// esquema de clave por departamento que BITACORA_INGRESO_COMBUSTIBLE_PREFIX
+// (bitacora_maquinaria_otros:<fechaISO>:<departamento>), con un array de
+// máquinas descritas ese día en vez de un solo objeto de productos.
+const BITACORA_MAQUINARIA_OTROS_PREFIX = "bitacora_maquinaria_otros:";
 
 async function valorDeClave(propiedad, clave) {
   const { rows } = await query(
@@ -123,6 +129,22 @@ async function valorDeClave(propiedad, clave) {
   } catch (e) {
     return null;
   }
+}
+
+// Igual que valorDeClave, pero memoiza dentro de un `cache` (Map) que vive
+// solo mientras dura UNA pasada de filtrarFilasPorEquipo — sin esto, listar
+// horario_asignado: (un registro por empleado POR DÍA, sin límite de fecha)
+// repetía la misma consulta de cat_empleado:/cat_puesto: cientos de veces
+// para los mismos pocos empleados del equipo, una por cada día de historial.
+// Se cachea la PROMESA (no el valor ya resuelto) porque filtrarFilasPorEquipo
+// ahora corre todas las filas en paralelo: así, si dos filas piden la misma
+// clave al mismo tiempo, comparten una sola consulta en vez de disparar dos.
+// Sin `cache` (llamadas sueltas, ej. el gate de GET /:clave) se comporta
+// exactamente igual que antes.
+async function valorDeClaveCacheado(propiedad, clave, cache) {
+  if (!cache) return valorDeClave(propiedad, clave);
+  if (!cache.has(clave)) cache.set(clave, valorDeClave(propiedad, clave));
+  return cache.get(clave);
 }
 
 // ¿Este empleado pertenece al departamento que lidera esta jefatura? El
@@ -140,9 +162,9 @@ async function valorDeClave(propiedad, clave) {
 // puesto no caiga en el departamento que lidera. Quien llama a escribir o
 // aprobar (puedeEscribirClave) nunca manda este parámetro, así que esto
 // nunca abre una autoaprobación — solo lectura de lo propio.
-async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia) {
+async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia, cache) {
   if (!empleadoKey) return false;
-  const empleado = await valorDeClave(propiedad, EMPLEADO_PREFIX + empleadoKey);
+  const empleado = await valorDeClaveCacheado(propiedad, EMPLEADO_PREFIX + empleadoKey, cache);
   if (!empleado) return false;
 
   if (
@@ -154,7 +176,7 @@ async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLide
   }
 
   if (!departamentoLider || !empleado.PUESTO_KEY) return false;
-  const puesto = await valorDeClave(propiedad, PUESTO_PREFIX + empleado.PUESTO_KEY);
+  const puesto = await valorDeClaveCacheado(propiedad, PUESTO_PREFIX + empleado.PUESTO_KEY, cache);
   if (!puesto) return false;
 
   return puesto.DEPARTAMENTO_MINISTERIO === departamentoLider;
@@ -163,18 +185,20 @@ async function empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLide
 // ¿El empleado dueño de esta clave de horas_extra pertenece al departamento
 // que lidera esta jefatura (o es la jefatura misma, en lectura)? Un registro
 // "sinmatch-" (todavía sin empleado identificado) nunca pertenece a nadie —
-// esa asignación es trabajo de master/gerente.
-async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departamentoLider, cedulaPropia) {
+// esa asignación es trabajo de master/gerente. `cache`, si viene (ver
+// filtrarFilasPorEquipo), evita repetir la misma consulta de empleado/puesto
+// para cada fila de un mismo empleado.
+async function horaExtraPerteneceAEquipo(propiedad, claveHorasExtra, departamentoLider, cedulaPropia, cache) {
   const empleadoKey = claveHorasExtra.split(":")[1] || "";
   if (!empleadoKey || empleadoKey.startsWith("sinmatch-")) return false;
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia, cache);
 }
 
 // Igual que arriba, para solicitud_ausencia:<empleadoKey>:<id> — la clave
 // del empleado sale del mismo segundo segmento.
-async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamentoLider, cedulaPropia) {
+async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamentoLider, cedulaPropia, cache) {
   const empleadoKey = claveSolicitud.split(":")[1] || "";
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia, cache);
 }
 
 // Igual que arriba, para cat_empleado:<empleadoKey> directamente — a
@@ -184,9 +208,9 @@ async function solicitudPerteneceAEquipo(propiedad, claveSolicitud, departamento
 // en cualquier pantalla que liste empleados (ej. el calendario de Días
 // Libres) — el resto de sus lecturas ya estaban filtradas por equipo, pero
 // cat_empleado: se leía completo, sin filtrar.
-async function empleadoClavePerteneceAEquipo(propiedad, claveEmpleado, departamentoLider, cedulaPropia) {
+async function empleadoClavePerteneceAEquipo(propiedad, claveEmpleado, departamentoLider, cedulaPropia, cache) {
   const empleadoKey = claveEmpleado.slice(EMPLEADO_PREFIX.length);
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia, cache);
 }
 
 // A diferencia de horas_extra:/solicitud_ausencia:/horario_asignado: de
@@ -196,33 +220,38 @@ async function empleadoClavePerteneceAEquipo(propiedad, claveEmpleado, departame
 // Por eso acá nunca se compara departamento — se llama a
 // empleadoPerteneceAEquipo sin departamentoLider (null), que deja activo
 // solo el chequeo de cédula propia.
-async function incapacidadEsPropia(propiedad, claveIncapacidad, cedulaPropia) {
+async function incapacidadEsPropia(propiedad, claveIncapacidad, cedulaPropia, cache) {
   const empleadoKey = claveIncapacidad.split(":")[1] || "";
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, null, cedulaPropia);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, null, cedulaPropia, cache);
 }
 
-// Igual que arriba, para horario_asignado:<empleadoKey>:<fechaISO>.
-async function horarioAsignadoPerteneceAEquipo(propiedad, claveAsignado, departamentoLider, cedulaPropia) {
+// Igual que arriba, para horario_asignado:<empleadoKey>:<fechaISO>. Este es
+// el prefijo que más se beneficia del cache: no tiene límite de fecha (ver
+// listarHorariosAsignados en app.js), así que acumula un registro por
+// empleado POR DÍA desde que existe el módulo — para un equipo de 20
+// personas con meses de historial, sin cache esto era cientos de consultas
+// repetidas a cat_empleado:/cat_puesto: para las mismas 20 personas.
+async function horarioAsignadoPerteneceAEquipo(propiedad, claveAsignado, departamentoLider, cedulaPropia, cache) {
   const empleadoKey = claveAsignado.split(":")[1] || "";
-  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia);
+  return empleadoPerteneceAEquipo(propiedad, empleadoKey, departamentoLider, cedulaPropia, cache);
 }
 
 // A diferencia de los de arriba, cat_horario: no es un dato "de" un empleado
 // — es una plantilla de turno (nombre + hora inicio/fin) que jefatura crea
 // para SU departamento. Acá se compara el departamento que trae el propio
 // registro del turno contra el de la jefatura, no el de ningún empleado.
-async function horarioPerteneceAEquipo(propiedad, claveHorario, departamentoLider) {
+async function horarioPerteneceAEquipo(propiedad, claveHorario, departamentoLider, cache) {
   if (!departamentoLider) return false;
-  const horario = await valorDeClave(propiedad, claveHorario);
+  const horario = await valorDeClaveCacheado(propiedad, claveHorario, cache);
   return !!horario && horario.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
 
 // Igual que horarioPerteneceAEquipo, para cat_lugar_trabajo: (ej. Hotel/
 // Playa/Hacienda en Seguridad) — tampoco es un dato "de" un empleado, es otra
 // plantilla por departamento.
-async function lugarTrabajoPerteneceAEquipo(propiedad, claveLugar, departamentoLider) {
+async function lugarTrabajoPerteneceAEquipo(propiedad, claveLugar, departamentoLider, cache) {
   if (!departamentoLider) return false;
-  const lugar = await valorDeClave(propiedad, claveLugar);
+  const lugar = await valorDeClaveCacheado(propiedad, claveLugar, cache);
   return !!lugar && lugar.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
 
@@ -230,19 +259,19 @@ async function lugarTrabajoPerteneceAEquipo(propiedad, claveLugar, departamentoL
 // horarioPerteneceAEquipo/lugarTrabajoPerteneceAEquipo: cat_bote:/
 // cat_ruta_bote:/cat_maquina: son catálogos con su propio
 // DEPARTAMENTO_MINISTERIO, no datos "de" un empleado puntual.
-async function botePerteneceAEquipo(propiedad, claveBote, departamentoLider) {
+async function botePerteneceAEquipo(propiedad, claveBote, departamentoLider, cache) {
   if (!departamentoLider) return false;
-  const bote = await valorDeClave(propiedad, claveBote);
+  const bote = await valorDeClaveCacheado(propiedad, claveBote, cache);
   return !!bote && bote.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
-async function rutaBotePerteneceAEquipo(propiedad, claveRuta, departamentoLider) {
+async function rutaBotePerteneceAEquipo(propiedad, claveRuta, departamentoLider, cache) {
   if (!departamentoLider) return false;
-  const ruta = await valorDeClave(propiedad, claveRuta);
+  const ruta = await valorDeClaveCacheado(propiedad, claveRuta, cache);
   return !!ruta && ruta.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
-async function maquinaPerteneceAEquipo(propiedad, claveMaquina, departamentoLider) {
+async function maquinaPerteneceAEquipo(propiedad, claveMaquina, departamentoLider, cache) {
   if (!departamentoLider) return false;
-  const maquina = await valorDeClave(propiedad, claveMaquina);
+  const maquina = await valorDeClaveCacheado(propiedad, claveMaquina, cache);
   return !!maquina && maquina.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
 
@@ -252,23 +281,25 @@ async function maquinaPerteneceAEquipo(propiedad, claveMaquina, departamentoLide
 // slice(2).join(":") en vez de tomar solo el tercer segmento porque la clave
 // del catálogo (cat_bote:xxxx) ya trae un ":" propio — un split(":")[2] a
 // secas cortaría ese boteKey a la mitad.
-async function bitacoraBotePerteneceAEquipo(propiedad, claveBitacora, departamentoLider) {
+async function bitacoraBotePerteneceAEquipo(propiedad, claveBitacora, departamentoLider, cache) {
   const boteKey = claveBitacora.split(":").slice(2).join(":");
   if (!boteKey) return false;
-  return botePerteneceAEquipo(propiedad, boteKey, departamentoLider);
+  return botePerteneceAEquipo(propiedad, boteKey, departamentoLider, cache);
 }
-async function bitacoraMaquinariaPerteneceAEquipo(propiedad, claveBitacora, departamentoLider) {
+async function bitacoraMaquinariaPerteneceAEquipo(propiedad, claveBitacora, departamentoLider, cache) {
   const maquinaKey = claveBitacora.split(":").slice(2).join(":");
   if (!maquinaKey) return false;
-  return maquinaPerteneceAEquipo(propiedad, maquinaKey, departamentoLider);
+  return maquinaPerteneceAEquipo(propiedad, maquinaKey, departamentoLider, cache);
 }
 
-// bitacora_ingreso_combustible:<fechaISO>:<departamento> no apunta a ningún
+// bitacora_ingreso_combustible:<fechaISO>:<departamento> y
+// bitacora_maquinaria_otros:<fechaISO>:<departamento> no apuntan a ningún
 // catálogo: el departamento YA es el último segmento de la clave, así que
-// alcanza con compararlo directo, sin ir a la base de datos.
-function ingresoCombustiblePerteneceAEquipo(propiedad, claveIngreso, departamentoLider) {
+// alcanza con compararlo directo, sin ir a la base de datos. Genérica para
+// cualquier prefijo con esta misma forma (no depende de cuál sea).
+function registroPorDeptoPerteneceAEquipo(propiedad, clave, departamentoLider) {
   if (!departamentoLider) return false;
-  const depto = claveIngreso.split(":").slice(2).join(":");
+  const depto = clave.split(":").slice(2).join(":");
   return depto === departamentoLider;
 }
 
@@ -381,7 +412,10 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
     return bitacoraMaquinariaPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
   if (usuario.rol === "jefatura" && clave.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX)) {
-    return ingresoCombustiblePerteneceAEquipo(propiedad, clave, usuario.puesto);
+    return registroPorDeptoPerteneceAEquipo(propiedad, clave, usuario.puesto);
+  }
+  if (usuario.rol === "jefatura" && clave.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX)) {
+    return registroPorDeptoPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
   return false;
 }
@@ -389,39 +423,34 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
 // Filtra filas (con o sin `valor`) de horas_extra:, solicitud_ausencia: o
 // incapacidad: dejando solo las del equipo de esa jefatura, MÁS las propias
 // (ver "Mi información" en app.js — cedula de `usuario` habilita esa
-// excepción de solo lectura). Secuencial y no en paralelo a propósito: son
-// pocas filas por período, y evita abrir decenas de conexiones a la vez.
+// excepción de solo lectura). En paralelo (Promise.all) con un `cache`
+// compartido por toda la pasada — antes era secuencial (un await por fila),
+// que para horario_asignado: (un registro por empleado POR DÍA, sin límite
+// de fecha — ver listarHorariosAsignados en app.js) significaba cientos de
+// consultas a la base de datos UNA POR UNA: con equipos de 15-20 personas y
+// meses de historial, esto hacía que Horarios tardara muchísimo en cargar
+// para jefatura (nunca para master/gerente, que no pasan por este filtro).
+// El cache evita además repetir la misma consulta de empleado/puesto para
+// cada día de la misma persona.
 async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
-  const resultado = [];
-  for (const fila of filas) {
-    const pertenece = fila.clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)
-      ? await solicitudPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
-      : fila.clave.startsWith(INCAPACIDAD_PREFIX)
-      ? await incapacidadEsPropia(propiedad, fila.clave, usuario.cedula)
-      : fila.clave.startsWith(EMPLEADO_PREFIX)
-      ? await empleadoClavePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
-      : fila.clave.startsWith(HORARIO_ASIGNADO_PREFIX)
-      ? await horarioAsignadoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula)
-      : fila.clave.startsWith(HORARIO_PREFIX)
-      ? await horarioPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : fila.clave.startsWith(LUGAR_TRABAJO_PREFIX)
-      ? await lugarTrabajoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : fila.clave.startsWith(BOTE_PREFIX)
-      ? await botePerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : fila.clave.startsWith(RUTA_BOTE_PREFIX)
-      ? await rutaBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : fila.clave.startsWith(MAQUINA_PREFIX)
-      ? await maquinaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : fila.clave.startsWith(BITACORA_BOTE_PREFIX) || fila.clave.startsWith(BITACORA_REBOTE_PREFIX)
-      ? await bitacoraBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : fila.clave.startsWith(BITACORA_MAQUINARIA_PREFIX)
-      ? await bitacoraMaquinariaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : fila.clave.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX)
-      ? ingresoCombustiblePerteneceAEquipo(propiedad, fila.clave, usuario.puesto)
-      : await horaExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula);
-    if (pertenece) resultado.push(fila);
-  }
-  return resultado;
+  const cache = new Map();
+  const pertenencias = await Promise.all(filas.map((fila) => {
+    if (fila.clave.startsWith(SOLICITUD_AUSENCIA_PREFIX)) return solicitudPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula, cache);
+    if (fila.clave.startsWith(INCAPACIDAD_PREFIX)) return incapacidadEsPropia(propiedad, fila.clave, usuario.cedula, cache);
+    if (fila.clave.startsWith(EMPLEADO_PREFIX)) return empleadoClavePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula, cache);
+    if (fila.clave.startsWith(HORARIO_ASIGNADO_PREFIX)) return horarioAsignadoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula, cache);
+    if (fila.clave.startsWith(HORARIO_PREFIX)) return horarioPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(LUGAR_TRABAJO_PREFIX)) return lugarTrabajoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(BOTE_PREFIX)) return botePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(RUTA_BOTE_PREFIX)) return rutaBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(MAQUINA_PREFIX)) return maquinaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(BITACORA_BOTE_PREFIX) || fila.clave.startsWith(BITACORA_REBOTE_PREFIX)) return bitacoraBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(BITACORA_MAQUINARIA_PREFIX)) return bitacoraMaquinariaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX)) return registroPorDeptoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto);
+    if (fila.clave.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX)) return registroPorDeptoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto);
+    return horaExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula, cache);
+  }));
+  return filas.filter((_, i) => pertenencias[i]);
 }
 
 // Una jefatura no ve "la página de Recursos Humanos" — solo horas extra, el
@@ -437,7 +466,7 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
 // y cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
 // departamento de su propio equipo — nada de contratos, documentos, otros
 // catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX, BOTE_PREFIX, RUTA_BOTE_PREFIX, MAQUINA_PREFIX, BITACORA_BOTE_PREFIX, BITACORA_REBOTE_PREFIX, BITACORA_MAQUINARIA_PREFIX, BITACORA_INGRESO_COMBUSTIBLE_PREFIX];
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX, BOTE_PREFIX, RUTA_BOTE_PREFIX, MAQUINA_PREFIX, BITACORA_BOTE_PREFIX, BITACORA_REBOTE_PREFIX, BITACORA_MAQUINARIA_PREFIX, BITACORA_INGRESO_COMBUSTIBLE_PREFIX, BITACORA_MAQUINARIA_OTROS_PREFIX];
 
 // Un "empleado" (portal de autoservicio) no tiene "página de RH" tampoco —
 // solo su propio expediente (cat_empleado:<su clave>, exacta, nunca la lista
@@ -603,7 +632,7 @@ router.get("/", async (req, res, next) => {
     // nombre de gente de otros departamentos no aparezca ni siquiera en
     // pantallas que solo listan empleados, como el calendario de Días Libres.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
-      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX) || prefijo.startsWith(BOTE_PREFIX) || prefijo.startsWith(RUTA_BOTE_PREFIX) || prefijo.startsWith(MAQUINA_PREFIX) || prefijo.startsWith(BITACORA_BOTE_PREFIX) || prefijo.startsWith(BITACORA_REBOTE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_PREFIX) || prefijo.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX));
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX) || prefijo.startsWith(BOTE_PREFIX) || prefijo.startsWith(RUTA_BOTE_PREFIX) || prefijo.startsWith(MAQUINA_PREFIX) || prefijo.startsWith(BITACORA_BOTE_PREFIX) || prefijo.startsWith(BITACORA_REBOTE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_PREFIX) || prefijo.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX));
     // Un empleado solo ve sus propias filas — nunca las de un compañero,
     // aunque pida el mismo prefijo que vería un master/gerente.
     const filtrarPropias = req.usuario.rol === "empleado" &&
@@ -712,7 +741,11 @@ router.get("/:clave(*)", async (req, res, next) => {
       if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "jefatura" && clave.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX)) {
-      const enSuEquipo = ingresoCombustiblePerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      const enSuEquipo = registroPorDeptoPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && clave.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX)) {
+      const enSuEquipo = registroPorDeptoPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "empleado" && !esClavePropiaDeEmpleado(clave, req.usuario.empleadoClave)) {
