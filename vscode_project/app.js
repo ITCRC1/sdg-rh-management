@@ -16635,12 +16635,11 @@ const BITACORA_TIPOS = {
 // Tercer reporte: consumo de combustible/aceite por máquina o equipo — más
 // simple que los de botes, una cantidad por producto fijo, sin ruta ni
 // entrada/devolución. Los productos están fijos a propósito (no es un
-// catálogo editable como Botes/Rutas/Máquinas): son siempre los mismos 6.
+// catálogo editable como Botes/Rutas/Máquinas): son siempre los mismos 5.
 const MAQUINA_PREFIX = "cat_maquina:";
 const BITACORA_MAQUINARIA_PREFIX = "bitacora_maquinaria:"; // bitacora_maquinaria:<fechaISO>:<maquinaKey>
 const PRODUCTOS_MAQUINARIA = [
   ["GAS_REGULAR", "Gas Regular"],
-  ["GAS_SUPER", "Gas Super"],
   ["DIESEL", "Diesel"],
   ["ACEITE_MEZCLA", "Aceite Mezcla"],
   ["ACEITE_15W40", "Aceite 15W40"],
@@ -16649,7 +16648,7 @@ const PRODUCTOS_MAQUINARIA = [
 
 // Cuarto reporte (el original de Bitácoras, antes de los de botes): el
 // ingreso de combustible/aceite al inventario de la propiedad, por producto
-// — mismos 6 productos que Consumo de Maquinaria, para hablar el mismo
+// — mismos 5 productos que Consumo de Maquinaria, para hablar el mismo
 // idioma. Un registro por día POR DEPARTAMENTO (no por bote/máquina, no hay
 // un "catálogo" de referencia): la clave trae el departamento pegado en vez
 // de una clave de catálogo. Por producto se registra el tamaño de pichinga
@@ -16661,6 +16660,7 @@ const PICHINGA_GALONES_OPCIONES = [5, 18, 20];
 let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
 let bitacorasFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
 let bitacorasDeptoActivoActual = null; // depto realmente en pantalla ahora (cache para guardarNuevoBote/Ruta/Maquina)
+let bitacorasMesRevision = null; // "YYYY-MM", para la sección "Bitácoras guardadas" — se fija al mes de hoy la primera vez
 
 // Este reporte (botes/rutas/rebotes/maquinaria) es, por ahora, SOLO para
 // Actividades — pedido explícito del usuario. El menú y el selector de
@@ -17123,7 +17123,7 @@ function actualizarTotalIngresoCombustible(campo){
   if (celda) celda.textContent = total === null ? "—" : total;
 }
 
-// Guarda de una vez la pichinga + cantidad de los 6 productos para el
+// Guarda de una vez la pichinga + cantidad de los 5 productos para el
 // departamento y día activos — es un solo registro (no uno por producto),
 // así que un solo botón ya alcanza, sin la confusión de un botón por fila.
 async function guardarBitacoraIngresoCombustibleDia(departamento, fechaISO){
@@ -17190,6 +17190,85 @@ function renderSeccionIngresoCombustible(entrada, departamento, fechaISO, puedeG
     ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="guardarBitacoraIngresoCombustibleDia('${departamento}', '${fechaISO}')">💾 Guardar</button></div>` : ""}
     <div id="bitacoras-ingreso-combustible-status" style="font-size:12px; margin-top:8px;"></div>
   </div></div>`;
+}
+
+// ==========================================================================
+// "📅 Bitácoras guardadas" — resumen por mes para poder verificar de un
+// vistazo si falta cargar algún día, sin tener que ir probando fecha por
+// fecha en el selector de arriba. Solo necesita las CLAVES (no el contenido)
+// de los cuatro reportes, para saber qué días tienen al menos un registro.
+// ==========================================================================
+
+// A diferencia de listarBitacoraDelDia/listarBitacoraMaquinariaDelDia (que
+// piden un día puntual), acá se pide el prefijo completo sin fecha — para
+// ver, de todos los días que existan, cuáles tienen algo guardado.
+async function listarTodasLasClavesBitacora(prefix){
+  const res = await window.storage.list(prefix, false);
+  return (res && res.keys) || [];
+}
+
+// Separa "<fechaISO>:<resto>" de una clave de bitácora ya sin su prefijo —
+// `resto` puede traer sus propios ":" (ej. un boteKey tipo "cat_bote:xxxx"),
+// por eso se corta solo en el PRIMER ":" (la fecha en sí nunca trae ":").
+function fechaYRestoDeClaveBitacora(prefix, clave){
+  const sinPrefijo = clave.slice(prefix.length);
+  const idx = sinPrefijo.indexOf(":");
+  if (idx < 0) return { fecha: sinPrefijo, resto: "" };
+  return { fecha: sinPrefijo.slice(0, idx), resto: sinPrefijo.slice(idx + 1) };
+}
+
+function diasDelMes(mesISO){
+  const [anio, mes] = mesISO.split("-").map(Number);
+  const totalDias = new Date(anio, mes, 0).getDate();
+  return Array.from({ length: totalDias }, (_, i) => `${mesISO}-${String(i + 1).padStart(2, "0")}`);
+}
+
+function renderSeccionBitacorasGuardadas(mesISO, diasPorTipo, deptoActivo){
+  const hoy = isoDeHoy();
+  const filasHtml = diasDelMes(mesISO).map(fechaISO => {
+    const esFutura = fechaISO > hoy;
+    const celda = (set) => set.has(fechaISO)
+      ? `<span style="color:#2e7d32; font-weight:700;">✓</span>`
+      : (esFutura ? `<span style="color:var(--ink-soft);">—</span>` : `<span style="color:#b23b3b; font-weight:700;">✕</span>`);
+    const dia = Number(fechaISO.slice(-2));
+    return `<tr${fechaISO===hoy ? ` style="background:#fff8e1;"` : ""}>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); cursor:pointer; text-decoration:underline; color:var(--navy-deep);" onclick="irABitacoraDelDia('${fechaISO}')">${dia}${fechaISO===hoy ? " (hoy)" : ""}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.ingreso)}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.diaria)}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.rebote)}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.maquinaria)}</td>
+    </tr>`;
+  }).join("");
+
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📅 Bitácoras guardadas — ${escapeHtml(deptoActivo)}</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">✓ = ese día ya tiene algo guardado. ✕ = no tiene nada todavía. Hacé clic en el día para ir a revisarlo o corregirlo arriba.</div>
+    <div style="margin-bottom:10px;">
+      <input type="month" value="${escapeHtml(mesISO)}" onchange="bitacorasMesRevision=this.value; renderBitacorasPanel();">
+    </div>
+    <div style="overflow-x:auto; max-height:360px; overflow-y:auto;">
+    <table style="border-collapse:collapse; font-size:11px;">
+      <thead><tr>
+        <th style="position:sticky; top:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Día</th>
+        <th style="position:sticky; top:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Ingreso Combustible</th>
+        <th style="position:sticky; top:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Botes</th>
+        <th style="position:sticky; top:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Rebotes</th>
+        <th style="position:sticky; top:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Maquinaria</th>
+      </tr></thead>
+      <tbody>${filasHtml}</tbody>
+    </table>
+    </div>
+  </div></div>`;
+}
+
+// Salta directo a un día desde "Bitácoras guardadas" — cambia la fecha madre
+// y vuelve a subir la pantalla hasta el módulo, para que se vea de una vez
+// el formulario ya cargado con lo que tenga ese día (o vacío, si falta).
+async function irABitacoraDelDia(fechaISO){
+  bitacorasFechaActiva = fechaISO;
+  await renderBitacorasPanel();
+  const panel = document.getElementById("bitacoras-panel");
+  if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function renderBitacorasPanel(){
@@ -17318,6 +17397,37 @@ async function renderBitacorasPanel(){
       <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
       ${renderGrillaBitacoraMaquinaria(maquinasVisibles, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
     </div></div>`;
+
+    // "Bitácoras guardadas" — resumen por mes para poder verificar si falta
+    // algún día, en vez de ir probando fecha por fecha. Solo pide claves
+    // (sin valores) de los cuatro prefijos, sin fijarse en la fecha activa.
+    if (!bitacorasMesRevision) bitacorasMesRevision = bitacorasFechaActiva.slice(0, 7);
+    const [clavesIngreso, clavesDiaria, clavesRebote, clavesMaquinaria] = await Promise.all([
+      listarTodasLasClavesBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX),
+      listarTodasLasClavesBitacora(BITACORA_BOTE_PREFIX),
+      listarTodasLasClavesBitacora(BITACORA_REBOTE_PREFIX),
+      listarTodasLasClavesBitacora(BITACORA_MAQUINARIA_PREFIX),
+    ]);
+    const botesVisiblesKeys = new Set(botesVisibles.map(b => b.key));
+    const maquinasVisiblesKeys = new Set(maquinasVisibles.map(m => m.key));
+    const diasPorTipo = { ingreso: new Set(), diaria: new Set(), rebote: new Set(), maquinaria: new Set() };
+    clavesIngreso.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX, clave);
+      if (resto === deptoActivo) diasPorTipo.ingreso.add(fecha);
+    });
+    clavesDiaria.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_BOTE_PREFIX, clave);
+      if (botesVisiblesKeys.has(resto)) diasPorTipo.diaria.add(fecha);
+    });
+    clavesRebote.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_REBOTE_PREFIX, clave);
+      if (botesVisiblesKeys.has(resto)) diasPorTipo.rebote.add(fecha);
+    });
+    clavesMaquinaria.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_MAQUINARIA_PREFIX, clave);
+      if (maquinasVisiblesKeys.has(resto)) diasPorTipo.maquinaria.add(fecha);
+    });
+    html += renderSeccionBitacorasGuardadas(bitacorasMesRevision, diasPorTipo, deptoActivo);
 
     panel.innerHTML = html;
   }catch(e){
