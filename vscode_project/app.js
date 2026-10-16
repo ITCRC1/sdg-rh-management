@@ -336,6 +336,19 @@ function aplicarModoSegunRol(rol){
   const btnFirmaContratos = document.getElementById("navbtn-firma-contratos");
   if (btnFirmaContratos) btnFirmaContratos.style.display = (window.sdgApi && window.sdgApi.puedeFirmarContratos()) ? "block" : "none";
 
+  // Bitácoras: exclusivo de master/gerente/consultor y de la jefatura de
+  // Actividades (ver esJefaturaDeActividades en rutas-datos.js) — ninguna
+  // otra jefatura lo ve, a diferencia de Horarios que es para cualquier
+  // departamento. El servidor igual lo bloquea aparte; esto es solo para no
+  // ofrecerle a otra jefatura una puerta cerrada.
+  const btnBitacoras = document.getElementById("navbtn-bitacoras");
+  if (btnBitacoras){
+    const sesionActual = window.sdgApi && window.sdgApi.sesionActual();
+    const esJefaturaActividades = rol === "jefatura" && sesionActual && sesionActual.puesto === "ACTIVIDADES";
+    const puedeVerBitacoras = rol === "master" || rol === "gerente" || rol === "consultor" || esJefaturaActividades;
+    btnBitacoras.style.display = puedeVerBitacoras ? "block" : "none";
+  }
+
   // Jefatura no tiene "página de RH" — solo Horas extras, el módulo de Días
   // Libres y Vacaciones (ahí sí necesita entrar: la especificación dice que
   // el líder/jefatura es quien solicita ausencias para su equipo), e
@@ -5103,6 +5116,7 @@ function showTab(which){
   document.getElementById("diaslibresvacaciones-panel").style.display = which === "vacaciones" ? "block" : "none";
   document.getElementById("incapacidades-panel").style.display = which === "incapacidades" ? "block" : "none";
   document.getElementById("horarios-panel").style.display = which === "horarios" ? "block" : "none";
+  document.getElementById("bitacoras-panel").style.display = which === "bitacoras" ? "block" : "none";
   document.getElementById("form-toolbar").style.display = (which === "form") ? "flex" : "none";
   document.getElementById("despidoform-toolbar").style.display = (which === "despidoform") ? "flex" : "none";
   document.getElementById("liquidacionform-toolbar").style.display = (which === "liquidacionform") ? "flex" : "none";
@@ -5124,10 +5138,11 @@ function showTab(which){
     planilla:"planilla",
     vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla", reloj:"planilla",
     horarios:"horarios",
+    bitacoras:"bitacoras",
     reporte:"reportes",
     faq:"configuracion", manual:"configuracion",
   };
-  ["inicio","contratos","empleados","documentos","datos","planilla","vacaciones","incapacidades","horarios","reportes","configuracion"].forEach(g => {
+  ["inicio","contratos","empleados","documentos","datos","planilla","vacaciones","incapacidades","horarios","bitacoras","reportes","configuracion"].forEach(g => {
     const btn = document.getElementById("navbtn-" + g);
     if (btn) btn.classList.toggle("active", groupOf[which] === g);
   });
@@ -5180,6 +5195,7 @@ function showTab(which){
   if (which === "vacaciones") renderDiasLibresVacacionesPanel();
   if (which === "incapacidades") renderIncapacidadesPanel();
   if (which === "horarios") renderHorariosPanel();
+  if (which === "bitacoras") renderBitacorasPanel();
 }
 
 // ---------- dropdown navbar ----------
@@ -16573,6 +16589,498 @@ async function renderHorariosPanel(){
     html += renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar, puedeAprobar);
     html += renderSeccionAsignacionRapida(empleadosVisibles, horariosVisibles, lugaresVisibles, deptoActivo, horariosSemanaDesde, puedeGestionar);
     html += renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, horariosSemanaDesde, puedeGestionar);
+
+    panel.innerHTML = html;
+  }catch(e){
+    panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo: ${escapeHtml(e.message || "")}</div>`;
+  }finally{
+    requestAnimationFrame(() => window.scrollTo(0, _scrollY));
+  }
+}
+
+// ==========================================================================
+// Bitácoras — exclusivo del departamento ACTIVIDADES (jefatura de ese
+// departamento + master/gerente/consultor, nunca otra jefatura — ver
+// esJefaturaDeActividades en rutas-datos.js). Primer reporte: "Reporte de
+// Botes — Operación diaria", inventario de combustible por bote y ruta
+// (entrada/devolución, con el gasto real calculado solo). Mismo patrón de
+// catálogos editables que ya usa Horarios (Lugares de trabajo/Turnos), pero
+// SIN el filtro por departamento — acá no hace falta, todo el módulo ya es
+// de un solo departamento fijo.
+// ==========================================================================
+const BOTE_PREFIX = "cat_bote:";
+const RUTA_BOTE_PREFIX = "cat_ruta_bote:";
+const BITACORA_BOTE_PREFIX = "bitacora_bote:"; // bitacora_bote:<fechaISO>:<boteKey> — operación diaria
+const BITACORA_REBOTE_PREFIX = "bitacora_rebote:"; // mismo esquema, para viajes extra aparte de la operación
+
+// Los dos reportes de botes comparten exactamente la misma grilla
+// (renderGrillaBitacoraBotes) y el mismo catálogo de botes/rutas — lo único
+// que cambia es dónde se guarda cada uno, para que "Rebotes" nunca pise la
+// Operación diaria aunque sea el mismo bote y la misma ruta el mismo día.
+const BITACORA_TIPOS = {
+  diaria: { prefix: BITACORA_BOTE_PREFIX, titulo: "⛽ Reporte de Botes — Operación diaria" },
+  rebote: { prefix: BITACORA_REBOTE_PREFIX, titulo: "🔁 Reporte de Operación de Rebotes (adicional a la operación)" },
+};
+
+// Tercer reporte: consumo de combustible/aceite por máquina o equipo — más
+// simple que los de botes, una cantidad por producto fijo, sin ruta ni
+// entrada/devolución. Los productos están fijos a propósito (no es un
+// catálogo editable como Botes/Rutas/Máquinas): son siempre los mismos 6.
+const MAQUINA_PREFIX = "cat_maquina:";
+const BITACORA_MAQUINARIA_PREFIX = "bitacora_maquinaria:"; // bitacora_maquinaria:<fechaISO>:<maquinaKey>
+const PRODUCTOS_MAQUINARIA = [
+  ["GAS_REGULAR", "Gas Regular"],
+  ["GAS_SUPER", "Gas Super"],
+  ["DIESEL", "Diesel"],
+  ["ACEITE_MEZCLA", "Aceite Mezcla"],
+  ["ACEITE_15W40", "Aceite 15W40"],
+  ["OTROS", "Otros"],
+];
+
+let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
+
+async function listarBotes(){
+  const res = await window.storage.list(BOTE_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const botes = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return botes.filter(Boolean);
+}
+
+async function listarRutasBote(){
+  const res = await window.storage.list(RUTA_BOTE_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const rutas = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return rutas.filter(Boolean);
+}
+
+// A diferencia de listarHorariosAsignados (que trae TODO el historial),
+// acá se pide con la fecha ya pegada al prefijo — un reporte diario de botes
+// nunca necesita más que un día a la vez, así que no tiene sentido bajar
+// meses de historial para mostrar uno solo. `tipo` es "diaria" o "rebote"
+// (ver BITACORA_TIPOS).
+async function listarBitacoraDelDia(tipo, fechaISO){
+  const prefix = BITACORA_TIPOS[tipo].prefix;
+  const res = await window.storage.list(`${prefix}${fechaISO}:`, false);
+  const keys = (res && res.keys) || [];
+  const entradas = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return entradas.filter(Boolean);
+}
+
+async function listarMaquinas(){
+  const res = await window.storage.list(MAQUINA_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const maquinas = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return maquinas.filter(Boolean);
+}
+
+async function listarBitacoraMaquinariaDelDia(fechaISO){
+  const res = await window.storage.list(`${BITACORA_MAQUINARIA_PREFIX}${fechaISO}:`, false);
+  const keys = (res && res.keys) || [];
+  const entradas = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return entradas.filter(Boolean);
+}
+
+async function guardarNuevoBote(){
+  const status = document.getElementById("bitacoras-botes-status");
+  const nombre = ((document.getElementById("bote-nuevo-nombre")||{}).value || "").trim();
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre del bote.</span>`; return; }
+  try{
+    const key = BOTE_PREFIX + "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre }), false);
+    statusMsg("Bote creado.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
+}
+
+// Exclusivo de master/gerente (igual que eliminarHorario/eliminarLugarTrabajo)
+// — jefatura nunca puede borrar nada vía DELETE (A.requiereEscritura en el
+// servidor la excluye por completo).
+async function eliminarBote(key){
+  if (!confirm("¿Eliminar este bote? Los reportes diarios que ya tenía guardados quedan igual, pero sin nombre.")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Bote eliminado.");
+    renderBitacorasPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
+}
+
+async function guardarNuevaRutaBote(){
+  const status = document.getElementById("bitacoras-rutas-status");
+  const nombre = ((document.getElementById("ruta-nuevo-nombre")||{}).value || "").trim();
+  const tieneHacienda = !!(document.getElementById("ruta-nuevo-hacienda")||{}).checked;
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre de la ruta.</span>`; return; }
+  try{
+    const key = RUTA_BOTE_PREFIX + "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda }), false);
+    statusMsg("Ruta creada.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
+}
+
+async function eliminarRutaBote(key){
+  if (!confirm("¿Eliminar esta ruta? Los reportes diarios que ya la usaban quedan guardados, pero sin nombre.")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Ruta eliminada.");
+    renderBitacorasPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
+}
+
+function renderSeccionBotes(botes, puedeGestionar){
+  const filasHtml = botes.length
+    ? botes.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(b => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="font-size:12.5px;"><b>${escapeHtml(b.NOMBRE||"")}</b></div>
+        ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarBote('${b.key}')">🗑️ Eliminar</button>` : ""}
+      </div>`).join("")
+    : `<div class="empty-state" style="padding:8px 0;">No hay botes creados todavía.</div>`;
+  const formHtml = puedeGestionar ? `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre del bote
+        <input type="text" id="bote-nuevo-nombre" placeholder="Ej. Chulín" style="min-width:160px;">
+      </label>
+      <button class="btn primary" onclick="guardarNuevoBote();">➕ Agregar bote</button>
+    </div>` : "";
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🛶 Botes</div>
+    ${filasHtml}
+    ${formHtml}
+    <div id="bitacoras-botes-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
+}
+
+function renderSeccionRutasBote(rutas, puedeGestionar){
+  const filasHtml = rutas.length
+    ? rutas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(r => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="font-size:12.5px;"><b>${escapeHtml(r.NOMBRE||"")}</b>${r.TIENE_HACIENDA ? ` · incluye parada en Hacienda` : ""}</div>
+        ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarRutaBote('${r.key}')">🗑️ Eliminar</button>` : ""}
+      </div>`).join("")
+    : `<div class="empty-state" style="padding:8px 0;">No hay rutas creadas todavía.</div>`;
+  const formHtml = puedeGestionar ? `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre de la ruta
+        <input type="text" id="ruta-nuevo-nombre" placeholder="Ej. SRP-CWL" style="min-width:160px;">
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; padding-bottom:4px;">
+        <input type="checkbox" id="ruta-nuevo-hacienda"> Incluye parada en Hacienda
+      </label>
+      <button class="btn primary" onclick="guardarNuevaRutaBote();">➕ Agregar ruta</button>
+    </div>` : "";
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗺️ Rutas</div>
+    ${filasHtml}
+    ${formHtml}
+    <div id="bitacoras-rutas-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
+}
+
+async function guardarNuevaMaquina(){
+  const status = document.getElementById("bitacoras-maquinas-status");
+  const nombre = ((document.getElementById("maquina-nueva-nombre")||{}).value || "").trim();
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el tipo de máquina.</span>`; return; }
+  try{
+    const key = MAQUINA_PREFIX + "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre }), false);
+    statusMsg("Máquina creada.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
+}
+
+async function eliminarMaquina(key){
+  if (!confirm("¿Eliminar este tipo de máquina? Los reportes diarios que ya tenía guardados quedan igual, pero sin nombre.")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Máquina eliminada.");
+    renderBitacorasPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
+}
+
+function renderSeccionMaquinas(maquinas, puedeGestionar){
+  const filasHtml = maquinas.length
+    ? maquinas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(m => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="font-size:12.5px;"><b>${escapeHtml(m.NOMBRE||"")}</b></div>
+        ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarMaquina('${m.key}')">🗑️ Eliminar</button>` : ""}
+      </div>`).join("")
+    : `<div class="empty-state" style="padding:8px 0;">No hay máquinas/equipos creados todavía.</div>`;
+  const formHtml = puedeGestionar ? `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo de máquina o equipo
+        <input type="text" id="maquina-nueva-nombre" placeholder="Ej. Motosierra" style="min-width:220px;">
+      </label>
+      <button class="btn primary" onclick="guardarNuevaMaquina();">➕ Agregar máquina</button>
+    </div>` : "";
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Máquinas y equipos</div>
+    ${filasHtml}
+    ${formHtml}
+    <div id="bitacoras-maquinas-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
+}
+
+// Guarda de una vez las 6 cantidades de producto de UNA máquina para el día
+// activo — mismo criterio que guardarBitacoraBoteDia: se lee del DOM y se
+// guarda entero, no campo por campo.
+async function guardarBitacoraMaquinariaDia(maquinaKey, fechaISO){
+  const status = document.getElementById("bitacoras-maquinaria-grilla-status");
+  const valores = {};
+  PRODUCTOS_MAQUINARIA.forEach(([campo]) => {
+    const v = (document.getElementById(`bitacora-maquinaria-${maquinaKey}-${campo}`)||{}).value;
+    if (v !== "") valores[campo] = Number(v);
+  });
+  try{
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const key = `${BITACORA_MAQUINARIA_PREFIX}${fechaISO}:${maquinaKey}`;
+    await window.storage.set(key, JSON.stringify({
+      ...valores,
+      ACTUALIZADO_POR: sesion ? sesion.email : "",
+      ACTUALIZADO_EN: new Date().toISOString(),
+    }), false);
+    statusMsg("Consumo de la máquina guardado.");
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; else statusMsg("No se pudo guardar: " + e.message, false); }
+}
+
+function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, puedeGestionar){
+  if (!maquinas.length) return `<div class="empty-state">Creá primero al menos una máquina o equipo.</div>`;
+
+  const entradasPorClave = {};
+  entradasDelDia.forEach(e => { entradasPorClave[e.key] = e; });
+  const maquinasOrdenadas = maquinas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"));
+
+  return `<div style="overflow-x:auto;">
+  <table style="border-collapse:collapse; font-size:11px;">
+    <thead><tr>
+      <th style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Tipo de máquina</th>
+      ${PRODUCTOS_MAQUINARIA.map(([,label]) => `<th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(label)}</th>`).join("")}
+      ${puedeGestionar ? `<th style="padding:4px 8px; border:1px solid var(--paper-line);"></th>` : ""}
+    </tr></thead>
+    <tbody>
+      ${maquinasOrdenadas.map(maq => {
+        const claveEntrada = `${BITACORA_MAQUINARIA_PREFIX}${fechaISO}:${maq.key}`;
+        const actual = entradasPorClave[claveEntrada] || null;
+        return `<tr>
+          <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;"><b>${escapeHtml(maq.NOMBRE||"")}</b></td>
+          ${PRODUCTOS_MAQUINARIA.map(([campo]) => {
+            const valor = actual ? actual[campo] : undefined;
+            const celda = puedeGestionar
+              ? `<input type="number" step="0.01" id="bitacora-maquinaria-${maq.key}-${campo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:60px; font-size:10.5px;">`
+              : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
+            return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celda}</td>`;
+          }).join("")}
+          ${puedeGestionar ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;"><button class="btn" style="padding:3px 8px; font-size:10px;" onclick="guardarBitacoraMaquinariaDia('${maq.key}', '${fechaISO}')">💾</button></td>` : ""}
+        </tr>`;
+      }).join("")}
+    </tbody>
+  </table>
+  </div>
+  <div id="bitacoras-maquinaria-grilla-status" style="font-size:12px; margin-top:8px;"></div>`;
+}
+
+// ENT (combustible cargado) − DEV (combustible devuelto/sobrante) = gasto
+// real de esa ruta — null si falta cualquiera de los dos o no son números,
+// para no mostrar un cero engañoso cuando en realidad no se cargó nada.
+function calcularGastoBitacora(ent, dev){
+  if (ent === undefined || ent === null || ent === "" || dev === undefined || dev === null || dev === "") return null;
+  const e = Number(ent), d = Number(dev);
+  if (isNaN(e) || isNaN(d)) return null;
+  return Math.round((e - d) * 100) / 100;
+}
+
+// Recalcula en vivo la celda "GAST" al escribir ENT/DEV, sin esperar a
+// guardar — así quien carga el dato ve de una vez el gasto real, que es lo
+// que de verdad importa para la bitácora. `tipo` namespacea los ids
+// (ver renderGrillaBitacoraBotes) para que "diaria" y "rebote" nunca choquen
+// entre sí aunque sea el mismo bote y la misma ruta en la misma pantalla.
+function actualizarGastoBitacora(tipo, boteKey, rutaKey){
+  const ent = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-ent`)||{}).value;
+  const dev = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-dev`)||{}).value;
+  const gasto = calcularGastoBitacora(ent, dev);
+  const celda = document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-gast`);
+  if (celda) celda.textContent = gasto === null ? "—" : gasto;
+}
+
+// Guarda de una vez el capitán + todas las rutas de UN bote para el día
+// activo, en el reporte "diaria" o "rebote" según `tipo` — se lee todo
+// directo del DOM (no hay edición campo por campo con guardado automático,
+// a propósito: con hasta 5 rutas × 3 campos por bote, guardar en cada tecla
+// sería demasiadas escrituras).
+async function guardarBitacoraBoteDia(tipo, boteKey, fechaISO, rutasKeys){
+  const status = document.getElementById(`bitacoras-${tipo}-grilla-status`);
+  const capitanKey = (document.getElementById(`bitacora-${tipo}-${boteKey}-capitan`)||{}).value || "";
+  const rutasValor = {};
+  rutasKeys.forEach(({ key: rutaKey, tieneHacienda }) => {
+    const ent = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-ent`)||{}).value;
+    const dev = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-dev`)||{}).value;
+    const hac = tieneHacienda ? (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-hac`)||{}).value : "";
+    if (ent === "" && dev === "" && hac === "") return; // ruta sin tocar ese día — se ignora
+    const fila = {};
+    if (hac !== "") fila.HAC = Number(hac);
+    if (ent !== "") fila.ENT = Number(ent);
+    if (dev !== "") fila.DEV = Number(dev);
+    rutasValor[rutaKey] = fila;
+  });
+  try{
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const key = `${BITACORA_TIPOS[tipo].prefix}${fechaISO}:${boteKey}`;
+    await window.storage.set(key, JSON.stringify({
+      CAPITAN_KEY: capitanKey,
+      RUTAS: rutasValor,
+      ACTUALIZADO_POR: sesion ? sesion.email : "",
+      ACTUALIZADO_EN: new Date().toISOString(),
+    }), false);
+    statusMsg("Reporte del bote guardado.");
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; else statusMsg("No se pudo guardar: " + e.message, false); }
+}
+
+// `tipo` ("diaria" o "rebote") namespacea cada id del DOM (selects, inputs,
+// celda de GAST) — la misma grilla se usa dos veces en la misma pantalla
+// (Operación diaria y Rebotes), con el mismo bote y la misma ruta, así que
+// sin este prefijo los dos reportes se pisarían el uno al otro.
+function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia, fechaISO, puedeGestionar){
+  if (!botes.length) return `<div class="empty-state">Creá primero al menos un bote.</div>`;
+  if (!rutas.length) return `<div class="empty-state">Creá primero al menos una ruta.</div>`;
+
+  const entradasPorClave = {};
+  entradasDelDia.forEach(e => { entradasPorClave[e.key] = e; });
+
+  const rutasOrdenadas = rutas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"));
+  const botesOrdenados = botes.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"));
+  const rutasKeysInfo = rutasOrdenadas.map(r => ({ key: r.key, tieneHacienda: !!r.TIENE_HACIENDA }));
+  const rutasKeysJson = escapeHtml(JSON.stringify(rutasKeysInfo));
+  const prefix = BITACORA_TIPOS[tipo].prefix;
+
+  return `<div style="overflow-x:auto;">
+  <table style="border-collapse:collapse; font-size:11px;">
+    <thead>
+      <tr>
+        <th rowspan="2" style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Bote</th>
+        <th rowspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);">Capitán</th>
+        ${rutasOrdenadas.map(r => `<th colspan="${r.TIENE_HACIENDA ? 4 : 3}" style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(r.NOMBRE)}</th>`).join("")}
+        ${puedeGestionar ? `<th rowspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);"></th>` : ""}
+      </tr>
+      <tr>
+        ${rutasOrdenadas.map(r => `${r.TIENE_HACIENDA ? `<th style="padding:2px 4px; border:1px solid var(--paper-line);">HAC</th>` : ""}<th style="padding:2px 4px; border:1px solid var(--paper-line);">ENT</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">DEV</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">GAST</th>`).join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${botesOrdenados.map(bote => {
+        const claveEntrada = `${prefix}${fechaISO}:${bote.key}`;
+        const actual = entradasPorClave[claveEntrada] || null;
+        const capitanActual = actual ? (actual.CAPITAN_KEY || "") : "";
+        const rutasActual = actual ? (actual.RUTAS || {}) : {};
+        const nombreCapitanActual = capitanActual ? (nombreCompletoEmpleado(capitanes.find(c => c.key === capitanActual)) || capitanActual) : "—";
+        return `<tr>
+          <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;"><b>${escapeHtml(bote.NOMBRE||"")}</b></td>
+          <td style="padding:2px 4px; border:1px solid var(--paper-line);">${puedeGestionar ? `
+            <select id="bitacora-${tipo}-${bote.key}-capitan" style="font-size:10.5px; max-width:130px;">
+              <option value="">— Elegí —</option>
+              ${capitanes.map(c => `<option value="${c.key}"${c.key===capitanActual?" selected":""}>${escapeHtml(nombreCompletoEmpleado(c)||c.key)}</option>`).join("")}
+            </select>` : escapeHtml(nombreCapitanActual)}
+          </td>
+          ${rutasOrdenadas.map(r => {
+            const val = rutasActual[r.key] || {};
+            const gasto = calcularGastoBitacora(val.ENT, val.DEV);
+            const campo = (sufijo, valor) => puedeGestionar
+              ? `<input type="number" step="0.01" id="bitacora-${tipo}-${bote.key}-${r.key}-${sufijo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:50px; font-size:10.5px;" oninput="actualizarGastoBitacora('${tipo}', '${bote.key}', '${r.key}')">`
+              : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
+            return `${r.TIENE_HACIENDA ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("hac", val.HAC)}</td>` : ""}<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("ent", val.ENT)}</td><td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("dev", val.DEV)}</td><td id="bitacora-${tipo}-${bote.key}-${r.key}-gast" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${gasto === null ? "—" : gasto}</td>`;
+          }).join("")}
+          ${puedeGestionar ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;"><button class="btn" style="padding:3px 8px; font-size:10px;" onclick='guardarBitacoraBoteDia("${tipo}", "${bote.key}", "${fechaISO}", ${rutasKeysJson})'>💾</button></td>` : ""}
+        </tr>`;
+      }).join("")}
+    </tbody>
+  </table>
+  </div>
+  <div id="bitacoras-${tipo}-grilla-status" style="font-size:12px; margin-top:8px;"></div>`;
+}
+
+async function renderBitacorasPanel(){
+  const panel = document.getElementById("bitacoras-panel");
+  if (!panel) return;
+  const _scrollY = window.scrollY;
+  panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const esJefaturaActividades = rolActual === "jefatura" && sesion && sesion.puesto === "ACTIVIDADES";
+    const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente
+    const puedeGestionar = esJefaturaActividades || puedeAprobar;
+
+    if (!bitacorasFechaActiva) bitacorasFechaActiva = isoDeHoy();
+
+    const [empleados, puestos, botes, rutas, entradasDiaria, entradasRebote, maquinas, entradasMaquinaria] = await Promise.all([
+      cargarEmpleadosDB(),
+      cargarPuestosDB(),
+      listarBotes(),
+      listarRutasBote(),
+      listarBitacoraDelDia("diaria", bitacorasFechaActiva),
+      listarBitacoraDelDia("rebote", bitacorasFechaActiva),
+      listarMaquinas(),
+      listarBitacoraMaquinariaDelDia(bitacorasFechaActiva),
+    ]);
+    const puestosPorKey = {};
+    puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const departamentoDeEmpleado = emp => departamentoDeEmpleadoGenerico(emp, puestosPorKey);
+    const capitanes = empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === "ACTIVIDADES");
+
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">📘 Bitácoras</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Reportes operativos del departamento de Actividades.</div>
+    </div>`;
+
+    html += renderSeccionBotes(botes, puedeGestionar);
+    html += renderSeccionRutasBote(rutas, puedeGestionar);
+    html += renderSeccionMaquinas(maquinas, puedeGestionar);
+
+    html += `<div style="margin-bottom:12px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:200px;">Fecha (para los reportes de abajo)
+        <input type="date" value="${escapeHtml(bitacorasFechaActiva)}" onchange="bitacorasFechaActiva=this.value; renderBitacorasPanel();">
+      </label>
+    </div>`;
+
+    const avisoSinCapitanes = capitanes.length ? "" : " ⚠️ No hay empleados activos en el departamento ACTIVIDADES para elegir como capitán.";
+    const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
+    Object.keys(BITACORA_TIPOS).forEach(tipo => {
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">${BITACORA_TIPOS[tipo].titulo}</div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo.${avisoSinCapitanes}</div>
+        ${renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar)}
+      </div></div>`;
+    });
+
+    html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Consumo de Maquinaria</div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
+      ${renderGrillaBitacoraMaquinaria(maquinas, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
+    </div></div>`;
 
     panel.innerHTML = html;
   }catch(e){

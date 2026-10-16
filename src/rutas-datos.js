@@ -74,6 +74,38 @@ const HORARIO_PREFIX = "cat_horario:";
 const LUGAR_TRABAJO_PREFIX = "cat_lugar_trabajo:";
 const HORARIO_ASIGNADO_PREFIX = "horario_asignado:";
 
+// Módulo "Bitácoras" (ver renderBitacorasPanel en app.js) — a diferencia de
+// Horarios, esto NO es un patrón por departamento: es exclusivo del
+// departamento ACTIVIDADES, a propósito (pedido explícito — "apartado
+// exclusivo para la jefatura de Actividades"). cat_bote: y cat_ruta_bote:
+// son los catálogos (nombres de botes, y rutas con su bandera de si incluyen
+// parada en Hacienda); bitacora_bote:<fechaISO>:<boteKey> es el reporte
+// diario de combustible (entrada/devolución por ruta, capitán) de ese bote
+// ese día. Nadie más que master/gerente y la jefatura de Actividades
+// (usuario.puesto === "ACTIVIDADES") puede leer o escribir nada de esto — ni
+// siquiera otra jefatura, a diferencia de cómo funciona Horarios con
+// cualquier departamento.
+const BOTE_PREFIX = "cat_bote:";
+const RUTA_BOTE_PREFIX = "cat_ruta_bote:";
+const BITACORA_BOTE_PREFIX = "bitacora_bote:";
+// Mismo esquema que bitacora_bote:, pero para "Rebotes" (viajes extra,
+// aparte de la operación normal del día) — se guarda aparte para no pisar el
+// reporte de operación diaria, aunque comparten el mismo catálogo de botes/
+// rutas y el mismo alcance (solo Actividades).
+const BITACORA_REBOTE_PREFIX = "bitacora_rebote:";
+// Tercer reporte de Bitácoras: consumo de combustible/aceite por máquina o
+// equipo (motosierra, plantas eléctricas, vehículos internos, etc.) — más
+// simple que los de botes: una cantidad por producto, sin entrada/
+// devolución/ruta. cat_maquina: es el catálogo (editable, igual que
+// cat_bote:); bitacora_maquinaria:<fechaISO>:<maquinaKey> es el consumo de
+// ese día. Mismo alcance que todo lo demás de Bitácoras: solo Actividades.
+const MAQUINA_PREFIX = "cat_maquina:";
+const BITACORA_MAQUINARIA_PREFIX = "bitacora_maquinaria:";
+
+function esJefaturaDeActividades(usuario) {
+  return usuario.rol === "jefatura" && usuario.puesto === "ACTIVIDADES";
+}
+
 async function valorDeClave(propiedad, clave) {
   const { rows } = await query(
     `SELECT valor FROM documentos WHERE propiedad_id = $1 AND clave = $2 AND eliminado_en IS NULL`,
@@ -280,6 +312,13 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   if (usuario.rol === "jefatura" && clave.startsWith(HORARIO_ASIGNADO_PREFIX)) {
     return horarioAsignadoPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
+  // Bitácoras: exclusivo de la jefatura de Actividades (ver
+  // esJefaturaDeActividades arriba) — a diferencia de todo lo anterior, no
+  // depende de a qué equipo pertenece un empleado puntual, es un "sí" o "no"
+  // fijo según el departamento de la cuenta.
+  if (clave.startsWith(BOTE_PREFIX) || clave.startsWith(RUTA_BOTE_PREFIX) || clave.startsWith(BITACORA_BOTE_PREFIX) || clave.startsWith(BITACORA_REBOTE_PREFIX) || clave.startsWith(MAQUINA_PREFIX) || clave.startsWith(BITACORA_MAQUINARIA_PREFIX)) {
+    return esJefaturaDeActividades(usuario);
+  }
   return false;
 }
 
@@ -341,6 +380,14 @@ const PREFIJOS_LECTURA_EMPLEADO = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX
 // prefijo="" (listaría todo) ni un prefijo más corto que además matchee
 // catálogos ajenos.
 function puedeLeerClaveOPrefijo(usuario, claveOPrefijo) {
+  // Bitácoras: aparte del esquema "por equipo" de abajo — ni siquiera entra
+  // en PREFIJOS_LECTURA_JEFATURA, porque esto no depende de qué departamento
+  // sea, es un "sí" fijo solo para Actividades. Sin este chequeo PRIMERO,
+  // cualquier otra jefatura podría pedir prefijo="cat_bote:" y le llegaría
+  // (vacío o no) por el mismo camino genérico de abajo.
+  if (claveOPrefijo.startsWith(BOTE_PREFIX) || claveOPrefijo.startsWith(RUTA_BOTE_PREFIX) || claveOPrefijo.startsWith(BITACORA_BOTE_PREFIX) || claveOPrefijo.startsWith(BITACORA_REBOTE_PREFIX) || claveOPrefijo.startsWith(MAQUINA_PREFIX) || claveOPrefijo.startsWith(BITACORA_MAQUINARIA_PREFIX)) {
+    return usuario.rol === "master" || usuario.rol === "gerente" || usuario.rol === "consultor" || esJefaturaDeActividades(usuario);
+  }
   if (usuario.rol === "jefatura") {
     return PREFIJOS_LECTURA_JEFATURA.some((permitido) => claveOPrefijo.startsWith(permitido));
   }
