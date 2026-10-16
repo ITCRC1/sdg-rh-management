@@ -16936,6 +16936,10 @@ async function guardarTodoReporteMaquinaria(fechaISO, maquinas){
         const v = (document.getElementById(`bitacora-maquinaria-${maq.key}-${campo}`)||{}).value;
         if (v !== "") valores[campo] = Number(v);
       });
+      // "Otros" es un cajón genérico — se pide describir qué combustible/
+      // aceite es en realidad, para que el número no quede sin explicación.
+      const otrosDesc = ((document.getElementById(`bitacora-maquinaria-${maq.key}-otros-desc`)||{}).value || "").trim();
+      if (otrosDesc) valores.OTROS_DESC = otrosDesc;
       if (Object.keys(valores).length === 0) return; // máquina sin tocar ese día — se ignora
       const key = `${BITACORA_MAQUINARIA_PREFIX}${fechaISO}:${maq.key}`;
       await window.storage.set(key, JSON.stringify({
@@ -16970,6 +16974,16 @@ function renderGrillaBitacoraMaquinaria(maquinas, entradasDelDia, fechaISO, pued
           <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;"><b>${escapeHtml(maq.NOMBRE||"")}</b></td>
           ${PRODUCTOS_MAQUINARIA.map(([campo]) => {
             const valor = actual ? actual[campo] : undefined;
+            if (campo === "OTROS"){
+              const desc = actual ? actual.OTROS_DESC : undefined;
+              const celda = puedeGestionar
+                ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:center;">
+                    <input type="number" step="0.01" id="bitacora-maquinaria-${maq.key}-${campo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:60px; font-size:10.5px;">
+                    <input type="text" id="bitacora-maquinaria-${maq.key}-otros-desc" value="${escapeHtml(desc||"")}" placeholder="¿Qué es?" style="width:70px; font-size:9.5px;">
+                  </div>`
+                : `${(valor !== undefined && valor !== null) ? valor : "—"}${desc ? ` (${escapeHtml(desc)})` : ""}`;
+              return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celda}</td>`;
+            }
             const celda = puedeGestionar
               ? `<input type="number" step="0.01" id="bitacora-maquinaria-${maq.key}-${campo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:60px; font-size:10.5px;">`
               : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
@@ -17030,11 +17044,13 @@ async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys){
         if (dev !== "") fila.DEV = Number(dev);
         rutasValor[rutaKey] = fila;
       });
-      if (!capitanKey && Object.keys(rutasValor).length === 0) return; // bote sin tocar ese día — se ignora
+      const observaciones = ((document.getElementById(`bitacora-${tipo}-${boteKey}-observaciones`)||{}).value || "").trim();
+      if (!capitanKey && Object.keys(rutasValor).length === 0 && !observaciones) return; // bote sin tocar ese día — se ignora
       const key = `${BITACORA_TIPOS[tipo].prefix}${fechaISO}:${boteKey}`;
       await window.storage.set(key, JSON.stringify({
         CAPITAN_KEY: capitanKey,
         RUTAS: rutasValor,
+        OBSERVACIONES: observaciones,
         ACTUALIZADO_POR: sesion ? sesion.email : "",
         ACTUALIZADO_EN: new Date().toISOString(),
       }), false);
@@ -17061,6 +17077,9 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
   const prefix = BITACORA_TIPOS[tipo].prefix;
 
   const botesKeysJson = escapeHtml(JSON.stringify(botesOrdenados.map(b => ({ key: b.key }))));
+  // Para el colspan de la fila de Observaciones: Bote + Capitán, más HAC/
+  // ENT/DEV/GAST de cada ruta (4 columnas si tiene Hacienda, 3 si no).
+  const totalColumnas = 2 + rutasOrdenadas.reduce((acc, r) => acc + (r.TIENE_HACIENDA ? 4 : 3), 0);
 
   return `<div style="overflow-x:auto;">
   <table style="border-collapse:collapse; font-size:11px;">
@@ -17097,6 +17116,15 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
               : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
             return `${r.TIENE_HACIENDA ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("hac", val.HAC)}</td>` : ""}<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("ent", val.ENT)}</td><td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("dev", val.DEV)}</td><td id="bitacora-${tipo}-${bote.key}-${r.key}-gast" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${gasto === null ? "—" : gasto}</td>`;
           }).join("")}
+        </tr>
+        <tr>
+          <td colspan="${totalColumnas}" style="padding:4px 8px; border:1px solid var(--paper-line); background:#FAFAF7;">
+            <label style="font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Observaciones de ${escapeHtml(bote.NOMBRE||"")}
+              ${puedeGestionar
+                ? `<textarea id="bitacora-${tipo}-${bote.key}-observaciones" rows="2" placeholder="Ej. avería, demora, cliente canceló, etc." style="width:100%; max-width:480px; font-size:11px; font-family:inherit; resize:vertical;">${escapeHtml((actual && actual.OBSERVACIONES) || "")}</textarea>`
+                : `<span>${escapeHtml((actual && actual.OBSERVACIONES) || "—")}</span>`}
+            </label>
+          </td>
         </tr>`;
       }).join("")}
     </tbody>
@@ -17162,13 +17190,17 @@ async function guardarBitacoraIngresoCombustibleDia(departamento, fechaISO){
     const c1 = (document.getElementById(`ingreso-combustible-${campo}-cantidad-1`)||{}).value;
     const p2 = (document.getElementById(`ingreso-combustible-${campo}-pichinga-2`)||{}).value;
     const c2 = (document.getElementById(`ingreso-combustible-${campo}-cantidad-2`)||{}).value;
-    if (p1 === "" && c1 === "" && p2 === "" && c2 === "") return; // producto sin tocar ese día — se ignora
+    // "Otros" es un cajón genérico — se pide describir qué combustible es en
+    // realidad, para que el número no quede sin explicación.
+    const descripcion = campo === "OTROS" ? ((document.getElementById("ingreso-combustible-OTROS-descripcion")||{}).value || "").trim() : "";
+    if (p1 === "" && c1 === "" && p2 === "" && c2 === "" && !descripcion) return; // producto sin tocar ese día — se ignora
     valores[campo] = {
       PICHINGA_GAL_1: p1 !== "" ? Number(p1) : null,
       CANTIDAD_1: c1 !== "" ? Number(c1) : null,
       PICHINGA_GAL_2: p2 !== "" ? Number(p2) : null,
       CANTIDAD_2: c2 !== "" ? Number(c2) : null,
     };
+    if (descripcion) valores[campo].DESCRIPCION = descripcion;
   });
   try{
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
@@ -17218,7 +17250,7 @@ function renderSeccionIngresoCombustible(entrada, departamento, fechaISO, puedeG
     const p1 = val.PICHINGA_GAL_1, c1 = val.CANTIDAD_1, p2 = val.PICHINGA_GAL_2, c2 = val.CANTIDAD_2;
     const total = ((p1 && c1 ? p1 * c1 : 0) + (p2 && c2 ? p2 * c2 : 0)) || null;
     const huboAlgo = (p1 && c1) || (p2 && c2);
-    return `<tr>
+    const filaPrincipal = `<tr>
       <td style="padding:4px 8px; border:1px solid var(--paper-line);"><b>${escapeHtml(label)}</b></td>
       <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaPichinga(1)}</td>
       <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaCantidad(1)}</td>
@@ -17226,6 +17258,23 @@ function renderSeccionIngresoCombustible(entrada, departamento, fechaISO, puedeG
       <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaCantidad(2)}</td>
       <td id="ingreso-combustible-${campo}-total" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${huboAlgo ? Math.round(total * 100) / 100 : "—"}</td>
     </tr>`;
+
+    // "Otros" es un cajón genérico — se pide describir qué combustible es en
+    // realidad, para que el número no quede sin explicación.
+    if (campo === "OTROS"){
+      const desc = val.DESCRIPCION || "";
+      const filaDescripcion = `<tr>
+        <td colspan="6" style="padding:4px 8px; border:1px solid var(--paper-line); background:#FAFAF7;">
+          <label style="font-size:10.5px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;">¿Qué es "Otros"?
+            ${puedeGestionar
+              ? `<input type="text" id="ingreso-combustible-OTROS-descripcion" value="${escapeHtml(desc)}" placeholder="Ej. Kerosene" style="flex:1; max-width:240px; font-size:10.5px;">`
+              : `<span>${escapeHtml(desc || "—")}</span>`}
+          </label>
+        </td>
+      </tr>`;
+      return filaPrincipal + filaDescripcion;
+    }
+    return filaPrincipal;
   }).join("");
 
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">

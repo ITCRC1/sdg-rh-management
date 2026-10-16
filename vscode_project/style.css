@@ -902,3 +902,36 @@ body.solo-lectura select{
   body.imprimiendo-reloj .reloj-persona{ break-inside:avoid; box-shadow:none; }
   body.imprimiendo-reloj .reloj-asistencia tr.incompleto td{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
+
+/* ----------------------------------------------------------------------
+   Bitácoras — a diferencia del resto del programa (pensado para escritorio),
+   esto se carga a diario desde el teléfono/tablet en el campo (botes,
+   maquinaria, combustible). Las tablas de ese módulo usan fuente chiquita en
+   línea (10–11px) y campos angostos para caber muchas columnas en pantalla
+   de escritorio — en táctil eso es ilegible y casi imposible de tocar bien.
+   Estas reglas (con !important porque pisan estilos en línea) agrandan
+   fuente y campos SOLO dentro de #bitacoras-panel, sin tocar el resto del
+   programa — pedido explícito del usuario: empezar por acá, no por todo.
+   ---------------------------------------------------------------------- */
+#bitacoras-panel table{ font-size:13px !important; }
+#bitacoras-panel th, #bitacoras-panel td{ padding:6px 8px !important; }
+#bitacoras-panel input, #bitacoras-panel select, #bitacoras-panel textarea{
+  font-size:15px !important; /* evita que iOS haga zoom automático al enfocar un campo con fuente <16px */
+  min-height:38px;
+  box-sizing:border-box;
+}
+#bitacoras-panel input[type="checkbox"]{ min-height:auto; width:18px; height:18px; }
+#bitacoras-panel input[type="number"]{ width:68px !important; }
+#bitacoras-panel select{ min-width:74px; }
+#bitacoras-panel textarea{ min-height:52px; }
+#bitacoras-panel button, #bitacoras-panel .btn, #bitacoras-panel .del{
+  font-size:14px !important;
+  padding:9px 14px !important;
+  min-height:42px;
+}
+#bitacoras-panel div[style*="overflow-x:auto"]{ -webkit-overflow-scrolling:touch; }
+
+@media (max-width:760px){
+  #bitacoras-panel table{ font-size:12.5px !important; }
+  #bitacoras-panel .section-card{ padding:10px; }
+}
