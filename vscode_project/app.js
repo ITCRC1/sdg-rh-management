@@ -16647,6 +16647,17 @@ const PRODUCTOS_MAQUINARIA = [
   ["OTROS", "Otros"],
 ];
 
+// Cuarto reporte (el original de Bitácoras, antes de los de botes): el
+// ingreso de combustible/aceite al inventario de la propiedad, por producto
+// — mismos 6 productos que Consumo de Maquinaria, para hablar el mismo
+// idioma. Un registro por día POR DEPARTAMENTO (no por bote/máquina, no hay
+// un "catálogo" de referencia): la clave trae el departamento pegado en vez
+// de una clave de catálogo. Por producto se registra el tamaño de pichinga
+// (dropdown fijo) y la cantidad de pichingas — el total en galones se
+// calcula solo (pichinga × cantidad), igual que GAST en Botes.
+const BITACORA_INGRESO_COMBUSTIBLE_PREFIX = "bitacora_ingreso_combustible:"; // bitacora_ingreso_combustible:<fechaISO>:<departamento>
+const PICHINGA_GALONES_OPCIONES = [5, 18, 20];
+
 let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
 let bitacorasFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
 let bitacorasDeptoActivoActual = null; // depto realmente en pantalla ahora (cache para guardarNuevoBote/Ruta/Maquina)
@@ -17081,6 +17092,97 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
   <div id="bitacoras-${tipo}-grilla-status" style="font-size:12px; margin-top:8px;"></div>`;
 }
 
+// A diferencia de listarBitacoraDelDia (que pide TODAS las claves de ese
+// día, una por bote), acá hay un solo registro por departamento por día —
+// se pide directo con window.storage.get, sin pasar por list.
+async function obtenerBitacoraIngresoCombustibleDelDia(departamento, fechaISO){
+  if (!departamento) return null;
+  try{
+    const r = await window.storage.get(`${BITACORA_INGRESO_COMBUSTIBLE_PREFIX}${fechaISO}:${departamento}`, false);
+    return r && r.value ? JSON.parse(r.value) : null;
+  }catch(e){ return null; }
+}
+
+// Recalcula en vivo el total en galones (pichinga × cantidad) de UN
+// producto, sin esperar a guardar — mismo criterio que
+// actualizarGastoBitacora.
+function actualizarTotalIngresoCombustible(campo){
+  const pichinga = Number((document.getElementById(`ingreso-combustible-${campo}-pichinga`)||{}).value || 0);
+  const cantidad = Number((document.getElementById(`ingreso-combustible-${campo}-cantidad`)||{}).value || 0);
+  const total = (pichinga && cantidad) ? pichinga * cantidad : null;
+  const celda = document.getElementById(`ingreso-combustible-${campo}-total`);
+  if (celda) celda.textContent = total === null ? "—" : total;
+}
+
+// Guarda de una vez la pichinga + cantidad de los 6 productos para el
+// departamento y día activos — igual que guardarBitacoraMaquinariaDia, se
+// lee todo del DOM y se guarda entero.
+async function guardarBitacoraIngresoCombustibleDia(departamento, fechaISO){
+  const status = document.getElementById("bitacoras-ingreso-combustible-status");
+  const valores = {};
+  PRODUCTOS_MAQUINARIA.forEach(([campo]) => {
+    const pichinga = (document.getElementById(`ingreso-combustible-${campo}-pichinga`)||{}).value;
+    const cantidad = (document.getElementById(`ingreso-combustible-${campo}-cantidad`)||{}).value;
+    if (pichinga === "" && cantidad === "") return; // producto sin tocar ese día — se ignora
+    valores[campo] = {
+      PICHINGA_GAL: pichinga !== "" ? Number(pichinga) : null,
+      CANTIDAD: cantidad !== "" ? Number(cantidad) : null,
+    };
+  });
+  try{
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const key = `${BITACORA_INGRESO_COMBUSTIBLE_PREFIX}${fechaISO}:${departamento}`;
+    await window.storage.set(key, JSON.stringify({
+      ...valores,
+      ACTUALIZADO_POR: sesion ? sesion.email : "",
+      ACTUALIZADO_EN: new Date().toISOString(),
+    }), false);
+    statusMsg("Ingreso de combustible guardado.");
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; else statusMsg("No se pudo guardar: " + e.message, false); }
+}
+
+function renderSeccionIngresoCombustible(entrada, departamento, fechaISO, puedeGestionar){
+  const filasHtml = PRODUCTOS_MAQUINARIA.map(([campo, label]) => {
+    const val = (entrada && entrada[campo]) || {};
+    const pichinga = val.PICHINGA_GAL;
+    const cantidad = val.CANTIDAD;
+    const total = (pichinga && cantidad) ? pichinga * cantidad : null;
+    const celdaPichinga = puedeGestionar
+      ? `<select id="ingreso-combustible-${campo}-pichinga" style="font-size:10.5px;" onchange="actualizarTotalIngresoCombustible('${campo}')">
+          <option value="">—</option>
+          ${PICHINGA_GALONES_OPCIONES.map(g => `<option value="${g}"${pichinga===g?" selected":""}>${g} gal</option>`).join("")}
+        </select>`
+      : (pichinga ? `${pichinga} gal` : "—");
+    const celdaCantidad = puedeGestionar
+      ? `<input type="number" step="1" min="0" id="ingreso-combustible-${campo}-cantidad" value="${(cantidad !== undefined && cantidad !== null) ? cantidad : ""}" style="width:55px; font-size:10.5px;" oninput="actualizarTotalIngresoCombustible('${campo}')">`
+      : `${(cantidad !== undefined && cantidad !== null) ? cantidad : "—"}`;
+    return `<tr>
+      <td style="padding:4px 8px; border:1px solid var(--paper-line);"><b>${escapeHtml(label)}</b></td>
+      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaPichinga}</td>
+      <td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaCantidad}</td>
+      <td id="ingreso-combustible-${campo}-total" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${total === null ? "—" : total}</td>
+    </tr>`;
+  }).join("");
+
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">⛽ Ingreso de Combustible</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Pichinga = tamaño del envase que entró ese día. Total = galones (pichinga × cantidad), se calcula solo.</div>
+    <div style="overflow-x:auto;">
+    <table style="border-collapse:collapse; font-size:11px;">
+      <thead><tr>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Producto</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Pichinga</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Cantidad</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Total (gal)</th>
+      </tr></thead>
+      <tbody>${filasHtml}</tbody>
+    </table>
+    </div>
+    ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="guardarBitacoraIngresoCombustibleDia('${departamento}', '${fechaISO}')">💾 Guardar</button></div>` : ""}
+    <div id="bitacoras-ingreso-combustible-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
+}
+
 async function renderBitacorasPanel(){
   const panel = document.getElementById("bitacoras-panel");
   if (!panel) return;
@@ -17151,47 +17253,57 @@ async function renderBitacorasPanel(){
       return;
     }
 
-    html += renderSeccionBotes(botesVisibles, deptoActivo, puedeGestionar);
-    html += renderSeccionRutasBote(rutasVisibles, deptoActivo, puedeGestionar);
-    html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
-
-    // Las grillas de reportes diarios necesitan UN departamento concreto
-    // (son columnas de botes/rutas específicas) — igual que "Asignación
-    // rápida" en Horarios, si está en "Todos los departamentos" se pide
-    // elegir uno primero en vez de mezclar botes de distintos equipos.
+    // Todo lo de abajo necesita UN departamento concreto (Ingreso de
+    // Combustible es un registro por departamento; las grillas de Botes son
+    // columnas de botes/rutas específicas) — igual que "Asignación rápida"
+    // en Horarios, si está en "Todos los departamentos" se pide elegir uno
+    // primero en vez de mezclar datos de distintos equipos.
     if (!deptoActivo){
       html += `<div class="section-card" style="margin-bottom:14px; border-color:var(--gold);"><div class="section-body">
         <div class="empty-state" style="padding:4px 0;">Elegí un departamento específico arriba (no "Todos los departamentos") para ver y cargar los reportes diarios.</div>
       </div></div>`;
-    } else {
-      const [entradasDiaria, entradasRebote, entradasMaquinaria] = await Promise.all([
-        listarBitacoraDelDia("diaria", bitacorasFechaActiva),
-        listarBitacoraDelDia("rebote", bitacorasFechaActiva),
-        listarBitacoraMaquinariaDelDia(bitacorasFechaActiva),
-      ]);
-
-      html += `<div style="margin-bottom:12px;">
-        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:200px;">Fecha (para los reportes de abajo)
-          <input type="date" value="${escapeHtml(bitacorasFechaActiva)}" onchange="bitacorasFechaActiva=this.value; renderBitacorasPanel();">
-        </label>
-      </div>`;
-
-      const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos con puesto de Capitán en el departamento ${escapeHtml(deptoActivo)}.`;
-      const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
-      Object.keys(BITACORA_TIPOS).forEach(tipo => {
-        html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-          <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">${BITACORA_TIPOS[tipo].titulo}</div>
-          <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo.${avisoSinCapitanes}</div>
-          ${renderGrillaBitacoraBotes(tipo, botesVisibles, rutasVisibles, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar)}
-        </div></div>`;
-      });
-
-      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Consumo de Maquinaria</div>
-        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
-        ${renderGrillaBitacoraMaquinaria(maquinasVisibles, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
-      </div></div>`;
+      panel.innerHTML = html;
+      return;
     }
+
+    html += `<div style="margin-bottom:12px;">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; max-width:200px;">Fecha (para los reportes de abajo)
+        <input type="date" value="${escapeHtml(bitacorasFechaActiva)}" onchange="bitacorasFechaActiva=this.value; renderBitacorasPanel();">
+      </label>
+    </div>`;
+
+    // "Ingreso de Combustible" es el reporte original del módulo — va de
+    // primero. Los botes/rebotes/maquinaria se agregaron después, así que
+    // quedan más abajo (ver renderSeccionBotes.../renderGrillaBitacoraBotes
+    // más abajo) — pedido explícito del usuario.
+    const entradaIngreso = await obtenerBitacoraIngresoCombustibleDelDia(deptoActivo, bitacorasFechaActiva);
+    html += renderSeccionIngresoCombustible(entradaIngreso, deptoActivo, bitacorasFechaActiva, puedeGestionar);
+
+    html += renderSeccionBotes(botesVisibles, deptoActivo, puedeGestionar);
+    html += renderSeccionRutasBote(rutasVisibles, deptoActivo, puedeGestionar);
+    html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
+
+    const [entradasDiaria, entradasRebote, entradasMaquinaria] = await Promise.all([
+      listarBitacoraDelDia("diaria", bitacorasFechaActiva),
+      listarBitacoraDelDia("rebote", bitacorasFechaActiva),
+      listarBitacoraMaquinariaDelDia(bitacorasFechaActiva),
+    ]);
+
+    const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos con puesto de Capitán en el departamento ${escapeHtml(deptoActivo)}.`;
+    const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
+    Object.keys(BITACORA_TIPOS).forEach(tipo => {
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">${BITACORA_TIPOS[tipo].titulo}</div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo.${avisoSinCapitanes}</div>
+        ${renderGrillaBitacoraBotes(tipo, botesVisibles, rutasVisibles, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar)}
+      </div></div>`;
+    });
+
+    html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🔧 Consumo de Maquinaria</div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad de cada producto consumida por máquina/equipo ese día.</div>
+      ${renderGrillaBitacoraMaquinaria(maquinasVisibles, entradasMaquinaria, bitacorasFechaActiva, puedeGestionar)}
+    </div></div>`;
 
     panel.innerHTML = html;
   }catch(e){
