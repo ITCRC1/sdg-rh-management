@@ -16651,6 +16651,16 @@ let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
 let bitacorasFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
 let bitacorasDeptoActivoActual = null; // depto realmente en pantalla ahora (cache para guardarNuevoBote/Ruta/Maquina)
 
+// El selector de "Capitán" solo debe ofrecer gente cuyo PUESTO sea
+// específicamente de capitán (ej. "Capitán de lancha") — no cualquier
+// empleado activo del departamento, que puede incluir guías, marineros,
+// etc. Comparación sin acentos ni mayúsculas para no depender de cómo haya
+// quedado tipeado el nombre del puesto en el catálogo.
+function esPuestoCapitan(puesto){
+  const nombre = (puesto && puesto.PUESTO) || "";
+  return /capitan/i.test(nombre.normalize("NFD").replace(/[̀-ͯ]/g, ""));
+}
+
 async function listarBotes(){
   const res = await window.storage.list(BOTE_PREFIX, false);
   const keys = (res && res.keys) || [];
@@ -17106,7 +17116,7 @@ async function renderBitacorasPanel(){
     const botesVisibles = botes.filter(b => !deptoActivo || b.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const rutasVisibles = rutas.filter(r => !deptoActivo || r.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const maquinasVisibles = maquinas.filter(m => !deptoActivo || m.DEPARTAMENTO_MINISTERIO === deptoActivo);
-    const capitanes = deptoActivo ? empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === deptoActivo) : [];
+    const capitanes = deptoActivo ? empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === deptoActivo && esPuestoCapitan(puestosPorKey[e.PUESTO_KEY])) : [];
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">📘 Bitácoras${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
@@ -17147,7 +17157,7 @@ async function renderBitacorasPanel(){
         </label>
       </div>`;
 
-      const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos en el departamento ${escapeHtml(deptoActivo)} para elegir como capitán.`;
+      const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos con puesto de Capitán en el departamento ${escapeHtml(deptoActivo)}.`;
       const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
       Object.keys(BITACORA_TIPOS).forEach(tipo => {
         html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
