@@ -16651,6 +16651,13 @@ let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
 let bitacorasFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
 let bitacorasDeptoActivoActual = null; // depto realmente en pantalla ahora (cache para guardarNuevoBote/Ruta/Maquina)
 
+// Este reporte (botes/rutas/rebotes/maquinaria) es, por ahora, SOLO para
+// Actividades — pedido explícito del usuario. El menú y el selector de
+// departamento quedan genéricos (para cuando se programe el formato de otro
+// departamento), pero cualquier departamento que no sea este se muestra en
+// blanco en vez de ofrecer un formulario que no le corresponde.
+const DEPARTAMENTO_BITACORAS_PROGRAMADO = "ACTIVIDADES";
+
 // El selector de "Capitán" solo debe ofrecer gente cuyo PUESTO sea
 // específicamente de capitán (ej. "Capitán de lancha") — no cualquier
 // empleado activo del departamento, que puede incluir guías, marineros,
@@ -17130,6 +17137,18 @@ async function renderBitacorasPanel(){
           ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}"${bitacorasFiltroDepto===d?" selected":""}>${escapeHtml(d)}</option>`).join("")}
         </select>
       </div>`;
+    }
+
+    // Este formato de bitácora (botes/rutas/rebotes/maquinaria) todavía solo
+    // está programado para Actividades — cualquier otro departamento elegido
+    // a propósito (jefatura propia, o master/gerente mirando uno específico)
+    // queda en blanco hasta que se construya su propio formato.
+    if (deptoActivo && deptoActivo !== DEPARTAMENTO_BITACORAS_PROGRAMADO){
+      html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+        <div class="empty-state">Todavía no hay un formato de bitácora programado para ${escapeHtml(deptoActivo)}.</div>
+      </div></div>`;
+      panel.innerHTML = html;
+      return;
     }
 
     html += renderSeccionBotes(botesVisibles, deptoActivo, puedeGestionar);
