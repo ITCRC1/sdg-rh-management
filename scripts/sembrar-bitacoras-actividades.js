@@ -27,9 +27,15 @@ const BOTES = ["CHULIN", "TIBURON", "TAPIR", "PACA", "TAMANDUA", "COATI"];
 
 // Las 5 rutas quedan con TIENE_HACIENDA = true (confirmado con el usuario) —
 // si algún día no aplica, esa columna simplemente queda vacía en la grilla.
+// APLICA_REBOTE marca las rutas a puerto (Drake/Sierpe en cualquier
+// dirección) — son las únicas que el Reporte de Rebotes muestra (ver
+// scripts/marcar-rutas-rebote.js para backfill de rutas ya creadas antes de
+// que existiera este campo).
+const RUTAS_A_PUERTO = new Set(["SRP-CWL", "CWL-SRP", "CWL-DRAKE"]);
 const RUTAS = ["SRP-CWL", "CWL-SRP", "CWL-ISLA", "CWL-DRAKE", "CWL-TRANSB"].map((nombre) => ({
   nombre,
   tieneHacienda: true,
+  aplicaRebote: RUTAS_A_PUERTO.has(nombre),
 }));
 
 const MAQUINAS = [
@@ -108,14 +114,14 @@ async function sembrarCatalogoSimple(etiqueta, prefijo, nombres, aplicar) {
 async function sembrarRutas(aplicar) {
   const existentes = await nombresExistentes("cat_ruta_bote:");
   let creados = 0, omitidos = 0, indice = 0;
-  for (const { nombre, tieneHacienda } of RUTAS) {
+  for (const { nombre, tieneHacienda, aplicaRebote } of RUTAS) {
     indice++;
     if (existentes.has(normalizarNombre(nombre))) {
       console.log(`  [Rutas] "${nombre}" ya existe — se omite.`);
       omitidos++;
       continue;
     }
-    console.log(`  [Rutas] "${nombre}" (Hacienda: ${tieneHacienda ? "sí" : "no"}) ${aplicar ? "creada." : "se crearía."}`);
+    console.log(`  [Rutas] "${nombre}" (Hacienda: ${tieneHacienda ? "sí" : "no"}, Rebotes: ${aplicaRebote ? "sí" : "no"}) ${aplicar ? "creada." : "se crearía."}`);
     creados++;
     if (!aplicar) continue;
     const clave = claveUnica("cat_ruta_bote:", indice);
@@ -124,7 +130,7 @@ async function sembrarRutas(aplicar) {
         `INSERT INTO documentos (propiedad_id, clave, valor)
          VALUES ($1, $2, $3)
          ON CONFLICT (propiedad_id, clave) DO NOTHING`,
-        [PROPIEDAD_ID, clave, JSON.stringify({ NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda, DEPARTAMENTO_MINISTERIO: DEPARTAMENTO })]
+        [PROPIEDAD_ID, clave, JSON.stringify({ NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda, APLICA_REBOTE: aplicaRebote, DEPARTAMENTO_MINISTERIO: DEPARTAMENTO })]
       );
     });
   }

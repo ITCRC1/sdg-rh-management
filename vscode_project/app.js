@@ -16877,13 +16877,14 @@ async function guardarNuevaRutaBote(){
   const status = document.getElementById("bitacoras-rutas-status");
   const nombre = ((document.getElementById("ruta-nuevo-nombre")||{}).value || "").trim();
   const tieneHacienda = !!(document.getElementById("ruta-nuevo-hacienda")||{}).checked;
+  const aplicaRebote = !!(document.getElementById("ruta-nuevo-aplica-rebote")||{}).checked;
   const selectorDepto = document.getElementById("ruta-nuevo-depto");
   const depto = selectorDepto ? selectorDepto.value : bitacorasDeptoActivoActual;
   if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre de la ruta.</span>`; return; }
   if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
   try{
     const key = RUTA_BOTE_PREFIX + "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda, DEPARTAMENTO_MINISTERIO: depto }), false);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda, APLICA_REBOTE: aplicaRebote, DEPARTAMENTO_MINISTERIO: depto }), false);
     statusMsg("Ruta creada.");
     renderBitacorasPanel();
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo crear: ${escapeHtml(e.message)}</span>`; }
@@ -16931,7 +16932,7 @@ function renderSeccionRutasBote(rutas, deptoActivo, puedeGestionar){
   const necesitaSelectorDepto = !deptoActivo;
   const filasHtml = rutas.length
     ? rutas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(r => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-        <div style="font-size:12.5px;"><b>${escapeHtml(r.NOMBRE||"")}</b>${r.TIENE_HACIENDA ? ` · incluye parada en Hacienda` : ""}${necesitaSelectorDepto ? ` · ${escapeHtml(r.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
+        <div style="font-size:12.5px;"><b>${escapeHtml(r.NOMBRE||"")}</b>${r.TIENE_HACIENDA ? ` · incluye parada en Hacienda` : ""}${r.APLICA_REBOTE ? ` · 🔁 aplica para Rebotes` : ""}${necesitaSelectorDepto ? ` · ${escapeHtml(r.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
         ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarRutaBote('${r.key}')">🗑️ Eliminar</button>` : ""}
       </div>`).join("")
     : `<div class="empty-state" style="padding:8px 0;">No hay rutas creadas${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
@@ -16942,6 +16943,9 @@ function renderSeccionRutasBote(rutas, deptoActivo, puedeGestionar){
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; padding-bottom:4px;">
         <input type="checkbox" id="ruta-nuevo-hacienda"> Incluye parada en Hacienda
+      </label>
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; padding-bottom:4px;" title="Viajes a puerto (Drake/Sierpe en cualquier dirección) — solo estas rutas aparecen en el Reporte de Rebotes.">
+        <input type="checkbox" id="ruta-nuevo-aplica-rebote"> Aplica para Rebotes (viaje a puerto)
       </label>
       ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
         <select id="ruta-nuevo-depto">
@@ -17200,11 +17204,13 @@ async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys, departa
         const ent = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-ent`)||{}).value;
         const dev = (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-dev`)||{}).value;
         const hac = tieneHacienda ? (document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-hac`)||{}).value : "";
-        if (ent === "" && dev === "" && hac === "") return; // ruta sin tocar ese día — se ignora
+        const viaje = !!(document.getElementById(`bitacora-${tipo}-${boteKey}-${rutaKey}-viaje`)||{}).checked;
+        if (ent === "" && dev === "" && hac === "" && !viaje) return; // ruta sin tocar ese día — se ignora
         const fila = {};
         if (hac !== "") fila.HAC = Number(hac);
         if (ent !== "") fila.ENT = Number(ent);
         if (dev !== "") fila.DEV = Number(dev);
+        if (viaje) fila.VIAJE = true;
         rutasValor[rutaKey] = fila;
       });
       if (!capitanKey && Object.keys(rutasValor).length === 0) return; // bote sin tocar ese día — se ignora
@@ -17233,7 +17239,11 @@ async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys, departa
 // sin este prefijo los dos reportes se pisarían el uno al otro.
 function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia, fechaISO, puedeGestionar, departamento, observacionesGenerales){
   if (!botes.length) return `<div class="empty-state">Creá primero al menos un bote.</div>`;
-  if (!rutas.length) return `<div class="empty-state">Creá primero al menos una ruta.</div>`;
+  if (!rutas.length){
+    return tipo === "rebote"
+      ? `<div class="empty-state">Ninguna ruta está marcada "Aplica para Rebotes" todavía — marcá esa casilla en las rutas a puerto (Drake/Sierpe) en la sección de Rutas, arriba.</div>`
+      : `<div class="empty-state">Creá primero al menos una ruta.</div>`;
+  }
 
   const entradasPorClave = {};
   entradasDelDia.forEach(e => { entradasPorClave[e.key] = e; });
@@ -17252,10 +17262,10 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
       <tr>
         <th rowspan="2" style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line);">Bote</th>
         <th rowspan="2" style="padding:4px 8px; border:1px solid var(--paper-line);">Capitán</th>
-        ${rutasOrdenadas.map(r => `<th colspan="${r.TIENE_HACIENDA ? 4 : 3}" style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(r.NOMBRE)}</th>`).join("")}
+        ${rutasOrdenadas.map(r => `<th colspan="${r.TIENE_HACIENDA ? 5 : 4}" style="padding:4px 8px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(r.NOMBRE)}</th>`).join("")}
       </tr>
       <tr>
-        ${rutasOrdenadas.map(r => `${r.TIENE_HACIENDA ? `<th style="padding:2px 4px; border:1px solid var(--paper-line);">HAC</th>` : ""}<th style="padding:2px 4px; border:1px solid var(--paper-line);">ENT</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">DEV</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">GAST</th>`).join("")}
+        ${rutasOrdenadas.map(r => `${r.TIENE_HACIENDA ? `<th style="padding:2px 4px; border:1px solid var(--paper-line);">HAC</th>` : ""}<th style="padding:2px 4px; border:1px solid var(--paper-line);">ENT</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">DEV</th><th style="padding:2px 4px; border:1px solid var(--paper-line);">GAST</th><th style="padding:2px 4px; border:1px solid var(--paper-line);" title="El bote fue a esta ruta pero sin cargar combustible">Viaje</th>`).join("")}
       </tr>
     </thead>
     <tbody>
@@ -17279,7 +17289,10 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
             const campo = (sufijo, valor) => puedeGestionar
               ? `<input type="number" step="0.01" id="bitacora-${tipo}-${bote.key}-${r.key}-${sufijo}" value="${(valor !== undefined && valor !== null) ? valor : ""}" style="width:50px; font-size:10.5px;" oninput="actualizarGastoBitacora('${tipo}', '${bote.key}', '${r.key}')">`
               : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
-            return `${r.TIENE_HACIENDA ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("hac", val.HAC)}</td>` : ""}<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("ent", val.ENT)}</td><td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("dev", val.DEV)}</td><td id="bitacora-${tipo}-${bote.key}-${r.key}-gast" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${gasto === null ? "—" : gasto}</td>`;
+            const celdaViaje = puedeGestionar
+              ? `<input type="checkbox" id="bitacora-${tipo}-${bote.key}-${r.key}-viaje" ${val.VIAJE ? "checked" : ""}>`
+              : (val.VIAJE ? "✓" : "—");
+            return `${r.TIENE_HACIENDA ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("hac", val.HAC)}</td>` : ""}<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("ent", val.ENT)}</td><td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("dev", val.DEV)}</td><td id="bitacora-${tipo}-${bote.key}-${r.key}-gast" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${gasto === null ? "—" : gasto}</td><td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${celdaViaje}</td>`;
           }).join("")}
         </tr>`;
       }).join("")}
@@ -17713,11 +17726,18 @@ async function renderBitacorasPanel(){
     const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos con puesto de Capitán en el departamento ${escapeHtml(deptoActivo)}.`;
     const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
     const observacionesPorTipo = { diaria: obsDiaria, rebote: obsRebote };
+    // Rebotes (viajes extra a puerto — Drake/Sierpe en cualquier dirección)
+    // solo usa las rutas marcadas APLICA_REBOTE; Operación diaria sigue
+    // usando el catálogo completo de rutas.
+    const rutasPorTipo = {
+      diaria: rutasVisibles,
+      rebote: rutasVisibles.filter(r => r.APLICA_REBOTE),
+    };
     Object.keys(BITACORA_TIPOS).forEach(tipo => {
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
         <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">${BITACORA_TIPOS[tipo].titulo}</div>
-        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Todo en galones de Gas Regular (los botes no consumen otro combustible). ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo.${avisoSinCapitanes}</div>
-        ${renderGrillaBitacoraBotes(tipo, botesVisibles, rutasVisibles, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar, deptoActivo, observacionesPorTipo[tipo])}
+        <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Todo en galones de Gas Regular (los botes no consumen otro combustible). ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo. "Viaje" = el bote fue a esa ruta pero sin cargar combustible.${tipo === "rebote" ? " Solo rutas a puerto (Drake/Sierpe)." : ""}${avisoSinCapitanes}</div>
+        ${renderGrillaBitacoraBotes(tipo, botesVisibles, rutasPorTipo[tipo], capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar, deptoActivo, observacionesPorTipo[tipo])}
       </div></div>`;
     });
 
