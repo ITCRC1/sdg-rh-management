@@ -23233,10 +23233,18 @@ async function continuarInicioApp(){
     renderPropiedadBadge();
   }
   // Jefatura no usa nada de Contratos (formulario, PDF, datos de
-  // referencia) — se salta directo a Horas extras, que es lo único a lo
-  // que esa cuenta tiene acceso (showTab también lo fuerza, por si acaso).
+  // referencia) — se salta esa preparación, pero aterriza en el Dashboard
+  // como cualquier otro rol (tiene widgets propios: Solicitudes pendientes,
+  // Quién sale y quién entra, horas extra por aprobar). Esto ANTES forzaba
+  // "horasextras" porque esa pestaña era lo único a lo que jefatura tenía
+  // acceso — ya no es así (Horarios, Bitácoras, Vacaciones, Incapacidades
+  // propias, Reloj marcador...), así que forzar ese destino le pisaba
+  // cualquier otra pantalla a la que la cuenta quisiera entrar justo al
+  // recargar la sesión (por ejemplo, con "Ver como" desde el panel de
+  // usuarios) — el bug reportado: "entra y manda a Horas Extra" en vez de
+  // dejarla donde de verdad quería ir.
   if (window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
-    showTab("horasextras");
+    showTab("inicio");
     return;
   }
   await loadContentOverrides();
