@@ -5077,11 +5077,18 @@ function renderPreview(){
 
 // ---------- tabs ----------
 function showTab(which){
-  // Jefatura no tiene "página de RH" — solo el módulo de Horas extras.
-  // Esto es la comodidad visual (el servidor es quien de verdad bloquea el
-  // resto de los datos): cubre el logo, "atrás" del navegador o cualquier
-  // otro camino que intente llevarla a otra pestaña.
-  const TABS_PERMITIDAS_JEFATURA = ["horasextras", "vacaciones", "manual"];
+  // Comodidad visual (el servidor es quien de verdad bloquea el resto de los
+  // datos): cubre el logo, "atrás" del navegador o cualquier otro camino que
+  // intente llevar a jefatura a una pestaña sin botón visible en su menú.
+  // Esta lista quedó vieja de cuando jefatura solo tenía Horas Extra —
+  // quedó desactualizada cada vez que se le fue agregando una pestaña nueva
+  // (Dashboard, Horarios, Bitácoras, Reloj marcador, Preguntas de ley
+  // laboral) sin sumarla acá, así que CUALQUIER botón de esas se reescribía
+  // a la fuerza como "horasextras" antes de mostrar nada — el bug reportado
+  // ("entro a Horarios/Bitácoras y manda a Horas Extra"). Debe reflejar
+  // exactamente los botones que aplicarModoSegunRol deja visibles para
+  // jefatura.
+  const TABS_PERMITIDAS_JEFATURA = ["inicio", "horasextras", "reloj", "vacaciones", "horarios", "bitacoras", "faq", "manual"];
   if (!TABS_PERMITIDAS_JEFATURA.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "jefatura"){
     which = "horasextras";
   }
