@@ -16756,6 +16756,13 @@ const PICHINGA_GALONES_OPCIONES = [5, 18, 20];
 let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
 let bitacorasFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
 let bitacorasDeptoActivoActual = null; // depto realmente en pantalla ahora (cache para guardarNuevoBote/Ruta/Maquina)
+// Clave del bote/ruta/máquina que está en modo edición ahora mismo (o null)
+// — pedido explícito del usuario: antes la única forma de corregir un
+// nombre mal tipeado era eliminar y crear de nuevo, lo que desconectaba el
+// historial de reportes ya guardados con ese bote/ruta/máquina.
+let boteEnEdicion = null;
+let rutaBoteEnEdicion = null;
+let maquinaEnEdicion = null;
 let bitacorasMesRevision = null; // "YYYY-MM", para la sección "Bitácoras guardadas" — se fija al mes de hoy la primera vez
 
 // Este reporte (botes/rutas/rebotes/maquinaria) es, por ahora, SOLO para
@@ -16873,6 +16880,32 @@ async function eliminarBote(key){
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
+function editarBote(key){
+  boteEnEdicion = key;
+  renderBitacorasPanel();
+}
+function cancelarEdicionBote(){
+  boteEnEdicion = null;
+  renderBitacorasPanel();
+}
+// Corrige el nombre SIN borrar y recrear — conserva la misma clave, así que
+// todos los reportes diarios ya guardados con este bote lo siguen mostrando
+// correcto. No toca el departamento (eso sigue siendo "eliminar y crear de
+// nuevo" si hace falta mover un bote de departamento).
+async function guardarEdicionBote(key){
+  const status = document.getElementById("bitacoras-botes-status");
+  const nombre = ((document.getElementById("bote-editar-nombre")||{}).value || "").trim();
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre del bote.</span>`; return; }
+  try{
+    const r = await window.storage.get(key, false);
+    const actual = r && r.value ? JSON.parse(r.value) : {};
+    await window.storage.set(key, JSON.stringify({ ...actual, NOMBRE: nombre }), false);
+    boteEnEdicion = null;
+    statusMsg("Bote actualizado.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; }
+}
+
 async function guardarNuevaRutaBote(){
   const status = document.getElementById("bitacoras-rutas-status");
   const nombre = ((document.getElementById("ruta-nuevo-nombre")||{}).value || "").trim();
@@ -16899,13 +16932,53 @@ async function eliminarRutaBote(key){
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
+function editarRutaBote(key){
+  rutaBoteEnEdicion = key;
+  renderBitacorasPanel();
+}
+function cancelarEdicionRutaBote(){
+  rutaBoteEnEdicion = null;
+  renderBitacorasPanel();
+}
+// Corrige nombre, Hacienda y Aplica-para-Rebotes SIN borrar y recrear —
+// conserva la misma clave, así que los reportes diarios ya guardados con
+// esta ruta la siguen mostrando correcta. No toca el departamento.
+async function guardarEdicionRutaBote(key){
+  const status = document.getElementById("bitacoras-rutas-status");
+  const nombre = ((document.getElementById("ruta-editar-nombre")||{}).value || "").trim();
+  const tieneHacienda = !!(document.getElementById("ruta-editar-hacienda")||{}).checked;
+  const aplicaRebote = !!(document.getElementById("ruta-editar-aplica-rebote")||{}).checked;
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre de la ruta.</span>`; return; }
+  try{
+    const r = await window.storage.get(key, false);
+    const actual = r && r.value ? JSON.parse(r.value) : {};
+    await window.storage.set(key, JSON.stringify({ ...actual, NOMBRE: nombre, TIENE_HACIENDA: tieneHacienda, APLICA_REBOTE: aplicaRebote }), false);
+    rutaBoteEnEdicion = null;
+    statusMsg("Ruta actualizada.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; }
+}
+
 function renderSeccionBotes(botes, deptoActivo, puedeGestionar){
   const necesitaSelectorDepto = !deptoActivo;
   const filasHtml = botes.length
-    ? botes.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(b => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+    ? botes.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(b => {
+        if (puedeGestionar && boteEnEdicion === b.key){
+          return `<div style="display:flex; justify-content:space-between; align-items:flex-end; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line); flex-wrap:wrap;">
+            <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre del bote
+              <input type="text" id="bote-editar-nombre" value="${escapeHtml(b.NOMBRE||"")}" style="min-width:160px;">
+            </label>
+            <div style="display:flex; gap:6px;">
+              <button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="guardarEdicionBote('${b.key}')">💾 Guardar</button>
+              <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="cancelarEdicionBote();">Cancelar</button>
+            </div>
+          </div>`;
+        }
+        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
         <div style="font-size:12.5px;"><b>${escapeHtml(b.NOMBRE||"")}</b>${necesitaSelectorDepto ? ` · ${escapeHtml(b.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
-        ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarBote('${b.key}')">🗑️ Eliminar</button>` : ""}
-      </div>`).join("")
+        ${puedeGestionar ? `<div style="display:flex; gap:6px; flex-shrink:0;"><button class="btn" style="padding:4px 10px; font-size:11px;" onclick="editarBote('${b.key}')">✏️ Corregir</button><button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarBote('${b.key}')">🗑️ Eliminar</button></div>` : ""}
+      </div>`;
+      }).join("")
     : `<div class="empty-state" style="padding:8px 0;">No hay botes creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
   const formHtml = puedeGestionar ? `
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
@@ -16931,10 +17004,29 @@ function renderSeccionBotes(botes, deptoActivo, puedeGestionar){
 function renderSeccionRutasBote(rutas, deptoActivo, puedeGestionar){
   const necesitaSelectorDepto = !deptoActivo;
   const filasHtml = rutas.length
-    ? rutas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(r => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+    ? rutas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(r => {
+        if (puedeGestionar && rutaBoteEnEdicion === r.key){
+          return `<div style="display:flex; justify-content:space-between; align-items:flex-end; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line); flex-wrap:wrap;">
+            <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre de la ruta
+              <input type="text" id="ruta-editar-nombre" value="${escapeHtml(r.NOMBRE||"")}" style="min-width:160px;">
+            </label>
+            <label style="font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; padding-bottom:4px;">
+              <input type="checkbox" id="ruta-editar-hacienda" ${r.TIENE_HACIENDA ? "checked" : ""}> Incluye parada en Hacienda
+            </label>
+            <label style="font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; padding-bottom:4px;">
+              <input type="checkbox" id="ruta-editar-aplica-rebote" ${r.APLICA_REBOTE ? "checked" : ""}> Aplica para Rebotes
+            </label>
+            <div style="display:flex; gap:6px;">
+              <button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="guardarEdicionRutaBote('${r.key}')">💾 Guardar</button>
+              <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="cancelarEdicionRutaBote();">Cancelar</button>
+            </div>
+          </div>`;
+        }
+        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
         <div style="font-size:12.5px;"><b>${escapeHtml(r.NOMBRE||"")}</b>${r.TIENE_HACIENDA ? ` · incluye parada en Hacienda` : ""}${r.APLICA_REBOTE ? ` · 🔁 aplica para Rebotes` : ""}${necesitaSelectorDepto ? ` · ${escapeHtml(r.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
-        ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarRutaBote('${r.key}')">🗑️ Eliminar</button>` : ""}
-      </div>`).join("")
+        ${puedeGestionar ? `<div style="display:flex; gap:6px; flex-shrink:0;"><button class="btn" style="padding:4px 10px; font-size:11px;" onclick="editarRutaBote('${r.key}')">✏️ Corregir</button><button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarRutaBote('${r.key}')">🗑️ Eliminar</button></div>` : ""}
+      </div>`;
+      }).join("")
     : `<div class="empty-state" style="padding:8px 0;">No hay rutas creadas${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
   const formHtml = puedeGestionar ? `
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
@@ -16987,13 +17079,51 @@ async function eliminarMaquina(key){
   }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
 }
 
+function editarMaquina(key){
+  maquinaEnEdicion = key;
+  renderBitacorasPanel();
+}
+function cancelarEdicionMaquina(){
+  maquinaEnEdicion = null;
+  renderBitacorasPanel();
+}
+// Corrige el nombre SIN borrar y recrear — conserva la misma clave, así que
+// los reportes diarios ya guardados con esta máquina la siguen mostrando
+// correcta. No toca el departamento.
+async function guardarEdicionMaquina(key){
+  const status = document.getElementById("bitacoras-maquinas-status");
+  const nombre = ((document.getElementById("maquina-editar-nombre")||{}).value || "").trim();
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el tipo de máquina.</span>`; return; }
+  try{
+    const r = await window.storage.get(key, false);
+    const actual = r && r.value ? JSON.parse(r.value) : {};
+    await window.storage.set(key, JSON.stringify({ ...actual, NOMBRE: nombre }), false);
+    maquinaEnEdicion = null;
+    statusMsg("Máquina actualizada.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; }
+}
+
 function renderSeccionMaquinas(maquinas, deptoActivo, puedeGestionar){
   const necesitaSelectorDepto = !deptoActivo;
   const filasHtml = maquinas.length
-    ? maquinas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(m => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+    ? maquinas.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(m => {
+        if (puedeGestionar && maquinaEnEdicion === m.key){
+          return `<div style="display:flex; justify-content:space-between; align-items:flex-end; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line); flex-wrap:wrap;">
+            <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo de máquina o equipo
+              <input type="text" id="maquina-editar-nombre" value="${escapeHtml(m.NOMBRE||"")}" style="min-width:220px;">
+            </label>
+            <div style="display:flex; gap:6px;">
+              <button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="guardarEdicionMaquina('${m.key}')">💾 Guardar</button>
+              <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="cancelarEdicionMaquina();">Cancelar</button>
+            </div>
+          </div>`;
+        }
+        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
         <div style="font-size:12.5px;"><b>${escapeHtml(m.NOMBRE||"")}</b>${necesitaSelectorDepto ? ` · ${escapeHtml(m.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
-        ${puedeGestionar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarMaquina('${m.key}')">🗑️ Eliminar</button>` : ""}
-      </div>`).join("")
+        ${puedeGestionar ? `<div style="display:flex; gap:6px; flex-shrink:0;"><button class="btn" style="padding:4px 10px; font-size:11px;" onclick="editarMaquina('${m.key}')">✏️ Corregir</button><button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarMaquina('${m.key}')">🗑️ Eliminar</button></div>` : ""}
+      </div>`;
+      }).join("")
     : `<div class="empty-state" style="padding:8px 0;">No hay máquinas/equipos creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
   const formHtml = puedeGestionar ? `
     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
