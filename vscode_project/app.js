@@ -16674,8 +16674,8 @@ const BITACORA_REBOTE_PREFIX = "bitacora_rebote:"; // mismo esquema, para viajes
 // que cambia es dónde se guarda cada uno, para que "Rebotes" nunca pise la
 // Operación diaria aunque sea el mismo bote y la misma ruta el mismo día.
 const BITACORA_TIPOS = {
-  diaria: { prefix: BITACORA_BOTE_PREFIX, titulo: "⛽ Reporte de Botes — Operación diaria" },
-  rebote: { prefix: BITACORA_REBOTE_PREFIX, titulo: "🔁 Reporte de Operación de Rebotes (adicional a la operación)" },
+  diaria: { prefix: BITACORA_BOTE_PREFIX, titulo: "⛽ Reporte de Botes — Operación diaria", obsPrefix: "bitacora_obs_diaria:" },
+  rebote: { prefix: BITACORA_REBOTE_PREFIX, titulo: "🔁 Reporte de Operación de Rebotes (adicional a la operación)", obsPrefix: "bitacora_obs_rebote:" },
 };
 
 // Tercer reporte: consumo de combustible/aceite por máquina o equipo — más
@@ -17138,12 +17138,26 @@ function actualizarGastoBitacora(tipo, boteKey, rutaKey){
   if (celda) celda.textContent = gasto === null ? "—" : gasto;
 }
 
+// Una sola observación general por reporte/día/departamento (ya no una por
+// bote — pedido explícito del usuario: repetir el mismo cuadro en cada bote
+// no aportaba nada y hacía la pantalla más larga de lo necesario). Mismo
+// esquema de clave por departamento que BITACORA_INGRESO_COMBUSTIBLE_PREFIX.
+async function obtenerObservacionesBitacora(tipo, departamento, fechaISO){
+  if (!departamento) return "";
+  try{
+    const r = await window.storage.get(`${BITACORA_TIPOS[tipo].obsPrefix}${fechaISO}:${departamento}`, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    return (v && v.TEXTO) || "";
+  }catch(e){ return ""; }
+}
+
 // Guarda de una sola vez el capitán + todas las rutas de TODOS los botes
 // para el día activo, en el reporte "diaria" o "rebote" según `tipo` — un
 // solo botón por tabla (no uno por bote, que confundía al lado del único
 // botón de Ingreso de Combustible). Un bote sin capitán ni ninguna ruta
-// tocada se salta, para no crear un registro vacío.
-async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys){
+// tocada se salta, para no crear un registro vacío. La observación general
+// se guarda aparte, una sola vez por día/departamento.
+async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys, departamento){
   const status = document.getElementById(`bitacoras-${tipo}-grilla-status`);
   try{
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
@@ -17161,17 +17175,22 @@ async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys){
         if (dev !== "") fila.DEV = Number(dev);
         rutasValor[rutaKey] = fila;
       });
-      const observaciones = ((document.getElementById(`bitacora-${tipo}-${boteKey}-observaciones`)||{}).value || "").trim();
-      if (!capitanKey && Object.keys(rutasValor).length === 0 && !observaciones) return; // bote sin tocar ese día — se ignora
+      if (!capitanKey && Object.keys(rutasValor).length === 0) return; // bote sin tocar ese día — se ignora
       const key = `${BITACORA_TIPOS[tipo].prefix}${fechaISO}:${boteKey}`;
       await window.storage.set(key, JSON.stringify({
         CAPITAN_KEY: capitanKey,
         RUTAS: rutasValor,
-        OBSERVACIONES: observaciones,
         ACTUALIZADO_POR: sesion ? sesion.email : "",
         ACTUALIZADO_EN: new Date().toISOString(),
       }), false);
     }));
+    const observaciones = ((document.getElementById(`bitacora-${tipo}-observaciones`)||{}).value || "").trim();
+    const keyObs = `${BITACORA_TIPOS[tipo].obsPrefix}${fechaISO}:${departamento}`;
+    await window.storage.set(keyObs, JSON.stringify({
+      TEXTO: observaciones,
+      ACTUALIZADO_POR: sesion ? sesion.email : "",
+      ACTUALIZADO_EN: new Date().toISOString(),
+    }), false);
     statusMsg("Reporte guardado.");
   }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; else statusMsg("No se pudo guardar: " + e.message, false); }
 }
@@ -17180,7 +17199,7 @@ async function guardarTodoReporteBotes(tipo, fechaISO, botes, rutasKeys){
 // celda de GAST) — la misma grilla se usa dos veces en la misma pantalla
 // (Operación diaria y Rebotes), con el mismo bote y la misma ruta, así que
 // sin este prefijo los dos reportes se pisarían el uno al otro.
-function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia, fechaISO, puedeGestionar){
+function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia, fechaISO, puedeGestionar, departamento, observacionesGenerales){
   if (!botes.length) return `<div class="empty-state">Creá primero al menos un bote.</div>`;
   if (!rutas.length) return `<div class="empty-state">Creá primero al menos una ruta.</div>`;
 
@@ -17194,9 +17213,6 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
   const prefix = BITACORA_TIPOS[tipo].prefix;
 
   const botesKeysJson = escapeHtml(JSON.stringify(botesOrdenados.map(b => ({ key: b.key }))));
-  // Para el colspan de la fila de Observaciones: Bote + Capitán, más HAC/
-  // ENT/DEV/GAST de cada ruta (4 columnas si tiene Hacienda, 3 si no).
-  const totalColumnas = 2 + rutasOrdenadas.reduce((acc, r) => acc + (r.TIENE_HACIENDA ? 4 : 3), 0);
 
   return `<div style="overflow-x:auto;">
   <table style="border-collapse:collapse; font-size:11px;">
@@ -17233,21 +17249,17 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
               : `${(valor !== undefined && valor !== null) ? valor : "—"}`;
             return `${r.TIENE_HACIENDA ? `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("hac", val.HAC)}</td>` : ""}<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("ent", val.ENT)}</td><td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${campo("dev", val.DEV)}</td><td id="bitacora-${tipo}-${bote.key}-${r.key}-gast" style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${gasto === null ? "—" : gasto}</td>`;
           }).join("")}
-        </tr>
-        <tr>
-          <td colspan="${totalColumnas}" style="padding:4px 8px; border:1px solid var(--paper-line); background:#FAFAF7;">
-            <label style="font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Observaciones
-              ${puedeGestionar
-                ? `<textarea id="bitacora-${tipo}-${bote.key}-observaciones" rows="2" placeholder="Ej. avería, demora, cliente canceló, etc." style="width:100%; max-width:480px; font-size:11px; font-family:inherit; resize:vertical;">${escapeHtml((actual && actual.OBSERVACIONES) || "")}</textarea>`
-                : `<span>${escapeHtml((actual && actual.OBSERVACIONES) || "—")}</span>`}
-            </label>
-          </td>
         </tr>`;
       }).join("")}
     </tbody>
   </table>
   </div>
-  ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick='guardarTodoReporteBotes("${tipo}", "${fechaISO}", ${botesKeysJson}, ${rutasKeysJson})'>💾 Guardar</button></div>` : ""}
+  <label style="font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; margin-top:8px;">Observaciones (generales, para todo el reporte)
+    ${puedeGestionar
+      ? `<textarea id="bitacora-${tipo}-observaciones" rows="2" placeholder="Ej. avería, demora, cliente canceló, etc." style="width:100%; max-width:480px; font-size:11px; font-family:inherit; resize:vertical;">${escapeHtml(observacionesGenerales || "")}</textarea>`
+      : `<span>${escapeHtml(observacionesGenerales || "—")}</span>`}
+  </label>
+  ${puedeGestionar ? `<div style="margin-top:8px;"><button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick='guardarTodoReporteBotes("${tipo}", "${fechaISO}", ${botesKeysJson}, ${rutasKeysJson}, "${departamento}")'>💾 Guardar</button></div>` : ""}
   <div id="bitacoras-${tipo}-grilla-status" style="font-size:12px; margin-top:8px;"></div>`;
 }
 
@@ -17470,11 +17482,10 @@ function renderSeccionBitacorasGuardadas(mesISO, diasPorTipo, deptoActivo){
     </tr>`;
   }).join("");
 
-  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📅 Bitácoras guardadas — ${escapeHtml(deptoActivo)}</div>
+  return `
     <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">✓ = ese día ya tiene algo guardado. ✕ = no tiene nada todavía. Hacé clic en el día para ir a revisarlo o corregirlo arriba.</div>
     <div style="margin-bottom:10px;">
-      <input type="month" value="${escapeHtml(mesISO)}" onchange="bitacorasMesRevision=this.value; renderBitacorasPanel();">
+      <input type="month" value="${escapeHtml(mesISO)}" onchange="bitacorasMesRevision=this.value; cargarSeccionBitacorasGuardadas('${deptoActivo}');">
     </div>
     <div style="overflow-x:auto; max-height:360px; overflow-y:auto;">
     <table style="border-collapse:collapse; font-size:11px;">
@@ -17487,8 +17498,53 @@ function renderSeccionBitacorasGuardadas(mesISO, diasPorTipo, deptoActivo){
       </tr></thead>
       <tbody>${filasHtml}</tbody>
     </table>
-    </div>
-  </div></div>`;
+    </div>`;
+}
+
+// "Bitácoras guardadas" pide TODO el historial de cuatro prefijos (sin
+// límite de fecha) — con suficientes meses de uso, eso es la misma clase de
+// consulta pesada que hacía que Horarios tardara una eternidad para
+// jefatura (ver filtrarFilasPorEquipo en rutas-datos.js). En vez de cargarla
+// de una vez con el resto del panel (bloqueando toda la pantalla de
+// Bitácoras mientras tanto), queda detrás de un botón: el resto del módulo
+// aparece de inmediato, y esto se trae aparte, solo si alguien lo pide.
+async function cargarSeccionBitacorasGuardadas(deptoActivo){
+  const cont = document.getElementById("bitacoras-guardadas-contenedor");
+  if (!cont) return;
+  cont.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  try{
+    if (!bitacorasMesRevision) bitacorasMesRevision = bitacorasFechaActiva.slice(0, 7);
+    const [botes, maquinas, clavesIngreso, clavesDiaria, clavesRebote, clavesMaquinaria] = await Promise.all([
+      listarBotes(),
+      listarMaquinas(),
+      listarTodasLasClavesBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX),
+      listarTodasLasClavesBitacora(BITACORA_BOTE_PREFIX),
+      listarTodasLasClavesBitacora(BITACORA_REBOTE_PREFIX),
+      listarTodasLasClavesBitacora(BITACORA_MAQUINARIA_PREFIX),
+    ]);
+    const botesVisiblesKeys = new Set(botes.filter(b => b.DEPARTAMENTO_MINISTERIO === deptoActivo).map(b => b.key));
+    const maquinasVisiblesKeys = new Set(maquinas.filter(m => m.DEPARTAMENTO_MINISTERIO === deptoActivo).map(m => m.key));
+    const diasPorTipo = { ingreso: new Set(), diaria: new Set(), rebote: new Set(), maquinaria: new Set() };
+    clavesIngreso.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX, clave);
+      if (resto === deptoActivo) diasPorTipo.ingreso.add(fecha);
+    });
+    clavesDiaria.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_BOTE_PREFIX, clave);
+      if (botesVisiblesKeys.has(resto)) diasPorTipo.diaria.add(fecha);
+    });
+    clavesRebote.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_REBOTE_PREFIX, clave);
+      if (botesVisiblesKeys.has(resto)) diasPorTipo.rebote.add(fecha);
+    });
+    clavesMaquinaria.forEach(clave => {
+      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_MAQUINARIA_PREFIX, clave);
+      if (maquinasVisiblesKeys.has(resto)) diasPorTipo.maquinaria.add(fecha);
+    });
+    cont.innerHTML = renderSeccionBitacorasGuardadas(bitacorasMesRevision, diasPorTipo, deptoActivo);
+  }catch(e){
+    cont.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`;
+  }
 }
 
 // Salta directo a un día desde "Bitácoras guardadas" — cambia la fecha madre
@@ -17613,20 +17669,23 @@ async function renderBitacorasPanel(){
       html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
     }
 
-    const [entradasDiaria, entradasRebote, entradasMaquinaria, entradasMaquinariaOtros] = await Promise.all([
+    const [entradasDiaria, entradasRebote, entradasMaquinaria, entradasMaquinariaOtros, obsDiaria, obsRebote] = await Promise.all([
       listarBitacoraDelDia("diaria", bitacorasFechaActiva),
       listarBitacoraDelDia("rebote", bitacorasFechaActiva),
       listarBitacoraMaquinariaDelDia(bitacorasFechaActiva),
       obtenerBitacoraMaquinariaOtrosDelDia(deptoActivo, bitacorasFechaActiva),
+      obtenerObservacionesBitacora("diaria", deptoActivo, bitacorasFechaActiva),
+      obtenerObservacionesBitacora("rebote", deptoActivo, bitacorasFechaActiva),
     ]);
 
     const avisoSinCapitanes = capitanes.length ? "" : ` ⚠️ No hay empleados activos con puesto de Capitán en el departamento ${escapeHtml(deptoActivo)}.`;
     const entradasPorTipo = { diaria: entradasDiaria, rebote: entradasRebote };
+    const observacionesPorTipo = { diaria: obsDiaria, rebote: obsRebote };
     Object.keys(BITACORA_TIPOS).forEach(tipo => {
       html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
         <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">${BITACORA_TIPOS[tipo].titulo}</div>
         <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Todo en galones de Gas Regular (los botes no consumen otro combustible). ENT = combustible de entrada/cargado. DEV = combustible devuelto/sobrante. GAST = gasto real (ENT − DEV), se calcula solo.${avisoSinCapitanes}</div>
-        ${renderGrillaBitacoraBotes(tipo, botesVisibles, rutasVisibles, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar)}
+        ${renderGrillaBitacoraBotes(tipo, botesVisibles, rutasVisibles, capitanes, entradasPorTipo[tipo], bitacorasFechaActiva, puedeGestionar, deptoActivo, observacionesPorTipo[tipo])}
       </div></div>`;
     });
 
@@ -17642,37 +17701,19 @@ async function renderBitacorasPanel(){
     </div></div>`;
 
     // "Bitácoras guardadas" — resumen por mes para poder verificar si falta
-    // algún día, en vez de ir probando fecha por fecha. Solo pide claves
-    // (sin valores) de los cuatro prefijos, sin fijarse en la fecha activa.
-    if (!bitacorasMesRevision) bitacorasMesRevision = bitacorasFechaActiva.slice(0, 7);
-    const [clavesIngreso, clavesDiaria, clavesRebote, clavesMaquinaria] = await Promise.all([
-      listarTodasLasClavesBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX),
-      listarTodasLasClavesBitacora(BITACORA_BOTE_PREFIX),
-      listarTodasLasClavesBitacora(BITACORA_REBOTE_PREFIX),
-      listarTodasLasClavesBitacora(BITACORA_MAQUINARIA_PREFIX),
-    ]);
-    const botesVisiblesKeys = new Set(botesVisibles.map(b => b.key));
-    const maquinasVisiblesKeys = new Set(maquinasVisibles.map(m => m.key));
-    const diasPorTipo = { ingreso: new Set(), diaria: new Set(), rebote: new Set(), maquinaria: new Set() };
-    clavesIngreso.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX, clave);
-      if (resto === deptoActivo) diasPorTipo.ingreso.add(fecha);
-    });
-    clavesDiaria.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_BOTE_PREFIX, clave);
-      if (botesVisiblesKeys.has(resto)) diasPorTipo.diaria.add(fecha);
-    });
-    clavesRebote.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_REBOTE_PREFIX, clave);
-      if (botesVisiblesKeys.has(resto)) diasPorTipo.rebote.add(fecha);
-    });
-    clavesMaquinaria.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_MAQUINARIA_PREFIX, clave);
-      if (maquinasVisiblesKeys.has(resto)) diasPorTipo.maquinaria.add(fecha);
-    });
-    html += renderSeccionBitacorasGuardadas(bitacorasMesRevision, diasPorTipo, deptoActivo);
+    // algún día. Pide TODO el historial de cuatro prefijos sin límite de
+    // fecha, así que queda FUERA del render principal (ver
+    // cargarSeccionBitacorasGuardadas): con meses de uso, esperar esa
+    // consulta antes de mostrar nada era la misma clase de demora larga que
+    // ya vimos en Horarios con horario_asignado:. Acá el resto del módulo
+    // aparece de inmediato y esto se trae aparte, en segundo plano.
+    html += `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">📅 Bitácoras guardadas — ${escapeHtml(deptoActivo)}</div>
+      <div id="bitacoras-guardadas-contenedor"><div class="empty-state">Cargando…</div></div>
+    </div></div>`;
 
     panel.innerHTML = html;
+    cargarSeccionBitacorasGuardadas(deptoActivo); // sin await: no bloquea el resto de la pantalla
   }catch(e){
     panel.innerHTML = `<div class="empty-state">No se pudo cargar el módulo: ${escapeHtml(e.message || "")}</div>`;
   }finally{

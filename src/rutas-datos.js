@@ -117,6 +117,12 @@ const BITACORA_INGRESO_COMBUSTIBLE_PREFIX = "bitacora_ingreso_combustible:";
 // (bitacora_maquinaria_otros:<fechaISO>:<departamento>), con un array de
 // máquinas descritas ese día en vez de un solo objeto de productos.
 const BITACORA_MAQUINARIA_OTROS_PREFIX = "bitacora_maquinaria_otros:";
+// Observación general de cada reporte de botes (una sola por día/
+// departamento, no una por bote — ver renderGrillaBitacoraBotes en
+// app.js). Mismo esquema de clave por departamento que
+// BITACORA_INGRESO_COMBUSTIBLE_PREFIX.
+const BITACORA_OBS_DIARIA_PREFIX = "bitacora_obs_diaria:";
+const BITACORA_OBS_REBOTE_PREFIX = "bitacora_obs_rebote:";
 
 async function valorDeClave(propiedad, clave) {
   const { rows } = await query(
@@ -417,6 +423,9 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   if (usuario.rol === "jefatura" && clave.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX)) {
     return registroPorDeptoPerteneceAEquipo(propiedad, clave, usuario.puesto);
   }
+  if (usuario.rol === "jefatura" && (clave.startsWith(BITACORA_OBS_DIARIA_PREFIX) || clave.startsWith(BITACORA_OBS_REBOTE_PREFIX))) {
+    return registroPorDeptoPerteneceAEquipo(propiedad, clave, usuario.puesto);
+  }
   return false;
 }
 
@@ -448,6 +457,7 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
     if (fila.clave.startsWith(BITACORA_MAQUINARIA_PREFIX)) return bitacoraMaquinariaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
     if (fila.clave.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX)) return registroPorDeptoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto);
     if (fila.clave.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX)) return registroPorDeptoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto);
+    if (fila.clave.startsWith(BITACORA_OBS_DIARIA_PREFIX) || fila.clave.startsWith(BITACORA_OBS_REBOTE_PREFIX)) return registroPorDeptoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto);
     return horaExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, usuario.cedula, cache);
   }));
   return filas.filter((_, i) => pertenencias[i]);
@@ -466,7 +476,7 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
 // y cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
 // departamento de su propio equipo — nada de contratos, documentos, otros
 // catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX, BOTE_PREFIX, RUTA_BOTE_PREFIX, MAQUINA_PREFIX, BITACORA_BOTE_PREFIX, BITACORA_REBOTE_PREFIX, BITACORA_MAQUINARIA_PREFIX, BITACORA_INGRESO_COMBUSTIBLE_PREFIX, BITACORA_MAQUINARIA_OTROS_PREFIX];
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX, BOTE_PREFIX, RUTA_BOTE_PREFIX, MAQUINA_PREFIX, BITACORA_BOTE_PREFIX, BITACORA_REBOTE_PREFIX, BITACORA_MAQUINARIA_PREFIX, BITACORA_INGRESO_COMBUSTIBLE_PREFIX, BITACORA_MAQUINARIA_OTROS_PREFIX, BITACORA_OBS_DIARIA_PREFIX, BITACORA_OBS_REBOTE_PREFIX];
 
 // Un "empleado" (portal de autoservicio) no tiene "página de RH" tampoco —
 // solo su propio expediente (cat_empleado:<su clave>, exacta, nunca la lista
@@ -632,7 +642,7 @@ router.get("/", async (req, res, next) => {
     // nombre de gente de otros departamentos no aparezca ni siquiera en
     // pantallas que solo listan empleados, como el calendario de Días Libres.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
-      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX) || prefijo.startsWith(BOTE_PREFIX) || prefijo.startsWith(RUTA_BOTE_PREFIX) || prefijo.startsWith(MAQUINA_PREFIX) || prefijo.startsWith(BITACORA_BOTE_PREFIX) || prefijo.startsWith(BITACORA_REBOTE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_PREFIX) || prefijo.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX));
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX) || prefijo.startsWith(BOTE_PREFIX) || prefijo.startsWith(RUTA_BOTE_PREFIX) || prefijo.startsWith(MAQUINA_PREFIX) || prefijo.startsWith(BITACORA_BOTE_PREFIX) || prefijo.startsWith(BITACORA_REBOTE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_PREFIX) || prefijo.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX) || prefijo.startsWith(BITACORA_OBS_DIARIA_PREFIX) || prefijo.startsWith(BITACORA_OBS_REBOTE_PREFIX));
     // Un empleado solo ve sus propias filas — nunca las de un compañero,
     // aunque pida el mismo prefijo que vería un master/gerente.
     const filtrarPropias = req.usuario.rol === "empleado" &&
@@ -745,6 +755,10 @@ router.get("/:clave(*)", async (req, res, next) => {
       if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
     }
     if (req.usuario.rol === "jefatura" && clave.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX)) {
+      const enSuEquipo = registroPorDeptoPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
+      if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
+    }
+    if (req.usuario.rol === "jefatura" && (clave.startsWith(BITACORA_OBS_DIARIA_PREFIX) || clave.startsWith(BITACORA_OBS_REBOTE_PREFIX))) {
       const enSuEquipo = registroPorDeptoPerteneceAEquipo(propiedad, clave, req.usuario.puesto);
       if (!enSuEquipo) return res.status(403).json({ error: "Ese reporte no es de tu departamento.", codigo: "sin_permiso" });
     }
