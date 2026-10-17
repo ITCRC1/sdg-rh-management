@@ -20080,17 +20080,14 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
   // Incapacidad no tiene un único registro con FECHA_INICIO/FECHA_FIN como
   // las solicitudes de arriba — se guarda un registro horas_extra: POR DÍA
   // (TIPO_DIA "incapacidad", ver el chequeo de "horasDia" más arriba), así
-  // que "el día antes/después" se arma mirando si el día de al lado TAMBIÉN
-  // es incapacidad, en vez de comparar contra un rango. Mismo criterio de
-  // SALE/ENTRA que vacaciones/día libre/permiso sin goce: el último día
-  // trabajado antes de empezar la incapacidad es "SALE", el primer día de
-  // vuelta después de que termina es "ENTRA" — pedido explícito del usuario.
+  // que "el día después" se arma mirando si el día anterior TAMBIÉN es
+  // incapacidad, en vez de comparar contra un rango. A diferencia de
+  // vacaciones/día libre/permiso sin goce, acá SOLO hay "ENTRA" (el primer
+  // día de vuelta al trabajo) — pedido explícito del usuario: una
+  // incapacidad no tiene un "día de salida" que marcar (no es como salir de
+  // vacaciones con fecha planeada), solo importa cuándo vuelve.
   const esDiaDeIncapacidad = (iso) => registrosHorasExtraEmp.some(r => r.FECHA === iso && r.ESTADO === "aprobada" && r.TIPO_DIA === "incapacidad");
   if (!esDiaDeIncapacidad(fechaISO)){
-    const manana = new Date(fechaISO + "T00:00:00");
-    manana.setDate(manana.getDate() + 1);
-    if (esDiaDeIncapacidad(isoDeFechaLocal(manana))) return { texto: "SALE", color: "FFD9D9D9" };
-
     const ayer = new Date(fechaISO + "T00:00:00");
     ayer.setDate(ayer.getDate() - 1);
     if (esDiaDeIncapacidad(isoDeFechaLocal(ayer))) return { texto: "ENTRA", color: "FFD9D9D9" };
