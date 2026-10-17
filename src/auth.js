@@ -271,10 +271,16 @@ function leerCookie(req, nombre) {
 }
 
 const COOKIE = "sdg_sesion";
+// Mientras un master está "viendo como" otra cuenta (ver /auth/impersonar en
+// rutas-auth.js), esta segunda cookie guarda el token de SU sesión real —
+// nunca se expone al usuario, solo sirve para que /auth/volver-de-impersonar
+// pueda restaurarla. No toca la tabla `sesiones`: la real sigue viva y
+// válida todo el tiempo, solo se deja de usar como cookie principal.
+const COOKIE_VOLVER = "sdg_sesion_volver";
 
-function ponerCookie(res, token, expira) {
+function construirCookie(nombre, token, expira) {
   const partes = [
-    COOKIE + "=" + encodeURIComponent(token),
+    nombre + "=" + encodeURIComponent(token),
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
@@ -283,11 +289,27 @@ function ponerCookie(res, token, expira) {
   // Railway siempre sirve por HTTPS; en local (http://localhost) Secure
   // impediría que la cookie se guardara.
   if (process.env.NODE_ENV === "production") partes.push("Secure");
-  res.setHeader("Set-Cookie", partes.join("; "));
+  return partes.join("; ");
+}
+
+function construirCookieBorrada(nombre) {
+  return nombre + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+}
+
+function ponerCookie(res, token, expira) {
+  res.setHeader("Set-Cookie", construirCookie(COOKIE, token, expira));
 }
 
 function borrarCookie(res) {
-  res.setHeader("Set-Cookie", COOKIE + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+  res.setHeader("Set-Cookie", construirCookieBorrada(COOKIE));
+}
+
+// Node permite varias Set-Cookie a la vez solo si se mandan como ARRAY —
+// un segundo setHeader("Set-Cookie", ...) pisaría al primero en vez de
+// sumarse. Se usa para impersonar (cambia las dos cookies, la principal y
+// la "de vuelta", en la misma respuesta).
+function ponerVariasCookies(res, listaDeCookies) {
+  res.setHeader("Set-Cookie", listaDeCookies);
 }
 
 function ipDe(req) {
@@ -319,6 +341,11 @@ async function requiereSesion(req, res, next) {
       empleadoClave: sesion.empleado_clave,
       puedeFirmarContratos: sesion.puede_firmar_contratos,
       ip: ipDe(req),
+      // Si existe la cookie "de vuelta" es porque un master está viendo el
+      // sistema como esta cuenta (ver /auth/impersonar) — se expone para que
+      // el cliente muestre el aviso fijo y el botón de volver (ver
+      // renderAppTopbar/banner de impersonación en app.js).
+      impersonando: !!leerCookie(req, COOKIE_VOLVER),
     };
     req.sesionToken = token;
     next();
@@ -428,6 +455,10 @@ function exigeCambioPassword(req, res, next) {
 
 module.exports = {
   COOKIE,
+  COOKIE_VOLVER,
+  construirCookie,
+  construirCookieBorrada,
+  ponerVariasCookies,
   hashPassword,
   verificarPassword,
   validarPassword,

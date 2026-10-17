@@ -621,6 +621,7 @@ function renderListaUsuarios(usuarios){
           </div>
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0;">
+          ${u.activo ? `<button class="btn btn-mini" title="Ver el sistema como esta cuenta, para probar qué le llega de verdad" onclick="verComoUsuario('${esc(u.id)}','${esc(u.nombre)}')">👁️ Ver como</button>` : ""}
           <button class="btn btn-mini" onclick="resetearPassword('${esc(u.id)}','${esc(u.email)}')">Resetear</button>
           <button class="btn ${u.activo ? "btn-danger" : "btn-mini"}"
                   onclick="cambiarActivo('${esc(u.id)}', ${u.activo ? "false" : "true"})">
@@ -630,6 +631,19 @@ function renderListaUsuarios(usuarios){
       </div>`).join("");
   }catch(e){
     cont.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+  }
+}
+
+// "Ver como" cambia de verdad la sesión activa a la de esa cuenta (ver
+// window.sdgApi.impersonar en storage-api.js) — no es una simulación en
+// pantalla, el servidor te trata como esa cuenta real hasta que vuelvas.
+// La propia sesión de master queda guardada aparte y nunca se cierra.
+async function verComoUsuario(id, nombre){
+  if (!confirm(`¿Entrar como "${nombre}"? Vas a ver el sistema exactamente como lo ve esa cuenta — los cambios que hagas ahí se guardan de verdad. Un aviso fijo en pantalla te deja volver a tu cuenta de master cuando quieras.`)) return;
+  try{
+    await api.impersonar(id); // recarga la página sola al terminar
+  }catch(e){
+    alert(e.message || "No se pudo cambiar a esa cuenta.");
   }
 }
 

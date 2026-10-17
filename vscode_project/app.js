@@ -211,6 +211,29 @@ window.mostrarPantallaLogin = function(mensaje){
   if (mensaje) authMsg("login-trabajador-msg", String(mensaje), "err");
 };
 
+// Aviso fijo, imposible de pasar por alto, mientras un master está "viendo
+// el sistema como" otra cuenta (ver impersonar/volverDeImpersonar en
+// storage-api.js) — los cambios que haga en ese estado son reales, se
+// guardan a nombre de la cuenta vista, no son una simulación. Se crea el
+// elemento al vuelo en vez de vivir en index.html: así no hace falta tocar
+// el HTML para algo que casi nunca se muestra.
+function renderImpersonandoBanner(){
+  let banner = document.getElementById("impersonando-banner");
+  if (!banner){
+    banner = document.createElement("div");
+    banner.id = "impersonando-banner";
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+  if (!sesion || !sesion.impersonando){
+    banner.style.display = "none";
+    return;
+  }
+  banner.style.cssText = "display:flex; position:fixed; top:0; left:0; right:0; z-index:99999; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; background:#B3261E; color:#fff; padding:8px 14px; font-size:13px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.25);";
+  banner.innerHTML = `👁️ Estás viendo el sistema como <b>${escapeHtml(sesion.nombre || sesion.email)}</b> (${escapeHtml(sesion.rol)}) — los cambios que hagas son reales.
+    <button style="background:#fff; color:#B3261E; border:none; border-radius:6px; padding:4px 12px; font-weight:700; cursor:pointer; font-size:12.5px;" onclick="window.sdgApi.volverDeImpersonar();">↩️ Volver a mi cuenta</button>`;
+}
+
 // Con sesión ya validada: fija la propiedad y arranca la app.
 async function entrarConSesion(){
   const info = await window.sdgApi.me();
@@ -224,6 +247,8 @@ async function entrarConSesion(){
     propiedad: u.propiedadId,
     email: u.email,
   };
+
+  renderImpersonandoBanner();
 
   if (u.debeCambiarPassword){ mostrarCambioPasswordObligatorio(); return; }
 

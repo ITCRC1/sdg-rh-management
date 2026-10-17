@@ -235,6 +235,32 @@
       location.reload();
     },
 
+    // Master "ve el sistema como" otra cuenta real (ver /auth/impersonar en
+    // rutas-auth.js) — manda siempre a index.html (la app de RRHH), nunca
+    // recarga la página actual sin más: esto se puede disparar desde
+    // empleador.html (el panel de usuarios, que es solo para master), y la
+    // cuenta destino casi nunca tiene permiso de ver esa página.
+    async impersonar(usuarioId) {
+      const r = await pedir("/auth/impersonar", {
+        method: "POST",
+        body: JSON.stringify({ usuarioId }),
+      });
+      cache.clear();
+      versiones.clear();
+      location.href = "index.html";
+      return r;
+    },
+
+    // Restaura la sesión real de master — mismo motivo de mandar a
+    // index.html siempre, sin importar desde qué página se llame.
+    async volverDeImpersonar() {
+      const r = await pedir("/auth/volver-de-impersonar", { method: "POST" });
+      cache.clear();
+      versiones.clear();
+      location.href = "index.html";
+      return r;
+    },
+
     async me() {
       try {
         const r = await pedir("/auth/me", undefined, true); // sondeo
@@ -276,6 +302,12 @@
 
     rol() {
       return sesion ? sesion.rol : null;
+    },
+
+    // true mientras un master está viendo el sistema como esta cuenta (ver
+    // impersonar/volverDeImpersonar arriba) — para el aviso fijo en pantalla.
+    estaImpersonando() {
+      return !!(sesion && sesion.impersonando);
     },
 
     // Crea de una vez las cuentas de los empleados que ya tenían sus datos

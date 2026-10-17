@@ -124,6 +124,87 @@ router.get("/me", A.requiereSesion, async (req, res, next) => {
 });
 
 // --------------------------------------------------------------------------
+// POST /api/auth/impersonar · POST /api/auth/volver-de-impersonar
+//
+// Un master puede "ver el sistema como" otra cuenta real (jefatura, gerente,
+// empleado) para probar qué le llega de verdad — sin pedirle la contraseña a
+// nadie ni fingir el rol solo en la pantalla (eso no serviría: los permisos
+// los decide el servidor según la sesión, no el cliente). Técnicamente es
+// cambiar la cookie principal a una sesión nueva de la cuenta destino,
+// guardando el token real de master en una segunda cookie para restaurarlo
+// después — la sesión de master sigue viva en todo momento, nunca se cierra.
+// --------------------------------------------------------------------------
+router.post("/impersonar", A.requiereSesion, async (req, res, next) => {
+  try {
+    if (req.usuario.rol !== "master") {
+      return res.status(403).json({ error: "Esto es exclusivo de cuentas master." });
+    }
+    if (req.usuario.impersonando) {
+      return res.status(400).json({ error: "Volvé a tu cuenta antes de ver otra." });
+    }
+    const destinoId = req.body?.usuarioId;
+    if (!destinoId) return res.status(400).json({ error: "Falta indicar qué cuenta ver." });
+    if (String(destinoId) === String(req.usuario.id)) {
+      return res.status(400).json({ error: "Ya es tu propia cuenta." });
+    }
+
+    const { rows } = await query(
+      `SELECT id, email, nombre, rol, activo FROM usuarios WHERE id = $1`,
+      [destinoId]
+    );
+    const destino = rows[0];
+    if (!destino) return res.status(404).json({ error: "Esa cuenta ya no existe." });
+    if (!destino.activo) return res.status(400).json({ error: "Esa cuenta está desactivada." });
+
+    const ip = A.ipDe(req);
+    const ua = req.headers["user-agent"];
+    const tokenMaster = req.sesionToken;
+    const { token, expira } = await A.crearSesion(destino.id, ip, ua);
+
+    A.ponerVariasCookies(res, [
+      A.construirCookie(A.COOKIE, token, expira),
+      A.construirCookie(A.COOKIE_VOLVER, tokenMaster, expira),
+    ]);
+
+    await A.registrarAcceso({
+      email: destino.email, usuarioId: destino.id, evento: "impersonar", exito: true,
+      detalle: `visto por ${req.usuario.email}`, ip, userAgent: ua,
+    });
+
+    res.json({ usuario: { id: destino.id, email: destino.email, nombre: destino.nombre, rol: destino.rol } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/volver-de-impersonar", async (req, res, next) => {
+  try {
+    const tokenVolver = A.leerCookie(req, A.COOKIE_VOLVER);
+    if (!tokenVolver) return res.status(400).json({ error: "No hay una sesión a la que volver." });
+
+    const sesionReal = await A.buscarSesion(tokenVolver);
+    if (!sesionReal) {
+      A.ponerVariasCookies(res, [A.construirCookieBorrada(A.COOKIE), A.construirCookieBorrada(A.COOKIE_VOLVER)]);
+      return res.status(401).json({ error: "Tu sesión original ya expiró — volvé a iniciar sesión." });
+    }
+
+    // La sesión de impersonación era de un solo uso — se revoca al salir,
+    // no debe quedar viva ni reutilizable.
+    const tokenImpersonado = A.leerCookie(req, A.COOKIE);
+    if (tokenImpersonado) await A.revocarSesion(tokenImpersonado);
+
+    A.ponerVariasCookies(res, [
+      A.construirCookie(A.COOKIE, tokenVolver, sesionReal.expira_en),
+      A.construirCookieBorrada(A.COOKIE_VOLVER),
+    ]);
+
+    res.json({ usuario: { id: sesionReal.id, email: sesionReal.email, nombre: sesionReal.nombre, rol: sesionReal.rol } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --------------------------------------------------------------------------
 // GET /api/auth/mi-informacion — "¿cuál es MI PROPIO expediente?"
 //
 // Master, gerente y jefatura también son personas empleadas — esto resuelve
