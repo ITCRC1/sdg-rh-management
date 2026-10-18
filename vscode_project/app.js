@@ -15300,16 +15300,29 @@ const TIPOS_SOLICITUD_AUSENCIA = {
   // llegar a trabajar. A propósito NO entra a TIPOS_DIA_DESCUENTA_QUINCENA
   // (ver calcularResumenQuincena) ni al conteo de "días libres" del mes —
   // ninguno de los dos aplica, cuenta como día laborado normal.
-  dia_viaje: { label: "Día de viaje", emoji: "✈️", consumeSaldo: false, requiereComprobante: false, colorHex: "FF9FC5E8" },
+  dia_viaje: { label: "Día de viaje", emoji: "✈️", consumeSaldo: false, requiereComprobante: false, colorHex: "FF9FC5E8", soloCorcovado: true },
+  // Cumpleaños: gerencia/master ya lo podía otorgar directo e instantáneo
+  // desde "🎁 Otorgar día" (ver otorgarDiaCumpleanos/renderSeccionCumpleanos)
+  // — esto lo suma como tipo SOLICITABLE para que jefatura también pueda
+  // pedirlo para su equipo, con aprobación de gerencia/master (pedido
+  // explícito del usuario: "que jefatura solicite lo mismo que gerencia").
+  // aprobarSolicitudAusencia intercepta este tipo específico para usar el
+  // mismo mecanismo de otorgarDiaCumpleanos en vez del genérico (porque
+  // además de horas_extra: hay que marcar CUMPLEANOS_OTORGADO_ANIOS en el
+  // expediente, algo que jefatura no tiene permiso de escribir — por eso
+  // sigue siendo gerencia/master quien lo concede, aunque ahora pueda
+  // originarse en un pedido de jefatura). soloDia: un solo día, no un rango
+  // (mismo criterio que ya usaba el formulario de Asignación directa).
+  cumpleanos: { label: "Cumpleaños", emoji: "🎂", consumeSaldo: false, requiereComprobante: false, colorHex: "FFE0C4F0", soloDia: true, soloCorcovado: true },
 };
 
-// "Día de viaje" es propio del reglamento de SCP Corcovado Wilderness Lodge
-// (personal que viaja lejos para trabajar ahí) — en las demás propiedades no
-// aplica (su gente vive en la zona), así que no se ofrece como opción al
-// crear/asignar/corregir una solicitud. El resto de tipos son universales.
+// "Día de viaje" y "Cumpleaños" son propios del reglamento de SCP Corcovado
+// Wilderness Lodge (soloCorcovado) — en las demás propiedades no aplican,
+// así que no se ofrecen como opción al crear/asignar/corregir una
+// solicitud. El resto de tipos son universales.
 function tiposSolicitudAusenciaDisponibles(){
   const esCorcovado = currentPropiedadId === "corcovado";
-  return Object.keys(TIPOS_SOLICITUD_AUSENCIA).filter(t => t !== "dia_viaje" || esCorcovado);
+  return Object.keys(TIPOS_SOLICITUD_AUSENCIA).filter(t => !TIPOS_SOLICITUD_AUSENCIA[t].soloCorcovado || esCorcovado);
 }
 
 function isoDeHoy(){ return isoDeFechaLocal(new Date()); }
@@ -18438,6 +18451,17 @@ async function crearSolicitudAusencia({ empKey, tipo, fechaInicio, fechaFin, com
   if (TIPOS_SOLICITUD_AUSENCIA[tipo].requiereComprobante && !comprobanteDataUrl){
     throw new Error("Este tipo de ausencia necesita un comprobante adjunto.");
   }
+  // Cumpleaños es "todo o nada" por año (ver otorgadoEsteAnio) — sin este
+  // chequeo, jefatura podía pedir un segundo día para alguien que ya lo
+  // tenía otorgado, y gerencia solo se daba cuenta al aprobar (o peor, ni
+  // eso, si no revisaba el expediente primero).
+  if (tipo === "cumpleanos"){
+    const res = await window.storage.get(CATALOGS.empleados.prefix + empKey, false);
+    const emp = res && res.value ? JSON.parse(res.value) : null;
+    if (otorgadoEsteAnio(emp, fechaInicio.slice(0, 4))){
+      throw new Error("Ese empleado ya tiene el día de cumpleaños otorgado este año.");
+    }
+  }
   const dias = diasEntreFechasISO(fechaInicio, fechaFin);
   const id = `${fechaInicio}-${Date.now()}`;
   const key = SOLICITUD_AUSENCIA_PREFIX + empKey + ":" + id;
@@ -18783,10 +18807,13 @@ async function advertenciaSaldoNegativoVacaciones(empKey, tipo, dias){
 
 // Aprobación — exclusiva de gerencia/master (el servidor lo exige para
 // jefatura). Al aprobar se justifican los días en horas_extra: para que
-// cuenten en el reporte de planilla. Para SCP Corcovado Wilderness Lodge la
-// única regla especial del reglamento interno que aplica es el día de
-// cumpleaños (ver otorgarDiaCumpleanos) — día de viaje y día de entrada NO
-// aplican acá, así que no se generan.
+// cuenten en el reporte de planilla. Cumpleaños es la única regla especial:
+// en vez del camino genérico de abajo, usa el MISMO mecanismo que el botón
+// directo de gerencia (otorgarDiaCumpleanos) — porque además de crear el día
+// en horas_extra: hay que marcar CUMPLEANOS_OTORGADO_ANIOS en el expediente
+// del empleado, algo que jefatura no puede escribir directamente (por eso
+// sigue pasando por la aprobación de gerencia/master, aunque el pedido haya
+// salido de jefatura).
 async function aprobarSolicitudAusencia(key){
   try{
     const r = await window.storage.get(key, false);
@@ -18800,6 +18827,11 @@ async function aprobarSolicitudAusencia(key){
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
     await window.storage.set(key, JSON.stringify(v), false);
+
+    if (v.TIPO === "cumpleanos"){
+      await otorgarDiaCumpleanos(v.EMPLEADO_KEY, v.FECHA_INICIO); // ya hace su propio statusMsg + re-render
+      return;
+    }
 
     const diasBloqueados = await justificarRangoISO(v.EMPLEADO_KEY, v.FECHA_INICIO, v.FECHA_FIN, v.TIPO, "solicitud_ausencia", { SOLICITUD_KEY: key });
     await generarDocumentoAccionPersonalDeSolicitud(key);
@@ -19234,6 +19266,14 @@ function actualizarFilaSolicitud(i){
   const tipo = (document.getElementById(`solicitud-ausencia-tipo-${i}`)||{}).value;
   const comprobanteWrap = document.getElementById(`solicitud-ausencia-comprobante-wrap-${i}`);
   if (comprobanteWrap) comprobanteWrap.style.display = tipo === "ausencia_medica" ? "flex" : "none";
+  // Cumpleaños (y cualquier otro tipo soloDia) es de un solo día — oculta
+  // "Hasta" y "Desde" pasa a llamarse "Fecha", mismo criterio que ya usaba
+  // el formulario de Asignación directa de gerencia/master.
+  const esSoloDia = !!(TIPOS_SOLICITUD_AUSENCIA[tipo] && TIPOS_SOLICITUD_AUSENCIA[tipo].soloDia);
+  const hastaWrap = document.getElementById(`solicitud-ausencia-hasta-wrap-${i}`);
+  const labelDesde = document.getElementById(`solicitud-ausencia-desde-label-${i}`);
+  if (hastaWrap) hastaWrap.style.display = esSoloDia ? "none" : "flex";
+  if (labelDesde) labelDesde.textContent = esSoloDia ? "Fecha" : "Desde";
 }
 
 function renderFormularioSolicitud(empleadosDisponibles){
@@ -19245,10 +19285,10 @@ function renderFormularioSolicitud(empleadosDisponibles){
           ${tiposSolicitudAusenciaDisponibles().map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
         </select>
       </label>
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Desde
+      <label id="solicitud-ausencia-desde-label-wrap-${i}" style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;"><span id="solicitud-ausencia-desde-label-${i}">Desde</span>
         <input type="date" id="solicitud-ausencia-desde-${i}">
       </label>
-      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
+      <label id="solicitud-ausencia-hasta-wrap-${i}" style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
         <input type="date" id="solicitud-ausencia-hasta-${i}">
       </label>
       <label id="solicitud-ausencia-comprobante-wrap-${i}" style="font-size:11.5px; color:var(--ink-soft); display:none; flex-direction:column; gap:3px;">Comprobante (PDF/imagen)
@@ -19279,8 +19319,12 @@ async function confirmarCrearSolicitudAusencia(){
   const filas = [];
   for (let i = 0; i < 3; i++){
     const tipo = (document.getElementById(`solicitud-ausencia-tipo-${i}`)||{}).value;
+    const esSoloDia = !!(TIPOS_SOLICITUD_AUSENCIA[tipo] && TIPOS_SOLICITUD_AUSENCIA[tipo].soloDia);
     const fechaInicio = (document.getElementById(`solicitud-ausencia-desde-${i}`)||{}).value;
-    const fechaFin = (document.getElementById(`solicitud-ausencia-hasta-${i}`)||{}).value;
+    // Tipos soloDia (ej. Cumpleaños) no tienen "Hasta" en pantalla (queda
+    // oculto, ver actualizarFilaSolicitud) — la fecha única hace de inicio y
+    // fin para el resto de la validación de abajo.
+    const fechaFin = esSoloDia ? fechaInicio : (document.getElementById(`solicitud-ausencia-hasta-${i}`)||{}).value;
     if (!fechaInicio && !fechaFin) continue; // línea sin usar — se ignora, no hace falta llenar las 3
     const inputComprobante = document.getElementById(`solicitud-ausencia-comprobante-${i}`);
     const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
@@ -19330,11 +19374,11 @@ function actualizarFilaAsignacionDirecta(i){
   const tipo = (document.getElementById(`asignacion-directa-tipo-${i}`)||{}).value;
   const comprobanteWrap = document.getElementById(`asignacion-directa-comprobante-wrap-${i}`);
   if (comprobanteWrap) comprobanteWrap.style.display = tipo === "ausencia_medica" ? "flex" : "none";
-  const esCumpleanos = tipo === "cumpleanos";
+  const esSoloDia = !!(TIPOS_SOLICITUD_AUSENCIA[tipo] && TIPOS_SOLICITUD_AUSENCIA[tipo].soloDia);
   const hastaWrap = document.getElementById(`asignacion-directa-hasta-wrap-${i}`);
   const labelDesde = document.getElementById(`asignacion-directa-desde-label-${i}`);
-  if (hastaWrap) hastaWrap.style.display = esCumpleanos ? "none" : "flex";
-  if (labelDesde) labelDesde.textContent = esCumpleanos ? "Fecha" : "Desde";
+  if (hastaWrap) hastaWrap.style.display = esSoloDia ? "none" : "flex";
+  if (labelDesde) labelDesde.textContent = esSoloDia ? "Fecha" : "Desde";
 }
 
 function renderFormularioAsignacionDirecta(empleadosDisponibles){
@@ -19344,7 +19388,6 @@ function renderFormularioAsignacionDirecta(empleadosDisponibles){
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Tipo
         <select id="asignacion-directa-tipo-${i}" onchange="actualizarFilaAsignacionDirecta(${i});">
           ${tiposSolicitudAusenciaDisponibles().map(t => `<option value="${t}">${TIPOS_SOLICITUD_AUSENCIA[t].emoji} ${TIPOS_SOLICITUD_AUSENCIA[t].label}</option>`).join("")}
-          ${currentPropiedadId === "corcovado" ? `<option value="cumpleanos">🎂 Cumpleaños</option>` : ""}
         </select>
       </label>
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;"><span id="asignacion-directa-desde-label-${i}">Desde</span>
@@ -19456,12 +19499,12 @@ async function confirmarAsignacionDirecta(){
   const filas = [];
   for (let i = 0; i < 3; i++){
     const tipo = (document.getElementById(`asignacion-directa-tipo-${i}`)||{}).value;
-    const esCumpleanos = tipo === "cumpleanos";
+    const esSoloDia = !!(TIPOS_SOLICITUD_AUSENCIA[tipo] && TIPOS_SOLICITUD_AUSENCIA[tipo].soloDia);
     const fechaInicio = (document.getElementById(`asignacion-directa-desde-${i}`)||{}).value;
-    // Cumpleaños es de un solo día — no tiene "Hasta" en pantalla (queda
+    // Tipos soloDia (ej. Cumpleaños) no tienen "Hasta" en pantalla (queda
     // oculto, ver actualizarFilaAsignacionDirecta), así que la fecha única
     // hace de inicio y fin para el resto de la validación de abajo.
-    const fechaFin = esCumpleanos ? fechaInicio : (document.getElementById(`asignacion-directa-hasta-${i}`)||{}).value;
+    const fechaFin = esSoloDia ? fechaInicio : (document.getElementById(`asignacion-directa-hasta-${i}`)||{}).value;
     if (!fechaInicio && !fechaFin) continue; // línea sin usar — se ignora, no hace falta llenar las 3
     const inputComprobante = document.getElementById(`asignacion-directa-comprobante-${i}`);
     const archivo = inputComprobante && inputComprobante.files && inputComprobante.files[0];
@@ -21917,13 +21960,13 @@ function renderSelectorPerfilEmpleado(){
 // ==========================================================================
 
 // Etiqueta legible para un TIPO_DIA de horas_extra: (vacaciones, día libre,
-// permiso sin goce, ausencia médica ya están en TIPOS_SOLICITUD_AUSENCIA;
-// incapacidad y cumpleaños no pasan por ese catálogo, así que se nombran
-// aparte).
+// permiso sin goce, ausencia médica, cumpleaños ya están en
+// TIPOS_SOLICITUD_AUSENCIA; incapacidad no pasa por ese catálogo — no es
+// algo que se "pida" ni se "otorgue", tiene su propio módulo — así que se
+// nombra aparte).
 function etiquetaTipoDia(tipo){
   if (TIPOS_SOLICITUD_AUSENCIA[tipo]) return `${TIPOS_SOLICITUD_AUSENCIA[tipo].emoji} ${TIPOS_SOLICITUD_AUSENCIA[tipo].label}`;
   if (tipo === "incapacidad") return "🤒 Incapacidad";
-  if (tipo === "cumpleanos") return "🎂 Cumpleaños";
   return tipo;
 }
 
