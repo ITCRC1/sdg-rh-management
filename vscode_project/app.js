@@ -612,6 +612,7 @@ const CAMPOS_EXPORTAR_EMPLEADOS = [
   ]},
   { grupo: "Contacto de emergencia", campos: [
     ["CONTACTO_EMERGENCIA_NOMBRE", "Nombre"],
+    ["CONTACTO_EMERGENCIA_TIPO_ID", "Tipo de identificación"],
     ["CONTACTO_EMERGENCIA_ID", "Cédula"],
     ["CONTACTO_EMERGENCIA_TEL", "Teléfono"],
     ["CONTACTO_EMERGENCIA_PARENTESCO", "Parentesco"],
@@ -815,7 +816,8 @@ const CATALOGS = {
       ["FECHA_NACIMIENTO_EMP","date","14. Fecha de nacimiento",""],
       ["grp", "Contacto de emergencia"],
       ["CONTACTO_EMERGENCIA_NOMBRE","text","15. Nombre del contacto de emergencia","","mayus"],
-      ["CONTACTO_EMERGENCIA_ID","text_cedula_emp","Identificación del contacto de emergencia","Formato: 1-1112-1111"],
+      ["CONTACTO_EMERGENCIA_TIPO_ID","select_tipo_identificacion_emp","Tipo de identificación del contacto de emergencia",""],
+      ["CONTACTO_EMERGENCIA_ID","text_cedula_emp","Identificación del contacto de emergencia","Formato: 1-1112-1111","","CONTACTO_EMERGENCIA_TIPO_ID"],
       ["CONTACTO_EMERGENCIA_TEL","text","Teléfono del contacto de emergencia",""],
       ["CONTACTO_EMERGENCIA_PARENTESCO","text","Parentesco del contacto de emergencia","","libre"],
       ["grp", "Estado"],
@@ -2349,7 +2351,10 @@ function catalogFieldHtml(meta){
     // nacional lleva guiones (1-1112-1111, 9 dígitos); DIMEX/cédula de
     // residencia son solo números sin guiones (11-12 dígitos); pasaporte no
     // tiene un formato fijo (varía por país), así que no se valida.
-    const tipoId = catalogEditing.values.TIPO_IDENTIFICACION_EMP || "";
+    // meta[5] permite reusar este mismo control con el selector de tipo de
+    // OTRA persona (ej. CONTACTO_EMERGENCIA_TIPO_ID para el contacto de
+    // emergencia) en vez del tipo de identidad del propio empleado.
+    const tipoId = catalogEditing.values[meta[5] || "TIPO_IDENTIFICACION_EMP"] || "";
     if (tipoId === "DIMEX" || tipoId === "Cédula de residencia"){
       const dimexOk = /^\d{11,12}$/.test(val);
       control = `<input type="text" value="${escapeHtml(val)}" placeholder="Solo números, sin guiones (Ej. 155832591614)" oninput="
