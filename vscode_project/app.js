@@ -3403,8 +3403,12 @@ async function guardarFilasEmpleadosNuevos(rows){
     }catch(e){ /* no existe todavía bajo esa llave — sigue */ }
     const nombrePartido = dividirNombreCompleto(nombre);
     const value = {
-      NOMBRE_EMP: nombrePartido.nombre,
-      APELLIDOS_EMP: nombrePartido.apellidos,
+      // Nombres propios en mayúscula, igual que el formulario manual
+      // (text_nombre_emp / formato "mayus" — ver formatearNombrePropio):
+      // la importación masiva no debe dejar un estándar distinto al de
+      // captura manual para el mismo dato.
+      NOMBRE_EMP: formatearNombrePropio(nombrePartido.nombre),
+      APELLIDOS_EMP: formatearNombrePropio(nombrePartido.apellidos),
       NUMERO_EMPLEADO: String(row["NUMERO_EMPLEADO"] || row["NUMERO DE EMPLEADO"] || row["Número de empleado"] || "").trim(),
       DEPARTAMENTO_EMP: String(row["DEPARTAMENTO"] || "").trim(),
       IDENTIFICACION_EMP: String(row["IDENTIFICACION"] || "").trim(),
@@ -3414,7 +3418,7 @@ async function guardarFilasEmpleadosNuevos(rows){
       CELULAR_EMP: String(row["CELULAR PERSONAL"] || "").trim(),
       DIRECCION_EMP: String(row["DIRECCION"] || "").trim(),
       BANCO_EMP: String(row["BANCO DE ORIGEN"] || "").trim(),
-      CONTACTO_EMERGENCIA_NOMBRE: String(row["CONTACTO DE EMERGENCIA"] || "").trim(),
+      CONTACTO_EMERGENCIA_NOMBRE: formatearNombrePropio(row["CONTACTO DE EMERGENCIA"]),
       CONTACTO_EMERGENCIA_ID: String(row["ID CONTACTO EMERGENCIA"] || "").trim(),
       CONTACTO_EMERGENCIA_TEL: String(row["TELEFONO DE EMERGENCIA"] || "").trim(),
       CONTACTO_EMERGENCIA_PARENTESCO: String(row["PARENTESCO"] || "").trim(),
@@ -3472,7 +3476,7 @@ async function guardarFilasContactoEmpleados(rows){
     const direccion = String(row["DIRECCION"] || "").trim(); if (direccion) cambios.DIRECCION_EMP = direccion;
     const banco = String(row["BANCO DE ORIGEN"] || "").trim(); if (banco) cambios.BANCO_EMP = banco;
     const cuenta = extraerCuentaBancariaDeFila(row); if (cuenta) Object.assign(cambios, cuenta);
-    const contEmerg = String(row["CONTACTO DE EMERGENCIA"] || "").trim(); if (contEmerg) cambios.CONTACTO_EMERGENCIA_NOMBRE = contEmerg;
+    const contEmerg = String(row["CONTACTO DE EMERGENCIA"] || "").trim(); if (contEmerg) cambios.CONTACTO_EMERGENCIA_NOMBRE = formatearNombrePropio(contEmerg);
     const contEmergId = String(row["ID CONTACTO EMERGENCIA"] || "").trim(); if (contEmergId) cambios.CONTACTO_EMERGENCIA_ID = contEmergId;
     const contEmergTel = String(row["TELEFONO DE EMERGENCIA"] || "").trim(); if (contEmergTel) cambios.CONTACTO_EMERGENCIA_TEL = contEmergTel;
     const parentesco = String(row["PARENTESCO"] || "").trim(); if (parentesco) cambios.CONTACTO_EMERGENCIA_PARENTESCO = parentesco;
@@ -5281,8 +5285,8 @@ async function aplicarColillaIndividual(idx){
     if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
     if (r.nombreCorregido){
       const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
-      r.match.NOMBRE_EMP = partido.nombre;
-      r.match.APELLIDOS_EMP = partido.apellidos;
+      r.match.NOMBRE_EMP = formatearNombrePropio(partido.nombre);
+      r.match.APELLIDOS_EMP = formatearNombrePropio(partido.apellidos);
     }
     const notaPuesto = aplicarPuestoDesdeColilla(r);
     await window.storage.set(fullKey, JSON.stringify(r.match), false);
@@ -5295,8 +5299,8 @@ async function aplicarColillaIndividual(idx){
     if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
     if (r.nombreCorregido){
       const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
-      r.match.NOMBRE_EMP = partido.nombre;
-      r.match.APELLIDOS_EMP = partido.apellidos;
+      r.match.NOMBRE_EMP = formatearNombrePropio(partido.nombre);
+      r.match.APELLIDOS_EMP = formatearNombrePropio(partido.apellidos);
     }
     const notaPuesto = aplicarPuestoDesdeColilla(r);
     await window.storage.set(fullKey, JSON.stringify(r.match), false);
@@ -5332,8 +5336,8 @@ async function aplicarColillasUSD(){
     if (!r.match.NUMERO_EMPLEADO) r.match.NUMERO_EMPLEADO = r.numero;
     if (r.nombreCorregido){
       const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
-      r.match.NOMBRE_EMP = partido.nombre;
-      r.match.APELLIDOS_EMP = partido.apellidos;
+      r.match.NOMBRE_EMP = formatearNombrePropio(partido.nombre);
+      r.match.APELLIDOS_EMP = formatearNombrePropio(partido.apellidos);
     }
     const notaPuesto = aplicarPuestoDesdeColilla(r);
     await window.storage.set(fullKey, JSON.stringify(r.match), false);
@@ -5378,8 +5382,8 @@ async function aplicarColillas(){
     }
     if (r.nombreCorregido){
       const partido = dividirNombreCompleto(r.nombreCorregido.nuevo);
-      r.match.NOMBRE_EMP = partido.nombre;
-      r.match.APELLIDOS_EMP = partido.apellidos;
+      r.match.NOMBRE_EMP = formatearNombrePropio(partido.nombre);
+      r.match.APELLIDOS_EMP = formatearNombrePropio(partido.apellidos);
     }
     const notaPuesto = aplicarPuestoDesdeColilla(r);
     await window.storage.set(fullKey, JSON.stringify(r.match), false);

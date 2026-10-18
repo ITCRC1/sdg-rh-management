@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js",
-    "migrar": "node -e \"require('./src/db').migrar().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
+    "migrar": "node -e \"require('./src/db').migrar().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
+    "normalizar-nombres-empleados": "node scripts/normalizar-nombres-empleados-mayuscula.js"
   },
   "engines": {
     "node": ">=18"
