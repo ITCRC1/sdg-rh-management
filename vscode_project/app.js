@@ -623,9 +623,12 @@ const CAMPOS_EXPORTAR_EMPLEADOS = [
   ]},
 ];
 
-// Casillas marcadas por defecto — lo mínimo para identificar a alguien en
-// la hoja, el resto lo agrega quien lo necesite.
-const CAMPOS_EXPORTAR_EMPLEADOS_POR_DEFECTO = new Set(["APELLIDOS_EMP", "NOMBRE_EMP", "IDENTIFICACION_EMP", "NUMERO_EMPLEADO"]);
+// Casillas marcadas por defecto: TODAS — el Excel debe traer toda la
+// información de una vez sin que haya que acordarse de presionar
+// "Seleccionar todo"; quien quiera menos columnas las destilda a mano.
+const CAMPOS_EXPORTAR_EMPLEADOS_POR_DEFECTO = new Set(
+  CAMPOS_EXPORTAR_EMPLEADOS.flatMap(g => g.campos.map(([campo]) => campo))
+);
 
 function abrirModalExtraerEmpleadosExcel(){
   const modal = document.getElementById("modal-incompletos");
