@@ -19128,7 +19128,7 @@ async function renderDiasLibresVacacionesPanel(){
 
     html += renderListaSolicitudesOtorgadas(solicitudesVisibles, cumpleanosOtorgadosVisibles, empleadosPorKey, puedeAprobar);
 
-    html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario);
+    html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario, puestosPorKey);
 
     html += renderSeccionDotacionPorDia(empleadosVisibles, solicitudesVisibles, registrosHorasExtra, departamentoDeEmpleado, dotacionDesde, dotacionHasta);
 
@@ -20113,7 +20113,7 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
   return null;
 }
 
-function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasExtra, mesStr){
+function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasExtra, mesStr, puestosPorKey){
   const [anio, mes] = mesStr.split("-").map(Number);
   const primerDia = new Date(anio, mes - 1, 1);
   const ultimoDia = new Date(anio, mes, 0);
@@ -20126,7 +20126,16 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
   const mesAnteriorStr = `${mesAnterior.getFullYear()}-${String(mesAnterior.getMonth()+1).padStart(2,"0")}`;
   const mesSiguienteStr = `${mesSiguiente.getFullYear()}-${String(mesSiguiente.getMonth()+1).padStart(2,"0")}`;
 
-  const empleadosOrdenados = empleados.slice().sort(compararPorApellido);
+  // Capitanes primero (pedido explícito del usuario), después el resto —
+  // dentro de cada grupo sigue ordenado alfabéticamente por apellido, igual
+  // que antes. esPuestoCapitan ya existe para Bitácoras (reconoce el puesto
+  // por nombre, sin importar mayúsculas/acentos — ver más abajo).
+  const empleadosOrdenados = empleados.slice().sort((a, b) => {
+    const capA = puestosPorKey && esPuestoCapitan(puestosPorKey[a.PUESTO_KEY]) ? 0 : 1;
+    const capB = puestosPorKey && esPuestoCapitan(puestosPorKey[b.PUESTO_KEY]) ? 0 : 1;
+    if (capA !== capB) return capA - capB;
+    return compararPorApellido(a, b);
+  });
 
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
