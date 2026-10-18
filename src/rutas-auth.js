@@ -363,6 +363,22 @@ router.post("/usuarios", A.requiereSesion, A.requiereAdmin, async (req, res, nex
       if (!p.rows[0]) return res.status(400).json({ error: "La propiedad no existe." });
     }
 
+    // Una misma cédula no debería tener dos cuentas activas a la vez: evita
+    // altas duplicadas por error (ej. crear de nuevo a alguien que ya tiene
+    // cuenta) que después chocan en horas extra, aprobaciones o expedientes.
+    const cedula = String(b.cedula || "").trim();
+    if (cedula) {
+      const dup = await query(
+        "SELECT email, rol, propiedad_id FROM usuarios WHERE cedula = $1 AND activo = true",
+        [cedula]
+      );
+      if (dup.rows[0]) {
+        return res.status(409).json({
+          error: `Ya existe una cuenta activa con esa cédula (${dup.rows[0].email}, rol ${dup.rows[0].rol}). Edita esa cuenta en vez de crear una nueva.`,
+        });
+      }
+    }
+
     const { rows } = await query(
       `INSERT INTO usuarios (email, nombre, cedula, puesto, propiedad_id, rol,
                              password_hash, creado_por, debe_cambiar_password, empleado_clave)
@@ -412,6 +428,26 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
         return res.status(400).json({
           error: "Las cuentas de jefatura necesitan el departamento que lideran (el mismo departamento que el puesto de sus subalternos en el catálogo de Puestos), para saber a quién le aprueban horas.",
         });
+      }
+    }
+
+    // Misma protección que al crear: si esta edición deja a la cuenta con
+    // una cédula puesta (directo, o porque se está reactivando y ya la
+    // tenía) y esa cédula ya la tiene otra cuenta activa, no lo permitas.
+    if (b.cedula !== undefined || b.activo === true) {
+      const cedulaFinal = b.cedula !== undefined
+        ? String(b.cedula || "").trim()
+        : (await query("SELECT cedula FROM usuarios WHERE id = $1", [id])).rows[0]?.cedula || "";
+      if (cedulaFinal) {
+        const dup = await query(
+          "SELECT email, rol FROM usuarios WHERE cedula = $1 AND activo = true AND id <> $2",
+          [cedulaFinal, id]
+        );
+        if (dup.rows[0]) {
+          return res.status(409).json({
+            error: `Ya existe una cuenta activa con esa cédula (${dup.rows[0].email}, rol ${dup.rows[0].rol}).`,
+          });
+        }
       }
     }
 
