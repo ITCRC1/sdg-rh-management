@@ -14519,6 +14519,7 @@ function descargarConstanciaSalarialPDF(){
 // comprobar el período que estuvo, ej. un banco o una institución se lo pide
 // después de la salida) — por eso no se bloquea por ARCHIVADO.
 const PUESTO_FIRMANTE_CONSTANCIA_LABORAL = "Encargado de Recursos Humanos";
+const TEXTO_TIPO_CONTRATO_LABORAL = { determinado: "a plazo fijo (tiempo determinado)", indeterminado: "a tiempo indefinido" };
 let constanciaLaboralActual = null;
 
 async function generarConstanciaLaboralDeEmpleado(key){
@@ -14543,10 +14544,17 @@ async function construirConstanciaLaboral(key, emp, empresaInfo){
   const salida = archivado ? parsearFechaDDMMYYYY(emp.FECHA_ARCHIVADO) : null;
   const fechaSalidaTexto = salida ? `${salida.getDate()} de ${MESES[salida.getMonth()]} de ${salida.getFullYear()}` : "";
 
-  // La jornada y el tipo de contrato viven en el contrato vinculado (no en la
-  // ficha del empleado) — igual que hace generarDespidoDeEmpleado con los
-  // datos patronales, se toma del primer contrato encontrado por cédula.
-  let jornadaTexto = "", tipoContratoTexto = "";
+  // La jornada es un dato del PUESTO (MODALIDAD_JORNADA en cat_puesto, ver
+  // modalidadJornadaDeEmpleado — la misma fuente que ya usa Horas Extra para
+  // calcular la jornada diaria), no del contrato — así que no debe depender
+  // de que exista uno vinculado. El tipo de contrato (indefinido/plazo fijo)
+  // sí es exclusivo del contrato firmado; si no hay uno vinculado, esa parte
+  // de la frase simplemente se omite en vez de marcarse "pendiente".
+  let jornadaTexto = "", tipoContrato = "", tipoContratoTexto = "";
+  try{
+    const modalidad = await modalidadJornadaDeEmpleado(emp, {});
+    if (modalidad && MODALIDADES_JORNADA[modalidad]) jornadaTexto = MODALIDADES_JORNADA[modalidad].label;
+  }catch(e){ /* sin puesto asignado — queda pendiente */ }
   try{
     await buildContratosPorCedulaIndex();
     const vinculados = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
@@ -14554,11 +14562,12 @@ async function construirConstanciaLaboral(key, emp, empresaInfo){
       const cRes = await window.storage.get(vinculados[0].key, false);
       if (cRes && cRes.value){
         const c = JSON.parse(cRes.value);
-        if (c.MODALIDAD_JORNADA && MODALIDADES_JORNADA[c.MODALIDAD_JORNADA]) jornadaTexto = MODALIDADES_JORNADA[c.MODALIDAD_JORNADA].label;
-        tipoContratoTexto = c.TIPO_CONTRATO === "determinado" ? "a plazo fijo (tiempo determinado)" : "a tiempo indefinido";
+        if (!jornadaTexto && c.MODALIDAD_JORNADA && MODALIDADES_JORNADA[c.MODALIDAD_JORNADA]) jornadaTexto = MODALIDADES_JORNADA[c.MODALIDAD_JORNADA].label;
+        tipoContrato = c.TIPO_CONTRATO === "determinado" ? "determinado" : "indeterminado";
       }
     }
-  }catch(e){ /* sin contrato vinculado — queda marcado pendiente en el PDF */ }
+  }catch(e){ /* sin contrato vinculado — tipoContrato queda "" hasta que se elija a mano */ }
+  if (tipoContrato) tipoContratoTexto = TEXTO_TIPO_CONTRATO_LABORAL[tipoContrato];
 
   const sesion = window.sdgApi && window.sdgApi.sesionActual();
 
@@ -14569,7 +14578,7 @@ async function construirConstanciaLaboral(key, emp, empresaInfo){
     puesto: emp.DEPARTAMENTO_EMP || "",
     fechaIngresoTexto,
     archivado, fechaSalidaTexto,
-    jornadaTexto, tipoContratoTexto,
+    jornadaTexto, tipoContrato, tipoContratoTexto,
     empresa: empresaInfo.EMPRESA,
     direccionEmpresa: empresaInfo.DIRECCION_EMPRESA,
     cedulaJuridica: empresaInfo.CEDULA_JURIDICA_EMPRESA,
@@ -14581,6 +14590,16 @@ async function construirConstanciaLaboral(key, emp, empresaInfo){
   mostrarSoloConstanciaLaboral();
 }
 
+// Toggle manual Definido/Indefinido — por defecto sale del contrato
+// vinculado (si hay uno), pero RH puede corregirlo a mano acá mismo sin
+// tener que ir a buscar/crear un contrato solo para esto.
+function setTipoContratoConstanciaLaboral(tipo){
+  if (!constanciaLaboralActual) return;
+  constanciaLaboralActual.tipoContrato = tipo;
+  constanciaLaboralActual.tipoContratoTexto = TEXTO_TIPO_CONTRATO_LABORAL[tipo] || "";
+  renderConstanciaLaboral();
+}
+
 function renderConstanciaLaboral(){
   const c = constanciaLaboralActual;
   if (!c) return;
@@ -14590,6 +14609,10 @@ function renderConstanciaLaboral(){
         ? `desde el ${escapeHtml(c.fechaIngresoTexto)} hasta el ${escapeHtml(c.fechaSalidaTexto)}`
         : `desde el ${escapeHtml(c.fechaIngresoTexto)}`)
     : `<span class="missing">[falta la fecha de ingreso en la ficha]</span>`;
+  const jornadaHtml = c.jornadaTexto
+    ? `bajo la modalidad de <b>${escapeHtml(c.jornadaTexto)}</b>`
+    : `<span class="missing">[falta asignar la jornada al puesto, en el catálogo de Puestos]</span>`;
+  const tipoContratoHtml = c.tipoContratoTexto ? `, mediante un contrato de trabajo <b>${escapeHtml(c.tipoContratoTexto)}</b>` : "";
   let html = logoHeaderHtml();
   html += `
     <h2 class="doc-title" style="margin-bottom:18px;">CONSTANCIA LABORAL</h2>
@@ -14602,8 +14625,7 @@ function renderConstanciaLaboral(){
       con número de identificación <b>${escapeHtml(c.identificacion)}</b>, ${verbo} para nuestra empresa
       ${periodoTxt}, desempeñando el puesto de
       <b>${c.puesto ? escapeHtml(c.puesto) : '<span class="missing">[falta el puesto en la ficha]</span>'}</b>,
-      bajo la modalidad de ${c.jornadaTexto ? `<b>${escapeHtml(c.jornadaTexto)}</b>` : '<span class="missing">[sin contrato vinculado — jornada pendiente]</span>'},
-      mediante un contrato de trabajo ${c.tipoContratoTexto ? `<b>${escapeHtml(c.tipoContratoTexto)}</b>` : '<span class="missing">[sin contrato vinculado — tipo pendiente]</span>'}.
+      ${jornadaHtml}${tipoContratoHtml}.
     </p>
     <p style="margin:0 0 18px;">Se extiende la presente a solicitud de la persona interesada, para los fines que estime convenientes.</p>
     <div style="margin-top:36px;">
@@ -14620,6 +14642,15 @@ function renderConstanciaLaboral(){
     </div>` : `<div style="margin-top:24px; font-size:12px;" class="missing">[No hay ninguna empresa registrada en esta propiedad (pestaña Empresas) — agrega los datos a mano en el PDF si hace falta]</div>`}
   `;
   document.getElementById("constancia-laboral-root").innerHTML = html;
+  const toggleCont = document.getElementById("constancia-laboral-tipo-toggle");
+  if (toggleCont){
+    toggleCont.innerHTML = `
+      <span style="font-size:11px; color:var(--ink-soft);">Tipo de contrato:</span>
+      <div class="sino-toggle" style="display:inline-flex;">
+        <button type="button" class="${c.tipoContrato==='indeterminado'?'active':''}" onclick="setTipoContratoConstanciaLaboral('indeterminado')">Indefinido</button>
+        <button type="button" class="${c.tipoContrato==='determinado'?'active':''}" onclick="setTipoContratoConstanciaLaboral('determinado')">Definido</button>
+      </div>`;
+  }
 }
 
 function mostrarSoloConstanciaLaboral(){
