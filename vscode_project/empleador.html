@@ -550,6 +550,7 @@ async function crearTrabajador(){
 }
 
 let usuariosCache = [];
+let miUsuarioId = null; // cuenta con la que se entró — para limitar "✏️ Nombre" a la propia cuenta, no a cualquiera
 
 async function cargarUsuarios(){
   const cont = document.getElementById("lista-usuarios");
@@ -622,7 +623,7 @@ function renderListaUsuarios(usuarios){
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0;">
           ${u.activo ? `<button class="btn btn-mini" title="Ver el sistema como esta cuenta, para probar qué le llega de verdad" onclick="verComoUsuario('${esc(u.id)}','${esc(u.nombre)}')">👁️ Ver como</button>` : ""}
-          <button class="btn btn-mini" onclick="editarNombreUsuario('${esc(u.id)}','${esc(u.nombre)}')">✏️ Nombre</button>
+          ${u.id === miUsuarioId ? `<button class="btn btn-mini" onclick="editarNombreUsuario('${esc(u.id)}','${esc(u.nombre)}')">✏️ Mi nombre</button>` : ""}
           <button class="btn btn-mini" onclick="resetearPassword('${esc(u.id)}','${esc(u.email)}')">Resetear</button>
           <button class="btn ${u.activo ? "btn-danger" : "btn-mini"}"
                   onclick="cambiarActivo('${esc(u.id)}', ${u.activo ? "false" : "true"})">
@@ -775,6 +776,7 @@ async function arrancar(){
   if (!info){ mostrarPantalla("login"); return; }
 
   const u = info.usuario;
+  miUsuarioId = u.id;
   if (u.debeCambiarPassword){ mostrarPantalla("password"); return; }
 
   if (u.rol !== "master"){
