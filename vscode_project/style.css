@@ -641,6 +641,13 @@ body.solo-lectura select{
 .app-sidebar .nav-dd-menu{
   position:static; display:none; min-width:0; max-width:none; margin:2px 0 4px;
   background:rgba(0,0,0,.18); border:none; border-radius:8px; box-shadow:none;
+  /* La regla base .nav-dd-menu (pensada para cuando el menú flotaba, antes
+     de que viviera dentro del sidebar) trae overflow:hidden y height
+     implícita — acá nunca se reiniciaban, así que en algunos navegadores el
+     sidebar podía recortar el desplegable a solo lo que "entraba" en ese
+     momento en vez de mostrar la lista completa (reportado: "Documentos"
+     solo mostraba un ítem suelto en vez de todo el menú). */
+  overflow:visible; height:auto; max-height:none;
 }
 .app-sidebar .nav-dd-menu.open{ display:block; animation:none; }
 .app-sidebar .nav-dd-menu button{

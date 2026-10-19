@@ -14330,7 +14330,7 @@ function renderDespido(){
     <div class="firma-espacio-block" style="margin-top:44px;">
       <div class="firma-espacio-col">
         <div class="firma-espacio-linea"></div>
-        <div class="firma-espacio-titulo">${tr("Firma Recibido:","Signature received:")}</div>
+        <div class="firma-espacio-titulo">${tr("Firma del patrono:","Employer signature:")}</div>
         <div class="firma-espacio-detalle" style="font-weight:700;">${fBox.nombre}</div>
         <div class="firma-espacio-detalle">${fBox.cedula}</div>
         <div class="firma-espacio-detalle">${lang==="en" ? fBox.puestoEn : fBox.puesto}</div>
@@ -14338,7 +14338,7 @@ function renderDespido(){
       </div>
       <div class="firma-espacio-col">
         <div class="firma-espacio-linea"></div>
-        <div class="firma-espacio-titulo">&nbsp;</div>
+        <div class="firma-espacio-titulo">${tr("Firma Recibido:","Signature received:")}</div>
         <div class="firma-espacio-detalle" style="font-weight:700;">${escapeHtml(data.NOMBRE_TRABAJADOR || "")}</div>
         <div class="firma-espacio-detalle">${escapeHtml(data.IDENTIFICACION || "")}</div>
         <div class="firma-espacio-detalle">${tr("Trabajador","Employee")}${data.PUESTO ? " — " + escapeHtml((lang==="en" ? data.PUESTO_EN : data.PUESTO)) : ""}</div>
