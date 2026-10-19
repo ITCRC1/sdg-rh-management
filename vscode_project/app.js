@@ -14179,7 +14179,7 @@ async function mostrarModalElegirEmpresaGenerico(onElegir, titulo){
       return { key: k, EMPRESA: v.EMPRESA || k, CEDULA_JURIDICA_EMPRESA: v.CEDULA_JURIDICA_EMPRESA || "", DIRECCION_EMPRESA: v.DIRECCION_EMPRESA || "", TIPO_CEDULA_EMPRESA: v.TIPO_CEDULA_EMPRESA || "" };
     }));
     if (!empresas.length){
-      body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${tr("Todavía no hay ninguna empresa registrada en esta propiedad — agrégala primero en Contratos → Empresas.","No company has been registered for this property yet — add one first under Contracts → Companies.")}</div>`;
+      mostrarFormularioNuevaEmpresaPicker(tr("Todavía no hay ninguna empresa registrada en esta propiedad — créala aquí mismo, sin salir de este formulario.","No company has been registered for this property yet — create it right here, without leaving this form."));
       return;
     }
     body.innerHTML = `
@@ -14190,7 +14190,8 @@ async function mostrarModalElegirEmpresaGenerico(onElegir, titulo){
           ${empresas.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.EMPRESA)}${e.CEDULA_JURIDICA_EMPRESA ? " — " + escapeHtml(e.CEDULA_JURIDICA_EMPRESA) : ""}</option>`).join("")}
         </select>
       </div>
-      <button class="btn primary" style="width:100%; margin-top:8px;" onclick="confirmarEmpresaPickerGenerico(document.getElementById('empresa-picker-select').value)">${tr("Continuar","Continue")}</button>`;
+      <button class="btn primary" style="width:100%; margin-top:8px;" onclick="confirmarEmpresaPickerGenerico(document.getElementById('empresa-picker-select').value)">${tr("Continuar","Continue")}</button>
+      <button class="btn" style="width:100%; margin-top:8px;" onclick="mostrarFormularioNuevaEmpresaPicker()">${tr("➕ Crear nueva empresa","➕ Create new company")}</button>`;
   }catch(e){ body.innerHTML = `<div class="empty-state">${tr("No se pudo cargar el catálogo de empresas:","Could not load the company catalog:")} ${escapeHtml(e.message || "")}</div>`; }
 }
 
@@ -14209,6 +14210,57 @@ async function confirmarEmpresaPickerGenerico(empresaKey){
       TIPO_CEDULA_EMPRESA: e.TIPO_CEDULA_EMPRESA || "",
     });
   }catch(err){ /* se deja como estaba */ }
+}
+
+// Mini-formulario de alta rápida de empresa, embebido en el mismo modal del
+// selector — para que RH nunca tenga que abandonar la carta que está
+// llenando solo para ir a dar de alta la empresa en Contratos → Empresas.
+// Guarda únicamente los campos que una carta de RH necesita (nombre,
+// dirección, cédula); el resto de los campos del catálogo completo (Empresas
+// → Editar) quedan en blanco y se pueden completar después ahí si hace falta.
+function mostrarFormularioNuevaEmpresaPicker(avisoVacio){
+  const body = document.getElementById("modal-incompletos-body");
+  body.innerHTML = `
+    ${avisoVacio ? `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${escapeHtml(avisoVacio)}</div>` : `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${tr("Datos de la nueva empresa:","New company details:")}</div>`}
+    <div class="field">
+      <label>${tr("Nombre de la empresa","Company name")}</label>
+      <input type="text" id="empresa-picker-nueva-nombre" placeholder="${tr("Ej. SDG RH MANAGEMENT S.R.L","E.g. SDG RH MANAGEMENT S.R.L")}">
+    </div>
+    <div class="field">
+      <label>${tr("Dirección","Address")}</label>
+      <input type="text" id="empresa-picker-nueva-direccion" placeholder="${tr("Provincia, Cantón, Distrito, Señas","Province, Canton, District, Address details")}">
+    </div>
+    <div class="field">
+      <label>${tr("Tipo de cédula","ID type")}</label>
+      <input type="text" id="empresa-picker-nueva-tipocedula" placeholder="${tr("jurídica / física","legal entity / individual")}">
+    </div>
+    <div class="field">
+      <label>${tr("Número de cédula","ID number")}</label>
+      <input type="text" id="empresa-picker-nueva-cedula" placeholder="0-000-000000">
+    </div>
+    <button class="btn primary" style="width:100%; margin-top:8px;" onclick="guardarNuevaEmpresaPicker()">${tr("Guardar y usar esta empresa","Save and use this company")}</button>`;
+}
+
+async function guardarNuevaEmpresaPicker(){
+  const onElegir = empresaPickerPendiente;
+  const nombre = (document.getElementById("empresa-picker-nueva-nombre").value || "").trim();
+  if (!nombre){ statusMsg(tr("Escribe el nombre de la empresa antes de guardar.","Enter the company name before saving."), false); return; }
+  const info = {
+    EMPRESA: nombre,
+    DIRECCION_EMPRESA: (document.getElementById("empresa-picker-nueva-direccion").value || "").trim(),
+    TIPO_CEDULA_EMPRESA: (document.getElementById("empresa-picker-nueva-tipocedula").value || "").trim(),
+    CEDULA_JURIDICA_EMPRESA: (document.getElementById("empresa-picker-nueva-cedula").value || "").trim(),
+  };
+  try{
+    const key = CATALOGS.empresas.prefix + slugify(nombre);
+    const existente = await window.storage.get(key, false);
+    if (!(existente && existente.value)){
+      await window.storage.set(key, JSON.stringify(info), false);
+    }
+    empresaPickerPendiente = null;
+    cerrarModalIncompletos();
+    if (onElegir) onElegir(info);
+  }catch(e){ statusMsg(tr("No se pudo guardar la empresa: ","Could not save the company: ") + (e.message||""), false); }
 }
 
 function construirConstanciaSalarial(key, emp, empresaInfo){
