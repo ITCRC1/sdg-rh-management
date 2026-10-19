@@ -1883,6 +1883,21 @@ function renderEmpleadoVinculadoCard(nombre, cedula, extra, extraHtml, destTab){
   </div>`;
 }
 
+// Tarjeta de "empresa seleccionada" para Despido/Amonestación — para no
+// obligar a RH a ir primero a Contratos → Empresas solo para generar una
+// carta; onElegirFn es el nombre de la función (string) que abre el selector.
+function renderEmpresaSeleccionadaCard(nombreEmpresa, onElegirFn){
+  return `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
+    <div class="section-body" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <div>
+        <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-soft);">🏢 ${tr("Empresa","Company")}</div>
+        <div style="font-weight:700; color:var(--navy-deep); font-size:14px;">${nombreEmpresa ? escapeHtml(nombreEmpresa) : tr("Sin seleccionar","Not selected")}</div>
+      </div>
+      <button class="btn" onclick="${onElegirFn}" style="flex-shrink:0;">${nombreEmpresa ? tr("Cambiar","Change") : tr("Seleccionar","Select")}</button>
+    </div>
+  </div>`;
+}
+
 // Texto de búsqueda de cada "gate" (uno por tipo de documento: vacaciones,
 // despido, amonestación, permiso, recomendación) — separado por gateId para
 // que buscar en un formulario no pise lo que se buscó en otro.
@@ -2004,12 +2019,23 @@ function renderDespidoForm(){
     return;
   }
   const intro = renderEmpleadoVinculadoCard(data.NOMBRE_TRABAJADOR, data.IDENTIFICACION, data.PUESTO)
+    + renderEmpresaSeleccionadaCard(data.EMPRESA, "mostrarModalElegirEmpresaDespido()")
     + `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
       <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
         ⚖️ ${tr("Completa el tipo, la causal (si aplica) y los hechos para generar la carta.","Complete the type, cause (if it applies), and the facts to generate the letter.")}
       </div>
     </div>`;
   renderFieldSections("despidoform-panel", title => DESPIDO_SECTION_TITLES.includes(title), intro);
+}
+
+async function mostrarModalElegirEmpresaDespido(){
+  await mostrarModalElegirEmpresaGenerico((info) => {
+    data.EMPRESA = info.EMPRESA;
+    data.CEDULA_JURIDICA_EMPRESA = info.CEDULA_JURIDICA_EMPRESA;
+    data.DIRECCION_EMPRESA = info.DIRECCION_EMPRESA;
+    data.TIPO_CEDULA_EMPRESA = info.TIPO_CEDULA_EMPRESA;
+    renderDespidoForm();
+  }, "🏢 " + tr("Despido — elegir empresa","Dismissal — choose company"));
 }
 
 function renderRecomForm(){
@@ -14132,6 +14158,59 @@ async function confirmarEmpresaConstanciaSalarial(empresaKey){
   construirConstanciaSalarial(ctx.key, ctx.emp, empresaInfo);
 }
 
+// Selector de empresa reutilizable (Despido, Amonestación) — para que RH
+// pueda elegir o corregir la empresa sin tener que ir primero a Contratos →
+// Empresas. Si el empleado ya tiene un contrato vinculado, esos datos vienen
+// precargados igual; esto es solo para completarlos o cambiarlos a mano.
+let empresaPickerPendiente = null;
+
+async function mostrarModalElegirEmpresaGenerico(onElegir, titulo){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = titulo || ("🏢 " + tr("Elegir empresa","Choose company"));
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  empresaPickerPendiente = onElegir;
+  try{
+    const resEmpresas = await window.storage.list(CATALOGS.empresas.prefix, false);
+    const empresaKeys = ((resEmpresas && resEmpresas.keys) || []).slice().sort();
+    const empresas = await Promise.all(empresaKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, EMPRESA: v.EMPRESA || k, CEDULA_JURIDICA_EMPRESA: v.CEDULA_JURIDICA_EMPRESA || "", DIRECCION_EMPRESA: v.DIRECCION_EMPRESA || "", TIPO_CEDULA_EMPRESA: v.TIPO_CEDULA_EMPRESA || "" };
+    }));
+    if (!empresas.length){
+      body.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${tr("Todavía no hay ninguna empresa registrada en esta propiedad — agrégala primero en Contratos → Empresas.","No company has been registered for this property yet — add one first under Contracts → Companies.")}</div>`;
+      return;
+    }
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">${tr("¿A nombre de cuál empresa?","Which company is this for?")}</div>
+      <div class="field">
+        <label>${tr("Empresa","Company")}</label>
+        <select id="empresa-picker-select">
+          ${empresas.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.EMPRESA)}${e.CEDULA_JURIDICA_EMPRESA ? " — " + escapeHtml(e.CEDULA_JURIDICA_EMPRESA) : ""}</option>`).join("")}
+        </select>
+      </div>
+      <button class="btn primary" style="width:100%; margin-top:8px;" onclick="confirmarEmpresaPickerGenerico(document.getElementById('empresa-picker-select').value)">${tr("Continuar","Continue")}</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">${tr("No se pudo cargar el catálogo de empresas:","Could not load the company catalog:")} ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarEmpresaPickerGenerico(empresaKey){
+  const onElegir = empresaPickerPendiente;
+  empresaPickerPendiente = null;
+  cerrarModalIncompletos();
+  if (!onElegir || !empresaKey) return;
+  try{
+    const eRes = await window.storage.get(empresaKey, false);
+    const e = eRes && eRes.value ? JSON.parse(eRes.value) : {};
+    onElegir({
+      EMPRESA: e.EMPRESA || "",
+      CEDULA_JURIDICA_EMPRESA: e.CEDULA_JURIDICA_EMPRESA || "",
+      DIRECCION_EMPRESA: e.DIRECCION_EMPRESA || "",
+      TIPO_CEDULA_EMPRESA: e.TIPO_CEDULA_EMPRESA || "",
+    });
+  }catch(err){ /* se deja como estaba */ }
+}
+
 function construirConstanciaSalarial(key, emp, empresaInfo){
   const esUSD = emp.MONEDA_SALARIO_EMP === "USD";
   const bruto = Number(String((esUSD ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP) || "").replace(/[^0-9.]/g,""));
@@ -21233,6 +21312,15 @@ function toggleReincidenciaAmonestacion(){
   renderAmonestacionForm();
 }
 
+async function mostrarModalElegirEmpresaAmonestacion(){
+  await mostrarModalElegirEmpresaGenerico((info) => {
+    data.EMPRESA_AMONESTACION = info.EMPRESA;
+    data.CEDULA_JURIDICA_EMPRESA_AMONESTACION = info.CEDULA_JURIDICA_EMPRESA;
+    data.DIRECCION_EMPRESA_AMONESTACION = info.DIRECCION_EMPRESA;
+    renderAmonestacionForm();
+  }, "🏢 " + tr("Amonestación — elegir empresa","Warning letter — choose company"));
+}
+
 function renderAmonestacionForm(){
   if (!data.NOMBRE_AMONESTACION || !data.CEDULA_AMONESTACION){
     document.getElementById("amonestacionform-panel").innerHTML = renderElegirEmpleadoGate(
@@ -21267,6 +21355,7 @@ function renderAmonestacionForm(){
   };
 
   let html = renderEmpleadoVinculadoCard(data.NOMBRE_AMONESTACION, data.CEDULA_AMONESTACION, data.PUESTO_AMONESTACION);
+  html += renderEmpresaSeleccionadaCard(data.EMPRESA_AMONESTACION, "mostrarModalElegirEmpresaAmonestacion()");
   html += `<div class="section-card" style="border-color:var(--gold); margin-bottom:12px;">
     <div class="section-body" style="font-size:12px; color:var(--ink-soft);">
       ⚠️ Elige la falta del Reglamento Interno (o "Otro"), confirma el tipo de amonestación y describe los hechos para generar el documento.
