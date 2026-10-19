@@ -16247,7 +16247,7 @@ async function confirmarRegistroIncapacidad(){
     if (!empKey) throw new Error("Elegí un empleado.");
     let comprobanteDataUrl = null, comprobanteNombre = null;
     if (archivo){
-      if (archivo.size > 3.5*1024*1024) throw new Error("El comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+      if (archivo.size > 12*1024*1024) throw new Error("El comprobante pesa más de 12MB — comprímelo o escanea en menor resolución.");
       comprobanteDataUrl = await leerArchivoComoDataUrl(archivo);
       comprobanteNombre = archivo.name;
     }
@@ -19797,7 +19797,7 @@ async function confirmarCrearSolicitudAusencia(){
     try{
       let comprobanteDataUrl = null, comprobanteNombre = null;
       if (f.archivo){
-        if (f.archivo.size > 3.5*1024*1024) throw new Error("el comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+        if (f.archivo.size > 12*1024*1024) throw new Error("el comprobante pesa más de 12MB — comprímelo o escanea en menor resolución.");
         comprobanteDataUrl = await leerArchivoComoDataUrl(f.archivo);
         comprobanteNombre = f.archivo.name;
       }
@@ -19987,7 +19987,7 @@ async function confirmarAsignacionDirecta(){
       }
       let comprobanteDataUrl = null, comprobanteNombre = null;
       if (f.archivo){
-        if (f.archivo.size > 3.5*1024*1024) throw new Error("el comprobante pesa más de 3.5MB — comprímelo o escanea en menor resolución.");
+        if (f.archivo.size > 12*1024*1024) throw new Error("el comprobante pesa más de 12MB — comprímelo o escanea en menor resolución.");
         comprobanteDataUrl = await leerArchivoComoDataUrl(f.archivo);
         comprobanteNombre = f.archivo.name;
       }
@@ -21118,7 +21118,7 @@ async function onGenericPdfSelected(inputEl){
   if (!file || !ctx) return;
   const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
   if (!esPdf){ statusMsg("Solo se aceptan archivos PDF.", false); return; }
-  if (file.size > 3.5 * 1024 * 1024){ statusMsg("El PDF pesa más de 3.5MB — el almacenamiento del navegador es limitado. Comprime el PDF o escanea en menor resolución.", false); return; }
+  if (file.size > 12 * 1024 * 1024){ statusMsg("El PDF pesa más de 12MB — el almacenamiento del navegador es limitado. Comprime el PDF o escanea en menor resolución.", false); return; }
   try{
     const dataUrl = await leerArchivoComoDataUrl(file);
     const fullKey = CATALOGS.empleados.prefix + ctx.key;
@@ -23252,8 +23252,8 @@ async function onHandbookPdfSelected(inputEl){
     handbookPdfPendingKey = null;
     return;
   }
-  if (file.size > 3.5 * 1024 * 1024){
-    statusMsg("El PDF pesa más de 3.5MB — el almacenamiento del navegador es limitado. Escanea en menor resolución o comprime el PDF e inténtalo de nuevo.", false);
+  if (file.size > 12 * 1024 * 1024){
+    statusMsg("El PDF pesa más de 12MB — el almacenamiento del navegador es limitado. Escanea en menor resolución o comprime el PDF e inténtalo de nuevo.", false);
     handbookPdfPendingKey = null;
     return;
   }
@@ -23533,7 +23533,7 @@ function onArchivarPdfSelected(inputEl){
   if (!file) return;
   const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
   if (!esPdf){ statusMsg("Solo se aceptan archivos PDF.", false); return; }
-  if (file.size > 3.5 * 1024 * 1024){ statusMsg("El PDF pesa más de 3.5MB — comprímelo o escanea en menor resolución.", false); return; }
+  if (file.size > 12 * 1024 * 1024){ statusMsg("El PDF pesa más de 12MB — comprímelo o escanea en menor resolución.", false); return; }
   const reader = new FileReader();
   reader.onload = function(){
     archivarPendingPdfDataUrl = reader.result;
