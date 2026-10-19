@@ -20606,10 +20606,11 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
   if (horasDia && horasDia.TIPO_DIA === "cumpleanos") return { texto: "CUMP", color: "FFE0C4F0" };
   if (horasDia && horasDia.TIPO_DIA === "dia_viaje") return { texto: "VIAJE", color: TIPOS_SOLICITUD_AUSENCIA.dia_viaje.colorHex };
 
-  // El día ANTES de que arranque un bloque de "Día libre", "Vacaciones" o
-  // "Permiso sin goce" es cuando el empleado sale (su último día trabajado
-  // antes de salir) — se marca "SALE". El día DESPUÉS de que termina
-  // cualquiera de los tres es cuando vuelve a trabajar — se marca "ENTRA".
+  // El día ANTES de que arranque un bloque de "Día libre", "Vacaciones",
+  // "Permiso sin goce" o "Ausencia médica (cita)" es cuando el empleado sale
+  // (su último día trabajado antes de salir) — se marca "SALE". El día
+  // DESPUÉS de que termina cualquiera de los cuatro es cuando vuelve a
+  // trabajar — se marca "ENTRA".
   // Un "Día de viaje" no tiene su propio "día de entrada" para elegir aparte
   // (a propósito — no se selecciona como otro tipo, ver
   // TIPOS_SOLICITUD_AUSENCIA.dia_viaje): el día siguiente a CUALQUIER día de
@@ -20620,7 +20621,7 @@ function etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, registrosHorasExtra
   // etiqueta en vez de "SALE"/"ENTRA".
   for (const s of solicitudesEmp){
     if (s.ESTADO !== "aprobada") continue;
-    if (s.TIPO === "dia_libre" || s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce"){
+    if (s.TIPO === "dia_libre" || s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce" || s.TIPO === "ausencia_medica"){
       const diaAntes = new Date(s.FECHA_INICIO + "T00:00:00");
       diaAntes.setDate(diaAntes.getDate() - 1);
       if (isoDeFechaLocal(diaAntes) === fechaISO) return { texto: "SALE", color: "FFD9D9D9" };
