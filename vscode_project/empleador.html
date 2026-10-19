@@ -622,6 +622,7 @@ function renderListaUsuarios(usuarios){
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0;">
           ${u.activo ? `<button class="btn btn-mini" title="Ver el sistema como esta cuenta, para probar qué le llega de verdad" onclick="verComoUsuario('${esc(u.id)}','${esc(u.nombre)}')">👁️ Ver como</button>` : ""}
+          <button class="btn btn-mini" onclick="editarNombreUsuario('${esc(u.id)}','${esc(u.nombre)}')">✏️ Nombre</button>
           <button class="btn btn-mini" onclick="resetearPassword('${esc(u.id)}','${esc(u.email)}')">Resetear</button>
           <button class="btn ${u.activo ? "btn-danger" : "btn-mini"}"
                   onclick="cambiarActivo('${esc(u.id)}', ${u.activo ? "false" : "true"})">
@@ -712,6 +713,19 @@ async function cambiarPuedeFirmar(id, marcado){
   }catch(e){
     alert(e.message || "No se pudo actualizar.");
     await cargarUsuarios();
+  }
+}
+
+async function editarNombreUsuario(id, nombreActual){
+  const nuevo = prompt("Nombre completo de esta cuenta:", nombreActual);
+  if (nuevo === null) return; // canceló
+  const limpio = nuevo.trim();
+  if (!limpio || limpio === nombreActual) return;
+  try{
+    await api.usuarios.actualizar(id, { nombre: limpio });
+    await cargarUsuarios();
+  }catch(e){
+    alert(e.message || "No se pudo actualizar.");
   }
 }
 

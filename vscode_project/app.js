@@ -1283,7 +1283,7 @@ const REPRESENTANTE_LEGAL_FIJO = {
 // Fixed reference signer for all Employment Recommendation letters — extracted from
 // the person's own reference example, so it never has to be re-typed per letter.
 const FIRMANTE_RECOMENDACION = {
-  nombre: "Andrey Flores Pizarro",
+  nombre: "Andrey Alberto Flores Pizarro",
   cedula: "6-0417-0766",
   puesto: "Gerente Operativo",
   puestoEn: "Operations Manager",
@@ -14406,7 +14406,17 @@ async function construirConstanciaSalarial(key, emp, empresaInfo){
   const ingreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
   const fechaIngresoTexto = ingreso ? `${ingreso.getDate()} de ${MESES[ingreso.getMonth()]} de ${ingreso.getFullYear()}` : "";
 
-  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+  // Quien tiene la sesión abierta manda como firmante — mismo criterio que ya
+  // usa Permiso/Vacaciones/Amonestación (ver buscarFirmanteAccionesPropiedad).
+  let firmanteNombre = "", cedulaFirmante = "";
+  if (trabajadorActual){
+    firmanteNombre = trabajadorActual.nombre;
+    cedulaFirmante = trabajadorActual.cedula;
+  } else {
+    const firmanteInfo = await buscarFirmanteAccionesPropiedad();
+    firmanteNombre = firmanteInfo.nombre;
+    cedulaFirmante = firmanteInfo.cedula;
+  }
 
   constanciaSalarialActual = {
     empKey: key,
@@ -14420,7 +14430,8 @@ async function construirConstanciaSalarial(key, emp, empresaInfo){
     mesesPromedio: Math.round(prom.meses * 10) / 10,
     empresa: empresaInfo.EMPRESA,
     cedulaJuridica: empresaInfo.CEDULA_JURIDICA_EMPRESA,
-    firmante: (sesion && sesion.nombre) || "",
+    firmante: firmanteNombre || "",
+    cedulaFirmante: cedulaFirmante || "",
     puestoFirmante: PUESTO_FIRMANTE_CONSTANCIA_SALARIAL,
     fechaEmisionTexto: fmtFecha(new Date().toISOString()),
   };
@@ -14467,6 +14478,7 @@ function renderConstanciaSalarial(){
     <div style="margin-top:36px;">
       <div style="width:260px; border-top:1px solid #333; padding-top:4px;">
         <div style="font-weight:700;">${c.firmante ? escapeHtml(c.firmante) : '<span class="missing">[sin sesión identificada]</span>'}</div>
+        ${c.cedulaFirmante ? `<div style="font-size:12px; color:#555;">${escapeHtml(c.cedulaFirmante)}</div>` : ""}
         <div style="font-size:12px; color:#555;">${escapeHtml(c.puestoFirmante)}</div>
       </div>
     </div>
@@ -14569,7 +14581,17 @@ async function construirConstanciaLaboral(key, emp, empresaInfo){
   }catch(e){ /* sin contrato vinculado — tipoContrato queda "" hasta que se elija a mano */ }
   if (tipoContrato) tipoContratoTexto = TEXTO_TIPO_CONTRATO_LABORAL[tipoContrato];
 
-  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+  // Quien tiene la sesión abierta manda como firmante — mismo criterio que ya
+  // usa Permiso/Vacaciones/Amonestación (ver buscarFirmanteAccionesPropiedad).
+  let firmanteNombre = "", cedulaFirmante = "";
+  if (trabajadorActual){
+    firmanteNombre = trabajadorActual.nombre;
+    cedulaFirmante = trabajadorActual.cedula;
+  } else {
+    const firmanteInfo = await buscarFirmanteAccionesPropiedad();
+    firmanteNombre = firmanteInfo.nombre;
+    cedulaFirmante = firmanteInfo.cedula;
+  }
 
   constanciaLaboralActual = {
     empKey: key,
@@ -14582,7 +14604,8 @@ async function construirConstanciaLaboral(key, emp, empresaInfo){
     empresa: empresaInfo.EMPRESA,
     direccionEmpresa: empresaInfo.DIRECCION_EMPRESA,
     cedulaJuridica: empresaInfo.CEDULA_JURIDICA_EMPRESA,
-    firmante: (sesion && sesion.nombre) || "",
+    firmante: firmanteNombre || "",
+    cedulaFirmante: cedulaFirmante || "",
     puestoFirmante: PUESTO_FIRMANTE_CONSTANCIA_LABORAL,
     fechaEmisionTexto: fmtFecha(new Date().toISOString()),
   };
@@ -14631,6 +14654,7 @@ function renderConstanciaLaboral(){
     <div style="margin-top:36px;">
       <div style="width:260px; border-top:1px solid #333; padding-top:4px;">
         <div style="font-weight:700;">${c.firmante ? escapeHtml(c.firmante) : '<span class="missing">[sin sesión identificada]</span>'}</div>
+        ${c.cedulaFirmante ? `<div style="font-size:12px; color:#555;">${escapeHtml(c.cedulaFirmante)}</div>` : ""}
         <div style="font-size:12px; color:#555;">${escapeHtml(c.puestoFirmante)}</div>
       </div>
     </div>
