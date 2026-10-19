@@ -2162,6 +2162,16 @@ function renderConstanciaSalarialForm(){
   );
 }
 
+// Igual que la constancia salarial, pero certifica el período trabajado (no
+// el salario) — aplica tanto a empleados activos como archivados.
+function renderConstanciaLaboralForm(){
+  document.getElementById("constancialaboralform-panel").innerHTML = renderElegirEmpleadoGate(
+    tr("La constancia laboral se genera desde el registro del empleado, para que el nombre, la cédula y las fechas nunca se escriban a mano ni se desalineen con Empleados.",
+       "The employment certificate is generated from the employee record, so the name, ID and dates are never hand-typed or out of sync with Employees."),
+    null, null, { gateId: "constancialaboral", onSeleccionar: "generarConstanciaLaboralDeEmpleado" }
+  );
+}
+
 // Saldo de vacaciones acumulado a hoy para el empleado de esta acción de
 // personal — mismo cálculo (calcularSaldoVacaciones) que ya usan el módulo
 // de Días Libres y el perfil del empleado, para que el número nunca se
@@ -5154,6 +5164,7 @@ function showTab(which){
   document.getElementById("permisoform-panel").style.display = which === "permisoform" ? "block" : "none";
   document.getElementById("vacacionesform-panel").style.display = which === "vacacionesform" ? "block" : "none";
   document.getElementById("constanciasalarialform-panel").style.display = which === "constanciasalarialform" ? "block" : "none";
+  document.getElementById("constancialaboralform-panel").style.display = which === "constancialaboralform" ? "block" : "none";
   document.getElementById("empresas-panel").style.display = which === "empresas" ? "block" : "none";
   document.getElementById("puestos-panel").style.display = which === "puestos" ? "block" : "none";
   document.getElementById("propiedades-panel").style.display = which === "propiedades" ? "block" : "none";
@@ -5182,6 +5193,7 @@ function showTab(which){
   document.getElementById("liquidacion-wrap").style.display = "none";
   document.getElementById("amonestacion-wrap").style.display = "none";
   document.getElementById("constancia-salarial-wrap").style.display = "none";
+  document.getElementById("constancia-laboral-wrap").style.display = "none";
   document.getElementById("planilla-panel").style.display = which === "planilla" ? "block" : "none";
   document.getElementById("horasextras-panel").style.display = which === "horasextras" ? "block" : "none";
   document.getElementById("reloj-panel").style.display = which === "reloj" ? "block" : "none";
@@ -5206,7 +5218,7 @@ function showTab(which){
     // destino (el perfil de un empleado) por caminos distintos.
     empleados:"empleados", archivo:"empleados", perfil:"empleados",
     firmacontratos:"contratos",
-    despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos", constanciasalarialform:"documentos",
+    despidoform:"documentos", liquidacionform:"documentos", amonestacionform:"documentos", recomendacion:"documentos", recomform:"documentos", permisoform:"documentos", vacacionesform:"documentos", constanciasalarialform:"documentos", constancialaboralform:"documentos",
     datos:"datos",
     planilla:"planilla",
     vacaciones:"vacaciones", incapacidades:"incapacidades", horasextras:"planilla", reloj:"planilla",
@@ -5274,6 +5286,7 @@ function showTab(which){
   if (which === "permisoform") renderPermisoForm();
   if (which === "vacacionesform") renderVacacionesForm();
   if (which === "constanciasalarialform") renderConstanciaSalarialForm();
+  if (which === "constancialaboralform") renderConstanciaLaboralForm();
   if (MODULOS_PENDIENTES[which]) renderModuloPendiente(which);
   if (which === "vacaciones") renderDiasLibresVacacionesPanel();
   if (which === "incapacidades") renderIncapacidadesPanel();
@@ -14391,6 +14404,149 @@ function descargarConstanciaSalarialPDF(){
   }
 }
 
+// ---------- constancia laboral (certifica el período trabajado, no el salario) ----------
+// A diferencia de la constancia salarial, esta aplica tanto a empleados
+// activos como archivados (para alguien que ya no trabaja aquí pero necesita
+// comprobar el período que estuvo, ej. un banco o una institución se lo pide
+// después de la salida) — por eso no se bloquea por ARCHIVADO.
+const PUESTO_FIRMANTE_CONSTANCIA_LABORAL = "Encargado de Recursos Humanos";
+let constanciaLaboralActual = null;
+
+async function generarConstanciaLaboralDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    if (!emp.FECHA_INGRESO_EMP){
+      statusMsg("Este empleado no tiene fecha de ingreso guardada — complétala en su ficha antes de generar la constancia.", false);
+      return;
+    }
+    await mostrarModalElegirEmpresaGenerico((info) => {
+      construirConstanciaLaboral(key, emp, info);
+    }, "📄 " + tr("Constancia laboral — elegir empresa","Employment certificate — choose company"));
+  }catch(e){ statusMsg("No se pudo generar la constancia laboral: " + (e.message || ""), false); }
+}
+
+async function construirConstanciaLaboral(key, emp, empresaInfo){
+  const ingreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+  const fechaIngresoTexto = ingreso ? `${ingreso.getDate()} de ${MESES[ingreso.getMonth()]} de ${ingreso.getFullYear()}` : "";
+  const archivado = !!emp.ARCHIVADO;
+  const salida = archivado ? parsearFechaDDMMYYYY(emp.FECHA_ARCHIVADO) : null;
+  const fechaSalidaTexto = salida ? `${salida.getDate()} de ${MESES[salida.getMonth()]} de ${salida.getFullYear()}` : "";
+
+  // La jornada y el tipo de contrato viven en el contrato vinculado (no en la
+  // ficha del empleado) — igual que hace generarDespidoDeEmpleado con los
+  // datos patronales, se toma del primer contrato encontrado por cédula.
+  let jornadaTexto = "", tipoContratoTexto = "";
+  try{
+    await buildContratosPorCedulaIndex();
+    const vinculados = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
+    if (vinculados.length){
+      const cRes = await window.storage.get(vinculados[0].key, false);
+      if (cRes && cRes.value){
+        const c = JSON.parse(cRes.value);
+        if (c.MODALIDAD_JORNADA && MODALIDADES_JORNADA[c.MODALIDAD_JORNADA]) jornadaTexto = MODALIDADES_JORNADA[c.MODALIDAD_JORNADA].label;
+        tipoContratoTexto = c.TIPO_CONTRATO === "determinado" ? "a plazo fijo (tiempo determinado)" : "a tiempo indefinido";
+      }
+    }
+  }catch(e){ /* sin contrato vinculado — queda marcado pendiente en el PDF */ }
+
+  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+
+  constanciaLaboralActual = {
+    empKey: key,
+    nombreEmpleado: nombreCompletoEmpleado(emp),
+    identificacion: emp.IDENTIFICACION_EMP || "",
+    puesto: emp.DEPARTAMENTO_EMP || "",
+    fechaIngresoTexto,
+    archivado, fechaSalidaTexto,
+    jornadaTexto, tipoContratoTexto,
+    empresa: empresaInfo.EMPRESA,
+    direccionEmpresa: empresaInfo.DIRECCION_EMPRESA,
+    cedulaJuridica: empresaInfo.CEDULA_JURIDICA_EMPRESA,
+    firmante: (sesion && sesion.nombre) || "",
+    puestoFirmante: PUESTO_FIRMANTE_CONSTANCIA_LABORAL,
+    fechaEmisionTexto: fmtFecha(new Date().toISOString()),
+  };
+  renderConstanciaLaboral();
+  mostrarSoloConstanciaLaboral();
+}
+
+function renderConstanciaLaboral(){
+  const c = constanciaLaboralActual;
+  if (!c) return;
+  const verbo = c.archivado ? "laboró" : "labora";
+  const periodoTxt = c.fechaIngresoTexto
+    ? (c.archivado && c.fechaSalidaTexto
+        ? `desde el ${escapeHtml(c.fechaIngresoTexto)} hasta el ${escapeHtml(c.fechaSalidaTexto)}`
+        : `desde el ${escapeHtml(c.fechaIngresoTexto)}`)
+    : `<span class="missing">[falta la fecha de ingreso en la ficha]</span>`;
+  let html = logoHeaderHtml();
+  html += `
+    <h2 class="doc-title" style="margin-bottom:18px;">CONSTANCIA LABORAL</h2>
+    <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+      <div>A quien corresponda</div>
+      <div>Fecha: ${escapeHtml(c.fechaEmisionTexto)}</div>
+    </div>
+    <p style="text-align:justify; margin:0 0 18px;">
+      Por este medio hacemos constar que el(la) señor(a)(ita): <b>${escapeHtml(c.nombreEmpleado)}</b>,
+      con número de identificación <b>${escapeHtml(c.identificacion)}</b>, ${verbo} para nuestra empresa
+      ${periodoTxt}, desempeñando el puesto de
+      <b>${c.puesto ? escapeHtml(c.puesto) : '<span class="missing">[falta el puesto en la ficha]</span>'}</b>,
+      bajo la modalidad de ${c.jornadaTexto ? `<b>${escapeHtml(c.jornadaTexto)}</b>` : '<span class="missing">[sin contrato vinculado — jornada pendiente]</span>'},
+      mediante un contrato de trabajo ${c.tipoContratoTexto ? `<b>${escapeHtml(c.tipoContratoTexto)}</b>` : '<span class="missing">[sin contrato vinculado — tipo pendiente]</span>'}.
+    </p>
+    <p style="margin:0 0 18px;">Se extiende la presente a solicitud de la persona interesada, para los fines que estime convenientes.</p>
+    <div style="margin-top:36px;">
+      <div style="width:260px; border-top:1px solid #333; padding-top:4px;">
+        <div style="font-weight:700;">${c.firmante ? escapeHtml(c.firmante) : '<span class="missing">[sin sesión identificada]</span>'}</div>
+        <div style="font-size:12px; color:#555;">${escapeHtml(c.puestoFirmante)}</div>
+      </div>
+    </div>
+    ${(c.empresa || c.cedulaJuridica) ? `
+    <div style="margin-top:24px; font-size:12px; color:#555;">
+      ${c.empresa ? escapeHtml(c.empresa) + "<br>" : ""}
+      ${c.direccionEmpresa ? escapeHtml(c.direccionEmpresa) + "<br>" : ""}
+      ${c.cedulaJuridica ? "Cédula jurídica: " + escapeHtml(c.cedulaJuridica) : ""}
+    </div>` : `<div style="margin-top:24px; font-size:12px;" class="missing">[No hay ninguna empresa registrada en esta propiedad (pestaña Empresas) — agrega los datos a mano en el PDF si hace falta]</div>`}
+  `;
+  document.getElementById("constancia-laboral-root").innerHTML = html;
+}
+
+function mostrarSoloConstanciaLaboral(){
+  ALL_MAIN_PANELS.filter(id => id !== "constancia-laboral-wrap").forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  const wrap = document.getElementById("constancia-laboral-wrap");
+  if (wrap) wrap.style.display = "block";
+  ALL_FORM_TOOLBARS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function descargarConstanciaLaboralPDF(){
+  const c = constanciaLaboralActual;
+  if (!c) return;
+  const original = document.title;
+  const nombreBase = c.nombreEmpleado ? c.nombreEmpleado.trim().replace(/\s+/g, "_") : new Date().toISOString().slice(0,10);
+  document.title = ("Constancia_Laboral_" + nombreBase).replace(/[\/\\:*?"<>|]/g, "");
+  mostrarSoloConstanciaLaboral();
+  window.print();
+  setTimeout(() => { document.title = original; }, 1000);
+  congelarEmitido("constancia-laboral-root", {
+    tipo: "constancia_laboral",
+    titulo: "Constancia laboral — " + (c.nombreEmpleado || "sin nombre"),
+    nombreArchivo: "Constancia_Laboral_" + nombreBase,
+    empleadoCedula: c.identificacion || null,
+    empleadoNombre: c.nombreEmpleado || null,
+  });
+  if (c.empKey){
+    agregarBitacora(c.empKey, `Constancia laboral generada (firmada por ${c.firmante || "—"}).`);
+  }
+}
+
 // ---------- termination letter (Art. 81 CT causales database) ----------
 function renderDespido(){
   const lang = data.IDIOMA_CONTRATO === "en" ? "en" : "es";
@@ -14882,7 +15038,7 @@ function renderRecomendacion(){
   document.getElementById("recomendacion-root").innerHTML = html;
 }
 
-const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","liquidacionform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","constanciasalarialform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","constancia-salarial-wrap","despido-wrap","liquidacion-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
+const ALL_MAIN_PANELS = ["inicio-panel","contracts-panel","form-panel","despidoform-panel","liquidacionform-panel","amonestacionform-panel","recomform-panel","permisoform-panel","vacacionesform-panel","constanciasalarialform-panel","constancialaboralform-panel","empresas-panel","puestos-panel","propiedades-panel","empleados-panel","archivo-panel","perfil-panel","reporte-panel","faq-panel","datos-panel","preview-wrap","constancia-wrap","constancia-salarial-wrap","constancia-laboral-wrap","despido-wrap","liquidacion-wrap","amonestacion-wrap","recomendacion-wrap","permiso-wrap","vacaciones-wrap","planilla-panel","horasextras-panel","diaslibresvacaciones-panel","incapacidades-panel","pendiente-panel"];
 const ALL_FORM_TOOLBARS = ["form-toolbar","despidoform-toolbar","liquidacionform-toolbar","amonestacionform-toolbar","recomform-toolbar","permisoform-toolbar","vacacionesform-toolbar"];
 
 function mostrarSoloRecomendacion(){
@@ -21167,7 +21323,7 @@ async function guardarBorradorRecomendacion(){
 // que sirve para eso en vez de parecer que crea una constancia nueva de la
 // nada. La anterior queda igual en el historial (documentos_emitidos es de
 // solo-inserción) — se anula a mano ahí si ya no aplica.
-function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado, tieneConstanciaSalarial }){
+function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado, tieneConstanciaSalarial, tieneConstanciaLaboral }){
   const esMaster = !!(window.sdgApi && window.sdgApi.esMaster());
   // Consultor (contador líder y demás cuentas de Consultants) es de solo
   // lectura en todo — el servidor ya rechaza cualquiera de estos botones si
@@ -21207,6 +21363,7 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   if (puedeEditar && archivado) documentos.push(`<button onclick="generarRecomendacionDeEmpleado('${empKey}')">📝 Recomendación laboral</button>`);
   if (puedeEditar && !archivado) documentos.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">🗓️ Permiso sin goce salarial</button>`);
   if (puedeEditar && !archivado) documentos.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">${tieneConstanciaSalarial ? "🔄 Actualizar constancia salarial" : "💵 Constancia salarial"}</button>`);
+  if (puedeEditar) documentos.push(`<button onclick="generarConstanciaLaboralDeEmpleado('${empKey}')">${tieneConstanciaLaboral ? "🔄 Actualizar constancia laboral" : "📄 Constancia laboral"}</button>`);
   if (documentos.length){
     const subId = "emp-doc-submenu-" + empKey;
     botones.push(`<button onclick="toggleEmpDocSubmenu('${subId}')">${n()}📁 Documentos ▾</button>`);
@@ -21642,6 +21799,7 @@ const TIPOS_DOCUMENTO_EXPEDIENTE = {
   contrato: { emoji: "📄", label: "Contrato" },
   constancia_handbook: { emoji: "📋", label: "Constancia Handbook" },
   constancia_salarial: { emoji: "💵", label: "Constancia salarial" },
+  constancia_laboral: { emoji: "📄", label: "Constancia laboral" },
   carta_despido: { emoji: "⚖️", label: "Carta de despido" },
   accion_personal: { emoji: "🗓️", label: "Permiso sin goce salarial" },
   accion_personal_vacaciones: { emoji: "🏖️", label: "Vacaciones" },
@@ -22274,6 +22432,7 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
     { tipo: "contrato", titulo: "📄 Contratos" },
     { tipo: "constancia_handbook", titulo: "📋 Constancias" },
     { tipo: "constancia_salarial", titulo: "💵 Constancias salariales" },
+    { tipo: "constancia_laboral", titulo: "📄 Constancias laborales" },
     { tipo: "amonestacion", titulo: "⚠️ Amonestaciones" },
     { tipo: "carta_despido", titulo: "⚖️ Cartas de despido" },
     { tipo: "recomendacion", titulo: "📝 Recomendaciones laborales" },
@@ -22735,7 +22894,7 @@ async function renderPerfilEmpleado(){
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:8px;">Acciones</div>
         <div class="emp-acciones-menu open" style="border:none; margin:0; padding:0;">
-          ${renderBotonesAccionesEmpleado(perfilActualKey, { archivado: !!emp.ARCHIVADO, contratosVinculados: contratos, numerado: false, tieneConstanciaSalarial: documentosEmpleado.some(d => d.tipo === "constancia_salarial" && !d.anulado_en) })}
+          ${renderBotonesAccionesEmpleado(perfilActualKey, { archivado: !!emp.ARCHIVADO, contratosVinculados: contratos, numerado: false, tieneConstanciaSalarial: documentosEmpleado.some(d => d.tipo === "constancia_salarial" && !d.anulado_en), tieneConstanciaLaboral: documentosEmpleado.some(d => d.tipo === "constancia_laboral" && !d.anulado_en) })}
         </div>
         ${!emp.ARCHIVADO ? `<div class="hint" style="margin-top:6px;">📝 La recomendación laboral se habilita cuando el empleado pasa a Archivo (salida de la empresa).</div>` : ""}
         ${contratos.length > 0 ? `<button class="btn" style="width:100%; margin-top:8px;" onclick="openContract('${contratos[0].key.replace(/'/g,"\\'")}')">📄 Abrir contrato vinculado</button>` : ""}
