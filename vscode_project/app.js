@@ -8223,6 +8223,36 @@ async function archivarColillaGenerada(item, clavesYaArchivadas){
     empleadoCedula: emp.IDENTIFICACION_EMP || null,
     empleadoNombre: nombreCompletoEmpleado(emp) || null,
   });
+  // Guarda el desglose real (no solo el PDF) para que el expediente del
+  // empleado pueda reportar salario/horas extra/feriados pagados sin tener
+  // que reabrir cada PDF — ver renderSeccionHistorialPagosEmpleado. Si esto
+  // falla no debe tumbar el archivado del PDF, que ya se guardó bien.
+  try{
+    const fechaInicioObj = parsearFechaDDMMYYYY(item.periodoInicio);
+    const periodoISO = fechaInicioObj ? isoDeFechaLocal(fechaInicioObj) : item.periodoInicio.replace(/\//g,"-");
+    const devOrdinario = item.colilla.devengados.find(d => d.label === "Ordinario");
+    const devHorasExtra = item.colilla.devengados.find(d => d.label === "Horas extra");
+    const devHorasExtraFeriado = item.colilla.devengados.find(d => d.label === "Horas extra en feriado (triple)");
+    const devFeriado = item.colilla.devengados.find(d => d.label === "Recargo por feriado trabajado (día doble)");
+    await window.storage.set("colilla_pagada:" + emp.key + ":" + periodoISO, JSON.stringify({
+      EMPLEADO_KEY: emp.key,
+      PERIODO_INICIO: item.periodoInicio,
+      PERIODO_INICIO_ISO: periodoISO,
+      PERIODO_TXT: item.periodoTxt,
+      MONEDA: item.colilla.moneda,
+      SALARIO_ORDINARIO: devOrdinario ? devOrdinario.monto : 0,
+      HORAS_EXTRA_HORAS: devHorasExtra ? devHorasExtra.cantidad : 0,
+      HORAS_EXTRA_MONTO: devHorasExtra ? devHorasExtra.monto : 0,
+      HORAS_EXTRA_FERIADO_HORAS: devHorasExtraFeriado ? devHorasExtraFeriado.cantidad : 0,
+      HORAS_EXTRA_FERIADO_MONTO: devHorasExtraFeriado ? devHorasExtraFeriado.monto : 0,
+      FERIADO_DIAS_TRABAJADOS: devFeriado ? devFeriado.cantidad : 0,
+      FERIADO_MONTO: devFeriado ? devFeriado.monto : 0,
+      TOTAL_DEVENGADO: item.colilla.totalDevengado,
+      TOTAL_DEDUCCIONES: item.colilla.totalDeducciones,
+      NETO: item.colilla.neto,
+      GENERADO_EN: new Date().toISOString(),
+    }), false);
+  }catch(e){ /* no bloquea el archivado del PDF, que ya se guardó bien */ }
   clavesYaArchivadas.add(clave);
   // El saldo de un préstamo solo baja cuando la colilla quedó realmente
   // archivada — nunca solo por calcular la vista previa. Si una cuota
@@ -12020,6 +12050,59 @@ function toggleHerramientasHorasExtra(){
   if (btn) btn.textContent = herramientasHorasExtraColapsado ? "➕" : "➖";
 }
 
+// Feriados de ley que caen dentro de una quincena — para ofrecerle a RH un
+// checkbox por fecha en la fila de cada empleado de confianza (ver abajo):
+// como ninguno de los dos caminos automáticos que crean el registro
+// "trabajó el feriado" (importar marcación, crearFeriadosSinMarcaDelReloj)
+// toca a los de confianza — ver esEmpleadoConfianza —, sin este checkbox su
+// feriado trabajado nunca quedaría registrado para pagarlo.
+function feriadosEnRangoDeQuincena(inicio, fin){
+  const fechas = [];
+  let cursor = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate());
+  while (cursor <= fin){
+    const iso = isoDeFechaLocal(cursor);
+    if (feriadoLeyEnFecha(iso)) fechas.push(iso);
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+  }
+  return fechas;
+}
+
+// Marca/desmarca a mano que un empleado de confianza SÍ trabajó un feriado
+// de ley — crea (o borra) el mismo tipo de registro horas_extra: que ya usa
+// el resto del sistema (TIPO_DIA "laboral"), para que calcularResumenQuincena
+// lo cuente en "Feriados trabajados" sin ningún cambio aparte ahí. Si ese día
+// ya tiene otra cosa registrada (incapacidad, permiso, etc.) no lo toca —
+// evita pisar un registro legítimo por error.
+async function marcarFeriadoTrabajadoConfianza(empKey, fechaISO, trabajado){
+  const key = HORAS_EXTRA_PREFIX + empKey + ":" + fechaISO;
+  try{
+    let existente = null;
+    try{
+      const r = await window.storage.get(key, false);
+      existente = r && r.value ? JSON.parse(r.value) : null;
+    }catch(e){ /* no existe todavía: es lo normal */ }
+    if (trabajado){
+      if (existente && existente.ORIGEN !== "feriado_confianza_manual"){
+        statusMsg(`Ese día ya tiene registrado "${etiquetaTipoDia(existente.TIPO_DIA)}" para esta persona — corrígelo desde Horas Extra si hace falta.`, false);
+      } else {
+        const quienDecide = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+        const ahora = new Date().toISOString();
+        await window.storage.set(key, JSON.stringify({
+          EMPLEADO_KEY: empKey, FECHA: fechaISO, HORAS_EXTRA: 0, MARCAS: [], INCOMPLETO: false, MARCA_SUELTA: null,
+          TIPO_DIA: "laboral", ESTADO: "aprobada", ORIGEN: "feriado_confianza_manual",
+          CREADO_POR: quienDecide, CREADO_EN: ahora, APROBADO_POR: quienDecide, APROBADO_FINAL_POR: quienDecide,
+          FECHA_DECISION: ahora, FECHA_DECISION_FINAL: ahora,
+        }), false);
+        statusMsg("Feriado marcado como trabajado — se paga doble en la colilla.");
+      }
+    } else if (existente && existente.ORIGEN === "feriado_confianza_manual"){
+      await window.storage.delete(key, false);
+      statusMsg("Feriado desmarcado.");
+    }
+  }catch(e){ statusMsg("No se pudo guardar: " + (e.message || ""), false); }
+  await renderHorasExtrasPanel();
+}
+
 async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura, deptoJefatura, departamentoDeEmpleado){
   const rango = rangoQuincenaActual();
   let visibles = empleados.filter(e => !e.ARCHIVADO);
@@ -12037,6 +12120,7 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
     ? ` El día 31 no cuenta como día base de pago (ese mes solo se pagan 30 días de salario), pero si tuvo horas extra igual se suman en la columna de arriba.`
     : "";
   const cols = Object.keys(TIPOS_DIA_DESCUENTA_QUINCENA);
+  const feriadosQuincena = feriadosEnRangoDeQuincena(rango.inicio, rango.fin);
 
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -12044,7 +12128,7 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
       <button id="resumen-quincena-toggle" class="btn" style="padding:2px 10px; font-size:14px; line-height:1.4; flex-shrink:0;" onclick="toggleResumenQuincena()" title="${resumenQuincenaColapsado ? "Mostrar" : "Ocultar"} la tabla">${resumenQuincenaColapsado ? "➕" : "➖"}</button>
     </div>
     <div id="resumen-quincena-cuerpo" style="${resumenQuincenaColapsado ? "display:none;" : ""}">
-    <p style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Vacaciones y Días libres son dos beneficios separados (cada uno con su propio cupo/saldo) y ninguno de los dos resta de los días laborados — se muestran en columnas aparte para no confundirlos. Horas extra = lo ya aprobado en definitiva en todo el rango. Feriados trabajados = feriados de ley (Art. 147-148 CT) con marca real ese día — se pagan doble (y sus horas extra, triple); si el feriado cae y NO se trabajó, tampoco se descuenta, se paga sencillo igual.${notaDia31}</p>
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 10px;">Días laborados = días base (15, o menos si entró/salió a mitad de la quincena) menos incapacidad/permiso sin goce/cita médica/ausencia ya aprobados en ese rango — un día con marca real de la máquina de marcación ya cuenta solo, sin necesidad de nada más. Vacaciones y Días libres son dos beneficios separados (cada uno con su propio cupo/saldo) y ninguno de los dos resta de los días laborados — se muestran en columnas aparte para no confundirlos. Horas extra = lo ya aprobado en definitiva en todo el rango. Feriados trabajados = feriados de ley (Art. 147-148 CT) con marca real ese día — se pagan doble (y sus horas extra, triple); si el feriado cae y NO se trabajó, tampoco se descuenta, se paga sencillo igual. Para empleados de confianza (Art. 143 CT, no marcan asistencia) esa columna muestra un checkbox por cada feriado de la quincena — marcalo a mano si sí trabajó, para que se le pague doble en su colilla.${notaDia31}</p>
     <div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
       <thead><tr style="border-bottom:2px solid #ccc; text-align:left;">
@@ -12072,7 +12156,17 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
           <td style="padding:4px 8px; text-align:center;">${f.diasLibresQuincena || ""}</td>
           <td style="padding:4px 8px; text-align:center; font-size:11px;">${f.diasLibresMes}/${topeMes} ${notaMes}</td>
           <td style="padding:4px 8px; text-align:center; font-weight:700;">${f.horasExtra ? f.horasExtra.toFixed(1) : ""}</td>
-          <td style="padding:4px 8px; text-align:center; font-weight:700; ${f.diasFeriadosTrabajados ? 'color:#b2703b;' : ''}">${f.diasFeriadosTrabajados || ""}</td>
+          <td style="padding:4px 8px; text-align:center; font-weight:700; ${f.diasFeriadosTrabajados ? 'color:#b2703b;' : ''}">
+            ${f.confianza && feriadosQuincena.length
+              ? feriadosQuincena.map(fechaISO => {
+                  const yaMarcado = registros.some(r => r.EMPLEADO_KEY === f.emp.key && r.FECHA === fechaISO && r.TIPO_DIA === "laboral" && r.ESTADO === "aprobada");
+                  const fechaCorta = fechaISO.slice(8,10) + "/" + fechaISO.slice(5,7);
+                  return `<label style="display:flex; align-items:center; gap:3px; font-size:10.5px; justify-content:center; white-space:nowrap; font-weight:400;" title="¿Trabajó el feriado del ${fechaCorta}? (empleado de confianza — no se detecta solo)">
+                    <input type="checkbox" ${yaMarcado ? "checked" : ""} onchange="marcarFeriadoTrabajadoConfianza('${f.emp.key.replace(/'/g,"\\'")}','${fechaISO}', this.checked)">${fechaCorta}
+                  </label>`;
+                }).join("")
+              : (f.diasFeriadosTrabajados || "")}
+          </td>
         </tr>`;
         }).join("")}
       </tbody>
@@ -14178,7 +14272,7 @@ async function confirmarEmpresaConstanciaSalarial(empresaKey){
   }
   constanciaSalarialEmpPendiente = null;
   cerrarModalIncompletos();
-  construirConstanciaSalarial(ctx.key, ctx.emp, empresaInfo);
+  await construirConstanciaSalarial(ctx.key, ctx.emp, empresaInfo);
 }
 
 // Selector de empresa reutilizable (Despido, Amonestación) — para que RH
@@ -14286,11 +14380,24 @@ async function guardarNuevaEmpresaPicker(){
   }catch(e){ statusMsg(tr("No se pudo guardar la empresa: ","Could not save the company: ") + (e.message||""), false); }
 }
 
-function construirConstanciaSalarial(key, emp, empresaInfo){
+async function construirConstanciaSalarial(key, emp, empresaInfo){
   const esUSD = emp.MONEDA_SALARIO_EMP === "USD";
-  const bruto = Number(String((esUSD ? emp.SALARIO_USD_EMP : emp.SALARIO_EMP) || "").replace(/[^0-9.]/g,""));
   const simbolo = esUSD ? "$" : "₡";
   const monedaPalabra = esUSD ? "dólares" : "colones";
+
+  // El bruto de la constancia es el PROMEDIO ponderado de los últimos 6
+  // meses (Art. 31 CT), no el salario actual tal cual está en la ficha — así
+  // refleja lo que de verdad se le ha pagado si tuvo horas extra o cambios
+  // de tarifa a mitad de camino, en vez de solo el monto base de hoy.
+  const hoy = new Date();
+  const { monto: salarioDiario } = salarioDiarioDeEmpleado(emp);
+  const jornadaEmp = await jornadaDiariaDeEmpleado(emp, {});
+  const montoPorHoraExtra = salarioDiario ? (salarioDiario / jornadaEmp) * TARIFA_HORAS_EXTRA : 0;
+  const registrosHorasExtraTodos = await listarRegistrosHorasExtra();
+  const registrosEmp = registrosHorasExtraTodos.filter(r => r.EMPLEADO_KEY === key);
+  const prom = calcularSalarioPromedioParaConstancia(emp, registrosEmp, hoy, montoPorHoraExtra);
+
+  const bruto = Math.round(prom.promedio * 100) / 100;
   const ccss = Math.round(bruto * DEDUCCION_CCSS * 100) / 100;
   const otrosRebajos = 0, embargos = 0;
   const totalDeducciones = Math.round((ccss + otrosRebajos + embargos) * 100) / 100;
@@ -14310,6 +14417,7 @@ function construirConstanciaSalarial(key, emp, empresaInfo){
     simbolo, monedaPalabra,
     bruto, ccss, otrosRebajos, embargos, totalDeducciones, neto,
     brutoLetras: montoEnLetrasParaConstancia(bruto),
+    mesesPromedio: Math.round(prom.meses * 10) / 10,
     empresa: empresaInfo.EMPRESA,
     cedulaJuridica: empresaInfo.CEDULA_JURIDICA_EMPRESA,
     firmante: (sesion && sesion.nombre) || "",
@@ -14343,12 +14451,13 @@ function renderConstanciaSalarial(){
       con número de identificación <b>${escapeHtml(c.identificacion)}</b>, labora para nuestra empresa
       ${c.fechaIngresoTexto ? `desde el ${escapeHtml(c.fechaIngresoTexto)}` : `<span class="missing">[falta la fecha de ingreso en la ficha]</span>`},
       desempeñando la función de <b>${c.puesto ? escapeHtml(c.puesto) : '<span class="missing">[falta el puesto en la ficha]</span>'}</b>,
-      devengando un salario bruto de <b>${fmtMontoConstancia(c.bruto, c.simbolo)}</b>
-      (${c.brutoLetras}).
+      devengando un salario bruto promedio de <b>${fmtMontoConstancia(c.bruto, c.simbolo)}</b>
+      (${c.brutoLetras}), correspondiente al promedio de los salarios devengados
+      durante los últimos ${c.mesesPromedio === 1 ? "1 mes" : (c.mesesPromedio || 0) + " meses"} (Art. 31 del Código de Trabajo de Costa Rica).
     </p>
     <p style="margin:0 0 8px;">A continuación un desglose detallado:</p>
     <div style="max-width:420px; margin-bottom:24px;">
-      ${filaMonto("Salario Bruto:", c.bruto)}
+      ${filaMonto("Salario Bruto Promedio:", c.bruto)}
       ${filaMonto("C.C.S.S. 10.83%", c.ccss)}
       ${filaMonto("Otros rebajos:", c.otrosRebajos)}
       ${filaMonto("Embargos:", c.embargos)}
@@ -15929,6 +16038,58 @@ function calcularAguinaldoEstimado(emp, registrosHorasExtraDelEmpleado, fechaCor
     .filter(r => r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO)
     .reduce((suma, r) => suma + (r.HORAS_EXTRA || 0) * (montoPorHoraExtra || 0), 0);
   return { periodoInicio, periodoFin, montoBase, montoHorasExtra, total: montoBase + montoHorasExtra, moneda };
+}
+
+// Promedio salarial para la Constancia Salarial (Art. 31 Código de Trabajo):
+// cuando el salario es variable, se toma el promedio de los salarios
+// devengados en los últimos 6 meses — o el tiempo que lleve trabajando, si es
+// menos de 6 meses. Mismo recorrido mes a mes día-ponderado que ya usa
+// calcularAguinaldoEstimado (vía salarioVigenteEnMes/HISTORIAL_SALARIOS), solo
+// que la base se divide entre la cantidad real de meses de la ventana (no
+// siempre 12) y se suman las horas extra YA aprobadas en ese mismo rango.
+// LIMITACIÓN conocida: HISTORIAL_SALARIOS guarda cambios de TARIFA base, no
+// el monto realmente pagado cada mes — no incluye comisiones (el sistema no
+// guarda todavía un registro de comisiones efectivamente pagadas).
+function calcularSalarioPromedioParaConstancia(emp, registrosHorasExtraDelEmpleado, fechaCorte, montoPorHoraExtra){
+  const moneda = emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC";
+  const monedaEsUSD = moneda === "USD";
+  const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+  const seisMesesAtras = new Date(fechaCorte.getFullYear(), fechaCorte.getMonth() - 6, fechaCorte.getDate());
+  const inicioEfectivo = (fechaIngreso && fechaIngreso > seisMesesAtras) ? fechaIngreso : seisMesesAtras;
+  const finEfectivo = fechaCorte;
+  if (finEfectivo < inicioEfectivo){
+    return { inicioEfectivo, finEfectivo, promedioBase: 0, promedioHorasExtra: 0, promedio: 0, moneda, meses: 0 };
+  }
+
+  let montoBase = 0;
+  let fraccionMeses = 0;
+  let cursor = new Date(inicioEfectivo.getFullYear(), inicioEfectivo.getMonth(), 1);
+  while (cursor <= finEfectivo){
+    const periodoMes = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+    const salarioDelMes = salarioVigenteEnMes(emp, periodoMes, monedaEsUSD);
+    const inicioMes = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const finMes = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const desde = inicioMes < inicioEfectivo ? inicioEfectivo : inicioMes;
+    const hasta = finMes > finEfectivo ? finEfectivo : finMes;
+    const diasEnEsteMes = Math.round((hasta - desde) / 86400000) + 1;
+    const fraccion = diasEnEsteMes / finMes.getDate();
+    montoBase += salarioDelMes * fraccion;
+    fraccionMeses += fraccion;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+
+  const inicioISO = isoDeFechaLocal(inicioEfectivo);
+  const finISO = isoDeFechaLocal(finEfectivo);
+  const montoHorasExtra = (registrosHorasExtraDelEmpleado || [])
+    .filter(r => r.ESTADO === "aprobada" && r.FECHA >= inicioISO && r.FECHA <= finISO)
+    .reduce((suma, r) => suma + (r.HORAS_EXTRA || 0) * (montoPorHoraExtra || 0), 0);
+
+  const promedioBase = fraccionMeses ? montoBase / fraccionMeses : 0;
+  const promedioHorasExtra = fraccionMeses ? montoHorasExtra / fraccionMeses : 0;
+  return {
+    inicioEfectivo, finEfectivo, moneda, meses: fraccionMeses,
+    promedioBase, promedioHorasExtra, promedio: promedioBase + promedioHorasExtra,
+  };
 }
 
 async function crearIncapacidad({ empKey, tipo, fechaInicio, fechaFin, numeroBoleta, esProrroga, incapacidadOriginalKey, comprobanteDataUrl, comprobanteNombre }){
@@ -22197,6 +22358,32 @@ async function descargarColillasDePerfil(empKey){
   await descargarVariasColillas(colillas);
 }
 
+// Desglose real (no solo el PDF) de cada colilla ya archivada: salario
+// ordinario, horas extra pagadas y feriados pagados, período por período —
+// para responder "¿cuánto se le pagó en salario, horas extra y feriados?"
+// sin tener que abrir cada PDF a mano. Solo existe para colillas generadas
+// DESPUÉS de este cambio (ver archivarColillaGenerada); las anteriores solo
+// tienen el PDF, visible arriba en "Colillas de pago".
+function renderSeccionHistorialPagosEmpleado(historialPagos){
+  if (!historialPagos.length) return "";
+  const ordenado = historialPagos.slice().sort((a,b) => (b.PERIODO_INICIO_ISO||"").localeCompare(a.PERIODO_INICIO_ISO||""));
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:8px;">📊 Historial de pagos (${ordenado.length})</div>
+    ${ordenado.map(p => {
+      const simbolo = p.MONEDA === "USD" ? "$" : "₡";
+      const partes = [`Ordinario: ${simbolo} ${Number(p.SALARIO_ORDINARIO||0).toLocaleString("es-CR",{minimumFractionDigits:2})}`];
+      if (p.HORAS_EXTRA_MONTO) partes.push(`Horas extra (${p.HORAS_EXTRA_HORAS}h): ${simbolo} ${Number(p.HORAS_EXTRA_MONTO).toLocaleString("es-CR",{minimumFractionDigits:2})}`);
+      if (p.HORAS_EXTRA_FERIADO_MONTO) partes.push(`Horas extra en feriado (${p.HORAS_EXTRA_FERIADO_HORAS}h): ${simbolo} ${Number(p.HORAS_EXTRA_FERIADO_MONTO).toLocaleString("es-CR",{minimumFractionDigits:2})}`);
+      if (p.FERIADO_MONTO) partes.push(`Feriado trabajado (${p.FERIADO_DIAS_TRABAJADOS} día(s)): ${simbolo} ${Number(p.FERIADO_MONTO).toLocaleString("es-CR",{minimumFractionDigits:2})}`);
+      return `<div style="font-size:12px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="font-weight:600;">${escapeHtml(p.PERIODO_TXT || p.PERIODO_INICIO || "")}</div>
+        <div style="color:var(--ink-soft);">${partes.map(escapeHtml).join(" · ")}</div>
+        <div>Neto: <b>${simbolo} ${Number(p.NETO||0).toLocaleString("es-CR",{minimumFractionDigits:2})}</b></div>
+      </div>`;
+    }).join("")}
+  </div></div>`;
+}
+
 // Agrupa fechas ISO ("AAAA-MM-DD") consecutivas en rangos — un empleado
 // incapacitado 5 días seguidos queda como un solo período, no 5 filas
 // sueltas. Más reciente primero.
@@ -22745,6 +22932,22 @@ async function renderPerfilEmpleado(){
       catch(e){ /* best effort */ }
     }
 
+    // Desglose real de cada colilla ya archivada (salario, horas extra
+    // pagadas, feriados pagados) — ver archivarColillaGenerada, que guarda
+    // esto aparte del PDF desde que se generó la colilla. Las colillas
+    // archivadas ANTES de este cambio no tienen esta entrada (solo el PDF).
+    let historialPagos = [];
+    try{
+      const resPagos = await window.storage.list("colilla_pagada:" + perfilActualKey + ":", false);
+      const clavesPagos = (resPagos && resPagos.keys) || [];
+      historialPagos = (await Promise.all(clavesPagos.map(async k => {
+        try{
+          const r = await window.storage.get(k, false);
+          return r && r.value ? JSON.parse(r.value) : null;
+        }catch(e){ return null; }
+      }))).filter(Boolean);
+    }catch(e){ /* best effort */ }
+
     // Saldo de vacaciones, resumen de horas extra e incapacidades — mismos
     // datos que ya usan los módulos de Vacaciones y Horas Extra, solo que
     // acá se filtran a este único empleado. Sale de horas_extra:/
@@ -22906,6 +23109,8 @@ async function renderPerfilEmpleado(){
       ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesDeEsteEmpleado.filter(s => s.ESTADO === "pendiente"), emp)}
 
       ${renderSeccionColillasEmpleado(documentosEmpleado, perfilActualKey)}
+
+      ${renderSeccionHistorialPagosEmpleado(historialPagos)}
 
       ${renderSeccionDocumentosEmpleado(documentosEmpleado, solicitudesDeEsteEmpleado, emp, perfilActualKey)}
 
