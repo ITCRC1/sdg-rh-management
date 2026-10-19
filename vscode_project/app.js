@@ -3199,6 +3199,20 @@ async function useEmpresa(key){
   }catch(e){ statusMsg("No se pudo aplicar.", false); }
 }
 
+// Sugiere las actividades de exclusividad según el departamento (Ministerio)
+// del puesto, sin pisar nunca algo que la persona ya haya escrito a mano.
+// Se llama tanto al aplicar un puesto nuevo (usePuesto) como al abrir/
+// actualizar un contrato YA guardado (openContract): antes solo corría en
+// usePuesto, así que un contrato existente creado antes de que el puesto
+// tuviera departamento asignado (o antes de que existiera esta sugerencia)
+// se quedaba con «ACTIVIDADES_EXCLUSIVIDAD» vacío para siempre, aunque el
+// departamento cargado sí calzara con EXCLUSIVIDAD_POR_DEPTO.
+function sugerirActividadesExclusividad(){
+  if (!data.ACTIVIDADES_EXCLUSIVIDAD && data.DEPARTAMENTO_MINISTERIO && EXCLUSIVIDAD_POR_DEPTO[data.DEPARTAMENTO_MINISTERIO]){
+    data.ACTIVIDADES_EXCLUSIVIDAD = EXCLUSIVIDAD_POR_DEPTO[data.DEPARTAMENTO_MINISTERIO];
+  }
+}
+
 async function usePuesto(key){
   try{
     const res = await window.storage.get(CATALOGS.puestos.prefix + key, false);
@@ -3211,9 +3225,7 @@ async function usePuesto(key){
   data.LIDER_DIRECTOR_EN = DIRECTOR_PROYECTO_FIJO_EN;
       // Suggest exclusivity activities for this position's department, but never
       // overwrite something the person already wrote by hand.
-      if (!data.ACTIVIDADES_EXCLUSIVIDAD && data.DEPARTAMENTO_MINISTERIO && EXCLUSIVIDAD_POR_DEPTO[data.DEPARTAMENTO_MINISTERIO]){
-        data.ACTIVIDADES_EXCLUSIVIDAD = EXCLUSIVIDAD_POR_DEPTO[data.DEPARTAMENTO_MINISTERIO];
-      }
+      sugerirActividadesExclusividad();
       // best-effort suggestion of the applicable sales-commission department, based on
       // keywords in the position/department text — never overrides a manual choice.
       if (!data.DEPARTAMENTO_COMISION){
@@ -14462,6 +14474,11 @@ async function openContract(key){
     data.CANTON_FIRMA = loaded.CANTON_FIRMA || "";
     data.PROVINCIA_FIRMA = loaded.PROVINCIA_FIRMA || "";
       migrarDatosTrabajadorSiFalta(loaded);
+      // Retroactivo: si el contrato se guardó antes de que el puesto tuviera
+      // departamento asignado (o antes de que existiera esta sugerencia), se
+      // completa ahora que el departamento ya está cargado — sin pisar nada
+      // que la persona haya escrito a mano.
+      sugerirActividadesExclusividad();
       data._createdAt = loaded._createdAt || "";
       data._updatedAt = loaded._updatedAt || "";
       data.LIDER_DIRECTOR = DIRECTOR_PROYECTO_FIJO; // fixed for every contract
