@@ -3627,10 +3627,11 @@ async function saveCatalogItem(type){
   });
   if (type === "empresas"){
     // Las 3 partes de la dirección no son un field propio (se combinan en
-    // DIRECCION_EMPRESA al vuelo) — se formatean aparte y se recompone.
-    ["CANTON_EMPRESA","DISTRITO_EMPRESA","SENAS_EMPRESA"].forEach(k => {
-      if (catalogEditing.values[k]) catalogEditing.values[k] = formatearTextoLibre(catalogEditing.values[k]);
-    });
+    // DIRECCION_EMPRESA al vuelo). A propósito NO se pasan por
+    // formatearTextoLibre: esa función pone todo en minúscula y solo
+    // capitaliza la primera letra, lo cual arruina nombres propios (Bahía
+    // Ballena), siglas (BCR) y nombres de marca (Whale Tail) sin importar
+    // cómo los haya escrito quien edita — se respeta tal cual se escribió.
     catalogEditing.values.DIRECCION_EMPRESA = [
       catalogEditing.values.PROVINCIA_EMPRESA, catalogEditing.values.CANTON_EMPRESA,
       catalogEditing.values.DISTRITO_EMPRESA, catalogEditing.values.SENAS_EMPRESA,
