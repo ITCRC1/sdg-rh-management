@@ -15168,7 +15168,7 @@ function renderRecomendacion(){
   const fechaIni = data.FECHA_INICIO_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const fechaFin = data.FECHA_FIN_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const razon = (data.RAZON_SALIDA_RECOM || "").trim() || `<span class="missing">[${tr("razón pendiente","reason pending")}]</span>`;
-  const desempeno = (data.DESEMPENO_RECOM || "").trim() || tr("un buen desempeño en sus funciones, destacando por ser una persona responsable y comprometida","good performance in their duties, standing out as a responsible and committed person");
+  const desempeno = (data.DESEMPENO_RECOM || "").trim() || tr("sus funciones con responsabilidad y dedicación, destacando por ser una persona comprometida","their duties with responsibility and dedication, standing out as a committed person");
   const lugarFirma = data.LUGAR_FIRMA_RECOM || `<span class="missing">[${tr("lugar pendiente","place pending")}]</span>`;
   const fechaFirma = data.FECHA_FIRMA_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const empresaTxt = lang === "en" ? f.empresaEn : f.empresa;
