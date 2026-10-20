@@ -17250,7 +17250,7 @@ const PRODUCTOS_MAQUINARIA = [
   ["ACEITE_15W40", "Aceite 15W40 (oz)"],
   ["OTROS", "Otros"],
 ];
-// Combustibles se reparten en galones (pichinga 5/18/20 gal); aceites se
+// Combustibles se reparten en galones (pichinga 15/18/20 gal); aceites se
 // miden en onzas, directo, sin pichinga — ver renderSeccionIngresoCombustible
 // y guardarBitacoraIngresoCombustibleDia, que usan este set para decidir qué
 // campos pedir por producto.
@@ -17278,7 +17278,7 @@ const BITACORA_MAQUINARIA_OTROS_PREFIX = "bitacora_maquinaria_otros:";
 // (dropdown fijo) y la cantidad de pichingas — el total en galones se
 // calcula solo (pichinga × cantidad), igual que GAST en Botes.
 const BITACORA_INGRESO_COMBUSTIBLE_PREFIX = "bitacora_ingreso_combustible:"; // bitacora_ingreso_combustible:<fechaISO>:<departamento>
-const PICHINGA_GALONES_OPCIONES = [5, 18, 20];
+const PICHINGA_GALONES_OPCIONES = [15, 18, 20];
 
 let bitacorasFechaActiva = null; // ISO, se fija a hoy la primera vez
 let bitacorasFiltroDepto = "todos"; // master/gerente: "todos" o un departamento específico
