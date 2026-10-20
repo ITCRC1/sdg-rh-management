@@ -17304,9 +17304,21 @@ const DEPARTAMENTO_BITACORAS_PROGRAMADO = "ACTIVIDADES";
 // empleado activo del departamento, que puede incluir guías, marineros,
 // etc. Comparación sin acentos ni mayúsculas para no depender de cómo haya
 // quedado tipeado el nombre del puesto en el catálogo.
-function esPuestoCapitan(puesto){
-  const nombre = (puesto && puesto.PUESTO) || "";
-  return /capitan/i.test(nombre.normalize("NFD").replace(/[̀-ͯ]/g, ""));
+//
+// Excepciones puntuales (pedido explícito del usuario): personas que SÍ
+// cumplen función de capitán en Bitácoras de Actividades aunque su PUESTO
+// en el catálogo no diga "capitán" literalmente — se agregan por nombre
+// completo, comparado igual de sin acentos/mayúsculas que el puesto.
+const EXCEPCIONES_CAPITAN_NOMBRE = new Set(["nerys varela"]);
+
+function esPuestoCapitan(puesto, emp){
+  const nombrePuesto = (puesto && puesto.PUESTO) || "";
+  if (/capitan/i.test(nombrePuesto.normalize("NFD").replace(/[̀-ͯ]/g, ""))) return true;
+  if (emp){
+    const nombreEmp = (nombreCompletoEmpleado(emp) || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    if (EXCEPCIONES_CAPITAN_NOMBRE.has(nombreEmp)) return true;
+  }
+  return false;
 }
 
 async function listarBotes(){
@@ -18301,7 +18313,7 @@ async function renderBitacorasPanel(){
     const botesVisibles = botes.filter(b => !deptoActivo || b.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const rutasVisibles = rutas.filter(r => !deptoActivo || r.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const maquinasVisibles = maquinas.filter(m => !deptoActivo || m.DEPARTAMENTO_MINISTERIO === deptoActivo);
-    const capitanes = deptoActivo ? empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === deptoActivo && esPuestoCapitan(puestosPorKey[e.PUESTO_KEY])) : [];
+    const capitanes = deptoActivo ? empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === deptoActivo && esPuestoCapitan(puestosPorKey[e.PUESTO_KEY], e)) : [];
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">📘 Bitácoras${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
@@ -20689,8 +20701,8 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
   // que antes. esPuestoCapitan ya existe para Bitácoras (reconoce el puesto
   // por nombre, sin importar mayúsculas/acentos — ver más abajo).
   const empleadosOrdenados = empleados.slice().sort((a, b) => {
-    const capA = puestosPorKey && esPuestoCapitan(puestosPorKey[a.PUESTO_KEY]) ? 0 : 1;
-    const capB = puestosPorKey && esPuestoCapitan(puestosPorKey[b.PUESTO_KEY]) ? 0 : 1;
+    const capA = puestosPorKey && esPuestoCapitan(puestosPorKey[a.PUESTO_KEY], a) ? 0 : 1;
+    const capB = puestosPorKey && esPuestoCapitan(puestosPorKey[b.PUESTO_KEY], b) ? 0 : 1;
     if (capA !== capB) return capA - capB;
     return compararPorApellido(a, b);
   });
