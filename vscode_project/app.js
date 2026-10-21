@@ -2831,7 +2831,11 @@ function hintBancoIban(valorCrudo, esIban){
   if (!/^CR\d{20}$/.test(v)) return "";
   const info = analizarIbanCR(v);
   if (!info.digitosOk) return "⚠️ Los dígitos de control no cuadran con el resto del número — revisa que esté bien digitado.";
-  if (info.esBNCR) return "✅ Banco Nacional (BNCR) — cuenta electrónica: " + info.cuentaElectronica;
+  // Pedido explícito del usuario: ya no se muestra ningún mensaje cuando sí
+  // es BNCR (ese aviso "✅ ..." no aportaba y generaba confusión) — solo
+  // queda la alerta cuando es de un banco distinto, que sí requiere revisión
+  // a mano para la planilla bancaria.
+  if (info.esBNCR) return "";
   return "⚠️ IBAN de un banco distinto a BNCR (código " + info.codigoBanco + ") — revisar a mano para la planilla bancaria.";
 }
 
