@@ -22916,30 +22916,6 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
     const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
     const salarioNum = Number(String(emp.SALARIO_EMP||"").replace(/[^0-9.]/g,""));
 
-    // Estimado de liquidación — misma fórmula exacta que ya usa RRHH en el
-    // expediente administrativo (ver renderPerfilEmpleado): antigüedad,
-    // vacaciones en dinero, aguinaldo proporcional, cesantía y preaviso
-    // hipotéticos, menos el saldo de préstamos/adelantos pendientes.
-    let prestaciones = null;
-    try{
-      const hoy = new Date();
-      const { monto: salarioDiario } = salarioDiarioDeEmpleado(emp);
-      const jornadaEmp = await jornadaDiariaDeEmpleado(emp, {});
-      const montoPorHoraExtra = salarioDiario ? (salarioDiario / jornadaEmp) * TARIFA_HORAS_EXTRA : 0;
-      const saldoPrestamosPendientes = (emp.DEDUCCIONES_RECURRENTES || [])
-        .filter(d => d.tipo === "prestamo")
-        .reduce((s, d) => s + (d.saldoPendiente || 0), 0);
-      prestaciones = {
-        moneda: emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC",
-        antiguedad: calcularAntiguedad(fechaIngreso, hoy),
-        vacacionesMonto: calcularVacacionesEnDinero(saldoVacaciones, salarioDiario),
-        aguinaldo: calcularAguinaldoEstimado(emp, registrosDeEsteEmpleado, hoy, montoPorHoraExtra),
-        cesantia: calcularCesantiaEstimada(fechaIngreso, hoy, salarioDiario),
-        preaviso: calcularPreavisoEstimado(fechaIngreso, hoy, salarioDiario),
-        saldoPrestamosPendientes,
-      };
-    }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
-
     return `
       <div class="section-card" style="border-color:var(--leaf);">
         <div class="section-body">
@@ -22972,18 +22948,6 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
       ${(miInfoRangoDesde && miInfoRangoHasta && registrosEnRangoMiInfo.length === 0) ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ No hay ningún día registrado en este rango — puede que la marcación de ese período todavía no se haya importado, o que no hayas tenido marca en esas fechas.</div></div>` : ""}
 
       ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesPendientes, emp)}
-
-      ${prestaciones ? `<div class="section-card" style="margin-top:10px;"><div class="section-body">
-        <div style="font-weight:700; margin-bottom:4px;">💰 Datos Monetarios</div>
-        <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Antigüedad: ${prestaciones.antiguedad.años} año(s), ${prestaciones.antiguedad.meses} mes(es). <b>Estimado informativo, no vinculante</b> — el monto final depende de la causa y fecha real de salida, y no reemplaza el cálculo oficial de planilla.</div>
-        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between; ${saldoVacaciones < 0 ? "color:#B3261E;" : ""}"><span>${saldoVacaciones < 0 ? `🔻 Vacaciones en adelanto (${Math.abs(saldoVacaciones)} día(s))` : `🏖️ Vacaciones pendientes (${saldoVacaciones} día(s))`}</span><b>${fmtMonedaEmpleado(prestaciones.vacacionesMonto, prestaciones.moneda)}</b></div>
-        <div style="font-size:12.5px; padding:4px 0; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>🎁 Aguinaldo proporcional (${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoInicio)} al ${fmtFechaDesdeDate(prestaciones.aguinaldo.periodoFin)})</span><b>${fmtMonedaEmpleado(prestaciones.aguinaldo.total, prestaciones.moneda)}</b></div>
-        <div style="font-size:11px; color:var(--ink-soft); margin-top:8px; margin-bottom:2px;">⚖️ Si la relación terminara HOY con responsabilidad patronal (hipotético):</div>
-        <div style="font-size:12.5px; padding:4px 0 4px 14px; border-bottom:1px solid var(--paper-line); display:flex; justify-content:space-between;"><span>Cesantía (${prestaciones.cesantia.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.cesantia.monto, prestaciones.moneda)}</b></div>
-        <div style="font-size:12.5px; padding:4px 0 4px 14px; ${prestaciones.saldoPrestamosPendientes > 0 ? "border-bottom:1px solid var(--paper-line);" : ""}display:flex; justify-content:space-between;"><span>Preaviso (${prestaciones.preaviso.dias} día(s))</span><b>${fmtMonedaEmpleado(prestaciones.preaviso.monto, prestaciones.moneda)}</b></div>
-        ${prestaciones.saldoPrestamosPendientes > 0 ? `<div style="font-size:12.5px; padding:4px 0; color:#B3261E; display:flex; justify-content:space-between;"><span>➖ Saldo de préstamo/adelanto pendiente</span><b>-${fmtMonedaEmpleado(prestaciones.saldoPrestamosPendientes, prestaciones.moneda)}</b></div>` : ""}
-        <div style="font-size:13px; padding:8px 0 0; font-weight:700; color:var(--navy-deep); display:flex; justify-content:space-between;"><span>Total estimado</span><span>${fmtMonedaEmpleado(prestaciones.vacacionesMonto + prestaciones.aguinaldo.total + prestaciones.cesantia.monto + prestaciones.preaviso.monto - prestaciones.saldoPrestamosPendientes, prestaciones.moneda)}</span></div>
-      </div></div>` : ""}
 
       ${renderSeccionColillasEmpleado(documentosEmpleado, empKey)}
 
