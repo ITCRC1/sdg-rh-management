@@ -22715,15 +22715,21 @@ function renderSeccionDiasLibresEmpleado(registrosHorasExtra, solicitudesPendien
 // rutas-datos.js), pero agrupado en subsecciones fijas en vez de una sola
 // lista plana, para que "amonestaciones", "constancias" y "contratos
 // firmados" se lean como categorías separadas.
+// Esta función solo la usa la vista de autoservicio del empleado
+// (construirHtmlMiInformacion / "Mi Información") — RH ve TODOS sus
+// documentos, incluidos despidos y amonestaciones, en el expediente
+// administrativo (renderSeccionDocumentosEmpleado), que es una función
+// aparte. Los documentos disciplinarios/delicados (despido, amonestación) se
+// excluyen a propósito de lo que el empleado ve de sí mismo — quedan solo
+// para gerencia/master (pedido explícito del usuario).
+const TIPOS_DOCUMENTO_OCULTOS_PARA_EMPLEADO = new Set(["carta_despido", "amonestacion"]);
 function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
-  const documentos = documentosSinFiltrar.filter(d => !d.anulado_en && d.tipo !== "colilla_pago");
+  const documentos = documentosSinFiltrar.filter(d => !d.anulado_en && d.tipo !== "colilla_pago" && !TIPOS_DOCUMENTO_OCULTOS_PARA_EMPLEADO.has(d.tipo));
   const grupos = [
     { tipo: "contrato", titulo: "📄 Contratos" },
     { tipo: "constancia_handbook", titulo: "📋 Constancias" },
     { tipo: "constancia_salarial", titulo: "💵 Constancias salariales" },
     { tipo: "constancia_laboral", titulo: "📄 Constancias laborales" },
-    { tipo: "amonestacion", titulo: "⚠️ Amonestaciones" },
-    { tipo: "carta_despido", titulo: "⚖️ Cartas de despido" },
     { tipo: "recomendacion", titulo: "📝 Recomendaciones laborales" },
     { tipo: "accion_personal_vacaciones", titulo: "🏖️ Acciones de personal — Vacaciones" },
     { tipo: "accion_personal", titulo: "📄 Acciones de personal — Permiso sin goce" },
