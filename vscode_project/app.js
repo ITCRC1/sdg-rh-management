@@ -14745,6 +14745,24 @@ function renderDespido(){
   const titulo = tr("CARTA DE DESPIDO","TERMINATION LETTER");
   const fBox = FIRMANTE_DESPIDO;
 
+  // Preaviso (Art. 28 CT) — mismo cálculo por antigüedad que ya usa
+  // Liquidación (ver calcularPreavisoEstimado): 0 días con menos de 3 meses
+  // de servicio, 7 entre 3-6 meses, 14 entre 6 meses y 1 año, 30 con 1 año o
+  // más. Solo aplica al despido CON responsabilidad patronal — sin
+  // responsabilidad nunca paga preaviso (ya lo dice esa rama más abajo).
+  const fechaIngresoDespido = parsearFechaEmpleado(data.FECHA_INGRESO_EMP_DESPIDO);
+  const mesDespidoIdx = MESES.indexOf(data.MES_DESPIDO);
+  const fechaDespidoObj = (tieneFecha && mesDespidoIdx >= 0) ? new Date(Number(data.ANIO_DESPIDO), mesDespidoIdx, Number(data.DIA_DESPIDO)) : null;
+  const preaviso = (fechaIngresoDespido && fechaDespidoObj) ? calcularPreavisoEstimado(fechaIngresoDespido, fechaDespidoObj, 0) : null;
+  const preavisoTxt = !preaviso
+    ? tr(`<span class="missing">[falta la fecha de ingreso en la ficha para calcular el preaviso]</span>`,
+         `<span class="missing">[start date missing from the record to calculate the notice period]</span>`)
+    : preaviso.dias > 0
+      ? tr(`Por su antigüedad, corresponde un preaviso de <b>${preaviso.dias} día(s)</b>, conforme al artículo 28 del Código de Trabajo.`,
+           `Based on their length of service, a notice period of <b>${preaviso.dias} day(s)</b> applies, pursuant to article 28 of the Labor Code.`)
+      : tr(`Por tener menos de tres meses de servicio continuo, no corresponde preaviso, conforme al artículo 28 del Código de Trabajo.`,
+           `As they have less than three months of continuous service, no notice period applies, pursuant to article 28 of the Labor Code.`);
+
   let responsabilidadTxt, observacionesHtml;
   if (esSin){
     const causalTxt = causal
@@ -14767,9 +14785,9 @@ function renderDespido(){
     );
     observacionesHtml = tr(
       `<p><b>Observaciones:</b> ${motivoCon}.</p>
-       <p>Se procederá al pago de preaviso, auxilio de cesantía, vacaciones y aguinaldo proporcionales, conforme a la legislación laboral vigente.</p>`,
+       <p>${preavisoTxt} Se procederá además al pago de auxilio de cesantía, vacaciones y aguinaldo proporcionales, conforme a la legislación laboral vigente.</p>`,
       `<p><b>Remarks:</b> ${motivoCon}.</p>
-       <p>Preaviso, auxilio de cesantía, and proportional vacation and Christmas bonus (Aguinaldo) will be paid, in accordance with current labor legislation.</p>`
+       <p>${preavisoTxt} Auxilio de cesantía, and proportional vacation and Christmas bonus (Aguinaldo) will also be paid, in accordance with current labor legislation.</p>`
     );
   }
 
@@ -21633,6 +21651,10 @@ async function generarDespidoDeEmpleado(key){
     data.NOMBRE_PILA_TRABAJADOR = emp.NOMBRE_EMP || data.NOMBRE_PILA_TRABAJADOR || "";
     data.IDENTIFICACION = emp.IDENTIFICACION_EMP || data.IDENTIFICACION || "";
     data.PUESTO = emp.DEPARTAMENTO_EMP || data.PUESTO || "";
+    // Se guarda aparte (no se le pide a RH, no se muestra en el formulario)
+    // solo para poder calcular el preaviso (Art. 28 CT) en renderDespido —
+    // ver calcularPreavisoEstimado.
+    data.FECHA_INGRESO_EMP_DESPIDO = emp.FECHA_INGRESO_EMP || "";
 
     // pull employer data from the linked contract (by cédula) so RH never re-types it
     await buildContratosPorCedulaIndex();
