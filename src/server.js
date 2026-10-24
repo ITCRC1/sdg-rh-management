@@ -60,7 +60,8 @@ app.get("/healthz/db", async (req, res) => {
     const { rows } = await query("SELECT now() AS hora, current_database() AS bd");
     res.json({ ok: true, hora: rows[0].hora, bd: rows[0].bd });
   } catch (e) {
-    res.status(503).json({ ok: false, error: e.message });
+    console.error("Falló la verificación de la base de datos:", e.message);
+    res.status(503).json({ ok: false, error: "Base de datos no disponible." });
   }
 });
 
