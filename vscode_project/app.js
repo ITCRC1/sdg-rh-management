@@ -13989,6 +13989,29 @@ body{ background:#fff; margin:0; padding:24px; }
 
 // Congela y archiva. Nunca interrumpe la impresión: si falla, avisa y sigue,
 // porque perder el documento impreso sería peor que perder la copia archivada.
+// Tipos de documento donde generar uno nuevo debe anular automáticamente
+// cualquier versión anterior del mismo tipo para la misma persona — pedido
+// explícito del usuario: para Amonestación, Recomendación laboral,
+// Constancia salarial y Constancia laboral solo debe quedar activa la
+// última generada, ya que las anteriores se entienden como erróneas o
+// desactualizadas. No se borran de verdad (documentos_emitidos es de
+// solo-inserción, por auditoría) — se anulan igual que "Anular" a mano,
+// solo que automático, así que siguen recuperables desde la base si hiciera
+// falta.
+const TIPOS_DOCUMENTO_SOLO_ULTIMA_VERSION = new Set(["amonestacion", "recomendacion", "constancia_salarial", "constancia_laboral"]);
+
+async function anularVersionesAnterioresDeTipo(tipo, cedula, idNuevo){
+  if (!cedula) return;
+  try{
+    const docs = await window.sdgApi.documentos({ tipo, cedula, limite: 50 });
+    const anteriores = (docs || []).filter(d => !d.anulado_en && d.id !== idNuevo);
+    for (const d of anteriores){
+      try{ await window.sdgApi.anularDocumento(d.id, "Reemplazado automáticamente por una versión más reciente del mismo documento."); }
+      catch(e){ /* best effort — si uno falla no debe tumbar los demás ni el documento nuevo, que ya se guardó bien */ }
+    }
+  }catch(e){ /* best effort — no debe tumbar el archivado del documento nuevo, que ya se guardó bien */ }
+}
+
 async function congelarEmitido(rootId, meta){
   if (!CON_BACKEND) return;
   if (window.sdgApi && !window.sdgApi.puedeEditar()) return;
@@ -14005,6 +14028,9 @@ async function congelarEmitido(rootId, meta){
       empleadoNombre: meta.empleadoNombre || null,
     });
     statusMsg("Documento archivado en el histórico (huella " + r.sha256.slice(0, 12) + "…).", true);
+    if (TIPOS_DOCUMENTO_SOLO_ULTIMA_VERSION.has(meta.tipo)){
+      await anularVersionesAnterioresDeTipo(meta.tipo, meta.empleadoCedula, r.id);
+    }
   }catch(e){
     statusMsg("El documento se generó, pero no se pudo archivar: " + (e.message || "error"), false);
   }
