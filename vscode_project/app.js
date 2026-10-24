@@ -19742,6 +19742,7 @@ async function renderDiasLibresVacacionesPanel(){
     // entre varias propiedades) — va al final, después de todo lo que
     // requiere acción (solicitudes, calendario, reportes), no primero.
     html += renderTablaSaldos(empleadosVisibles, solicitudes, registrosHorasExtra, new Date());
+    html += renderTablaSaldosDiasLibres(empleadosVisibles, registrosHorasExtra, new Date());
 
     panel.innerHTML = html;
   }catch(e){
@@ -20628,6 +20629,41 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
         const etiqueta = f.saldo < 0 ? `${Math.abs(f.saldo)} día(s) 🔻 adelanto` : `${f.saldo} día(s)${f.saldo >= TOPE_SALDO_VACACIONES ? " ⚠️ tope" : ""}`;
         return `<div style="${bordeFila}">${escapeHtml(nombreCompletoEmpleado(f.emp)||f.emp.key)}</div><div style="${bordeFila} text-align:right; font-weight:700; color:${color};" title="${f.saldo < 0 ? 'Saldo negativo: se le aprobaron/asignaron más días de los que tenía acumulados. Se recupera solo con la acumulación mensual hasta volver a 0.' : ''}">${etiqueta}</div>${puedeAjustar ? `<div style="${bordeFila}"><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
       }).join("")}
+    </div>
+  </div></div>`;
+}
+
+// "¿Quién falta de días libres?" — a diferencia de vacaciones (cupo legal,
+// ciclo de aniversario), el cupo de días libres es un beneficio interno que
+// se acredita cada MES CALENDARIO (ver calcularSaldoDiasLibres) y se
+// arrastra sin límite si no se otorga completo — este saldo acumulado es
+// justo "cuántos días libres todavía se le deben" a hoy. Solo se listan los
+// que tienen saldo > 0 (pendiente de otorgar); un saldo negativo es un
+// adelanto, no una deuda, así que no cuenta acá.
+function renderTablaSaldosDiasLibres(empleados, registrosHorasExtra, hoy){
+  const filas = empleados
+    .map(e => {
+      const diasOtorgados = registrosHorasExtra
+        .filter(r => r.EMPLEADO_KEY === e.key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
+        .map(r => r.FECHA);
+      const saldo = calcularSaldoDiasLibres(e, diasOtorgados, hoy);
+      return { emp: e, saldo };
+    })
+    .filter(f => f.saldo > 0)
+    .sort((a,b) => b.saldo - a.saldo);
+  if (!filas.length){
+    return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🗓️ Días libres pendientes de otorgar</div>
+      <div style="font-size:12px; color:var(--ink-soft);">Nadie tiene días libres pendientes — todos están al día.</div>
+    </div></div>`;
+  }
+  return `<div class="section-card" style="margin-bottom:14px; border-color:#D9A54A;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🗓️ Días libres pendientes de otorgar (${filas.length})</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cupo mensual acumulado (con arrastre) menos lo ya otorgado — mismo criterio que la columna "Días libres (mes)" de Horas Extra.</div>
+    <div style="display:grid; grid-template-columns:1fr auto; gap:4px 10px; align-items:center; font-size:12.5px;">
+      ${filas.map(f => `
+        <div style="padding:5px 0; border-bottom:1px solid var(--paper-line);">${escapeHtml(nombreCompletoEmpleado(f.emp) || f.emp.key)}</div>
+        <div style="padding:5px 0; border-bottom:1px solid var(--paper-line); text-align:right; font-weight:700; color:#b2703b;">${f.saldo} día(s)</div>`).join("")}
     </div>
   </div></div>`;
 }
