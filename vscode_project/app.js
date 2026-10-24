@@ -20759,6 +20759,7 @@ function renderCalendarioMensual(empleados, todasLasSolicitudes, registrosHorasE
       <div style="display:flex; gap:6px;">
         <button class="btn" onclick="diasLibresMesCalendario='${mesAnteriorStr}'; renderDiasLibresVacacionesPanel();">← Mes anterior</button>
         <button class="btn" onclick="diasLibresMesCalendario='${mesSiguienteStr}'; renderDiasLibresVacacionesPanel();">Mes siguiente →</button>
+        <button class="btn primary" onclick="exportarCalendarioMensualExcel();">⬇️ Exportar Excel (todos los departamentos)</button>
       </div>
     </div>
     <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">
@@ -20818,6 +20819,132 @@ function ordenarDepartamentos(deptos){
     if (ib === -1) return -1;
     return ia - ib;
   });
+}
+
+// Exporta el calendario mensual de días libres/vacaciones completo (TODOS
+// los departamentos, sin importar el filtro activo en pantalla — pedido
+// explícito del usuario), una pestaña de Excel por departamento, con el
+// mismo color por celda que ya se ve en renderCalendarioMensual
+// (etiquetaCalendarioParaDia ya devuelve el color en formato ARGB, listo
+// para pegarlo directo en el fill de ExcelJS, sin convertir nada).
+async function exportarCalendarioMensualExcel(){
+  if (typeof ExcelJS === "undefined"){ statusMsg("No se pudo cargar el generador de Excel.", false); return; }
+  try{
+    const mesStr = diasLibresMesCalendario;
+    const [anio, mes] = mesStr.split("-").map(Number);
+    const primerDia = new Date(anio, mes - 1, 1);
+    const ultimoDia = new Date(anio, mes, 0);
+    const dias = [];
+    for (let d = new Date(primerDia); d <= ultimoDia; d.setDate(d.getDate()+1)) dias.push(new Date(d));
+    const DIA_SEMANA = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+    const [empleados, solicitudes, registrosHorasExtra] = await Promise.all([
+      cargarEmpleadosDB(), listarSolicitudesAusencia(), listarRegistrosHorasExtra(),
+    ]);
+    const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestos = await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix, ""), ...v };
+    }));
+    const puestosPorKey = {}; puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const departamentoDeEmpleado = emp => departamentoDeEmpleadoGenerico(emp, puestosPorKey);
+
+    const activos = empleados.filter(e => !e.ARCHIVADO);
+    if (!activos.length){ statusMsg("No hay empleados activos para exportar.", false); return; }
+
+    const grupos = {};
+    activos.forEach(e => {
+      const depto = departamentoDeEmpleado(e) || "Sin departamento";
+      if (!grupos[depto]) grupos[depto] = [];
+      grupos[depto].push(e);
+    });
+    const departamentosOrdenados = ordenarDepartamentos(Object.keys(grupos));
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+    const COLUMNAS = ["Colaborador", ...dias.map(d => `${DIA_SEMANA[d.getDay()]} ${d.getDate()}`)];
+    const nombresUsados = new Set();
+
+    const wb = new ExcelJS.Workbook();
+    departamentosOrdenados.forEach(depto => {
+      // Nombre de pestaña de Excel: máx. 31 caracteres, sin \/?*[]: y sin
+      // repetirse — "Sin departamento" y nombres largos se recortan igual.
+      let nombreHoja = depto.replace(/[\\/?*\[\]:]/g, "").slice(0, 31).trim() || "Depto";
+      let sufijo = 2;
+      while (nombresUsados.has(nombreHoja.toUpperCase())){
+        nombreHoja = (depto.slice(0, 28) + " " + sufijo).slice(0, 31);
+        sufijo++;
+      }
+      nombresUsados.add(nombreHoja.toUpperCase());
+
+      const ws = wb.addWorksheet(nombreHoja);
+      ws.columns = [{ width: 28 }, ...dias.map(() => ({ width: 7 }))];
+
+      ws.mergeCells(1, 1, 1, COLUMNAS.length);
+      const t = ws.getCell(1, 1);
+      t.value = nombrePropiedad;
+      t.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NEGRO} };
+      t.font = { color:{argb:BLANCO}, bold:true, size:13 };
+      t.alignment = { horizontal:"center" };
+
+      ws.mergeCells(2, 1, 2, COLUMNAS.length);
+      const st = ws.getCell(2, 1);
+      st.value = `Calendario — ${MESES[mes-1]} ${anio} — ${depto}`;
+      st.font = { italic:true, size:10 };
+      st.alignment = { horizontal:"center" };
+
+      const hdr = ws.getRow(3);
+      COLUMNAS.forEach((c, i) => {
+        const cell = hdr.getCell(i + 1);
+        cell.value = c;
+        cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} };
+        cell.font = { bold:true };
+        cell.alignment = { horizontal:"center" };
+        cell.border = bordeCelda;
+      });
+
+      // Mismo orden que el calendario en pantalla: capitanes primero, luego
+      // alfabético por apellido (ver esPuestoCapitan/compararPorApellido).
+      const empleadosDepto = grupos[depto].slice().sort((a, b) => {
+        const capA = esPuestoCapitan(puestosPorKey[a.PUESTO_KEY], a) ? 0 : 1;
+        const capB = esPuestoCapitan(puestosPorKey[b.PUESTO_KEY], b) ? 0 : 1;
+        if (capA !== capB) return capA - capB;
+        return compararPorApellido(a, b);
+      });
+
+      let fila = 4;
+      empleadosDepto.forEach(emp => {
+        const solicitudesEmp = solicitudes.filter(s => s.EMPLEADO_KEY === emp.key);
+        const horasEmp = registrosHorasExtra.filter(r => r.EMPLEADO_KEY === emp.key);
+        const row = ws.getRow(fila);
+        const celdaNombre = row.getCell(1);
+        celdaNombre.value = nombreCompletoEmpleado(emp) || emp.key;
+        celdaNombre.border = bordeCelda;
+        dias.forEach((d, i) => {
+          const fechaISO = isoDeFechaLocal(d);
+          const etiqueta = etiquetaCalendarioParaDia(fechaISO, solicitudesEmp, horasEmp);
+          const cell = row.getCell(i + 2);
+          cell.border = bordeCelda;
+          cell.alignment = { horizontal:"center" };
+          if (etiqueta){
+            cell.value = etiqueta.texto;
+            cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb: etiqueta.color} };
+          }
+        });
+        fila++;
+      });
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    descargarBlobComoArchivo(blob, `calendario_dias_libres_${mesStr}.xlsx`);
+    statusMsg("Calendario de días libres exportado — una pestaña por departamento.");
+  }catch(e){ statusMsg("No se pudo exportar: " + (e.message || ""), false); }
 }
 
 function calcularDotacionPorDia(empleados, solicitudes, registrosHorasExtra, departamentoDeEmpleado, desdeISO, hastaISO){
