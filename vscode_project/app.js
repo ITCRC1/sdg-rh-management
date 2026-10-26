@@ -23479,6 +23479,34 @@ function toggleEmpDocSubmenu(id){
   if (!isOpen) menu.classList.add("open");
 }
 
+// Copia a `data` los campos de identidad/puesto que vienen de la ficha del
+// empleado (y de su puesto vinculado, vía usePuesto) — compartido entre
+// "crear contrato nuevo" y "reabrir uno ya existente para refrescarlo", para
+// que las dos rutas traigan exactamente los mismos datos frescos, sin
+// duplicar la lista de campos en dos lugares que podrían desincronizarse.
+// A propósito NO toca el salario ni las cláusulas propias del contrato
+// (empresa, propiedad, exclusividad, teletrabajo, comisiones) — esas son del
+// contrato, no de la ficha, y no deben pisarse solas.
+async function aplicarDatosEmpleadoAContrato(emp){
+  if (emp.PUESTO_KEY){
+    await usePuesto(emp.PUESTO_KEY);
+  }
+  data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp);
+  data.APELLIDOS_TRABAJADOR = emp.APELLIDOS_EMP || "";
+  data.NOMBRE_PILA_TRABAJADOR = emp.NOMBRE_EMP || "";
+  data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+  // Dirección: se copia tal cual de la ficha (ya viene partida en
+  // Provincia/Cantón/Distrito/Señas desde Empleados) — RH no debería tener
+  // que volver a elegirla/escribirla a mano.
+  data.PROVINCIA_TRABAJADOR = emp.PROVINCIA_EMP || "";
+  data.CANTON_TRABAJADOR = emp.CANTON_EMP || "";
+  data.DISTRITO_TRABAJADOR = emp.DISTRITO_EMP || "";
+  data.SENAS_TRABAJADOR = emp.SENAS_EMP || "";
+  data.DIRECCION_TRABAJADOR = emp.DIRECCION_EMP || "";
+  data.ESTADO_CIVIL = emp.ESTADO_CIVIL_EMP || "";
+  if (!emp.PUESTO_KEY && !data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
+}
+
 async function actualizarContratoDeEmpleado(key){
   try{
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
@@ -23491,31 +23519,26 @@ async function actualizarContratoDeEmpleado(key){
     const vinculados = contratosPorCedulaCache[(emp.IDENTIFICACION_EMP||"").trim()] || [];
     if (vinculados.length){
       await openContract(vinculados[0].key);
-      statusMsg("Se abrió el contrato ya existente de " + (nombreCompletoEmpleado(emp) || "el empleado") + " para actualizarlo.");
+      // Pedido explícito del usuario: antes esto reabría el contrato con la
+      // "foto" de los datos del empleado tal como estaban el día que se
+      // vinculó por primera vez — si después se corregía algo en la ficha
+      // (nombre, cédula, dirección, puesto), el contrato quedaba
+      // desactualizado para siempre, y la única forma de corregirlo era
+      // desvincular y volver a escribir todo a mano, o borrar el contrato y
+      // crear uno nuevo. Ahora, cada vez que se reabre desde acá, los datos
+      // de identidad/puesto se refrescan con lo que diga la ficha AHORA.
+      await aplicarDatosEmpleadoAContrato(emp);
+      currentEmpKeyForContract = key;
+      renderForm();
+      statusMsg("Se abrió el contrato de " + (nombreCompletoEmpleado(emp) || "el empleado") + " con los datos de identidad y puesto actualizados.");
       return;
     }
 
     // no contract yet: start a new one, pre-filled with the employee's data —
     // including their linked puesto (jefatura, jornada, tareas, responsabilidades)
     // so RH never has to type any of this twice.
-    if (emp.PUESTO_KEY){
-      await usePuesto(emp.PUESTO_KEY);
-    }
-    data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp);
-    data.APELLIDOS_TRABAJADOR = emp.APELLIDOS_EMP || "";
-    data.NOMBRE_PILA_TRABAJADOR = emp.NOMBRE_EMP || "";
-    data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
-    // Dirección: se copia tal cual de la ficha (ya viene partida en
-    // Provincia/Cantón/Distrito/Señas desde Empleados) — al crear el contrato
-    // DESDE el empleado, RH no debería tener que volver a elegirla a mano.
-    data.PROVINCIA_TRABAJADOR = emp.PROVINCIA_EMP || "";
-    data.CANTON_TRABAJADOR = emp.CANTON_EMP || "";
-    data.DISTRITO_TRABAJADOR = emp.DISTRITO_EMP || "";
-    data.SENAS_TRABAJADOR = emp.SENAS_EMP || "";
-    data.DIRECCION_TRABAJADOR = emp.DIRECCION_EMP || "";
-    data.ESTADO_CIVIL = emp.ESTADO_CIVIL_EMP || "";
+    await aplicarDatosEmpleadoAContrato(emp);
     currentEmpKeyForContract = key;
-    if (!emp.PUESTO_KEY && !data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
     const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
     if (fechaIngreso){
       data.DIA_INICIO = String(fechaIngreso.getDate());
