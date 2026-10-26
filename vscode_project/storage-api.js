@@ -361,6 +361,10 @@
       return API + "/documentos/" + encodeURIComponent(id) + "/archivo";
     },
 
+    urlDescargaFirmado(id) {
+      return API + "/documentos/" + encodeURIComponent(id) + "/archivo-firmado";
+    },
+
     async anularDocumento(id, motivo) {
       return pedir("/documentos/" + encodeURIComponent(id) + "/anular", {
         method: "PATCH",
@@ -372,8 +376,19 @@
     async enviarContratoAFirma(id) {
       return pedir("/documentos/" + encodeURIComponent(id) + "/enviar-firma", { method: "PATCH" });
     },
-    async firmarContrato(id) {
-      return pedir("/documentos/" + encodeURIComponent(id) + "/firmar", { method: "PATCH" });
+    // Pedido explícito del usuario (integridad legal): ya no basta con
+    // confirmar sin archivo — hay que subir de regreso el PDF realmente
+    // firmado (ver migrations/010_firma_contrato_pdf.sql).
+    async firmarContrato(id, blob, nombreArchivo) {
+      const base64 = await blobABase64(blob);
+      return pedir("/documentos/" + encodeURIComponent(id) + "/firmar", {
+        method: "PATCH",
+        body: JSON.stringify({
+          archivoBase64: base64,
+          mime: blob.type || "application/pdf",
+          nombreArchivo: nombreArchivo || "contrato_firmado.pdf",
+        }),
+      });
     },
     async rechazarContrato(id, motivo) {
       return pedir("/documentos/" + encodeURIComponent(id) + "/rechazar-firma", {

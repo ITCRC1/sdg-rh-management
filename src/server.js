@@ -20,7 +20,9 @@ const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-app.use(express.json({ limit: "20mb" }));
+// 40mb para que quepa con margen un PDF de contrato firmado de hasta 25MB
+// codificado en base64 (~34MB) — ver PATCH /api/documentos/:id/firmar.
+app.use(express.json({ limit: "40mb" }));
 
 // Cabeceras de seguridad. xlsx.js y pdf.js viven en vscode_project/vendor/ (ya no
 // se cargan desde un CDN externo, así que no hace falta abrir la CSP para eso —

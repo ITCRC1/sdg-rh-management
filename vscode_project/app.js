@@ -22330,7 +22330,10 @@ function renderBloqueFirmaContrato(d, origen){
   const puedeFirmar = !!(window.sdgApi && window.sdgApi.puedeFirmarContratos());
 
   if (d.firmado_en){
-    return `<div style="margin-top:2px;"><span class="meta" style="color:#2e7d32;">✅ Firmado por ${escapeHtml((d.firmado_por_email||"").split("@")[0]||"—")} el ${fmtFecha(d.firmado_en)}</span></div>`;
+    return `<div style="margin-top:2px;">
+      <span class="meta" style="color:#2e7d32;">✅ Firmado por ${escapeHtml((d.firmado_por_email||"").split("@")[0]||"—")} el ${fmtFecha(d.firmado_en)}</span>
+      <a class="btn" style="padding:3px 8px; font-size:10.5px; margin-left:6px; text-decoration:none;" href="${window.sdgApi.urlDescargaFirmado(d.id)}" target="_blank" rel="noopener">📎 Ver PDF firmado</a>
+    </div>`;
   }
   if (d.rechazado_firma_en){
     const reenviar = puedeEnviar ? `<button class="btn" style="padding:3px 8px; font-size:10.5px; margin-top:3px;" onclick="enviarContratoAFirma${sufijo}('${idEsc}')">📤 Reenviar a firma</button>` : "";
@@ -22342,7 +22345,7 @@ function renderBloqueFirmaContrato(d, origen){
   if (d.enviado_firma_en){
     const acciones = puedeFirmar
       ? `<div style="margin-top:3px; display:flex; gap:6px;">
-          <button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="firmarContrato${sufijo}('${idEsc}')">✍️ Firmar</button>
+          <button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="firmarContrato${sufijo}('${idEsc}')">✍️ Firmar (sube el PDF firmado)</button>
           <button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="rechazarContrato${sufijo}('${idEsc}')">❌ Rechazar</button>
         </div>`
       : "";
@@ -22369,12 +22372,36 @@ async function enviarContratoAFirmaConConfirmacion(id, alConfirmar){
   }catch(e){ statusMsg("No se pudo enviar a firma: " + (e.message || "error"), false); }
 }
 
+// Pedido explícito del usuario (integridad legal): firmar ya no es solo
+// confirmar — hay que subir de regreso el PDF realmente firmado. En vez de
+// un confirm() que solo ponía una fecha, esto dispara un selector de
+// archivo; el PATCH de verdad se dispara en onFirmaContratoPdfSelected una
+// vez elegido el PDF.
+let pendingFirmaContrato = null;
+const MAX_PDF_FIRMA_CONTRATO_BYTES = 25 * 1024 * 1024;
+
 async function firmarContratoConConfirmacion(id, alConfirmar){
-  if (!confirm("¿Firmar este contrato? Esta acción queda registrada y no se puede deshacer.")) return;
+  pendingFirmaContrato = { id, alConfirmar };
+  document.getElementById("firma-contrato-pdf-input").click();
+}
+
+async function onFirmaContratoPdfSelected(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  const ctx = pendingFirmaContrato;
+  inputEl.value = "";
+  pendingFirmaContrato = null;
+  if (!file || !ctx) return;
+  const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if (!esPdf){ statusMsg("Solo se aceptan archivos PDF.", false); return; }
+  if (file.size > MAX_PDF_FIRMA_CONTRATO_BYTES){
+    statusMsg("El PDF pesa más de 25MB — comprímelo o escanea en menor resolución.", false);
+    return;
+  }
+  if (!confirm("¿Confirmar que este es el contrato ya firmado? Esta acción queda registrada y no se puede deshacer.")) return;
   try{
-    await window.sdgApi.firmarContrato(id);
-    statusMsg("Contrato firmado.");
-    if (alConfirmar) await alConfirmar();
+    await window.sdgApi.firmarContrato(ctx.id, file, file.name);
+    statusMsg("Contrato firmado — PDF guardado.");
+    if (ctx.alConfirmar) await ctx.alConfirmar();
   }catch(e){ statusMsg("No se pudo firmar: " + (e.message || "error"), false); }
 }
 

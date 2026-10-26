@@ -16,6 +16,7 @@ const router = express.Router();
 
 const MAX_VALOR_BYTES = 4 * 1024 * 1024; // por documento
 const MAX_ARCHIVO_BYTES = 15 * 1024 * 1024; // por documento emitido
+const MAX_ARCHIVO_FIRMADO_BYTES = 25 * 1024 * 1024; // PDF de contrato firmado subido al confirmar PATCH .../firmar
 
 router.use(A.requiereSesion, A.exigeCambioPassword);
 
@@ -1154,6 +1155,39 @@ emitidos.get("/:id/archivo", async (req, res, next) => {
   }
 });
 
+// GET /api/documentos/:id/archivo-firmado — descarga el PDF REALMENTE
+// FIRMADO (distinto del original que genera el sistema, ver PATCH .../firmar).
+// Mismo control de acceso que /:id/archivo.
+emitidos.get("/:id/archivo-firmado", async (req, res, next) => {
+  try {
+    const propiedad = propiedadDe(req);
+    const { rows } = await query(
+      `SELECT nombre_archivo_firmado, mime_firmado, contenido_firmado, propiedad_id, empleado_cedula
+         FROM documentos_emitidos WHERE id = $1`,
+      [req.params.id]
+    );
+    const d = rows[0];
+    if (!d || !d.contenido_firmado) return res.status(404).json({ error: "Todavía no hay un PDF firmado para este documento." });
+    if (d.propiedad_id !== propiedad && !puedeVerCualquierPropiedad(req.usuario.rol)) {
+      return res.status(403).json({ error: "Ese documento pertenece a otra propiedad." });
+    }
+    if ((req.usuario.rol === "empleado" || req.usuario.rol === "jefatura") && d.empleado_cedula !== req.usuario.cedula) {
+      return res.status(403).json({ error: "Ese documento no es tuyo." });
+    }
+
+    res.setHeader("Content-Type", d.mime_firmado || "application/pdf");
+    res.setHeader("Content-Length", d.contenido_firmado.length);
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="' + (d.nombre_archivo_firmado || "contrato_firmado.pdf").replace(/[^\w.\- ]/g, "_") + '"'
+    );
+    res.end(d.contenido_firmado);
+  } catch (e) {
+    if (e.code === "22P02") return res.status(400).json({ error: "Identificador inválido." });
+    next(e);
+  }
+});
+
 // PATCH /api/documentos/:id/anular — no borra, marca como anulado
 emitidos.patch("/:id/anular", A.requiereEscritura, async (req, res, next) => {
   try {
@@ -1232,18 +1266,37 @@ emitidos.patch("/:id/enviar-firma", A.requiereEscritura, async (req, res, next) 
 // PATCH /api/documentos/:id/firmar — solo la cuenta con
 // usuarios.puede_firmar_contratos. Exige que ya se haya enviado a firma
 // antes (no se firma cualquier documento suelto sin pasar por ahí).
+// Pedido explícito del usuario (integridad legal): ya no basta con
+// confirmar sin más — hay que subir de regreso el PDF realmente firmado,
+// que queda guardado en la misma fila (ver migrations/010_firma_contrato_pdf.sql)
+// y se descarga aparte en GET /:id/archivo-firmado.
 emitidos.patch("/:id/firmar", A.requiereFirmaContratos, async (req, res, next) => {
   try {
     const d = await documentoDeContratoConAcceso(req, res);
     if (!d) return;
 
+    const b = req.body || {};
+    const base64 = String(b.archivoBase64 || "");
+    if (!base64) return res.status(400).json({ error: "Hay que subir el PDF firmado para confirmar la firma." });
+    const contenido = Buffer.from(base64, "base64");
+    if (!contenido.length) return res.status(400).json({ error: "El archivo llegó vacío." });
+    if (contenido.length > MAX_ARCHIVO_FIRMADO_BYTES) {
+      return res.status(413).json({
+        error: "El PDF firmado supera el límite de " + (MAX_ARCHIVO_FIRMADO_BYTES / 1024 / 1024) + " MB.",
+      });
+    }
+
     const { rows } = await query(
       `UPDATE documentos_emitidos
-          SET firmado_en = now(), firmado_por = $2, firmado_por_email = $3
+          SET firmado_en = now(), firmado_por = $2, firmado_por_email = $3,
+              contenido_firmado = $4, mime_firmado = $5, nombre_archivo_firmado = $6, tamano_bytes_firmado = $7
         WHERE id = $1 AND enviado_firma_en IS NOT NULL AND firmado_en IS NULL
               AND rechazado_firma_en IS NULL AND anulado_en IS NULL
         RETURNING id, firmado_en`,
-      [req.params.id, req.usuario.id, req.usuario.email]
+      [
+        req.params.id, req.usuario.id, req.usuario.email,
+        contenido, String(b.mime || "application/pdf"), String(b.nombreArchivo || "contrato_firmado.pdf"), contenido.length,
+      ]
     );
     if (!rows[0]) return res.status(409).json({ error: "Este contrato no está pendiente de firma." });
     res.json(rows[0]);
