@@ -9590,59 +9590,72 @@ function filasDesdeEventosMarcacion(eventos, jornadaPorCodigo){
   const filasIncompletas = [];
   let sinPar = 0; // marcas descartadas de verdad (par con duración imposible)
   let turnosSinMarcar = 0; // marcas sueltas que SÍ quedan como fila para revisar
-  Object.entries(porEmpleado).forEach(([codigo, info]) => {
-    const porFecha = {};
-    info.marcas.forEach(ev => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
 
-    // Turno nocturno/mixto que cruza medianoche (típico de seguridad): si un
-    // día trae UNA sola marca y el día calendario siguiente también trae una
-    // sola marca, se tratan como el mismo turno (entrada hoy, salida mañana,
-    // contado en el día de hoy) en vez de dos días "sin marcar" — antes esto
-    // SIEMPRE se veía como dos turnos incompletos porque el corte por fecha
-    // civil parte cualquier turno que cruce la medianoche (ver el porqué de
-    // ese corte más arriba). Cualquier otro patrón (2+ marcas de sobra
-    // cualquiera de los dos días) se deja intacto para revisión manual — acá
-    // fusionar sería adivinar cuál de varias marcas es la del turno nocturno.
+  const registrarPar = (codigo, nombre, fecha, marcaIn, marcaOut) => {
+    const horas = (marcaOut.ts - marcaIn.ts) / 3600000;
+    // Negativo (marcas fuera de orden) o absurdamente largo: se ignora ese
+    // par en vez de inventar un turno que no calza.
+    if (horas <= 0 || horas > 20){ sinPar += 2; return; }
+    const key = codigo + "|" + fecha;
+    if (!porDia[key]) porDia[key] = { codigo, nombre, fecha, horas: 0, marcas: [] };
+    porDia[key].horas += horas;
+    porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcaIn.ts), salida: formatoFechaHoraCortaUTC(marcaOut.ts) });
+  };
+  const registrarSuelta = (codigo, nombre, fecha, marca) => {
+    filasIncompletas.push({ CODIGO: codigo, NOMBRE: nombre, FECHA: fecha, MARCA_SUELTA: isoLocalDesdeTs(marca.ts), INCOMPLETO: true });
+    turnosSinMarcar += 1;
+  };
+
+  Object.entries(porEmpleado).forEach(([codigo, info]) => {
     const puedeCruzarMedianoche = typeof jornadaPorCodigo === "function" &&
       ["turno_nocturno", "turno_mixto"].includes(jornadaPorCodigo(codigo));
-    const fusionaConMañana = new Set(); // fecha D: su única marca se movió al turno de D
-    const fusionadaDesdeAyer = new Set(); // fecha D+1: su única marca ya se consumió en el turno de D
+
     if (puedeCruzarMedianoche){
-      Object.keys(porFecha).sort().forEach(fecha => {
-        if (porFecha[fecha].length !== 1) return;
-        const mañana = relojSumarDias(fecha, 1);
-        const marcasMañana = porFecha[mañana];
-        if (!marcasMañana || marcasMañana.length !== 1) return;
-        const horas = (marcasMañana[0].ts - porFecha[fecha][0].ts) / 3600000;
-        if (horas <= 0 || horas > 20) return;
-        fusionaConMañana.add(fecha);
-        fusionadaDesdeAyer.add(mañana);
-      });
+      // Turno nocturno/mixto que cruza medianoche (típico de seguridad): en
+      // vez de agrupar por fecha CIVIL y después adivinar cuáles marcas
+      // cruzan medianoche (lo que hacía esto antes), se empareja la
+      // secuencia COMPLETA de marcas de la persona en orden cronológico
+      // (entrada-salida-entrada-salida...), sin importar en qué día
+      // calendario cae cada una. Esto corrige el bug real que motivó este
+      // cambio: con turnos nocturnos SEGUIDOS (ej. dos o más noches
+      // seguidas), el día de en medio siempre trae 2 marcas — la salida de
+      // la noche anterior (~6am) y la entrada de esa noche (~6pm) — y el
+      // agrupado por fecha civil las emparejaba ENTRE SÍ como si fueran un
+      // solo turno de ~12 horas, cuando esas 12 horas son en realidad el
+      // DESCANSO entre dos turnos, no trabajo — de ahí salían las horas
+      // extra disparadas de la nada. Cada turno emparejado así queda
+      // archivado bajo la fecha civil de su marca de ENTRADA (primera del
+      // par), igual que ya hacía la versión anterior para el caso simple.
+      const marcas = info.marcas.slice().sort((a, b) => a.ts - b.ts);
+      let inicio = 0;
+      // Si la PRIMERA marca del archivo es de madrugada (antes del
+      // mediodía), probablemente es la salida de un turno que arrancó ANTES
+      // del rango importado (no tenemos su entrada) — se deja aparte como
+      // suelta en vez de emparejarla con la siguiente marca, que sería la
+      // entrada de un turno nuevo, no la salida del que ya traía a medias.
+      if (new Date(marcas[0].ts).getUTCHours() < 12){
+        registrarSuelta(codigo, info.nombre, marcas[0].fecha, marcas[0]);
+        inicio = 1;
+      }
+      for (let i = inicio; i + 1 < marcas.length; i += 2){
+        registrarPar(codigo, info.nombre, marcas[i].fecha, marcas[i], marcas[i + 1]);
+      }
+      if ((marcas.length - inicio) % 2 === 1){
+        const suelta = marcas[marcas.length - 1];
+        registrarSuelta(codigo, info.nombre, suelta.fecha, suelta);
+      }
+      return;
     }
 
+    const porFecha = {};
+    info.marcas.forEach(ev => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
     Object.entries(porFecha).forEach(([fecha, marcasDelDiaOriginal]) => {
-      if (fusionadaDesdeAyer.has(fecha)) return; // ya se contó como la salida del turno de ayer
-      const marcasDelDia = fusionaConMañana.has(fecha)
-        ? [marcasDelDiaOriginal[0], porFecha[relojSumarDias(fecha, 1)][0]]
-        : marcasDelDiaOriginal;
-      const marcas = marcasDelDia.slice().sort((a, b) => a.ts - b.ts);
+      const marcas = marcasDelDiaOriginal.slice().sort((a, b) => a.ts - b.ts);
       for (let i = 0; i + 1 < marcas.length; i += 2){
-        const horas = (marcas[i + 1].ts - marcas[i].ts) / 3600000;
-        // Negativo (marcas fuera de orden) o absurdamente largo: se ignora
-        // ese par en vez de inventar un turno que no calza.
-        if (horas <= 0 || horas > 20){ sinPar += 2; continue; }
-        const key = codigo + "|" + fecha;
-        if (!porDia[key]) porDia[key] = { codigo, nombre: info.nombre, fecha, horas: 0, marcas: [] };
-        porDia[key].horas += horas;
-        porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcas[i].ts), salida: formatoFechaHoraCortaUTC(marcas[i + 1].ts) });
+        registrarPar(codigo, info.nombre, fecha, marcas[i], marcas[i + 1]);
       }
       if (marcas.length % 2 === 1){
-        const suelta = marcas[marcas.length - 1];
-        filasIncompletas.push({
-          CODIGO: codigo, NOMBRE: info.nombre, FECHA: fecha,
-          MARCA_SUELTA: isoLocalDesdeTs(suelta.ts), INCOMPLETO: true,
-        });
-        turnosSinMarcar += 1;
+        registrarSuelta(codigo, info.nombre, fecha, marcas[marcas.length - 1]);
       }
     });
   });
