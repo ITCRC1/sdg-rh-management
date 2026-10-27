@@ -7178,12 +7178,22 @@ function renderModalHandbooksColectivo(){
     <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">Empleados activos sin Handbook archivado todavía — ${completos.length + incompletos.length} en total. La empresa se elige una sola vez para todo el lote.</div>
     <div class="field" style="margin-bottom:8px;">
       <label>Empresa (aplica a todos los que se descarguen)</label>
-      <select id="handbooks-colectivo-empresa">
+      <select id="handbooks-colectivo-empresa" ${st.empresaKey ? "disabled" : ""}>
         <option value="">— Elegir empresa —</option>
-        ${empresas.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.EMPRESA)}</option>`).join("")}
+        ${empresas.map(e => `<option value="${escapeHtml(e.key)}" ${e.key===st.empresaKey?"selected":""}>${escapeHtml(e.EMPRESA)}</option>`).join("")}
       </select>
+      ${st.empresaKey ? `<div class="hint">Ya quedó fija para este lote.</div>` : ""}
     </div>
-    <button class="btn primary" style="width:100%; margin-bottom:12px;" onclick="descargarHandbooksColectivoCompletos()">⬇️ Descargar todos los completos (${completos.length})</button>
+    ${(() => {
+      const faltan = completos.filter(f => !descargados.has(f.emp.key)).length;
+      if (!faltan) return completos.length ? `<div style="font-weight:700; color:var(--leaf); text-align:center; margin-bottom:12px;">✅ Ya se descargaron todos.</div>` : "";
+      // Uno a la vez, nunca en cadena automática: si se cancela el diálogo
+      // de imprimir/guardar de una persona, no debe disparar solo el de la
+      // siguiente — pedido explícito del usuario tras ver que "cancelar"
+      // hacía reaparecer el diálogo de guardar PDF (era el de la próxima
+      // persona del lote, no el mismo, pero daba esa impresión exacta).
+      return `<button class="btn primary" style="width:100%; margin-bottom:12px;" onclick="procesarSiguienteHandbookColectivo()">⬇️ ${descargados.size ? "Descargar el siguiente" : "Empezar a descargar"} (${faltan} pendiente${faltan===1?"":"s"})</button>`;
+    })()}
 
     <div style="font-weight:700; color:var(--leaf); margin-bottom:6px;">✅ Handbook completo (${completos.length})</div>
     ${completos.length ? completos.map(f => {
@@ -7204,55 +7214,57 @@ function renderModalHandbooksColectivo(){
   `;
 }
 
-async function descargarHandbooksColectivoCompletos(){
+// Procesa UN empleado por clic — a propósito, nunca en cadena automática:
+// window.print() no avisa si la persona apretó "Guardar/Imprimir" o
+// "Cancelar", así que encadenar todo el lote solo hacía que, al cancelar
+// uno, el diálogo de la SIGUIENTE persona apareciera de inmediato (se veía
+// como si "guardar PDF" reapareciera solo). Ahora cada descarga es un clic
+// aparte — si cancelás uno, no pasa nada hasta que vos decidas seguir.
+async function procesarSiguienteHandbookColectivo(){
   const st = handbooksColectivoEstado;
   if (!st) return;
-  const empresaKey = (document.getElementById("handbooks-colectivo-empresa") || {}).value;
-  if (!empresaKey){ statusMsg("Elegí la empresa antes de descargar.", false); return; }
-  const empresaInfo = st.empresas.find(e => e.key === empresaKey);
-  const pendientes = st.completos.filter(f => !st.descargados.has(f.emp.key));
-  if (!pendientes.length){ statusMsg("Ya se descargaron todos.", false); return; }
-  const nombrePropiedadActual = (getPropiedadActual() || {}).nombre || "";
-
-  statusMsg(`Generando ${pendientes.length} Handbook(s) — se va a abrir un diálogo de impresión por cada uno, uno a la vez.`, true);
-  for (const f of pendientes){
-    const emp = f.emp;
-    try{
-      data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp);
-      data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
-      const puesto = emp.PUESTO_KEY ? st.puestosPorKey[emp.PUESTO_KEY] : null;
-      data.PUESTO = (puesto && puesto.PUESTO) || emp.DEPARTAMENTO_EMP || "";
-      data.PUESTO_EN = (puesto && puesto.PUESTO_EN) || "";
-      const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
-      if (fechaIngreso){
-        data.DIA_INICIO = String(fechaIngreso.getDate());
-        data.MES_INICIO = MESES[fechaIngreso.getMonth()];
-        data.ANIO_INICIO = String(fechaIngreso.getFullYear());
-      }
-      data.PROPIEDADES = nombrePropiedadActual;
-      data.EMPRESA = empresaInfo.EMPRESA;
-      data.CEDULA_JURIDICA_EMPRESA = empresaInfo.CEDULA_JURIDICA_EMPRESA;
-      data.DIRECCION_EMPRESA = empresaInfo.DIRECCION_EMPRESA;
-      currentKey = null;
-      // El modal tiene que cerrarse ANTES de imprimir — si no, queda
-      // encima del documento en la vista previa de impresión (el bug que
-      // se vio: el PDF salía con el modal tapando el contenido).
-      document.getElementById("modal-incompletos").classList.remove("open");
-      mostrarSoloConstancia();
-      descargarConstanciaPDF();
-      await agregarBitacora(emp.key, "Constancia de Handbook generada (migración en colectivo).");
-      st.descargados.add(emp.key);
-    }catch(e){ statusMsg(`No se pudo generar el Handbook de ${nombreCompletoEmpleado(emp) || emp.key}: ${e.message||""}`, false); }
-    // Se reabre entre cada uno para mostrar el progreso en vivo (quién ya
-    // quedó en ✅ Descargado) mientras se procesa el resto del lote — se
-    // restaura la empresa elegida, que se pierde al rehacer el HTML del selector.
-    document.getElementById("modal-incompletos").classList.add("open");
-    renderModalHandbooksColectivo();
-    const selEmpresa = document.getElementById("handbooks-colectivo-empresa");
-    if (selEmpresa) selEmpresa.value = empresaKey;
-    await new Promise(r => setTimeout(r, 600));
+  // La empresa se fija la primera vez que se hace clic en "Empezar a
+  // descargar" — los clics siguientes ("Descargar el siguiente") la
+  // reutilizan sin pedirla de nuevo.
+  if (!st.empresaKey){
+    const empresaKey = (document.getElementById("handbooks-colectivo-empresa") || {}).value;
+    if (!empresaKey){ statusMsg("Elegí la empresa antes de descargar.", false); return; }
+    st.empresaKey = empresaKey;
+    st.empresaInfo = st.empresas.find(e => e.key === empresaKey);
   }
-  statusMsg("Listo — revisá la lista, los descargados ya dicen ✅.", true);
+  const f = st.completos.find(x => !st.descargados.has(x.emp.key));
+  if (!f){ statusMsg("Ya se descargaron todos.", false); return; }
+  const emp = f.emp;
+  const nombrePropiedadActual = (getPropiedadActual() || {}).nombre || "";
+  try{
+    data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp);
+    data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+    const puesto = emp.PUESTO_KEY ? st.puestosPorKey[emp.PUESTO_KEY] : null;
+    data.PUESTO = (puesto && puesto.PUESTO) || emp.DEPARTAMENTO_EMP || "";
+    data.PUESTO_EN = (puesto && puesto.PUESTO_EN) || "";
+    const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+    if (fechaIngreso){
+      data.DIA_INICIO = String(fechaIngreso.getDate());
+      data.MES_INICIO = MESES[fechaIngreso.getMonth()];
+      data.ANIO_INICIO = String(fechaIngreso.getFullYear());
+    }
+    data.PROPIEDADES = nombrePropiedadActual;
+    data.EMPRESA = st.empresaInfo.EMPRESA;
+    data.CEDULA_JURIDICA_EMPRESA = st.empresaInfo.CEDULA_JURIDICA_EMPRESA;
+    data.DIRECCION_EMPRESA = st.empresaInfo.DIRECCION_EMPRESA;
+    currentKey = null;
+    // El modal tiene que cerrarse ANTES de imprimir — si no, queda encima
+    // del documento en la vista previa de impresión.
+    document.getElementById("modal-incompletos").classList.remove("open");
+    mostrarSoloConstancia();
+    descargarConstanciaPDF();
+    await agregarBitacora(emp.key, "Constancia de Handbook generada (migración en colectivo).");
+    st.descargados.add(emp.key);
+  }catch(e){ statusMsg(`No se pudo generar el Handbook de ${nombreCompletoEmpleado(emp) || emp.key}: ${e.message||""}`, false); }
+  document.getElementById("modal-incompletos").classList.add("open");
+  renderModalHandbooksColectivo();
+  const selEmpresa = document.getElementById("handbooks-colectivo-empresa");
+  if (selEmpresa) selEmpresa.value = st.empresaKey;
 }
 
 // "Ver/regenerar credenciales de acceso" desde el expediente de un empleado:
