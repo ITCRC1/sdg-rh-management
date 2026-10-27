@@ -233,7 +233,7 @@
     <div class="modal-body">
       <div class="field">
         <label>Tipo de salida</label>
-        <select id="archivar-tipo-salida">
+        <select id="archivar-tipo-salida" onchange="actualizarCamposArchivar()">
           <option value="">— Selecciona el tipo de salida —</option>
           <option>Renuncia voluntaria</option>
           <option>Despido con responsabilidad patronal</option>
@@ -244,10 +244,21 @@
         </select>
         <div class="hint-error" id="hint-archivar-tipo-salida"></div>
       </div>
-      <div class="field">
-        <label>Fecha de salida</label>
+      <div id="archivar-preaviso-wrap" style="display:none;">
+        <div class="field">
+          <label>¿Va a cumplir el preaviso trabajando?</label>
+          <div class="sino-toggle">
+            <button type="button" id="archivar-preaviso-si" onclick="elegirPreavisoRenuncia('si')">Sí</button>
+            <button type="button" id="archivar-preaviso-no" onclick="elegirPreavisoRenuncia('no')">No</button>
+          </div>
+          <div class="hint">Según el Art. 28 del Código de Trabajo: si trabaja el preaviso, sigue activo (en planilla) hasta el último día; si no, se archiva de una vez.</div>
+        </div>
+        <div id="archivar-preaviso-info" style="display:none;"></div>
+      </div>
+      <div class="field" id="archivar-fecha-wrap">
+        <label id="archivar-fecha-label">Fecha de salida</label>
         <input type="date" id="archivar-fecha">
-        <div class="hint">Por defecto es hoy — cámbiala si el archivado se está registrando días después de que la persona ya salió.</div>
+        <div class="hint" id="archivar-fecha-hint">Por defecto es hoy — cámbiala si el archivado se está registrando días después de que la persona ya salió.</div>
       </div>
       <div class="field">
         <label>Carta de renuncia o despido firmada (PDF, opcional)</label>
@@ -256,7 +267,7 @@
         <div id="archivar-pdf-label" style="font-size:12px; color:var(--leaf); font-weight:700; margin-top:4px;"></div>
         <div class="hint">Puedes archivar sin el PDF y subirlo después desde el perfil del empleado.</div>
       </div>
-      <button class="btn primary" style="width:100%; margin-top:6px;" onclick="confirmarArchivarEmpleado()">🗄️ Archivar empleado</button>
+      <button class="btn primary" style="width:100%; margin-top:6px;" id="archivar-confirmar-btn" onclick="confirmarArchivarEmpleado()">🗄️ Archivar empleado</button>
     </div>
   </div>
 </div>

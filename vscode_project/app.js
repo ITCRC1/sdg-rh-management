@@ -23287,6 +23287,11 @@ async function renderPerfilEmpleado(){
     }
     if (!emp.HANDBOOK_FIRMADO_FECHA) alertas.push(`📋 Handbook pendiente de firma.`);
     if (contratos.length === 0) alertas.push(`📄 No hay un contrato registrado con esta cédula.`);
+    if (emp.SALIDA_PACTADA_FECHA && !emp.ARCHIVADO){
+      const diasRestantes = Math.round((new Date(emp.SALIDA_PACTADA_FECHA + "T00:00:00") - new Date())/86400000);
+      alertas.push(`⏳ Renuncia programada para el ${fmtFecha(emp.SALIDA_PACTADA_FECHA + "T00:00:00")} (${diasRestantes >= 0 ? diasRestantes + " día(s) restantes" : "ya venció, finalizar cuanto antes"}).
+        <button class="btn" style="padding:2px 8px; font-size:10.5px; margin-left:6px;" onclick="archivarEmpleado('${perfilActualKey}')">Finalizar ahora</button>`);
+    }
 
     // Estimados de prestaciones — reutiliza el saldo de vacaciones y las
     // horas extra ya cargadas arriba, solo les pone precio (ver
@@ -23715,6 +23720,8 @@ async function descargarVacacionesFirmado(key, index){
 let archivarPendingKey = null;
 let archivarPendingPdfDataUrl = null;
 let archivarPendingPdfNombre = null;
+let archivarPendingEmp = null; // ficha completa, cargada al abrir el modal — para calcular el preaviso de una renuncia sin otra consulta
+let archivarPreavisoRespuesta = null; // "si"/"no" — solo aplica cuando el tipo de salida es "Renuncia voluntaria"
 
 // Crea una cuenta de acceso (rol "jefatura") a partir de un empleado ya
 // existente, en vez de mandar a Master a llenar el mismo formulario desde
@@ -23829,26 +23836,127 @@ async function confirmarDesignarJefatura(key){
   }
 }
 
-function archivarEmpleado(key){
+async function archivarEmpleado(key){
   archivarPendingKey = key;
   archivarPendingPdfDataUrl = null;
   archivarPendingPdfNombre = null;
+  archivarPreavisoRespuesta = null;
+  archivarPendingEmp = null;
   // Sin valor por defecto: hay que decidir a propósito si es despido,
-  // renuncia o abandono laboral — no se puede archivar sin elegir uno.
+  // renuncia o abandono laboral — no se puede archivar sin elegir uno. Si ya
+  // tenía una renuncia programada (ver elegirPreavisoRenuncia/
+  // confirmarArchivarEmpleado), se precarga ese tipo y esa fecha para que
+  // "Finalizar salida ahora" sea solo confirmar, no volver a escribir todo.
   const sel = document.getElementById("archivar-tipo-salida");
-  if (sel) sel.value = "";
   const hint = document.getElementById("hint-archivar-tipo-salida");
   if (hint) hint.textContent = "";
   const label = document.getElementById("archivar-pdf-label");
   if (label) label.textContent = "";
   const fecha = document.getElementById("archivar-fecha");
-  if (fecha) fecha.value = isoDeHoy();
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    archivarPendingEmp = res && res.value ? JSON.parse(res.value) : null;
+  }catch(e){ archivarPendingEmp = null; }
+  if (sel) sel.value = (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_TIPO_SALIDA) || "";
+  if (fecha) fecha.value = (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA) || isoDeHoy();
   document.getElementById("modal-archivar").classList.add("open");
+  actualizarCamposArchivar();
 }
 
 function cerrarModalArchivar(){
   document.getElementById("modal-archivar").classList.remove("open");
   archivarPendingKey = null;
+  archivarPendingEmp = null;
+  archivarPreavisoRespuesta = null;
+}
+
+// Muestra/oculta la pregunta de preaviso según el tipo de salida elegido —
+// solo tiene sentido para Renuncia voluntaria (Art. 28 CT: el preaviso lo
+// debe el trabajador al patrono, no al revés, así que no aplica a despidos).
+function actualizarCamposArchivar(){
+  const tipo = (document.getElementById("archivar-tipo-salida") || {}).value || "";
+  const esRenuncia = tipo === "Renuncia voluntaria";
+  const wrap = document.getElementById("archivar-preaviso-wrap");
+  if (wrap) wrap.style.display = esRenuncia ? "block" : "none";
+  if (!esRenuncia){
+    archivarPreavisoRespuesta = null;
+    restaurarCampoFechaArchivar();
+  } else if (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA){
+    // Ya había una renuncia programada para esta persona: se precarga en "Sí".
+    elegirPreavisoRenuncia("si");
+    return;
+  }
+  pintarBotonesPreavisoRenuncia();
+}
+
+function pintarBotonesPreavisoRenuncia(){
+  const btnSi = document.getElementById("archivar-preaviso-si");
+  const btnNo = document.getElementById("archivar-preaviso-no");
+  if (btnSi) btnSi.className = archivarPreavisoRespuesta === "si" ? "active" : "";
+  if (btnNo) btnNo.className = archivarPreavisoRespuesta === "no" ? "active" : "";
+}
+
+function restaurarCampoFechaArchivar(){
+  const label = document.getElementById("archivar-fecha-label");
+  const hint = document.getElementById("archivar-fecha-hint");
+  const btn = document.getElementById("archivar-confirmar-btn");
+  const info = document.getElementById("archivar-preaviso-info");
+  if (label) label.textContent = "Fecha de salida";
+  if (hint) hint.textContent = "Por defecto es hoy — cámbiala si el archivado se está registrando días después de que la persona ya salió.";
+  if (btn) btn.textContent = "🗄️ Archivar empleado";
+  if (info) info.style.display = "none";
+  const fecha = document.getElementById("archivar-fecha");
+  if (fecha && !(archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA)) fecha.value = isoDeHoy();
+}
+
+// Art. 28 del Código de Trabajo: el preaviso de una renuncia va de 7 a 30
+// días según la antigüedad, y durante ese plazo el patrono debe conceder un
+// día de asueto (libre, pagado) por semana para que la persona busque
+// colocación — de ahí el calendario con esos días marcados.
+function elegirPreavisoRenuncia(valor){
+  archivarPreavisoRespuesta = valor;
+  pintarBotonesPreavisoRenuncia();
+  const info = document.getElementById("archivar-preaviso-info");
+  const label = document.getElementById("archivar-fecha-label");
+  const hint = document.getElementById("archivar-fecha-hint");
+  const btn = document.getElementById("archivar-confirmar-btn");
+  if (valor !== "si" || !archivarPendingEmp){
+    if (valor === "no") restaurarCampoFechaArchivar();
+    return;
+  }
+  const fechaIngreso = parsearFechaEmpleado(archivarPendingEmp.FECHA_INGRESO_EMP);
+  const hoy = new Date();
+  const preaviso = fechaIngreso ? calcularPreavisoEstimado(fechaIngreso, hoy, 0) : { dias: 0 };
+  const diasAsueto = Math.floor(preaviso.dias / 7);
+  const antiguedad = fechaIngreso ? calcularAntiguedad(fechaIngreso, hoy) : { años: 0, meses: 0 };
+
+  const fechaFin = archivarPendingEmp.SALIDA_PACTADA_FECHA
+    ? new Date(archivarPendingEmp.SALIDA_PACTADA_FECHA + "T00:00:00")
+    : (() => { const d = new Date(); d.setDate(d.getDate() + preaviso.dias); return d; })();
+  const fechaInicio = new Date();
+
+  // Calendario simple: un día por celda desde hoy hasta el último día del
+  // preaviso, marcando como "asueto" uno de cada siete (el mismo día de la
+  // semana en que arrancó el preaviso).
+  const DIA_SEMANA = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  const celdas = [];
+  for (let d = new Date(fechaInicio), i = 0; d <= fechaFin; d.setDate(d.getDate()+1), i++){
+    const esAsueto = i > 0 && i % 7 === 0;
+    celdas.push(`<div style="text-align:center; padding:4px 2px; border-radius:4px; font-size:10.5px; ${esAsueto ? "background:#F5D06B; font-weight:700;" : "background:#f2f2f2;"}" title="${esAsueto ? "Día de asueto (Art. 28 CT)" : "Día de preaviso trabajado"}">${DIA_SEMANA[d.getDay()]}<br>${d.getDate()}/${d.getMonth()+1}</div>`);
+  }
+
+  if (info){
+    info.style.display = "block";
+    info.innerHTML = `
+      <div class="hint" style="margin-bottom:6px;">Antigüedad: ${antiguedad.años} año(s), ${antiguedad.meses} mes(es) → preaviso de <b>${preaviso.dias} día(s)</b> (Art. 28 CT), con <b>${diasAsueto} día(s) de asueto</b> para buscar colocación (resaltados abajo).</div>
+      <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:3px; margin-bottom:8px;">${celdas.join("")}</div>
+    `;
+  }
+  if (label) label.textContent = "Último día trabajado (confirma o ajusta)";
+  if (hint) hint.textContent = "El empleado sigue activo (en planilla, horas extra, etc.) hasta este día — recién ahí se termina de archivar.";
+  if (btn) btn.textContent = "📅 Programar renuncia";
+  const fecha = document.getElementById("archivar-fecha");
+  if (fecha) fecha.value = isoDeFechaLocal(fechaFin);
 }
 
 function onArchivarPdfSelected(inputEl){
@@ -23883,6 +23991,35 @@ async function confirmarArchivarEmpleado(){
     statusMsg("Elige la fecha en que salió el empleado.", false);
     return;
   }
+
+  // Renuncia con preaviso trabajado: NO se archiva todavía — sigue activo
+  // (en planilla, horas extra, etc.) hasta el último día confirmado. Queda
+  // guardado como "salida pactada"; "Archivar" se vuelve a usar ese día (o
+  // cualquier día después) para terminar de archivarlo de verdad.
+  if (tipoSalida === "Renuncia voluntaria" && archivarPreavisoRespuesta === "si"){
+    try{
+      const fullKey = CATALOGS.empleados.prefix + key;
+      const res = await window.storage.get(fullKey, false);
+      if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+      const emp = JSON.parse(res.value);
+      const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+      const diasPreaviso = fechaIngreso ? calcularPreavisoEstimado(fechaIngreso, new Date(), 0).dias : 0;
+      emp.SALIDA_PACTADA_FECHA = fechaSalidaISO;
+      emp.SALIDA_PACTADA_TIPO_SALIDA = tipoSalida;
+      emp.SALIDA_PACTADA_DIAS_PREAVISO = diasPreaviso;
+      if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
+      emp.HISTORIAL.unshift({
+        fecha: fmtFecha(new Date().toISOString()),
+        texto: `Renuncia programada — preaviso de ${diasPreaviso} día(s) (Art. 28 CT), último día trabajado el ${fmtFecha(fechaSalidaISO + "T00:00:00")}. Sigue activo hasta esa fecha.`,
+      });
+      await window.storage.set(fullKey, JSON.stringify(emp), false);
+      cerrarModalArchivar();
+      renderCatalogTab("empleados");
+      statusMsg((nombreCompletoEmpleado(emp) || "El empleado") + " sigue activo — renuncia programada para el " + fmtFecha(fechaSalidaISO + "T00:00:00") + ".", true);
+    }catch(e){ statusMsg("No se pudo programar la renuncia.", false); }
+    return;
+  }
+
   try{
     const fullKey = CATALOGS.empleados.prefix + key;
     const res = await window.storage.get(fullKey, false);
@@ -23890,6 +24027,11 @@ async function confirmarArchivarEmpleado(){
     const emp = JSON.parse(res.value);
     emp.ARCHIVADO = true;
     emp.ESTADO_EMP = "Inactivo";
+    // Si venía de una renuncia programada que ahora sí se está finalizando,
+    // limpia esas banderas — ya cumplieron su función.
+    delete emp.SALIDA_PACTADA_FECHA;
+    delete emp.SALIDA_PACTADA_TIPO_SALIDA;
+    delete emp.SALIDA_PACTADA_DIAS_PREAVISO;
     // La fecha de salida la elige quien archiva (por defecto hoy, pero
     // editable) — antes siempre quedaba la fecha en que alguien HIZO CLIC en
     // "Archivar", que no necesariamente es el día real en que la persona
