@@ -23857,6 +23857,7 @@ async function archivarEmpleado(key){
   const label = document.getElementById("archivar-pdf-label");
   if (label) label.textContent = "";
   const fecha = document.getElementById("archivar-fecha");
+  const fechaArchivo = document.getElementById("archivar-fecha-archivo");
   try{
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
     archivarPendingEmp = res && res.value ? JSON.parse(res.value) : null;
@@ -23864,6 +23865,10 @@ async function archivarEmpleado(key){
   archivarModoFinalizar = !!(archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA);
   if (sel) sel.value = (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_TIPO_SALIDA) || "";
   if (fecha) fecha.value = (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA) || isoDeHoy();
+  // Fecha de archivo: cuándo se PROCESA el archivado en el sistema — aparte
+  // de la fecha de salida real, que puede ser otro día (pedido explícito
+  // del usuario). Por defecto hoy, siempre editable.
+  if (fechaArchivo) fechaArchivo.value = (archivarPendingEmp && archivarPendingEmp.FECHA_PROCESO_ARCHIVO) || isoDeHoy();
   document.getElementById("modal-archivar").classList.add("open");
   actualizarCamposArchivar();
 }
@@ -23902,14 +23907,30 @@ function actualizarCamposArchivar(){
     if (label) label.textContent = "Último día trabajado";
     if (hint) hint.textContent = "Elegí libremente la fecha real de salida — no se recalcula sola.";
     if (btn) btn.textContent = "🗄️ Finalizar y archivar";
+    mostrarCampoFechaArchivo(true);
     return;
   }
   if (wrap) wrap.style.display = esRenuncia ? "block" : "none";
   if (!esRenuncia){
     archivarPreavisoRespuesta = null;
     restaurarCampoFechaArchivar();
+    mostrarCampoFechaArchivo(true);
+  } else {
+    // Recién se eligió Renuncia, todavía no se contestó Sí/No — se oculta
+    // hasta que se sepa si de verdad se va a archivar ya (No) o más
+    // adelante (Sí), para no confundir con una fecha que todavía no aplica.
+    mostrarCampoFechaArchivo(false);
   }
   pintarBotonesPreavisoRenuncia();
+}
+
+// La "Fecha de archivo" (cuándo se procesa en el sistema, aparte de la
+// fecha de salida real) solo tiene sentido cuando de verdad se va a
+// archivar YA — se oculta mientras una renuncia con preaviso trabajado
+// sigue "programada" y no se ha archivado todavía.
+function mostrarCampoFechaArchivo(mostrar){
+  const wrap = document.getElementById("archivar-fecha-archivo-wrap");
+  if (wrap) wrap.style.display = mostrar ? "block" : "none";
 }
 
 function pintarBotonesPreavisoRenuncia(){
@@ -23944,42 +23965,77 @@ function elegirPreavisoRenuncia(valor){
   const hint = document.getElementById("archivar-fecha-hint");
   const btn = document.getElementById("archivar-confirmar-btn");
   if (valor !== "si" || !archivarPendingEmp){
-    if (valor === "no") restaurarCampoFechaArchivar();
+    if (valor === "no"){
+      restaurarCampoFechaArchivar();
+      mostrarCampoFechaArchivo(true);
+    }
     return;
   }
+  if (label) label.textContent = "Último día trabajado (hacé clic en el calendario, o escribí la fecha)";
+  if (hint) hint.textContent = "El empleado sigue activo (en planilla, horas extra, etc.) hasta este día — recién ahí se termina de archivar.";
+  if (btn) btn.textContent = "📅 Programar renuncia";
+  if (info) info.style.display = "block";
+  mostrarCampoFechaArchivo(false);
+  // Si el campo todavía está vacío (primera vez que se elige "Sí"), arranca
+  // en el mínimo legal — después queda 100% libre para elegir una fecha
+  // más adelante (ver renderCalendarioPreavisoRenuncia).
+  const fecha = document.getElementById("archivar-fecha");
+  if (fecha && !fecha.value){
+    const fechaIngreso = parsearFechaEmpleado(archivarPendingEmp.FECHA_INGRESO_EMP);
+    const preaviso = fechaIngreso ? calcularPreavisoEstimado(fechaIngreso, new Date(), 0) : { dias: 0 };
+    const minima = new Date(); minima.setDate(minima.getDate() + preaviso.dias);
+    fecha.value = isoDeFechaLocal(minima);
+  }
+  renderCalendarioPreavisoRenuncia();
+}
+
+// Pinta (o repinta, cada vez que cambia la fecha elegida) el calendario del
+// preaviso: dorado = día de asueto (Art. 28 CT, uno de cada 7 dentro del
+// mínimo legal); recuadro marcado = la fecha que está puesta AHORA MISMO en
+// el campo. El calendario siempre se extiende más allá del mínimo legal (o
+// de la fecha ya elegida, lo que sea mayor) para poder clicar una fecha más
+// adelante si la persona se queda trabajando más días de los que exige la
+// ley — pedido explícito del usuario.
+function renderCalendarioPreavisoRenuncia(){
+  if (!archivarPendingEmp) return;
   const fechaIngreso = parsearFechaEmpleado(archivarPendingEmp.FECHA_INGRESO_EMP);
   const hoy = new Date();
   const preaviso = fechaIngreso ? calcularPreavisoEstimado(fechaIngreso, hoy, 0) : { dias: 0 };
   const diasAsueto = Math.floor(preaviso.dias / 7);
   const antiguedad = fechaIngreso ? calcularAntiguedad(fechaIngreso, hoy) : { años: 0, meses: 0 };
+  const fechaMinima = new Date(); fechaMinima.setDate(fechaMinima.getDate() + preaviso.dias);
 
-  const fechaFin = archivarPendingEmp.SALIDA_PACTADA_FECHA
-    ? new Date(archivarPendingEmp.SALIDA_PACTADA_FECHA + "T00:00:00")
-    : (() => { const d = new Date(); d.setDate(d.getDate() + preaviso.dias); return d; })();
-  const fechaInicio = new Date();
+  const fechaCampoStr = (document.getElementById("archivar-fecha") || {}).value || isoDeFechaLocal(fechaMinima);
+  const fechaElegida = new Date(fechaCampoStr + "T00:00:00");
+  const fechaFinCalendario = new Date(Math.max(fechaMinima.getTime(), fechaElegida.getTime()));
+  fechaFinCalendario.setDate(fechaFinCalendario.getDate() + 14); // margen para poder elegir más adelante del mínimo
 
-  // Calendario simple: un día por celda desde hoy hasta el último día del
-  // preaviso, marcando como "asueto" uno de cada siete (el mismo día de la
-  // semana en que arrancó el preaviso).
   const DIA_SEMANA = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
   const celdas = [];
-  for (let d = new Date(fechaInicio), i = 0; d <= fechaFin; d.setDate(d.getDate()+1), i++){
-    const esAsueto = i > 0 && i % 7 === 0;
-    celdas.push(`<div style="text-align:center; padding:4px 2px; border-radius:4px; font-size:10.5px; ${esAsueto ? "background:#F5D06B; font-weight:700;" : "background:#f2f2f2;"}" title="${esAsueto ? "Día de asueto (Art. 28 CT)" : "Día de preaviso trabajado"}">${DIA_SEMANA[d.getDay()]}<br>${d.getDate()}/${d.getMonth()+1}</div>`);
+  let i = 0;
+  for (let d = new Date(); d <= fechaFinCalendario; d.setDate(d.getDate()+1), i++){
+    const iso = isoDeFechaLocal(d);
+    const esAsueto = i > 0 && i <= preaviso.dias && i % 7 === 0;
+    const esMinimo = iso === isoDeFechaLocal(fechaMinima);
+    const esElegida = iso === fechaCampoStr;
+    const fondo = esAsueto ? "#F5D06B" : "#f2f2f2";
+    const borde = esElegida ? "border:2px solid var(--navy-deep);" : (esMinimo ? "border:1px dashed #999;" : "border:1px solid transparent;");
+    const titulo = esAsueto ? "Día de asueto (Art. 28 CT)" : (esMinimo ? "Mínimo legal según antigüedad" : "Hacer este el último día trabajado");
+    celdas.push(`<div onclick="elegirFechaCalendarioPreaviso('${iso}')" style="cursor:pointer; text-align:center; padding:4px 2px; border-radius:4px; font-size:10.5px; background:${fondo}; ${borde} ${esAsueto?"font-weight:700;":""}" title="${titulo}">${DIA_SEMANA[d.getDay()]}<br>${d.getDate()}/${d.getMonth()+1}</div>`);
   }
 
-  if (info){
-    info.style.display = "block";
-    info.innerHTML = `
-      <div class="hint" style="margin-bottom:6px;">Antigüedad: ${antiguedad.años} año(s), ${antiguedad.meses} mes(es) → preaviso de <b>${preaviso.dias} día(s)</b> (Art. 28 CT), con <b>${diasAsueto} día(s) de asueto</b> para buscar colocación (resaltados abajo).</div>
-      <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:3px; margin-bottom:8px;">${celdas.join("")}</div>
-    `;
+  const texto = document.getElementById("archivar-preaviso-texto");
+  if (texto){
+    texto.innerHTML = `Antigüedad: ${antiguedad.años} año(s), ${antiguedad.meses} mes(es) → preaviso mínimo de <b>${preaviso.dias} día(s)</b> (Art. 28 CT), con <b>${diasAsueto} día(s) de asueto</b> para buscar colocación (dorado). El recuadro marcado es la fecha elegida — hacé clic en cualquier día para cambiarla, incluso más adelante del mínimo si se queda trabajando más tiempo.`;
   }
-  if (label) label.textContent = "Último día trabajado (confirma o ajusta)";
-  if (hint) hint.textContent = "El empleado sigue activo (en planilla, horas extra, etc.) hasta este día — recién ahí se termina de archivar.";
-  if (btn) btn.textContent = "📅 Programar renuncia";
+  const grid = document.getElementById("archivar-preaviso-calendario");
+  if (grid) grid.innerHTML = celdas.join("");
+}
+
+function elegirFechaCalendarioPreaviso(iso){
   const fecha = document.getElementById("archivar-fecha");
-  if (fecha) fecha.value = isoDeFechaLocal(fechaFin);
+  if (fecha) fecha.value = iso;
+  renderCalendarioPreavisoRenuncia();
 }
 
 function onArchivarPdfSelected(inputEl){
@@ -24064,6 +24120,12 @@ async function confirmarArchivarEmpleado(){
     // para la planilla, no solo para el registro.
     emp.FECHA_ARCHIVADO = fmtFecha(fechaSalidaISO + "T00:00:00");
     emp.TIPO_SALIDA = tipoSalida;
+    // Fecha de archivo: cuándo se procesa esto en el sistema, APARTE de la
+    // fecha de salida real de arriba (pedido explícito del usuario) — por
+    // defecto hoy, pero editable por si se registra días después. Es solo
+    // informativa: no la usa ningún cálculo de planilla, solo FECHA_ARCHIVADO.
+    const fechaArchivoISO = (document.getElementById("archivar-fecha-archivo") || {}).value || isoDeHoy();
+    emp.FECHA_PROCESO_ARCHIVO = fechaArchivoISO;
 
     // Vacaciones y días libres que le quedaban pendientes (sin disfrutar) a
     // la fecha de salida se liquidan como días base "de más" en la planilla
@@ -24115,7 +24177,8 @@ async function confirmarArchivarEmpleado(){
       fecha: emp.FECHA_ARCHIVADO,
       texto: `Archivado — ${tipoSalida}.` + (archivarPendingPdfDataUrl ? ` Carta firmada adjuntada ("${archivarPendingPdfNombre}").` : "") +
         (saldoPrestamosPendientes > 0 ? ` Queda un saldo de préstamo/adelanto pendiente de ${fmtMontoColilla(saldoPrestamosPendientes, emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC")} por descontar de la liquidación.` : "") +
-        (diasPendientesLiquidacion > 0 ? ` ${diasPendientesLiquidacion} día(s) de vacaciones/días libres pendientes se liquidan de una vez, sumados a "Días laborados" en el reporte de planilla de esta quincena.` : ""),
+        (diasPendientesLiquidacion > 0 ? ` ${diasPendientesLiquidacion} día(s) de vacaciones/días libres pendientes se liquidan de una vez, sumados a "Días laborados" en el reporte de planilla de esta quincena.` : "") +
+        (fechaArchivoISO !== fechaSalidaISO ? ` (procesado en el sistema el ${fmtFecha(fechaArchivoISO + "T00:00:00")}).` : ""),
     });
     await window.storage.set(fullKey, JSON.stringify(emp), false);
     cerrarModalArchivar();
@@ -24167,7 +24230,10 @@ async function renderArchivoList(){
     }
     panel.innerHTML = archivados.map(it => {
       const k2 = it.key.replace(/'/g,"\\'");
-      const meta = [it.DEPARTAMENTO_EMP, it.IDENTIFICACION_EMP, it.FECHA_ARCHIVADO ? "Archivado: " + it.FECHA_ARCHIVADO : "", it.TIPO_SALIDA || ""].filter(Boolean).join(" · ");
+      const fechaProcesoTxt = it.FECHA_PROCESO_ARCHIVO ? fmtFecha(it.FECHA_PROCESO_ARCHIVO + "T00:00:00") : "";
+      const meta = [it.DEPARTAMENTO_EMP, it.IDENTIFICACION_EMP, it.FECHA_ARCHIVADO ? "Salida: " + it.FECHA_ARCHIVADO : "",
+        (fechaProcesoTxt && fechaProcesoTxt !== it.FECHA_ARCHIVADO) ? "Archivado: " + fechaProcesoTxt : "",
+        it.TIPO_SALIDA || ""].filter(Boolean).join(" · ");
       return `<div class="catalog-item">
         <div class="row1">
           <div class="info">

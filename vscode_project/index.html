@@ -253,12 +253,20 @@
           </div>
           <div class="hint">Según el Art. 28 del Código de Trabajo: si trabaja el preaviso, sigue activo (en planilla) hasta el último día; si no, se archiva de una vez.</div>
         </div>
-        <div id="archivar-preaviso-info" style="display:none;"></div>
+        <div id="archivar-preaviso-info" style="display:none;">
+          <div class="hint" id="archivar-preaviso-texto" style="margin-bottom:6px;"></div>
+          <div id="archivar-preaviso-calendario" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:3px; margin-bottom:8px;"></div>
+        </div>
       </div>
       <div class="field" id="archivar-fecha-wrap">
         <label id="archivar-fecha-label">Fecha de salida</label>
-        <input type="date" id="archivar-fecha">
+        <input type="date" id="archivar-fecha" onchange="if (archivarPreavisoRespuesta==='si' && !archivarModoFinalizar) renderCalendarioPreavisoRenuncia();">
         <div class="hint" id="archivar-fecha-hint">Por defecto es hoy — cámbiala si el archivado se está registrando días después de que la persona ya salió.</div>
+      </div>
+      <div class="field" id="archivar-fecha-archivo-wrap" style="display:none;">
+        <label>Fecha de archivo</label>
+        <input type="date" id="archivar-fecha-archivo">
+        <div class="hint">Cuándo se procesa el archivado en el sistema — por defecto es hoy, puede ser distinta a la fecha de salida (ej. se registra unos días después).</div>
       </div>
       <div class="field">
         <label>Carta de renuncia o despido firmada (PDF, opcional)</label>
