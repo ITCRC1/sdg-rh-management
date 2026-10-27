@@ -7234,15 +7234,24 @@ async function descargarHandbooksColectivoCompletos(){
       data.CEDULA_JURIDICA_EMPRESA = empresaInfo.CEDULA_JURIDICA_EMPRESA;
       data.DIRECCION_EMPRESA = empresaInfo.DIRECCION_EMPRESA;
       currentKey = null;
+      // El modal tiene que cerrarse ANTES de imprimir — si no, queda
+      // encima del documento en la vista previa de impresión (el bug que
+      // se vio: el PDF salía con el modal tapando el contenido).
+      document.getElementById("modal-incompletos").classList.remove("open");
       mostrarSoloConstancia();
       descargarConstanciaPDF();
       await agregarBitacora(emp.key, "Constancia de Handbook generada (migración en colectivo).");
       st.descargados.add(emp.key);
     }catch(e){ statusMsg(`No se pudo generar el Handbook de ${nombreCompletoEmpleado(emp) || emp.key}: ${e.message||""}`, false); }
+    // Se reabre entre cada uno para mostrar el progreso en vivo (quién ya
+    // quedó en ✅ Descargado) mientras se procesa el resto del lote — se
+    // restaura la empresa elegida, que se pierde al rehacer el HTML del selector.
+    document.getElementById("modal-incompletos").classList.add("open");
+    renderModalHandbooksColectivo();
+    const selEmpresa = document.getElementById("handbooks-colectivo-empresa");
+    if (selEmpresa) selEmpresa.value = empresaKey;
     await new Promise(r => setTimeout(r, 600));
   }
-  document.getElementById("modal-incompletos").classList.add("open"); // el print() pudo haber desenfocado el modal
-  renderModalHandbooksColectivo();
   statusMsg("Listo — revisá la lista, los descargados ya dicen ✅.", true);
 }
 
