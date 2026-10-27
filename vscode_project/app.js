@@ -7256,7 +7256,7 @@ function renderFaqLaboral(){
   const preguntas = [
     { q: "¿Cuántos días de vacaciones le corresponden a un trabajador?", a: "Dos semanas (15 días) por cada cincuenta semanas de trabajo continuo, según el artículo 153 del Código de Trabajo. Si la relación laboral es menor a 50 semanas, las vacaciones se calculan de forma proporcional." },
     { q: "¿Cómo se calcula el aguinaldo?", a: "Un doceavo de todos los salarios ordinarios y extraordinarios devengados entre el 1 de diciembre del año anterior y el 30 de noviembre del año en curso, según la Ley de Aguinaldo. Debe pagarse dentro de los primeros veinte días de diciembre." },
-    { q: "¿Cuánto preaviso hay que dar antes de terminar un contrato?", a: "Según el artículo 28 del Código de Trabajo: una semana si el trabajador tiene entre 3 y 6 meses de servicio; dos semanas entre 6 meses y 1 año; y un mes si supera el año de servicio." },
+    { q: "¿Cuánto preaviso hay que dar antes de terminar un contrato?", a: "Según el artículo 28 del Código de Trabajo: una semana (7 días) si el trabajador tiene entre 3 y 6 meses de servicio; quince días entre 6 meses y 1 año; y un mes (30 días) si supera el año de servicio. Durante ese plazo también corresponde un día de asueto pagado por semana para buscar nuevo empleo." },
     { q: "¿Cuánto dura el período de prueba?", a: "Tres meses, según el artículo 26 del Código de Trabajo. Durante ese período, cualquiera de las partes puede terminar la relación sin responsabilidad, salvo el pago proporcional de vacaciones y aguinaldo." },
     { q: "¿Qué diferencia hay entre despido con y sin responsabilidad patronal?", a: "Sin responsabilidad patronal (Art. 81 CT): el patrono despide por una causa grave probada y no paga preaviso ni cesantía, solo vacaciones y aguinaldo proporcional. Con responsabilidad patronal (Art. 85 CT): el patrono termina la relación sin necesidad de causa grave, pero debe pagar preaviso, cesantía, vacaciones y aguinaldo proporcional." },
     { q: "¿Cuántos días de incapacidad paga la CCSS?", a: "La CCSS reconoce el subsidio a partir del cuarto día de incapacidad por enfermedad, según el artículo 79 del Código de Trabajo; los primeros tres días corren por cuenta del patrono en el porcentaje que la ley establece." },
@@ -16039,14 +16039,17 @@ function calcularCesantiaEstimada(fechaIngreso, fechaCorte, salarioDiario){
   return { dias: Math.round(dias * 100) / 100, monto: (salarioDiario || 0) * dias };
 }
 
-// Preaviso, Art. 28 CT: mismo calendario que ya explica el FAQ del sistema
-// (3-6 meses → 1 semana; 6 meses-1 año → 2 semanas; 1 año o más → 1 mes).
+// Preaviso, Art. 28 CT (texto literal: "...con un mínimo de una semana...",
+// "...con un mínimo de quince días...", "...con un mínimo de un mes..."):
+// 3-6 meses → 7 días (una semana); 6 meses-1 año → 15 días (NO 14 — son
+// "quince días" tal cual, no "dos semanas"; corregido tras detectarlo mal);
+// 1 año o más → 30 días (un mes).
 function calcularPreavisoEstimado(fechaIngreso, fechaCorte, salarioDiario){
   const mesesTotales = calcularAntiguedad(fechaIngreso, fechaCorte).mesesCompletosTotales;
   let dias = 0;
   if (mesesTotales < 3) dias = 0;
   else if (mesesTotales < 6) dias = 7;
-  else if (mesesTotales < 12) dias = 14;
+  else if (mesesTotales < 12) dias = 15;
   else dias = 30;
   return { dias, monto: (salarioDiario || 0) * dias };
 }
