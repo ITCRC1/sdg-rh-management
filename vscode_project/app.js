@@ -4454,6 +4454,7 @@ async function renderCatalogTab(type){
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalEstadoCuentas()">🔑 Ver estado de cuentas de acceso</button>
+      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalHandbooksColectivo()">📋 Generar Handbooks en colectivo (migración)</button>
       <div class="field" style="margin-bottom:10px;">
         <input type="text" id="empleados-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
       </div>
@@ -7103,6 +7104,146 @@ async function confirmarBackfillCuentasEmpleado(){
     statusMsg(e.message || "No se pudo crear las cuentas.", false);
   }
   await mostrarModalEstadoCuentas();
+}
+
+// ---------- Handbooks en colectivo (herramienta de migración, pedida "solo
+// por esta vez" para ponerse al día con empleados que nunca tuvieron
+// Handbook porque venían de antes de que existiera este paso) ----------
+// Mismos campos que exige renderConstancia para no dejar marcas "[pendiente]"
+// en rojo: nombre, cédula, puesto y fecha de ingreso (la empresa se elige
+// UNA sola vez para todo el lote, no por persona).
+let handbooksColectivoEstado = null; // { empresaInfo, completos: [{emp,puesto}], incompletos: [{emp,faltan}], descargados: Set<key> }
+
+function evaluarFaltantesHandbook(emp, puestosPorKey){
+  const faltan = [];
+  if (!nombreCompletoEmpleado(emp)) faltan.push("nombre");
+  if (!emp.IDENTIFICACION_EMP) faltan.push("cédula");
+  const puesto = emp.PUESTO_KEY ? puestosPorKey[emp.PUESTO_KEY] : null;
+  const puestoTxt = (puesto && puesto.PUESTO) || emp.DEPARTAMENTO_EMP || "";
+  if (!puestoTxt) faltan.push("puesto");
+  if (!parsearFechaEmpleado(emp.FECHA_INGRESO_EMP)) faltan.push("fecha de ingreso");
+  return faltan;
+}
+
+async function mostrarModalHandbooksColectivo(){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "📋 Handbooks en colectivo";
+  body.innerHTML = `<div class="empty-state">Revisando empleados…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const [empleados, resPuestos, handbooksExistentes, resEmpresas] = await Promise.all([
+      cargarEmpleadosDB(),
+      window.storage.list(CATALOGS.puestos.prefix, false),
+      window.sdgApi.documentos({ tipo: "constancia_handbook", limite: 5000 }),
+      window.storage.list(CATALOGS.empresas.prefix, false),
+    ]);
+    const puestoKeys = (resPuestos && resPuestos.keys) || [];
+    const puestosPorKey = {};
+    (await Promise.all(puestoKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k.replace(CATALOGS.puestos.prefix,""), ...v };
+    }))).forEach(p => { puestosPorKey[p.key] = p; });
+
+    // Quien ya tiene un Handbook archivado (de antes, o generado con el
+    // botón nuevo en su ficha) no necesita pasar por esta herramienta.
+    const cedulasConHandbook = new Set((handbooksExistentes || []).filter(d => !d.anulado_en).map(d => d.empleado_cedula));
+    const pendientes = empleados.filter(e => !e.ARCHIVADO && !cedulasConHandbook.has(e.IDENTIFICACION_EMP));
+
+    const completos = [], incompletos = [];
+    pendientes.forEach(emp => {
+      const faltan = evaluarFaltantesHandbook(emp, puestosPorKey);
+      if (faltan.length) incompletos.push({ emp, faltan });
+      else completos.push({ emp });
+    });
+
+    const empresaKeys = (resEmpresas && resEmpresas.keys) || [];
+    const empresas = await Promise.all(empresaKeys.map(async k => {
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, EMPRESA: v.EMPRESA || k, CEDULA_JURIDICA_EMPRESA: v.CEDULA_JURIDICA_EMPRESA || "", DIRECCION_EMPRESA: v.DIRECCION_EMPRESA || "" };
+    }));
+
+    handbooksColectivoEstado = { completos, incompletos, descargados: new Set(), puestosPorKey, empresas };
+    renderModalHandbooksColectivo();
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo revisar la lista: ${escapeHtml(e.message||"")}</div>`; }
+}
+
+function renderModalHandbooksColectivo(){
+  const body = document.getElementById("modal-incompletos-body");
+  const st = handbooksColectivoEstado;
+  if (!st) return;
+  const { completos, incompletos, descargados, empresas } = st;
+  body.innerHTML = `
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">Empleados activos sin Handbook archivado todavía — ${completos.length + incompletos.length} en total. La empresa se elige una sola vez para todo el lote.</div>
+    <div class="field" style="margin-bottom:8px;">
+      <label>Empresa (aplica a todos los que se descarguen)</label>
+      <select id="handbooks-colectivo-empresa">
+        <option value="">— Elegir empresa —</option>
+        ${empresas.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.EMPRESA)}</option>`).join("")}
+      </select>
+    </div>
+    <button class="btn primary" style="width:100%; margin-bottom:12px;" onclick="descargarHandbooksColectivoCompletos()">⬇️ Descargar todos los completos (${completos.length})</button>
+
+    <div style="font-weight:700; color:var(--leaf); margin-bottom:6px;">✅ Handbook completo (${completos.length})</div>
+    ${completos.length ? completos.map(f => {
+      const k = f.emp.key;
+      const yaDescargado = descargados.has(k);
+      return `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--paper-line); font-size:12.5px;">
+        <span>${escapeHtml(nombreCompletoEmpleado(f.emp) || k)}</span>
+        <span style="${yaDescargado ? "color:var(--leaf); font-weight:700;" : "color:var(--ink-soft);"}">${yaDescargado ? "✅ Descargado" : "⏳ Pendiente"}</span>
+      </div>`;
+    }).join("") : `<div class="hint" style="margin-bottom:10px;">Nadie en esta lista por ahora.</div>`}
+
+    <div style="font-weight:700; color:#B3261E; margin:14px 0 6px;">⚠️ Handbook incompleto (${incompletos.length})</div>
+    ${incompletos.length ? incompletos.map(f => `
+      <div style="padding:5px 0; border-bottom:1px solid var(--paper-line); font-size:12.5px;">
+        <div>${escapeHtml(nombreCompletoEmpleado(f.emp) || f.emp.key)}</div>
+        <div style="color:var(--ink-soft); font-size:11px;">Falta: ${escapeHtml(f.faltan.join(", "))} — completalo en su ficha y va a aparecer en "Completo" la próxima vez que abras esta ventana.</div>
+      </div>`).join("") : `<div class="hint">Nadie con datos incompletos — todos listos.</div>`}
+  `;
+}
+
+async function descargarHandbooksColectivoCompletos(){
+  const st = handbooksColectivoEstado;
+  if (!st) return;
+  const empresaKey = (document.getElementById("handbooks-colectivo-empresa") || {}).value;
+  if (!empresaKey){ statusMsg("Elegí la empresa antes de descargar.", false); return; }
+  const empresaInfo = st.empresas.find(e => e.key === empresaKey);
+  const pendientes = st.completos.filter(f => !st.descargados.has(f.emp.key));
+  if (!pendientes.length){ statusMsg("Ya se descargaron todos.", false); return; }
+  const nombrePropiedadActual = (getPropiedadActual() || {}).nombre || "";
+
+  statusMsg(`Generando ${pendientes.length} Handbook(s) — se va a abrir un diálogo de impresión por cada uno, uno a la vez.`, true);
+  for (const f of pendientes){
+    const emp = f.emp;
+    try{
+      data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp);
+      data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+      const puesto = emp.PUESTO_KEY ? st.puestosPorKey[emp.PUESTO_KEY] : null;
+      data.PUESTO = (puesto && puesto.PUESTO) || emp.DEPARTAMENTO_EMP || "";
+      data.PUESTO_EN = (puesto && puesto.PUESTO_EN) || "";
+      const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+      if (fechaIngreso){
+        data.DIA_INICIO = String(fechaIngreso.getDate());
+        data.MES_INICIO = MESES[fechaIngreso.getMonth()];
+        data.ANIO_INICIO = String(fechaIngreso.getFullYear());
+      }
+      data.PROPIEDADES = nombrePropiedadActual;
+      data.EMPRESA = empresaInfo.EMPRESA;
+      data.CEDULA_JURIDICA_EMPRESA = empresaInfo.CEDULA_JURIDICA_EMPRESA;
+      data.DIRECCION_EMPRESA = empresaInfo.DIRECCION_EMPRESA;
+      currentKey = null;
+      mostrarSoloConstancia();
+      descargarConstanciaPDF();
+      await agregarBitacora(emp.key, "Constancia de Handbook generada (migración en colectivo).");
+      st.descargados.add(emp.key);
+    }catch(e){ statusMsg(`No se pudo generar el Handbook de ${nombreCompletoEmpleado(emp) || emp.key}: ${e.message||""}`, false); }
+    await new Promise(r => setTimeout(r, 600));
+  }
+  document.getElementById("modal-incompletos").classList.add("open"); // el print() pudo haber desenfocado el modal
+  renderModalHandbooksColectivo();
+  statusMsg("Listo — revisá la lista, los descargados ya dicen ✅.", true);
 }
 
 // "Ver/regenerar credenciales de acceso" desde el expediente de un empleado:
@@ -14011,7 +14152,7 @@ body{ background:#fff; margin:0; padding:24px; }
 // solo-inserción, por auditoría) — se anulan igual que "Anular" a mano,
 // solo que automático, así que siguen recuperables desde la base si hiciera
 // falta.
-const TIPOS_DOCUMENTO_SOLO_ULTIMA_VERSION = new Set(["amonestacion", "recomendacion", "constancia_salarial", "constancia_laboral"]);
+const TIPOS_DOCUMENTO_SOLO_ULTIMA_VERSION = new Set(["amonestacion", "recomendacion", "constancia_salarial", "constancia_laboral", "constancia_handbook"]);
 
 async function anularVersionesAnterioresDeTipo(tipo, cedula, idNuevo){
   if (!cedula) return;
@@ -14590,6 +14731,52 @@ async function generarConstanciaLaboralDeEmpleado(key){
       construirConstanciaLaboral(key, emp, info);
     }, "📄 " + tr("Constancia laboral — elegir empresa","Employment certificate — choose company"));
   }catch(e){ statusMsg("No se pudo generar la constancia laboral: " + (e.message || ""), false); }
+}
+
+// Antes el Handbook solo se podía generar como parte de crear un contrato
+// (vía "HB Firma" en la lista de contratos guardados) — pedido explícito del
+// usuario: muchos empleados vienen de antes de que existiera ese paso, o
+// nunca tuvieron un contrato creado DESDE este sistema, así que nunca
+// tuvieron forma de generarlo. Esto lo genera directo desde la ficha del
+// empleado, sin pasar por ningún contrato — mismo patrón que ya usan
+// Constancia Salarial/Laboral/Despido (datos del empleado + su puesto +
+// empresa elegida), reutilizando 100% de la plantilla/impresión/archivo que
+// ya existía (renderConstancia/descargarConstanciaPDF).
+async function generarHandbookDeEmpleado(key){
+  try{
+    const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
+    if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
+    const emp = JSON.parse(res.value);
+    data.NOMBRE_TRABAJADOR = nombreCompletoEmpleado(emp);
+    data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+    data.PUESTO = emp.DEPARTAMENTO_EMP || "";
+    data.PUESTO_EN = "";
+    if (emp.PUESTO_KEY){
+      try{
+        const pRes = await window.storage.get(CATALOGS.puestos.prefix + emp.PUESTO_KEY, false);
+        if (pRes && pRes.value){
+          const p = JSON.parse(pRes.value);
+          if (p.PUESTO) data.PUESTO = p.PUESTO;
+          data.PUESTO_EN = p.PUESTO_EN || "";
+        }
+      }catch(e){ /* se queda con DEPARTAMENTO_EMP */ }
+    }
+    const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
+    if (fechaIngreso){
+      data.DIA_INICIO = String(fechaIngreso.getDate());
+      data.MES_INICIO = MESES[fechaIngreso.getMonth()];
+      data.ANIO_INICIO = String(fechaIngreso.getFullYear());
+    }
+    currentKey = null;
+    await mostrarModalElegirEmpresaGenerico((info) => {
+      data.EMPRESA = info.EMPRESA;
+      data.CEDULA_JURIDICA_EMPRESA = info.CEDULA_JURIDICA_EMPRESA;
+      data.DIRECCION_EMPRESA = info.DIRECCION_EMPRESA;
+      mostrarSoloConstancia();
+      descargarConstanciaPDF();
+      agregarBitacora(key, "Constancia de Handbook generada.");
+    }, "📋 " + tr("Handbook — elegir empresa","Handbook — choose company"));
+  }catch(e){ statusMsg("No se pudo generar el Handbook: " + (e.message || ""), false); }
 }
 
 async function construirConstanciaLaboral(key, emp, empresaInfo){
@@ -21787,7 +21974,7 @@ async function guardarBorradorRecomendacion(){
 // que sirve para eso en vez de parecer que crea una constancia nueva de la
 // nada. La anterior queda igual en el historial (documentos_emitidos es de
 // solo-inserción) — se anula a mano ahí si ya no aplica.
-function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado, tieneConstanciaSalarial, tieneConstanciaLaboral }){
+function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados, numerado, tieneConstanciaSalarial, tieneConstanciaLaboral, tieneHandbook }){
   const esMaster = !!(window.sdgApi && window.sdgApi.esMaster());
   // Consultor (contador líder y demás cuentas de Consultants) es de solo
   // lectura en todo — el servidor ya rechaza cualquiera de estos botones si
@@ -21828,6 +22015,7 @@ function renderBotonesAccionesEmpleado(empKey, { archivado, contratosVinculados,
   if (puedeEditar && !archivado) documentos.push(`<button onclick="generarPermisoDeEmpleado('${empKey}')">🗓️ Permiso sin goce salarial</button>`);
   if (puedeEditar && !archivado) documentos.push(`<button onclick="generarConstanciaSalarialDeEmpleado('${empKey}')">${tieneConstanciaSalarial ? "🔄 Actualizar constancia salarial" : "💵 Constancia salarial"}</button>`);
   if (puedeEditar) documentos.push(`<button onclick="generarConstanciaLaboralDeEmpleado('${empKey}')">${tieneConstanciaLaboral ? "🔄 Actualizar constancia laboral" : "📄 Constancia laboral"}</button>`);
+  if (puedeEditar) documentos.push(`<button onclick="generarHandbookDeEmpleado('${empKey}')">${tieneHandbook ? "🔄 Regenerar Handbook" : "📋 Generar Handbook"}</button>`);
   if (documentos.length){
     const subId = "emp-doc-submenu-" + empKey;
     botones.push(`<button onclick="toggleEmpDocSubmenu('${subId}')">${n()}📁 Documentos ▾</button>`);
@@ -23406,7 +23594,7 @@ async function renderPerfilEmpleado(){
       <div class="section-card" style="margin-top:10px;"><div class="section-body">
         <div style="font-weight:700; margin-bottom:8px;">Acciones</div>
         <div class="emp-acciones-menu open" style="border:none; margin:0; padding:0;">
-          ${renderBotonesAccionesEmpleado(perfilActualKey, { archivado: !!emp.ARCHIVADO, contratosVinculados: contratos, numerado: false, tieneConstanciaSalarial: documentosEmpleado.some(d => d.tipo === "constancia_salarial" && !d.anulado_en), tieneConstanciaLaboral: documentosEmpleado.some(d => d.tipo === "constancia_laboral" && !d.anulado_en) })}
+          ${renderBotonesAccionesEmpleado(perfilActualKey, { archivado: !!emp.ARCHIVADO, contratosVinculados: contratos, numerado: false, tieneConstanciaSalarial: documentosEmpleado.some(d => d.tipo === "constancia_salarial" && !d.anulado_en), tieneConstanciaLaboral: documentosEmpleado.some(d => d.tipo === "constancia_laboral" && !d.anulado_en), tieneHandbook: documentosEmpleado.some(d => d.tipo === "constancia_handbook" && !d.anulado_en) })}
         </div>
         ${!emp.ARCHIVADO ? `<div class="hint" style="margin-top:6px;">📝 La recomendación laboral se habilita cuando el empleado pasa a Archivo (salida de la empresa).</div>` : ""}
         ${contratos.length > 0 ? `<button class="btn" style="width:100%; margin-top:8px;" onclick="openContract('${contratos[0].key.replace(/'/g,"\\'")}')">📄 Abrir contrato vinculado</button>` : ""}
