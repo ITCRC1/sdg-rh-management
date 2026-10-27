@@ -23725,6 +23725,7 @@ let archivarPendingPdfDataUrl = null;
 let archivarPendingPdfNombre = null;
 let archivarPendingEmp = null; // ficha completa, cargada al abrir el modal — para calcular el preaviso de una renuncia sin otra consulta
 let archivarPreavisoRespuesta = null; // "si"/"no" — solo aplica cuando el tipo de salida es "Renuncia voluntaria"
+let archivarModoFinalizar = false; // true = esta persona YA tenía una renuncia programada y se está reabriendo para cerrarla, no para programar otra
 
 // Crea una cuenta de acceso (rol "jefatura") a partir de un empleado ya
 // existente, en vez de mandar a Master a llenar el mismo formulario desde
@@ -23860,6 +23861,7 @@ async function archivarEmpleado(key){
     const res = await window.storage.get(CATALOGS.empleados.prefix + key, false);
     archivarPendingEmp = res && res.value ? JSON.parse(res.value) : null;
   }catch(e){ archivarPendingEmp = null; }
+  archivarModoFinalizar = !!(archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA);
   if (sel) sel.value = (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_TIPO_SALIDA) || "";
   if (fecha) fecha.value = (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA) || isoDeHoy();
   document.getElementById("modal-archivar").classList.add("open");
@@ -23871,6 +23873,7 @@ function cerrarModalArchivar(){
   archivarPendingKey = null;
   archivarPendingEmp = null;
   archivarPreavisoRespuesta = null;
+  archivarModoFinalizar = false;
 }
 
 // Muestra/oculta la pregunta de preaviso según el tipo de salida elegido —
@@ -23880,14 +23883,31 @@ function actualizarCamposArchivar(){
   const tipo = (document.getElementById("archivar-tipo-salida") || {}).value || "";
   const esRenuncia = tipo === "Renuncia voluntaria";
   const wrap = document.getElementById("archivar-preaviso-wrap");
+  // Modo "finalizar": esta persona YA tenía una renuncia programada — no se
+  // vuelve a preguntar Sí/No (eso ya se decidió), solo se muestra la fecha
+  // ya pactada, 100% editable a mano, con un botón que de verdad archiva
+  // (pedido explícito del usuario: antes, al reabrir, la fecha se
+  // recalculaba sola y el botón solo volvía a "programar" en vez de
+  // archivar — nunca se terminaba de cerrar la salida).
+  if (archivarModoFinalizar){
+    if (wrap) wrap.style.display = "none";
+    const info = document.getElementById("archivar-preaviso-info");
+    const label = document.getElementById("archivar-fecha-label");
+    const hint = document.getElementById("archivar-fecha-hint");
+    const btn = document.getElementById("archivar-confirmar-btn");
+    if (info){
+      info.style.display = "block";
+      info.innerHTML = `<div class="hint" style="margin-bottom:6px;">Esta renuncia ya estaba programada (preaviso de ${archivarPendingEmp.SALIDA_PACTADA_DIAS_PREAVISO || "—"} día(s)). Ajustá la fecha si hace falta y confirmá para archivarla de una vez.</div>`;
+    }
+    if (label) label.textContent = "Último día trabajado";
+    if (hint) hint.textContent = "Elegí libremente la fecha real de salida — no se recalcula sola.";
+    if (btn) btn.textContent = "🗄️ Finalizar y archivar";
+    return;
+  }
   if (wrap) wrap.style.display = esRenuncia ? "block" : "none";
   if (!esRenuncia){
     archivarPreavisoRespuesta = null;
     restaurarCampoFechaArchivar();
-  } else if (archivarPendingEmp && archivarPendingEmp.SALIDA_PACTADA_FECHA){
-    // Ya había una renuncia programada para esta persona: se precarga en "Sí".
-    elegirPreavisoRenuncia("si");
-    return;
   }
   pintarBotonesPreavisoRenuncia();
 }
@@ -23999,7 +24019,7 @@ async function confirmarArchivarEmpleado(){
   // (en planilla, horas extra, etc.) hasta el último día confirmado. Queda
   // guardado como "salida pactada"; "Archivar" se vuelve a usar ese día (o
   // cualquier día después) para terminar de archivarlo de verdad.
-  if (tipoSalida === "Renuncia voluntaria" && archivarPreavisoRespuesta === "si"){
+  if (tipoSalida === "Renuncia voluntaria" && archivarPreavisoRespuesta === "si" && !archivarModoFinalizar){
     try{
       const fullKey = CATALOGS.empleados.prefix + key;
       const res = await window.storage.get(fullKey, false);
