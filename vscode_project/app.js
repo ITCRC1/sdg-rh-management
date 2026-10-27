@@ -15437,18 +15437,18 @@ function renderRecomendacion(){
   const fechaIni = data.FECHA_INICIO_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const fechaFin = data.FECHA_FIN_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const razon = (data.RAZON_SALIDA_RECOM || "").trim() || `<span class="missing">[${tr("razón pendiente","reason pending")}]</span>`;
-  const desempeno = (data.DESEMPENO_RECOM || "").trim() || tr("su responsabilidad y dedicación en el trabajo, siendo una persona comprometida","their responsibility and dedication at work, being a committed person");
+  const desempeno = (data.DESEMPENO_RECOM || "").trim() || tr("Su responsabilidad y dedicación en el trabajo, siendo una persona comprometida","Their responsibility and dedication at work, being a committed person");
   const lugarFirma = data.LUGAR_FIRMA_RECOM || `<span class="missing">[${tr("lugar pendiente","place pending")}]</span>`;
   const fechaFirma = data.FECHA_FIRMA_RECOM || `<span class="missing">[${tr("fecha pendiente","date pending")}]</span>`;
   const empresaTxt = lang === "en" ? f.empresaEn : f.empresa;
   const puestoFirmanteTxt = lang === "en" ? f.puestoEn : f.puesto;
 
   const cuerpo = tr(
-    `<p>El suscrito <b>${f.nombre}</b>, cédula de identidad <b>${f.cedula}</b>, mayor, en calidad de <b>${puestoFirmanteTxt}</b> de la empresa <b>${empresaTxt}</b> con cédula jurídica <b>${f.cedulaJuridica}</b>, hago constar que <b>${nombre}</b>, cédula número <b>${cedula}</b>, laboró como <b>${puesto}</b> desde el <b>${fechaIni}</b> al <b>${fechaFin}</b>. Se destacó por ${escapeHtml(desempeno)}. La razón de su salida corresponde a ${escapeHtml(razon)}.</p>
+    `<p>El suscrito <b>${f.nombre}</b>, cédula de identidad <b>${f.cedula}</b>, mayor, en calidad de <b>${puestoFirmanteTxt}</b> de la empresa <b>${empresaTxt}</b> con cédula jurídica <b>${f.cedulaJuridica}</b>, hago constar que <b>${nombre}</b>, cédula número <b>${cedula}</b>, laboró como <b>${puesto}</b> desde el <b>${fechaIni}</b> al <b>${fechaFin}</b>. ${escapeHtml(desempeno)}. La razón de su salida corresponde a ${escapeHtml(razon)}.</p>
     <p>Por tanto, confío plenamente que podrá realizar cualquier labor que se le encomiende sin ningún problema.</p>
     <p>Les agradezco de antemano cualquier oportunidad que se le brinde.</p>
     <p>Para que así conste, firmo en ${lugarFirma}, ${fechaFirma}.</p>`,
-    `<p>I, the undersigned, <b>${f.nombre}</b>, holder of identity card <b>${f.cedula}</b>, of legal age, in my capacity as <b>${puestoFirmanteTxt}</b> of the company <b>${empresaTxt}</b> with legal entity ID <b>${f.cedulaJuridica}</b>, hereby certify that <b>${nombre}</b>, ID number <b>${cedula}</b>, worked as <b>${puesto}</b> from <b>${fechaIni}</b> to <b>${fechaFin}</b>. They stood out for ${escapeHtml(desempeno)}. The reason for their departure was ${escapeHtml(razon)}.</p>
+    `<p>I, the undersigned, <b>${f.nombre}</b>, holder of identity card <b>${f.cedula}</b>, of legal age, in my capacity as <b>${puestoFirmanteTxt}</b> of the company <b>${empresaTxt}</b> with legal entity ID <b>${f.cedulaJuridica}</b>, hereby certify that <b>${nombre}</b>, ID number <b>${cedula}</b>, worked as <b>${puesto}</b> from <b>${fechaIni}</b> to <b>${fechaFin}</b>. ${escapeHtml(desempeno)}. The reason for their departure was ${escapeHtml(razon)}.</p>
     <p>I am fully confident that they can carry out any work assigned to them without any issue.</p>
     <p>I thank you in advance for any opportunity extended to them.</p>
     <p>In witness whereof, I sign in ${lugarFirma}, ${fechaFirma}.</p>`
