@@ -4452,9 +4452,7 @@ async function renderCatalogTab(type){
         <div style="font-size:11.5px; color:var(--ink-soft);">📥 Para importar empleados nuevos, actualizar sus datos de contacto o su salario desde un archivo, ve al menú <b style="color:var(--navy-deep);">📤 Datos</b>.</div>
       </div></div>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalIncompletos()">👁️ Ver datos incompletos por empleado</button>
-      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalDuplicados()">🔀 Buscar y fusionar duplicados</button>
       <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalEstadoCuentas()">🔑 Ver estado de cuentas de acceso</button>
-      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="mostrarModalHandbooksColectivo()">📋 Generar Handbooks en colectivo (migración)</button>
       <div class="field" style="margin-bottom:10px;">
         <input type="text" id="empleados-search" placeholder="🔍 Buscar empleado por nombre, puesto o cédula…" value="${escapeHtml(empleadosSearchTerm)}" oninput="filtrarEmpleadosInput(this.value)">
       </div>
@@ -7837,10 +7835,20 @@ async function renderPlanillaPanel(){
       <div style="font-size:12px; color:var(--ink-soft);">Colillas de pago archivadas por trabajador.</div>
     </div>`;
 
+    // La subida de colillas EXTERNAS queda exclusiva de Corcovado — es la
+    // única propiedad que viene migrando desde un proveedor externo de
+    // planillas. Cualquier propiedad nueva empieza de cero y usa desde el
+    // día uno el generador propio de colillas (ver más abajo), nunca la
+    // subida de PDFs de otro sistema.
+    const esCorcovado = currentPropiedadId === "corcovado";
+
     // Franja fija arriba de todo el panel — no parpadea (eso distrae y se ve
     // roto), pero es lo primero que se ve al entrar a Planilla, sin tener que
     // bajar hasta la tarjeta de tipo de cambio para notar que hace falta.
-    if (tipoCambioVencido(tipoCambioActual)){
+    // En Corcovado no aplica: ahí las colillas se suben ya calculadas desde
+    // afuera, nunca se generan ni se descargan datos de planilla en dólares
+    // desde acá.
+    if (!esCorcovado && tipoCambioVencido(tipoCambioActual)){
       html += `<div style="margin-bottom:14px; padding:10px 14px; border-radius:8px; background:#FDECEA; border:1.5px solid #B3261E; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <span style="font-size:20px;">⚠️</span>
         <div style="flex:1; min-width:200px; font-size:12.5px; color:#7a1d16;">
@@ -7853,12 +7861,6 @@ async function renderPlanillaPanel(){
       </div>`;
     }
 
-    // La subida de colillas EXTERNAS queda exclusiva de Corcovado — es la
-    // única propiedad que viene migrando desde un proveedor externo de
-    // planillas. Cualquier propiedad nueva empieza de cero y usa desde el
-    // día uno el generador propio de colillas (ver más abajo), nunca la
-    // subida de PDFs de otro sistema.
-    const esCorcovado = currentPropiedadId === "corcovado";
     html += esCorcovado
       ? `<div class="section-card" style="border-color:var(--leaf); margin-bottom:14px;" id="colillas-importar-seccion"><div class="section-body">
       <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🧾 Importar y Actualizar Salarios</div>
@@ -7875,7 +7877,10 @@ async function renderPlanillaPanel(){
       <button class="btn" style="width:100%;" onclick="mostrarModalColillasFaltantes();">🧾 Ver quién falta del período actual</button>
     </div>`;
 
-    html += `<div class="dash-panel" style="margin-bottom:14px;">
+    // En Corcovado no aplica — ahí no se descargan datos de planilla en
+    // dólares desde acá, así que el tipo de cambio de referencia no sirve.
+    if (!esCorcovado){
+      html += `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">💵 Tipo de cambio de referencia (USD → ₡)</div>
       <div style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;">Se usa para convertir a colones el salario de quienes ganan en dólares al descargar sus datos para planilla CCSS — la CCSS se presenta siempre en colones. Se guarda a mano (no se consulta ningún servicio externo) para que elijas vos qué tipo de cambio corresponde al reporte que estás llenando.</div>
       ${tipoCambioActual
@@ -7889,6 +7894,7 @@ async function renderPlanillaPanel(){
       </div>
       <div id="tipo-cambio-status" style="font-size:12px; margin-top:6px;"></div>
     </div>`;
+    }
 
     html += `<div class="dash-panel" style="margin-bottom:14px;">
       <div class="dash-panel-title">📊 Reporte de incidencias por fechas</div>
