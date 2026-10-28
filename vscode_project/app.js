@@ -10265,6 +10265,10 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
             existente.ALERTA_MARCAS_NUEVAS = true;
             existente.ALERTA_MARCAS_NUEVAS_DETALLE = detalleFresco;
             existente.ALERTA_MARCAS_NUEVAS_EN = new Date().toISOString();
+            // Marcas crudas (no solo el texto) para poder reclasificar el día
+            // de un clic si resulta que sí se trabajó — ver
+            // reclasificarAlertaMarcasNuevasComoLaboral.
+            existente.ALERTA_MARCAS_NUEVAS_MARCAS = info.MARCAS;
             await window.storage.set(key, JSON.stringify(existente), false);
           }catch(e){ /* no crítico: se reintenta en la próxima sincronización */ }
         }
@@ -12662,10 +12666,26 @@ async function renderHorasExtrasPanel(){
       // aprobar/rechazar este día (ver el aviso en guardarFilasHorasExtra) —
       // nunca se pisa la decisión sola, así que se avisa acá para que
       // jefatura/gerencia decida si hay que reabrirlo y recalcular a mano.
+      // Si el día en conflicto quedó decidido como vacaciones/día libre/
+      // permiso sin goce (no como "laboral" con un error de horas), "Revisado,
+      // quitar aviso" NO alcanza: deja a la persona marcada como si hubiera
+      // descansado un día que en realidad trabajó, sin corregir ni el
+      // calendario ni (lo más grave) su saldo de vacaciones/días libres, que
+      // sigue contando ese día como tomado. "🔁 Reclasificar" reabre el día
+      // como laboral pendiente (misma fila que cualquier otro día sin
+      // decidir) para que jefatura/gerencia le cargue las horas reales y lo
+      // apruebe — pero el saldo de vacaciones solo se libera corrigiendo
+      // aparte las fechas de la solicitud en "✅ Días libres y vacaciones
+      // otorgados" (ver guardarCorreccionSolicitud), así que se avisa acá.
+      const esDiaDeAusencia = r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "permiso_sin_goce" || r.TIPO_DIA === "dia_viaje";
       const bloqueAlertaMarcasNuevas = r.ALERTA_MARCAS_NUEVAS
         ? `<div style="margin-top:4px; padding:6px 8px; background:#FFF4E5; border:1px solid #D9A54A; border-radius:6px; font-size:11px; color:#7a5a12;">
             ⚠️ Llegaron marcas nuevas del reloj después de esta decisión — ahora el reloj muestra: <b>${escapeHtml(r.ALERTA_MARCAS_NUEVAS_DETALLE || "(sin marcas)")}</b>${r.ALERTA_MARCAS_NUEVAS_EN ? ` (detectado ${fmtFechaSimple(r.ALERTA_MARCAS_NUEVAS_EN.slice(0,10))})` : ""}.
-            ${puedeEditar ? `<div style="margin-top:3px;"><button class="btn" style="padding:2px 7px; font-size:10px;" onclick="descartarAlertaMarcasNuevas('${keyEsc}')">✔️ Revisado, quitar aviso</button></div>` : ""}
+            ${esDiaDeAusencia ? `<div style="margin-top:3px;">Este día está marcado como ${escapeHtml((TIPOS_DIA_HORARIO[r.TIPO_DIA] || {}).label || r.TIPO_DIA)} — si en realidad trabajó, reclasificalo y después corregí las fechas de su solicitud en "✅ Días libres y vacaciones otorgados" para liberarle ese día del saldo.</div>` : ""}
+            ${puedeEditar ? `<div style="margin-top:3px; display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn" style="padding:2px 7px; font-size:10px;" onclick="descartarAlertaMarcasNuevas('${keyEsc}')">✔️ Revisado, quitar aviso</button>
+              <button class="btn" style="padding:2px 7px; font-size:10px;" onclick="reclasificarAlertaMarcasNuevasComoLaboral('${keyEsc}')">🔁 Era un día trabajado — reclasificar</button>
+            </div>` : ""}
           </div>`
         : "";
       const etiquetaTipo = TIPOS_DIA_HORARIO[tipoDia] ? `${TIPOS_DIA_HORARIO[tipoDia].emoji} ${TIPOS_DIA_HORARIO[tipoDia].label}` : "";
@@ -12994,10 +13014,47 @@ async function descartarAlertaMarcasNuevas(key){
     delete v.ALERTA_MARCAS_NUEVAS;
     delete v.ALERTA_MARCAS_NUEVAS_DETALLE;
     delete v.ALERTA_MARCAS_NUEVAS_EN;
+    delete v.ALERTA_MARCAS_NUEVAS_MARCAS;
     await window.storage.set(key, JSON.stringify(v), false);
     statusMsg("Aviso descartado.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo descartar el aviso: " + e.message, false); }
+}
+
+// El día quedó decidido (ej. "vacaciones") pero el reloj trajo marcas reales
+// después (ver ALERTA_MARCAS_NUEVAS en guardarFilasHorasExtra) — señal de que
+// en realidad SÍ trabajó ese día. Reabre el registro como "laboral"
+// pendiente, con las marcas frescas del reloj, para que jefatura/gerencia le
+// cargue las horas y lo apruebe por el camino normal (mismo que cualquier
+// día sin decidir todavía). A propósito NO toca la solicitud de vacaciones/
+// día libre que originó este día (ver SOLICITUD_KEY) — esa solo se corrige
+// aparte, desde "✅ Días libres y vacaciones otorgados" → "✏️ Corregir
+// fechas", que sí sabe recalcular el saldo; tocarla desde acá duplicaría esa
+// lógica y arriesgaría descuadrar el saldo de alguien más en el camino.
+async function reclasificarAlertaMarcasNuevasComoLaboral(key){
+  if (!window.sdgApi.puedeEditar()) return;
+  if (!confirm("¿Reclasificar este día como trabajado? Va a quedar pendiente de aprobación con las marcas del reloj, para cargarle las horas. Recordá corregir aparte las fechas de su solicitud de vacaciones/día libre para liberarle el día del saldo.")) return;
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    if (Array.isArray(v.ALERTA_MARCAS_NUEVAS_MARCAS) && v.ALERTA_MARCAS_NUEVAS_MARCAS.length){
+      v.MARCAS = v.ALERTA_MARCAS_NUEVAS_MARCAS;
+    }
+    v.TIPO_DIA = "laboral";
+    v.ESTADO = "pendiente";
+    v.HORAS_EXTRA = 0;
+    v.INCOMPLETO = false;
+    v.MARCA_SUELTA = null;
+    delete v.ALERTA_MARCAS_NUEVAS;
+    delete v.ALERTA_MARCAS_NUEVAS_DETALLE;
+    delete v.ALERTA_MARCAS_NUEVAS_EN;
+    delete v.ALERTA_MARCAS_NUEVAS_MARCAS;
+    await window.storage.set(key, JSON.stringify(v), false);
+    if (v.EMPLEADO_KEY) await agregarBitacora(v.EMPLEADO_KEY, `${fmtFechaSimple(v.FECHA)}: reclasificado de día de ausencia a día laboral (llegaron marcas del reloj) — pendiente de aprobar horas.`);
+    statusMsg("Reclasificado como día laboral pendiente — recordá corregir su solicitud en 'Días libres y vacaciones otorgados'.", true);
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo reclasificar: " + e.message, false); }
 }
 
 // Histórico de versiones de un registro de horas_extra: (quién lo creó,
