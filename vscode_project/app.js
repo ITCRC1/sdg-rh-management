@@ -24509,11 +24509,12 @@ async function renderArchivoList(){
       return `<div class="catalog-item">
         <div class="row1">
           <div class="info">
-            <div class="name">${escapeHtml(nombreCompletoEmpleado(it) || it.key)}</div>
+            <div class="name" style="cursor:pointer;" onclick="verPerfilEmpleado('${k2}')">${escapeHtml(nombreCompletoEmpleado(it) || it.key)}</div>
             ${meta ? `<div class="meta">${escapeHtml(meta)}</div>` : ""}
             ${it.SALIDA_PDF_FIRMADO ? `<div style="margin-top:3px;"><button class="link-badge" onclick="descargarSalidaFirmada('${k2}')">📎 Ver carta firmada</button></div>` : `<div class="hint" style="margin:2px 0 0;">⚠️ Sin carta de salida firmada adjunta</div>`}
           </div>
           <div class="actions">
+            <button onclick="verPerfilEmpleado('${k2}')">🗂️ Ver expediente</button>
             <button onclick="generarDespidoDeEmpleado('${k2}')">⚖️ Despido</button>
             <button onclick="generarRecomendacionDeEmpleado('${k2}')">📝 Recomendación</button>
             <button onclick="subirSalidaFirmadaArchivo('${k2}')">📎 Subir carta</button>
