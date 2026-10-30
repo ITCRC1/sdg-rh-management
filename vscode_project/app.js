@@ -6031,7 +6031,14 @@ async function aplicarColillaIndividual(idx, opts){
     const cambios = [];
     if (aplicarSalario) cambios.push(`salario → ${r.moneda === "USD" ? "$" : "₡"}${r.salario.toLocaleString(r.moneda === "USD" ? "en-US" : "es-CR")}`);
     if (aplicarPuesto) cambios.push(`puesto → "${r.puestoInfo.puestoNombre}"`);
-    if (!confirm(`Vas a aplicarle a ${nombreCompletoEmpleado(r.match)}: ${cambios.join(", ")}. ¿Confirmas?`)) return;
+    // El nombre que no coincide es el caso más peligroso de confirmar "sin
+    // pensar" (puede pegarle el número de empleado/salario de otra persona a
+    // esta ficha para siempre) — se repite la advertencia acá, en el mismo
+    // diálogo de confirmación, en vez de confiar en que ya la leyeron arriba.
+    const advertencia = r.nombreSospechoso
+      ? `\n\n⚠️ OJO: esta colilla coincidió por ${r.matchedBy} con esta ficha, pero trae el nombre "${r.nombre}" — no parece la misma persona. Si no estás seguro de que es un número repetido entre dos planillas y de verdad es ${nombreCompletoEmpleado(r.match)}, cancelá y revisalo primero.\n\n`
+      : "";
+    if (!confirm(`Vas a aplicarle a ${nombreCompletoEmpleado(r.match)}: ${cambios.join(", ")}.${advertencia}¿Confirmas?`)) return;
   }
 
   const fullKey = CATALOGS.empleados.prefix + r.match.key;

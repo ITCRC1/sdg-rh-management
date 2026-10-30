@@ -624,6 +624,7 @@ function renderListaUsuarios(usuarios){
         <div style="display:flex; gap:6px; flex-shrink:0;">
           ${u.activo ? `<button class="btn btn-mini" title="Ver el sistema como esta cuenta, para probar qué le llega de verdad" onclick="verComoUsuario('${esc(u.id)}','${esc(u.nombre)}')">👁️ Ver como</button>` : ""}
           ${u.id === miUsuarioId ? `<button class="btn btn-mini" onclick="editarNombreUsuario('${esc(u.id)}','${esc(u.nombre)}')">✏️ Mi nombre</button>` : ""}
+          <button class="btn btn-mini" onclick="renombrarUsuarioLogin('${esc(u.id)}','${esc(u.email)}')">✏️ Usuario</button>
           <button class="btn btn-mini" onclick="resetearPassword('${esc(u.id)}','${esc(u.email)}')">Resetear</button>
           <button class="btn ${u.activo ? "btn-danger" : "btn-mini"}"
                   onclick="cambiarActivo('${esc(u.id)}', ${u.activo ? "false" : "true"})">
@@ -724,6 +725,28 @@ async function editarNombreUsuario(id, nombreActual){
   if (!limpio || limpio === nombreActual) return;
   try{
     await api.usuarios.actualizar(id, { nombre: limpio });
+    await cargarUsuarios();
+  }catch(e){
+    alert(e.message || "No se pudo actualizar.");
+  }
+}
+
+// Renombra el USUARIO de acceso (lo que se escribe para entrar, ej.
+// "RNunez") — distinto de "Mi nombre", que es solo el nombre para mostrar.
+// Hace falta cuando la cuenta se creó sola con datos viejos/mal digitados
+// del expediente y después se corrigieron, pero el usuario se quedó
+// pegado al nombre de antes (ver sincronizarCuentaEmpleado en el server,
+// que solo genera el usuario una vez). Cierra sus sesiones abiertas, igual
+// que un reseteo de contraseña, para que entre de nuevo con el dato nuevo.
+async function renombrarUsuarioLogin(id, emailActual){
+  const nuevo = prompt("Nuevo usuario de acceso para esta cuenta (lo que escribe para entrar):", emailActual);
+  if (nuevo === null) return; // canceló
+  const limpio = nuevo.trim();
+  if (!limpio || limpio === emailActual) return;
+  if (!confirm(`¿Cambiar el usuario de "${emailActual}" a "${limpio}"? Se cerrará cualquier sesión abierta de esta cuenta — avisale el nuevo usuario por un canal seguro.`)) return;
+  try{
+    await api.usuarios.actualizar(id, { email: limpio });
+    alert(`Usuario actualizado a "${limpio}".`);
     await cargarUsuarios();
   }catch(e){
     alert(e.message || "No se pudo actualizar.");

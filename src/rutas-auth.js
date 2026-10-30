@@ -534,6 +534,23 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
       }
     }
 
+    // Renombrar el usuario de acceso (ej. corregir "RNunez" a "RAzofeifa"
+    // cuando la cuenta se creó sola con un nombre que después se corrigió en
+    // el expediente — ver sincronizarCuentaEmpleado en rutas-datos.js, que
+    // genera el usuario UNA sola vez y nunca lo vuelve a tocar). Único en
+    // todo el sistema, igual que al crear la cuenta.
+    if (b.email !== undefined) {
+      const emailNuevo = String(b.email || "").trim();
+      if (!emailNuevo) return res.status(400).json({ error: "El usuario no puede quedar vacío." });
+      const dupEmail = await query(
+        "SELECT 1 FROM usuarios WHERE lower(email) = lower($1) AND id <> $2",
+        [emailNuevo, id]
+      );
+      if (dupEmail.rows[0]) {
+        return res.status(409).json({ error: "Ya existe una cuenta con ese usuario." });
+      }
+    }
+
     const campos = [];
     const valores = [id];
     const set = (col, val) => {
@@ -541,6 +558,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
       campos.push(col + " = $" + valores.length);
     };
 
+    if (b.email !== undefined) set("email", String(b.email).trim());
     if (b.nombre !== undefined) set("nombre", String(b.nombre).trim());
     if (b.cedula !== undefined) set("cedula", b.cedula || null);
     if (b.puesto !== undefined) set("puesto", b.puesto ? String(b.puesto).trim() : null);
@@ -567,8 +585,10 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
     );
     if (!rows[0]) return res.status(404).json({ error: "Usuario no encontrado." });
 
-    // Desactivar o cambiarle la contraseña a alguien lo saca de inmediato.
-    if (b.activo === false || b.password !== undefined) {
+    // Desactivar, cambiarle la contraseña, o renombrar su usuario, lo saca
+    // de inmediato — así entra de nuevo con el dato correcto en vez de seguir
+    // en una sesión vieja sin saber que cambió.
+    if (b.activo === false || b.password !== undefined || b.email !== undefined) {
       await A.revocarSesionesDe(id);
     }
 
