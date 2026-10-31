@@ -8994,6 +8994,122 @@ async function registrarMotivoMarcaHistorial({ empKey, fecha, motivo, accion }){
   }catch(e){ /* un fallo acá no debe bloquear la aprobación ya guardada */ }
 }
 
+// Solicitudes de corrección de horas extra — una vez que jefatura ya aprobó
+// un día (queda "aprobada_jefatura", esperando la aprobación final de
+// gerencia), jefatura ya no puede tocarlo directo: si se da cuenta de un
+// error, pide el cambio con esto en vez de editarlo ella misma. Queda
+// "pendiente" hasta que gerencia/master la apruebe o la rechace — solo ahí
+// se toca el registro real de horas_extra: (ver decidirCorreccionHorasExtra).
+// Es la contraparte de cambiarTipoDiaHoraExtra (que es gerencia/master
+// corrigiendo directo y avisándole a jefatura después): acá es jefatura la
+// que pide primero.
+const CORRECCION_HORAS_EXTRA_PREFIX = "correccion_horas_extra:";
+
+async function listarCorreccionesHorasExtra(){
+  const res = await window.storage.list(CORRECCION_HORAS_EXTRA_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const items = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return items.filter(Boolean);
+}
+
+async function solicitarCorreccionHorasExtra(registroKey){
+  try{
+    const r = await window.storage.get(registroKey, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v){ statusMsg("Ese registro ya no existe.", false); return; }
+    const existentes = await listarCorreccionesHorasExtra();
+    if (existentes.some(s => s.REGISTRO_KEY === registroKey && s.ESTADO === "pendiente")){
+      statusMsg("Ya hay una corrección pendiente para este día — esperá a que gerencia la revise.", false);
+      return;
+    }
+    const tipoActual = v.TIPO_DIA || "laboral";
+    const body = document.getElementById("modal-incompletos-body");
+    document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "✏️ Solicitar corrección";
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
+        Día ${escapeHtml(v.FECHA || "—")} — actualmente marcado como <b>${escapeHtml(TIPOS_DIA_HORARIO[tipoActual] ? TIPOS_DIA_HORARIO[tipoActual].label : tipoActual)}</b>.
+      </div>
+      <div class="field">
+        <label>Corregir a</label>
+        <select id="correccion-tipo-propuesto">
+          ${Object.keys(TIPOS_DIA_HORARIO).filter(t => t !== tipoActual).map(t => `<option value="${t}">${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Motivo de la corrección</label>
+        <input type="text" id="correccion-motivo" placeholder="¿Por qué hay que corregir este día?">
+      </div>
+      <button class="btn primary" style="margin-top:8px;" onclick="confirmarSolicitudCorreccionHorasExtra('${registroKey.replace(/'/g,"\\'")}')">📨 Enviar a gerencia/master</button>`;
+    document.getElementById("modal-incompletos").classList.add("open");
+  }catch(e){ statusMsg("No se pudo abrir el formulario: " + e.message, false); }
+}
+
+async function confirmarSolicitudCorreccionHorasExtra(registroKey){
+  const tipoEl = document.getElementById("correccion-tipo-propuesto");
+  const motivoEl = document.getElementById("correccion-motivo");
+  const tipoPropuesto = tipoEl ? tipoEl.value : "";
+  const motivo = motivoEl ? motivoEl.value.trim() : "";
+  if (!tipoPropuesto){ statusMsg("Elegí a qué corregirlo.", false); return; }
+  if (!motivo){ statusMsg("Indicá el motivo de la corrección.", false); return; }
+  try{
+    const r = await window.storage.get(registroKey, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v){ statusMsg("Ese registro ya no existe.", false); return; }
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const key = CORRECCION_HORAS_EXTRA_PREFIX + (v.EMPLEADO_KEY || "sin-empleado") + ":" + (v.FECHA || "sin-fecha") + ":" + Date.now();
+    await window.storage.set(key, JSON.stringify({
+      REGISTRO_KEY: registroKey,
+      EMPLEADO_KEY: v.EMPLEADO_KEY || "",
+      FECHA: v.FECHA || "",
+      TIPO_DIA_ACTUAL: v.TIPO_DIA || "laboral",
+      TIPO_DIA_PROPUESTO: tipoPropuesto,
+      MOTIVO: motivo,
+      ESTADO: "pendiente",
+      SOLICITADO_POR: (sesion && sesion.email) || "",
+      SOLICITADO_EN: new Date().toISOString(),
+    }), false);
+    cerrarModalIncompletos();
+    statusMsg("Corrección enviada — queda pendiente de que gerencia/master la revise.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo enviar la corrección: " + e.message, false); }
+}
+
+async function decidirCorreccionHorasExtra(solicitudKey, aprobar){
+  try{
+    const r = await window.storage.get(solicitudKey, false);
+    const s = r && r.value ? JSON.parse(r.value) : null;
+    if (!s || s.ESTADO !== "pendiente") return;
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const etiqueta = t => (TIPOS_DIA_HORARIO[t] ? TIPOS_DIA_HORARIO[t].label : t);
+    if (aprobar){
+      const rr = await window.storage.get(s.REGISTRO_KEY, false);
+      const v = rr && rr.value ? JSON.parse(rr.value) : null;
+      if (!v){ statusMsg("El día que se quería corregir ya no existe.", false); return; }
+      if (!confirm(`¿Aprobar la corrección que pidió jefatura: "${etiqueta(s.TIPO_DIA_ACTUAL)}" → "${etiqueta(s.TIPO_DIA_PROPUESTO)}"?`)) return;
+      v.TIPO_DIA = s.TIPO_DIA_PROPUESTO;
+      await window.storage.set(s.REGISTRO_KEY, JSON.stringify(v), false);
+      if (v.EMPLEADO_KEY){
+        await agregarBitacora(v.EMPLEADO_KEY, `Corrección pedida por jefatura, aprobada por gerencia/master: el día ${v.FECHA || "—"} pasó de "${etiqueta(s.TIPO_DIA_ACTUAL)}" a "${etiqueta(s.TIPO_DIA_PROPUESTO)}" (motivo: ${s.MOTIVO || "—"}).`);
+      }
+      s.ESTADO = "aprobada";
+    } else {
+      s.MOTIVO_RECHAZO = prompt("Motivo del rechazo (opcional):", "") || "";
+      s.ESTADO = "rechazada";
+    }
+    s.DECIDIDO_POR = (sesion && sesion.email) || "";
+    s.DECIDIDO_EN = new Date().toISOString();
+    await window.storage.set(solicitudKey, JSON.stringify(s), false);
+    statusMsg(aprobar ? "Corrección aplicada." : "Corrección rechazada.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo decidir: " + e.message, false); }
+}
+
 // Cache en memoria de la última carga del historial, para que el buscador
 // filtre sin tener que volver a pedirle todo a window.storage en cada letra.
 let historialMotivosMarcasCache = [];
@@ -12511,6 +12627,14 @@ async function renderHorasExtrasPanel(){
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     const registros = await listarRegistrosHorasExtra();
+    const correcciones = await listarCorreccionesHorasExtra();
+    // Solo la más reciente por registro — si una ya fue decidida y jefatura
+    // pidió otra corrección después, es esa la que importa mostrar.
+    const correccionesPorRegistro = {};
+    correcciones.forEach(c => {
+      const previa = correccionesPorRegistro[c.REGISTRO_KEY];
+      if (!previa || (c.SOLICITADO_EN || "") > (previa.SOLICITADO_EN || "")) correccionesPorRegistro[c.REGISTRO_KEY] = c;
+    });
     const res = await window.storage.list(CATALOGS.empleados.prefix, false);
     const empKeys = (res && res.keys) || [];
     const empleados = await Promise.all(empKeys.map(async k => {
@@ -12732,6 +12856,8 @@ async function renderHorasExtrasPanel(){
       const monto = (salarioHora && !isNaN(salarioHora)) ? (salarioHora * tarifaAplicable * r.HORAS_EXTRA) : null;
       const keyEsc = String(r.key).replace(/'/g, "\\'");
       const tipoDia = r.TIPO_DIA || "laboral";
+      const correccion = correccionesPorRegistro[r.key];
+      const etiquetaTipoDia = t => (TIPOS_DIA_HORARIO[t] ? TIPOS_DIA_HORARIO[t].label : t);
       let acciones = "";
       if (r.ESTADO === "pendiente" && r.INCOMPLETO && r.EMPLEADO_KEY && puedeAprobar){
         acciones = `<button class="use" onclick="marcarJornadaCompletaTurno('${keyEsc}')">⚡ Marcar jornada completa</button>
@@ -12749,7 +12875,14 @@ async function renderHorasExtrasPanel(){
         acciones = `<button class="use" onclick="mostrarModalAsignarHoraExtra('${keyEsc}')">🔗 Identificar</button>
           <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Descartar</button>`;
       } else if (r.ESTADO === "aprobada_jefatura" && puedeEditar){
-        acciones = `<select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
+        const bloqueCorreccion = (correccion && correccion.ESTADO === "pendiente")
+          ? `<div style="margin-bottom:6px; padding:6px 8px; background:#E8F0FE; border:1px solid var(--navy-deep); border-radius:6px; font-size:11px;">
+              📨 Jefatura pidió corregir este día: "${escapeHtml(etiquetaTipoDia(correccion.TIPO_DIA_ACTUAL))}" → "${escapeHtml(etiquetaTipoDia(correccion.TIPO_DIA_PROPUESTO))}"${correccion.MOTIVO ? ` — motivo: ${escapeHtml(correccion.MOTIVO)}` : ""} (${escapeHtml((correccion.SOLICITADO_POR||"").split("@")[0]||"—")})<br>
+              <button class="use" style="padding:2px 8px; font-size:10.5px; margin-top:4px;" onclick="decidirCorreccionHorasExtra('${correccion.key.replace(/'/g,"\\'")}', true)">✅ Aprobar corrección</button>
+              <button class="del" style="padding:2px 8px; font-size:10.5px; margin-top:4px;" onclick="decidirCorreccionHorasExtra('${correccion.key.replace(/'/g,"\\'")}', false)">🚫 Rechazar</button>
+            </div>`
+          : "";
+        acciones = `${bloqueCorreccion}<select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
           ${r.MOTIVO_HORAS_EXTRA ? `<div class="meta" style="font-size:10.5px; max-width:300px;">📝 Motivo: ${escapeHtml(r.MOTIVO_HORAS_EXTRA)}</div>` : ""}
@@ -12757,7 +12890,18 @@ async function renderHorasExtrasPanel(){
           ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}
           <button class="del" onclick="rechazarHoraExtraFinal('${keyEsc}')">🚫 Rechazar</button>`;
       } else if (r.ESTADO === "aprobada_jefatura"){
-        acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")} · esperando aprobación final de gerencia${r.MOTIVO_HORAS_EXTRA ? ` · 📝 ${escapeHtml(r.MOTIVO_HORAS_EXTRA)}` : ""}</span>`;
+        let bloqueCorreccionJefatura = "";
+        if (esJefatura && correccion && correccion.ESTADO === "pendiente"){
+          bloqueCorreccionJefatura = `<div class="meta" style="margin-top:3px;">⏳ Pediste corregir este día a "${escapeHtml(etiquetaTipoDia(correccion.TIPO_DIA_PROPUESTO))}" — esperando revisión de gerencia.</div>`;
+        } else if (esJefatura && correccion && correccion.ESTADO === "rechazada"){
+          bloqueCorreccionJefatura = `<div class="meta" style="margin-top:3px; color:#B3261E;">❌ Gerencia rechazó tu corrección (pediste "${escapeHtml(etiquetaTipoDia(correccion.TIPO_DIA_PROPUESTO))}")${correccion.MOTIVO_RECHAZO ? `: ${escapeHtml(correccion.MOTIVO_RECHAZO)}` : ""}.</div>
+            <button class="btn" style="padding:2px 8px; font-size:10.5px; margin-top:3px;" onclick="solicitarCorreccionHorasExtra('${keyEsc}')">✏️ Solicitar corrección</button>`;
+        } else if (esJefatura && correccion && correccion.ESTADO === "aprobada"){
+          bloqueCorreccionJefatura = `<div class="meta" style="margin-top:3px; color:var(--leaf);">✅ Gerencia aprobó tu corrección.</div>`;
+        } else if (esJefatura){
+          bloqueCorreccionJefatura = `<button class="btn" style="padding:2px 8px; font-size:10.5px; margin-top:3px;" onclick="solicitarCorreccionHorasExtra('${keyEsc}')">✏️ Solicitar corrección</button>`;
+        }
+        acciones = `<span class="meta">Aprobada por ${escapeHtml((r.APROBADO_POR || "").split("@")[0] || "—")} · esperando aprobación final de gerencia${r.MOTIVO_HORAS_EXTRA ? ` · 📝 ${escapeHtml(r.MOTIVO_HORAS_EXTRA)}` : ""}</span>${renderAvisoCorreccionGerencia(r, keyEsc)}${bloqueCorreccionJefatura}`;
       } else if (r.ESTADO === "aprobada" && puedeEditar){
         // Corrige el tipo de un día YA con aprobación final — antes, una vez
         // llegado acá, no había forma de arreglar un error (ej. un hueco de
@@ -12766,13 +12910,13 @@ async function renderHorasExtrasPanel(){
         // cambiarlo. No toca ESTADO — sigue "aprobada", solo corrige
         // TIPO_DIA (y las horas si se reclasifica a laboral).
         acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}</span>
-          <select class="btn" style="padding:5px 6px;" onchange="if(confirm('Este día ya tiene aprobación final. ¿Corregir su tipo de todas formas?')) cambiarTipoDiaHoraExtra('${keyEsc}', this.value); else this.value='${tipoDia}';">
+          <select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
           ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}
           <button class="del" onclick="eliminarRegistroHorasExtra('${keyEsc}')">🗑️ Eliminar</button>`;
       } else if (r.ESTADO === "aprobada"){
-        acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}${r.MOTIVO_HORAS_EXTRA ? ` · 📝 ${escapeHtml(r.MOTIVO_HORAS_EXTRA)}` : ""}</span>`;
+        acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}${r.MOTIVO_HORAS_EXTRA ? ` · 📝 ${escapeHtml(r.MOTIVO_HORAS_EXTRA)}` : ""}</span>${renderAvisoCorreccionGerencia(r, keyEsc)}`;
       } else if (r.ESTADO === "rechazada"){
         // Reabrir/ver historial: solo master/gerente (puedeEditar) — antes un
         // día rechazado quedaba atrapado sin ninguna forma de corregirlo si
@@ -13015,6 +13159,28 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) return;
+    // Si jefatura ya había decidido el tipo de día (aprobada_jefatura o
+    // aprobada) y quien lo cambia acá es gerencia/master, es una corrección
+    // de lo que jefatura mandó, no una primera decisión — se avisa antes de
+    // guardar, se guarda de dónde venía (solo la primera vez, para no perder
+    // el original si se corrige dos veces) y queda visible para jefatura en
+    // la campana de alertas y en su propia fila de solo-lectura (ver
+    // renderAvisoCorreccionGerencia/renderAppTopbar), sin que jefatura pueda
+    // volver a tocarlo — la aprobación sigue siendo exclusiva de gerencia.
+    const yaDecididoPorJefatura = (v.ESTADO === "aprobada_jefatura" || v.ESTADO === "aprobada");
+    const tipoAnterior = v.TIPO_DIA || "laboral";
+    if (yaDecididoPorJefatura && tipo !== tipoAnterior){
+      const anteriorInfo = TIPOS_DIA_HORARIO[tipoAnterior];
+      const nuevoInfo = TIPOS_DIA_HORARIO[tipo];
+      if (!confirm(`Jefatura había marcado este día como "${anteriorInfo ? anteriorInfo.label : tipoAnterior}". ¿Confirmás corregirlo a "${nuevoInfo ? nuevoInfo.label : tipo}"? Jefatura va a ver un aviso de este cambio.`)) return;
+      if (!v.TIPO_DIA_ORIGINAL_JEFATURA) v.TIPO_DIA_ORIGINAL_JEFATURA = tipoAnterior;
+      v.CORREGIDO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+      v.CORREGIDO_EN = new Date().toISOString();
+      v.CORRECCION_NO_VISTA = true;
+      if (v.EMPLEADO_KEY){
+        await agregarBitacora(v.EMPLEADO_KEY, `Gerencia/master corrigió el tipo de día del ${v.FECHA || "—"}: "${anteriorInfo ? anteriorInfo.label : tipoAnterior}" → "${nuevoInfo ? nuevoInfo.label : tipo}" (lo había marcado jefatura).`);
+      }
+    }
     v.TIPO_DIA = tipo;
     await window.storage.set(key, JSON.stringify(v), false);
     // Sin esto la fila se quedaba tal cual estaba pintada — si se reclasificó
@@ -13025,6 +13191,36 @@ async function cambiarTipoDiaHoraExtra(key, tipo){
     // había forma de que apareciera el campo para cargarlas.
     await renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo actualizar el tipo de día: " + e.message, false); }
+}
+
+// Aviso que ve jefatura en su propia fila de solo-lectura cuando gerencia/
+// master le corrigió el tipo de día que había marcado (ver
+// cambiarTipoDiaHoraExtra). Solo informa — jefatura no puede volver a
+// cambiarlo desde acá, la corrección ya quedó aplicada. El botón "Visto" es
+// lo único que hace: apagar el aviso de la campana (renderAppTopbar), no
+// deshace ni vuelve a abrir nada de la aprobación.
+function renderAvisoCorreccionGerencia(r, keyEsc){
+  if (!r.CORREGIDO_POR) return "";
+  const anteriorInfo = TIPOS_DIA_HORARIO[r.TIPO_DIA_ORIGINAL_JEFATURA || ""];
+  const actualInfo = TIPOS_DIA_HORARIO[r.TIPO_DIA || "laboral"];
+  const quien = (r.CORREGIDO_POR || "").split("@")[0] || "—";
+  const cuando = r.CORREGIDO_EN ? mostrarFechaHoraCorta(r.CORREGIDO_EN) : "—";
+  return `<div style="margin-top:4px; padding:6px 8px; background:#FFF7E0; border:1px solid #D9A54A; border-radius:6px; font-size:11px; color:#6b5210;">
+    ⚠️ Gerencia corrigió este día: lo habías marcado como "${escapeHtml(anteriorInfo ? anteriorInfo.label : (r.TIPO_DIA_ORIGINAL_JEFATURA || "—"))}", ahora está como "${escapeHtml(actualInfo ? actualInfo.label : r.TIPO_DIA)}" (${escapeHtml(quien)}, ${escapeHtml(cuando)}).
+    ${r.CORRECCION_NO_VISTA ? `<button class="btn" style="padding:2px 8px; font-size:10px; margin-left:6px;" onclick="marcarCorreccionVista('${keyEsc}')">Visto</button>` : ""}
+  </div>`;
+}
+
+async function marcarCorreccionVista(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.CORRECCION_NO_VISTA = false;
+    await window.storage.set(key, JSON.stringify(v), false);
+    await renderHorasExtrasPanel();
+    renderAppTopbar();
+  }catch(e){ statusMsg("No se pudo marcar como visto: " + e.message, false); }
 }
 
 // Borra un registro de horas_extra: ya con aprobación final — pensado para
@@ -13630,6 +13826,20 @@ async function renderAppTopbar(){
     if (rol === "consultor"){
       const eventosRRHH = await calcularAlertasRRHHConsultor();
       alertas += eventosRRHH.length;
+    }
+    // Jefatura: días que mandó y que gerencia/master corrigió después (ver
+    // cambiarTipoDiaHoraExtra/renderAvisoCorreccionGerencia) y que todavía no
+    // marcó como "Visto" — el servidor ya le filtra los registros a solo su
+    // equipo, así que no hace falta volver a filtrar por departamento acá.
+    if (rol === "jefatura"){
+      const registrosHorasExtra = await listarRegistrosHorasExtra();
+      alertas += registrosHorasExtra.filter(r => r.CORRECCION_NO_VISTA).length;
+    }
+    // Gerencia/master: solicitudes de corrección que jefatura mandó y siguen
+    // sin decidir (ver solicitarCorreccionHorasExtra/decidirCorreccionHorasExtra).
+    if (rol === "master" || rol === "gerente"){
+      const correccionesHorasExtra = await listarCorreccionesHorasExtra();
+      alertas += correccionesHorasExtra.filter(c => c.ESTADO === "pendiente").length;
     }
     const contratosRes = await window.storage.list("contrato:", false);
     const contratoKeys = (contratosRes && contratosRes.keys) || [];
