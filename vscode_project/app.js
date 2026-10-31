@@ -8109,7 +8109,7 @@ async function abrirModalAsignarColillaPendiente(key){
     const it = r && r.value ? JSON.parse(r.value) : null;
     if (!it){ body.innerHTML = `<div class="empty-state">Esa colilla ya no está en el buzón.</div>`; return; }
     colillaPendienteEnAsignacion = { key, it };
-    const empleados = (await cargarEmpleadosDB()).filter(e => !e.ARCHIVADO).sort(compararPorApellido);
+    const empleados = (await cargarEmpleadosDB()).sort(compararPorApellido);
     body.innerHTML = `
       <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
         Colilla: <b>${escapeHtml(it.nombre || "(sin nombre)")}</b> — № ${escapeHtml(it.numero || "—")} —
@@ -8119,7 +8119,7 @@ async function abrirModalAsignarColillaPendiente(key){
         <label>Asignar al empleado</label>
         <input type="text" id="asignar-colilla-busqueda" placeholder="🔍 Buscar por nombre…" oninput="filtrarSelectEmpleados(this, 'asignar-colilla-select')" autocomplete="off">
         <select id="asignar-colilla-select" size="8" style="margin-top:6px;">
-          ${empleados.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}${e.NUMERO_EMPLEADO ? " — № " + escapeHtml(e.NUMERO_EMPLEADO) : ""}</option>`).join("")}
+          ${empleados.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(nombreCompletoEmpleado(e)||e.key)}${e.NUMERO_EMPLEADO ? " — № " + escapeHtml(e.NUMERO_EMPLEADO) : ""}${e.ARCHIVADO ? " (archivado)" : ""}</option>`).join("")}
         </select>
       </div>
       <div id="asignar-colilla-status" style="font-size:12px; color:#B3261E; margin:6px 0;"></div>
