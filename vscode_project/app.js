@@ -12734,8 +12734,7 @@ async function renderHorasExtrasPanel(){
       const tipoDia = r.TIPO_DIA || "laboral";
       let acciones = "";
       if (r.ESTADO === "pendiente" && r.INCOMPLETO && r.EMPLEADO_KEY && puedeAprobar){
-        acciones = `${renderInputMotivoHorasExtra(r, keyEsc)}
-          <button class="use" onclick="marcarJornadaCompletaTurno('${keyEsc}')">⚡ Marcar jornada completa</button>
+        acciones = `<button class="use" onclick="marcarJornadaCompletaTurno('${keyEsc}')">⚡ Marcar jornada completa</button>
           <button class="use" onclick="mostrarModalCompletarTurno('${keyEsc}')">✏️ Completar</button>
           <button class="del" onclick="rechazarTurnoSinMarcar('${keyEsc}')">❌ No laboró</button>`;
       } else if (r.ESTADO === "pendiente" && r.EMPLEADO_KEY && puedeAprobar){
@@ -12743,7 +12742,7 @@ async function renderHorasExtrasPanel(){
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
           ${tipoDia === "laboral" ? renderInputHorasExtra(r, keyEsc) : ""}
-          ${tipoDia === "laboral" ? renderInputMotivoHorasExtra(r, keyEsc) : ""}
+          ${tipoDia === "laboral" && Number(r.HORAS_EXTRA) > 0 ? renderInputMotivoHorasExtra(r, keyEsc) : ""}
           <button class="use" onclick="aprobarHoraExtra('${keyEsc}')">✅ Aprobar</button>
           <button class="del" onclick="rechazarHoraExtra('${keyEsc}')">🚫 Rechazar</button>`;
       } else if (r.ESTADO === "pendiente" && !r.EMPLEADO_KEY && puedeEditar){
@@ -12955,7 +12954,7 @@ async function aprobarHoraExtra(key){
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) return;
-    if ((v.TIPO_DIA || "laboral") === "laboral"){
+    if ((v.TIPO_DIA || "laboral") === "laboral" && Number(v.HORAS_EXTRA) > 0){
       const motivo = leerMotivoHorasExtra(key);
       if (!motivo){ statusMsg("Tenés que indicar el motivo de las horas extra antes de aprobar.", false); return; }
       v.MOTIVO_HORAS_EXTRA = motivo;
@@ -13343,8 +13342,6 @@ async function rechazarVariasHorasExtra(keys){
 // gerencia), igual que si se hubiera completado a mano — no es una
 // aprobación final automática.
 async function marcarJornadaCompletaTurno(key){
-  const motivo = leerMotivoHorasExtra(key);
-  if (!motivo){ statusMsg("Tenés que indicar el motivo antes de aprobar esta jornada.", false); return; }
   try{
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
@@ -13367,12 +13364,10 @@ async function marcarJornadaCompletaTurno(key){
     v.MARCA_SUELTA = null;
     v.AUTOCOMPLETADO = true;
     v.TIPO_DIA = "laboral";
-    v.MOTIVO_HORAS_EXTRA = motivo;
     v.ESTADO = "aprobada_jefatura";
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
     await window.storage.set(key, JSON.stringify(v), false);
-    await registrarMotivoMarcaHistorial({ empKey: v.EMPLEADO_KEY, fecha: v.FECHA, motivo, accion: "Jornada completa marcada" });
     statusMsg("Jornada completa marcada — pendiente de la aprobación final de gerencia.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
@@ -13455,11 +13450,11 @@ async function mostrarModalCompletarTurno(key){
       </div>
       <div id="turno-completar-campos" data-marca-registrada="${escapeHtml(v.MARCA_SUELTA || "")}"></div>
       <div class="field">
-        <label>📝 Motivo de las horas extra (requerido)</label>
+        <label>📝 Motivo de las horas extra (solo si el turno completado da horas extra)</label>
         <input type="text" id="turno-motivo" value="${escapeHtml(leerMotivoHorasExtra(key) || v.MOTIVO_HORAS_EXTRA || "")}" placeholder="¿Por qué tuvo horas extra este empleado?">
       </div>
       <button class="btn primary" style="margin-top:8px;" onclick="confirmarCompletarTurno('${key.replace(/'/g,"\\'")}')">✅ Guardar y aprobar</button>
-      <div class="hint" style="margin-top:6px;">Las dos horas se pueden corregir a mano si hasta la marca registrada estuviera mal — el sistema solo calcula la diferencia entre Entrada y Salida.</div>`;
+      <div class="hint" style="margin-top:6px;">Las dos horas se pueden corregir a mano si hasta la marca registrada estuviera mal — el sistema solo calcula la diferencia entre Entrada y Salida. El motivo solo se pide si esa diferencia da horas extra de verdad.</div>`;
     renderCamposCompletarTurno();
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
 }
@@ -13468,9 +13463,6 @@ async function confirmarCompletarTurno(key){
   const entradaStr = document.getElementById("turno-entrada").value;
   const salidaStr = document.getElementById("turno-salida").value;
   if (!entradaStr || !salidaStr){ statusMsg("Completa las dos horas.", false); return; }
-  const motivoEl = document.getElementById("turno-motivo");
-  const motivo = motivoEl ? motivoEl.value.trim() : "";
-  if (!motivo){ statusMsg("Tenés que indicar el motivo antes de guardar.", false); return; }
   const horas = (new Date(salidaStr).getTime() - new Date(entradaStr).getTime()) / 3600000;
   if (!horas || isNaN(horas) || horas <= 0 || horas > 20){
     statusMsg("Ese rango de horas no parece válido — revisa las fechas y horas.", false);
@@ -13506,17 +13498,21 @@ async function confirmarCompletarTurno(key){
       statusMsg("La salida cae en el día siguiente, pero el puesto de este empleado no es de turno nocturno ni mixto — revisa las fechas antes de guardar.", false);
       return;
     }
-    v.HORAS_EXTRA = Math.round(aplicarToleranciaCortesia(Math.max(0, horas - jornada)) * 100) / 100;
+    const horasExtra = Math.round(aplicarToleranciaCortesia(Math.max(0, horas - jornada)) * 100) / 100;
+    const motivoEl = document.getElementById("turno-motivo");
+    const motivo = motivoEl ? motivoEl.value.trim() : "";
+    if (horasExtra > 0 && !motivo){ statusMsg("Este turno completado da horas extra — tenés que indicar el motivo antes de guardar.", false); return; }
+    v.HORAS_EXTRA = horasExtra;
     v.MARCAS = [{ entrada: mostrarFechaHoraCorta(entradaStr), salida: mostrarFechaHoraCorta(salidaStr) }];
     v.INCOMPLETO = false;
     v.MARCA_SUELTA = null;
     v.TIPO_DIA = "laboral";
-    v.MOTIVO_HORAS_EXTRA = motivo;
+    if (horasExtra > 0) v.MOTIVO_HORAS_EXTRA = motivo;
     v.ESTADO = "aprobada_jefatura";
     v.APROBADO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION = new Date().toISOString();
     await window.storage.set(key, JSON.stringify(v), false);
-    await registrarMotivoMarcaHistorial({ empKey: v.EMPLEADO_KEY, fecha: v.FECHA, motivo, accion: "Turno completado" });
+    if (horasExtra > 0) await registrarMotivoMarcaHistorial({ empKey: v.EMPLEADO_KEY, fecha: v.FECHA, motivo, accion: "Turno completado" });
     cerrarModalIncompletos();
     statusMsg("Turno completado y aprobado — pendiente de la aprobación final de gerencia.");
     renderHorasExtrasPanel();
