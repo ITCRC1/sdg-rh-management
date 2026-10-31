@@ -5465,7 +5465,7 @@ function parseColillas(text){
       // name is capped to a reasonable length as a safety net — a genuine full name
       // never runs 60+ characters, so this stops a broken line-join from swallowing
       // the rest of the payslip into the name/occupation fields.
-      const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)/s);
+      const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)(?:\s+(\d{2}\/\d{2}\/\d{4})\s+Al\s*:\s*(\d{2}\/\d{2}\/\d{4}))?/s);
       if (!m) return;
       const numero = m[1];
       const nombre = completarNombreConLineaSuelta(chunk, m, m[2].replace(/\s+/g," ").trim());
@@ -5478,6 +5478,7 @@ function parseColillas(text){
         departamento: deptMatch ? deptMatch[1].trim() : "",
         ocupacion: ocupMatch ? ocupMatch[1].trim() : "",
         cedula: cedulaMatch ? cedulaMatch[1].trim() : "",
+        periodoInicio: m[4] || "", periodoFin: m[5] || "",
         moneda: monedaActual,
       });
     });
@@ -5815,11 +5816,21 @@ async function procesarColillas(){
   // mecánicamente contra cualquiera que lo haya tenido, archivado o no).
   empleadosDB = empleadosDB.filter(e => !e.ARCHIVADO);
   window._puestosDBCache = puestosDB; // lo usa el selector de mapeo en renderColillasPreview
+  window._empleadosActivosColillasCache = empleadosDB; // lo usa renderColillasPreview para avisar de los que faltan
   const indicesPorMoneda = construirIndicesPorMoneda(empleadosDB);
+
+  // Para no repetir una actualización ya aplicada: si esta misma persona ya
+  // tiene una colilla archivada para este mismo período (misma quincena),
+  // volver a subir el mismo paquete no debe reaplicar el salario de nuevo —
+  // ver claveColillaArchivada/cargarClavesColillasArchivadas.
+  let clavesYaArchivadas;
+  try{ clavesYaArchivadas = await cargarClavesColillasArchivadas(); }
+  catch(e){ clavesYaArchivadas = new Set(); }
 
   colillasResultadosCache = parsed.map(p => {
     const { match, nombreCorregido, matchedBy, numeroAmbiguo } = emparejarRegistroColilla(p, indicesPorMoneda);
     const puestoInfo = calcularPuestoInfo(p, match, mapaOcupaciones);
+    const yaArchivada = !!(match && p.periodoInicio && clavesYaArchivadas.has(claveColillaArchivada(match.IDENTIFICACION_EMP, nombreCompletoEmpleado(match), p.periodoInicio)));
     // Un salario en colones que cae a menos de un tercio del que ya tenía
     // guardado (o que se triplica) casi nunca es un cambio real dentro de la
     // misma moneda — el caso típico es una colilla en dólares sin marcar como
@@ -5836,7 +5847,7 @@ async function procesarColillas(){
     if (match && (matchedBy === "número de empleado" || matchedBy === "cédula") && nombresSinRelacion(p.nombre, nombreCompletoEmpleado(match))){
       nombreSospechoso = true;
     }
-    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso, nombreSospechoso, numeroAmbiguo });
+    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso, nombreSospechoso, numeroAmbiguo, yaArchivada });
   });
   renderColillasPreview();
 }
@@ -5900,7 +5911,7 @@ async function guardarMapeoOcupacionDesdeColilla(idx){
 // (aplicarTodasLasSospechosas/cancelarTodasLasSospechosas) — para que las dos
 // vean exactamente las mismas filas, nunca una versión desincronizada.
 function filasSospechosasColillas(){
-  const todosEncontrados = colillasResultadosCache.filter(r => r.match);
+  const todosEncontrados = colillasResultadosCache.filter(r => r.match && !r.yaArchivada);
   const usdTodos = todosEncontrados.filter(r => r.moneda === "USD");
   const resto = todosEncontrados.filter(r => r.moneda !== "USD");
   return [
@@ -5911,7 +5922,8 @@ function filasSospechosasColillas(){
 
 function renderColillasPreview(){
   const wrap = document.getElementById("colillas-resultados");
-  const todosEncontrados = colillasResultadosCache.filter(r => r.match);
+  const todosEncontrados = colillasResultadosCache.filter(r => r.match && !r.yaArchivada);
+  const yaAplicados = colillasResultadosCache.filter(r => r.match && r.yaArchivada);
   const usdTodos = todosEncontrados.filter(r => r.moneda === "USD");
   const usd = usdTodos.filter(r => !r.nombreSospechoso && !tienePuestoDistinto(r));
   const resto = todosEncontrados.filter(r => r.moneda !== "USD");
@@ -5920,11 +5932,34 @@ function renderColillasPreview(){
   const noEncontrados = colillasResultadosCache.filter(r => !r.match);
   const puestosSinMapear = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "sin_mapear").length;
   const puestosDistintos = todosEncontrados.filter(r => r.puestoInfo && r.puestoInfo.estado === "distinto").length;
+  const empleadosConColillaKeys = new Set(colillasResultadosCache.filter(r => r.match).map(r => r.match.key));
+  const empleadosFaltantes = (window._empleadosActivosColillasCache || []).filter(e => !empleadosConColillaKeys.has(e.key));
 
   let html = `<div class="section-card" style="border-color:var(--leaf); margin-top:12px;"><div class="section-body">
     <div style="font-weight:700; margin-bottom:4px;">Resumen</div>
-    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} para revisar antes de aplicar</b>` : ""}${usd.length ? ` · <b style="color:var(--navy-deep);">${usd.length} en dólares</b>` : ""}${puestosSinMapear ? ` · <b style="color:#8a6d1f;">${puestosSinMapear} ocupación(es) sin mapear</b>` : ""}${puestosDistintos ? ` · <b style="color:#B3261E;">${puestosDistintos} con puesto para actualizar</b>` : ""}</div>
+    <div style="font-size:12.5px;">${colillasResultadosCache.length} registros leídos en la colilla · <b style="color:var(--leaf);">${encontrados.length} coinciden</b> con tu lista de empleados · <b style="color:#B3261E;">${noEncontrados.length} sin coincidencia</b>${sospechosos.length ? ` · <b style="color:#B3261E;">${sospechosos.length} para revisar antes de aplicar</b>` : ""}${usd.length ? ` · <b style="color:var(--navy-deep);">${usd.length} en dólares</b>` : ""}${yaAplicados.length ? ` · <b style="color:var(--ink-soft);">${yaAplicados.length} ya aplicada(s) este período</b>` : ""}${empleadosFaltantes.length ? ` · <b style="color:#B3261E;">${empleadosFaltantes.length} empleado(s) sin colilla en este paquete</b>` : ""}${puestosSinMapear ? ` · <b style="color:#8a6d1f;">${puestosSinMapear} ocupación(es) sin mapear</b>` : ""}${puestosDistintos ? ` · <b style="color:#B3261E;">${puestosDistintos} con puesto para actualizar</b>` : ""}</div>
   </div></div>`;
+
+  if (empleadosFaltantes.length){
+    html += `<div class="section-card" style="margin-top:10px; border-color:#B3261E;"><div class="section-body">
+      <div style="font-weight:700; color:#B3261E; margin-bottom:6px;">🚩 Estos empleados activos no aparecen en este paquete de colillas:</div>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:6px;">Puede ser que falte su página en el PDF, que su nombre/número venga distinto, o que de verdad no tengan colilla este período (vacaciones, permiso, etc.) — revisa antes de dar por cerrada la planilla.</div>
+      ${empleadosFaltantes.map(e => `<div style="font-size:12px; padding:3px 0;">• ${escapeHtml(nombreCompletoEmpleado(e))}${e.NUMERO_EMPLEADO ? " — № " + escapeHtml(e.NUMERO_EMPLEADO) : ""}${e.DEPARTAMENTO_EMP ? " (" + escapeHtml(e.DEPARTAMENTO_EMP) + ")" : ""}</div>`).join("")}
+    </div></div>`;
+  }
+
+  if (yaAplicados.length){
+    html += `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+      <div style="font-weight:700; color:var(--ink-soft); margin-bottom:6px;">📆 Ya se habían aplicado para este mismo período (no se repiten):</div>
+      ${yaAplicados.map(r => {
+        const idx = colillasResultadosCache.indexOf(r);
+        return `<div style="font-size:12px; padding:4px 0; border-bottom:1px solid var(--paper-line);">
+          ${escapeHtml(nombreCompletoEmpleado(r.match))} — № ${escapeHtml(r.numero)} — período ${escapeHtml(r.periodoInicio || "—")} al ${escapeHtml(r.periodoFin || "—")}
+          <button class="btn" style="padding:2px 8px; font-size:10.5px; margin-left:6px;" onclick="aplicarColillaIndividual(${idx})">Aplicar de todas formas</button>
+        </div>`;
+      }).join("")}
+    </div></div>`;
+  }
 
   if (usd.length){
     html += `<div class="section-card" style="margin-top:10px; border-color:var(--navy-deep);"><div class="section-body">
@@ -6140,7 +6175,7 @@ async function aplicarColillasUSD(){
   // nada que ver), o con un cambio de puesto/departamento propuesto, quedan
   // fuera del botón masivo — se confirman uno por uno desde la sección
   // "Revisar antes de aplicar" (ver tienePuestoDistinto).
-  const usd = colillasResultadosCache.filter(r => r.match && r.moneda === "USD" && !r.nombreSospechoso && !tienePuestoDistinto(r));
+  const usd = colillasResultadosCache.filter(r => r.match && r.moneda === "USD" && !r.yaArchivada && !r.nombreSospechoso && !tienePuestoDistinto(r));
   if (!usd.length) return;
   if (!confirm(`Vas a actualizar el salario en dólares de ${usd.length} empleado(s) a partir de esta colilla. ¿Continuar?`)) return;
   let count = 0;
@@ -6183,7 +6218,7 @@ async function aplicarColillas(){
   // Los de salario o nombre sospechoso, los que traen un cambio de puesto/
   // departamento propuesto, y los de dólares (que van por su propio botón
   // "Aplicar ... en dólares" arriba), quedan fuera del botón masivo en colones.
-  const encontrados = colillasResultadosCache.filter(r => r.match && !r.salarioSospechoso && !r.nombreSospechoso && !tienePuestoDistinto(r) && r.moneda !== "USD");
+  const encontrados = colillasResultadosCache.filter(r => r.match && !r.yaArchivada && !r.salarioSospechoso && !r.nombreSospechoso && !tienePuestoDistinto(r) && r.moneda !== "USD");
   if (!encontrados.length) return;
   if (!confirm(`Vas a actualizar el salario de ${encontrados.length} empleado(s) a partir de esta colilla. ¿Continuar?`)) return;
   let count = 0;
