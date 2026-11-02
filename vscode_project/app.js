@@ -24996,8 +24996,8 @@ function restaurarCampoFechaArchivar(){
   const hint = document.getElementById("archivar-fecha-hint");
   const btn = document.getElementById("archivar-confirmar-btn");
   const info = document.getElementById("archivar-preaviso-info");
-  if (label) label.textContent = "Fecha de salida";
-  if (hint) hint.textContent = "Por defecto es hoy — cámbiala si el archivado se está registrando días después de que la persona ya salió.";
+  if (label) label.textContent = "📅 Fecha de salida (el día real en que la persona se fue)";
+  if (hint) hint.textContent = "⚠️ Esta es la fecha que usa la planilla — revisala siempre, no dejes el valor de \"hoy\" sin más si la persona se fue otro día.";
   if (btn) btn.textContent = "🗄️ Archivar empleado";
   if (info) info.style.display = "none";
   const fecha = document.getElementById("archivar-fecha");
@@ -25120,6 +25120,28 @@ async function confirmarArchivarEmpleado(){
   if (!fechaSalidaISO){
     statusMsg("Elige la fecha en que salió el empleado.", false);
     return;
+  }
+  // "Fecha de archivo" (cuándo se procesa esto en el sistema) nunca puede
+  // ser ANTERIOR a "Fecha de salida" (el día real en que la persona se
+  // fue) — no tiene sentido procesar algo en el sistema antes de que
+  // ocurriera. Si pasa, casi seguro es que las dos fechas se escribieron al
+  // revés (se puso la fecha real de salida en el campo de "Fecha de
+  // archivo" y se dejó "Fecha de salida" con el valor por defecto de hoy) —
+  // eso ya pasó una vez y dejó mal la fecha que usa la planilla para
+  // prorratear (ver FECHA_ARCHIVADO más abajo), así que se bloquea acá en
+  // vez de guardarlo mal. No aplica al modo "Renuncia programada" (ese
+  // guarda SALIDA_PACTADA_FECHA, no toca este campo) ni cuando el campo de
+  // archivo está oculto (no visible = sigue el valor por defecto de hoy).
+  const campoFechaArchivoVisible = (() => {
+    const wrap = document.getElementById("archivar-fecha-archivo-wrap");
+    return !!wrap && wrap.style.display !== "none";
+  })();
+  if (campoFechaArchivoVisible && !(tipoSalida === "Renuncia voluntaria" && archivarPreavisoRespuesta === "si" && !archivarModoFinalizar)){
+    const fechaArchivoCampo = (document.getElementById("archivar-fecha-archivo") || {}).value || "";
+    if (fechaArchivoCampo && fechaArchivoCampo < fechaSalidaISO){
+      statusMsg(`"Fecha de archivo" (${fechaArchivoCampo}) no puede ser anterior a "Fecha de salida" (${fechaSalidaISO}) — revisa que no hayas puesto las fechas al revés.`, false);
+      return;
+    }
   }
 
   // Renuncia con preaviso trabajado: NO se archiva todavía — sigue activo

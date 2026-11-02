@@ -259,14 +259,14 @@
         </div>
       </div>
       <div class="field" id="archivar-fecha-wrap">
-        <label id="archivar-fecha-label">Fecha de salida</label>
+        <label id="archivar-fecha-label">📅 Fecha de salida (el día real en que la persona se fue)</label>
         <input type="date" id="archivar-fecha" onchange="if (archivarPreavisoRespuesta==='si' && !archivarModoFinalizar) renderCalendarioPreavisoRenuncia();">
-        <div class="hint" id="archivar-fecha-hint">Por defecto es hoy — cámbiala si el archivado se está registrando días después de que la persona ya salió.</div>
+        <div class="hint" id="archivar-fecha-hint">⚠️ Esta es la fecha que usa la planilla — revisala siempre, no dejes el valor de "hoy" sin más si la persona se fue otro día.</div>
       </div>
       <div class="field" id="archivar-fecha-archivo-wrap" style="display:none;">
-        <label>Fecha de archivo</label>
+        <label>🖥️ Fecha de archivo (solo informativa — cuándo lo estás registrando AHORA en el sistema, no cuándo se fue la persona)</label>
         <input type="date" id="archivar-fecha-archivo">
-        <div class="hint">Cuándo se procesa el archivado en el sistema — por defecto es hoy, puede ser distinta a la fecha de salida (ej. se registra unos días después).</div>
+        <div class="hint">Casi siempre es hoy. Solo cambiala si estás registrando esto varios días después de la salida real — nunca debería ser antes de "Fecha de salida".</div>
       </div>
       <div class="field">
         <label>Carta de renuncia o despido firmada (PDF, opcional)</label>
