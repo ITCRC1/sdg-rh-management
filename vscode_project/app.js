@@ -21094,10 +21094,116 @@ async function abrirModalCorregirSolicitud(key){
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message||"")}</div>`; }
 }
 
+// Lógica central de "corregir" una solicitud ya aprobada — reconciliar los
+// días en Horas Extra, regenerar/anular el documento de Acción de Personal,
+// y dejar bitácora. Compartida entre guardarCorreccionSolicitud (gerencia/
+// master corrige directo) y decidirCorreccionSolicitud (gerencia/master
+// aprueba una corrección que pidió jefatura primero — ver
+// solicitarCorreccionSolicitud) para no mantener dos copias de esto.
 // Solo toca los días que ESTA solicitud justificó (ver SOLICITUD_KEY en
 // justificarRangoISO/aprobarSolicitudAusencia) — nunca uno que ya haya sido
 // procesado aparte (aprobado/rechazado/reclasificado) desde Horas Extra, para
 // no revertir en silencio una decisión que ya se tomó por otra vía.
+async function aplicarCorreccionSolicitud(key, nuevoTipo, nuevaDesde, nuevaHasta){
+  const res = await window.storage.get(key, false);
+  const s = res && res.value ? JSON.parse(res.value) : null;
+  if (!s) throw new Error("Esa solicitud ya no existe.");
+  const fechaAnteriorDesde = s.FECHA_INICIO, fechaAnteriorHasta = s.FECHA_FIN;
+  const tipoAnterior = s.TIPO;
+  const cambioTipo = tipoAnterior !== nuevoTipo;
+
+  const todosLosRegistros = await listarRegistrosHorasExtra();
+  const diasDeEstaSolicitud = todosLosRegistros.filter(r => r.SOLICITUD_KEY === key);
+
+  const diasNuevoSet = new Set();
+  const cursor = new Date(nuevaDesde + "T00:00:00");
+  const finCursor = new Date(nuevaHasta + "T00:00:00");
+  while (cursor <= finCursor){ diasNuevoSet.add(isoDeFechaLocal(cursor)); cursor.setDate(cursor.getDate() + 1); }
+
+  let noTocados = 0;
+  // Los días de una solicitud de días libres/vacaciones/permiso sin goce
+  // se crean YA "aprobada" (ver crearOJustificarDiaHorasExtra) — nunca
+  // pasan por "pendiente". Comprobar ESTADO !== "pendiente" acá (tanto
+  // para sincronizar el tipo como para borrar lo que quedó fuera del
+  // nuevo rango) los dejaba SIEMPRE sin tocar: al corregir fechas, los
+  // días de ANTES de la corrección nunca se borraban y quedaban
+  // huérfanos contando de más (el bug real detrás de "sigue guardando
+  // las fechas anteriores"), y un cambio de tipo tampoco se reflejaba en
+  // los días que seguían dentro del rango. Lo que de verdad hay que
+  // respetar es si alguien reclasificó el día a mano a un tipo distinto
+  // del que tenía la solicitud ANTES de esta corrección — eso sí
+  // significa que se procesó aparte y no hay que revertirlo solo.
+  for (const dia of diasDeEstaSolicitud){
+    if (diasNuevoSet.has(dia.FECHA)){
+      // Sigue dentro del rango corregido — no se recrea, pero si cambió el
+      // tipo (vacaciones ↔ día libre) sí hay que reflejarlo en el día ya
+      // guardado, o quedaría con el tipo viejo aunque la solicitud diga
+      // otra cosa (afecta el saldo de vacaciones y el reporte de planilla).
+      if (cambioTipo && dia.TIPO_DIA === tipoAnterior){
+        dia.TIPO_DIA = nuevoTipo;
+        await window.storage.set(dia.key, JSON.stringify(dia), false);
+      }
+      continue;
+    }
+    if (dia.TIPO_DIA !== tipoAnterior){ noTocados++; continue; }
+    await window.storage.delete(dia.key, false);
+  }
+
+  const diasYaJustificados = new Set(diasDeEstaSolicitud.filter(d => diasNuevoSet.has(d.FECHA)).map(d => d.FECHA));
+  const diasBloqueados = [];
+  for (const fecha of diasNuevoSet){
+    if (diasYaJustificados.has(fecha)) continue;
+    const r = await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, nuevoTipo, "solicitud_ausencia", { SOLICITUD_KEY: key });
+    if (!r.creado) diasBloqueados.push(r.motivo);
+  }
+
+  s.TIPO = nuevoTipo;
+  s.FECHA_INICIO = nuevaDesde;
+  s.FECHA_FIN = nuevaHasta;
+  s.DIAS = diasEntreFechasISO(nuevaDesde, nuevaHasta);
+  s.CORREGIDO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+  s.FECHA_CORRECCION = new Date().toISOString();
+  if (!Array.isArray(s.HISTORIAL_CORRECCIONES)) s.HISTORIAL_CORRECCIONES = [];
+  s.HISTORIAL_CORRECCIONES.push({
+    antes: { TIPO: tipoAnterior, FECHA_INICIO: fechaAnteriorDesde, FECHA_FIN: fechaAnteriorHasta },
+    despues: { TIPO: nuevoTipo, FECHA_INICIO: nuevaDesde, FECHA_FIN: nuevaHasta },
+    por: s.CORREGIDO_POR, fecha: s.FECHA_CORRECCION,
+  });
+  await window.storage.set(key, JSON.stringify(s), false);
+
+  // El documento de Acción de Personal (vacaciones/permiso sin goce) sigue
+  // al día solo mientras nadie lo haya confirmado (ver
+  // generarDocumentoAccionPersonalDeSolicitud/confirmarDocumentoSolicitud):
+  // si ya se confirmó, esta corrección NUNCA lo regenera sola — solo lo
+  // deja marcado como desactualizado para que gerencia/master decida si
+  // hace falta una acción de personal nueva aparte.
+  let avisoDocumento = "";
+  if (s.DOCUMENTO_CONFIRMADO){
+    if (s.DOCUMENTO_ID){
+      s.DOCUMENTO_DESACTUALIZADO = true;
+      await window.storage.set(key, JSON.stringify(s), false);
+      avisoDocumento = " ⚠️ El documento de Acción de Personal ya estaba confirmado y NO se actualizó solo — quedó marcado como desactualizado.";
+    }
+  } else if (nuevoTipo === "vacaciones" || nuevoTipo === "permiso_sin_goce"){
+    await generarDocumentoAccionPersonalDeSolicitud(key);
+  } else if (s.DOCUMENTO_ID){
+    // Cambió a un tipo que no lleva este documento (día libre/día de
+    // viaje) y el anterior (de cuando era vacaciones/permiso) todavía no
+    // se había confirmado — se anula solo, no debe quedar activo un
+    // "Acción de Personal" para un tipo que ya no aplica.
+    try{ await window.sdgApi.anularDocumento(s.DOCUMENTO_ID, "La solicitud cambió a un tipo que no genera este documento."); }catch(e){ /* best effort */ }
+    s.DOCUMENTO_ID = null; s.DOCUMENTO_SHA256 = null; s.DOCUMENTO_DESACTUALIZADO = false;
+    await window.storage.set(key, JSON.stringify(s), false);
+  }
+
+  const tipoInfoAnterior = TIPOS_SOLICITUD_AUSENCIA[tipoAnterior] || { label: tipoAnterior };
+  const tipoInfoNuevo = TIPOS_SOLICITUD_AUSENCIA[nuevoTipo] || { label: nuevoTipo };
+  const detalleTipo = cambioTipo ? `${tipoInfoAnterior.label} → ${tipoInfoNuevo.label}, ` : "";
+  await agregarBitacora(s.EMPLEADO_KEY, `${tipoInfoNuevo.label} corregido: ${detalleTipo}${fmtFechaSimple(fechaAnteriorDesde)} al ${fmtFechaSimple(fechaAnteriorHasta)} → ${fmtFechaSimple(nuevaDesde)} al ${fmtFechaSimple(nuevaHasta)}.`);
+
+  return { noTocados, diasBloqueados, avisoDocumento };
+}
+
 async function guardarCorreccionSolicitud(){
   const key = corregirSolicitudPendienteKey;
   const status = document.getElementById("corregir-solicitud-status");
@@ -21108,112 +21214,37 @@ async function guardarCorreccionSolicitud(){
   if (nuevoTipo !== "vacaciones" && nuevoTipo !== "dia_libre" && nuevoTipo !== "dia_viaje" && nuevoTipo !== "permiso_sin_goce"){ if (status) status.textContent = "Elegí el tipo."; return; }
   if (!nuevaDesde || !nuevaHasta){ if (status) status.textContent = "Elegí ambas fechas."; return; }
   if (nuevaHasta < nuevaDesde){ if (status) status.textContent = "La fecha de fin no puede ser anterior a la de inicio."; return; }
-  if (status) status.textContent = "Guardando…";
   try{
     const res = await window.storage.get(key, false);
     const s = res && res.value ? JSON.parse(res.value) : null;
     if (!s) throw new Error("Esa solicitud ya no existe.");
-    const fechaAnteriorDesde = s.FECHA_INICIO, fechaAnteriorHasta = s.FECHA_FIN;
-    const tipoAnterior = s.TIPO;
-    const cambioTipo = tipoAnterior !== nuevoTipo;
-    if (fechaAnteriorDesde === nuevaDesde && fechaAnteriorHasta === nuevaHasta && !cambioTipo){
+    if (s.FECHA_INICIO === nuevaDesde && s.FECHA_FIN === nuevaHasta && s.TIPO === nuevoTipo){
       corregirSolicitudPendienteKey = null;
       cerrarModalIncompletos();
       return;
     }
+    // Este botón (en "Días libres y vacaciones otorgados") solo lo ve
+    // gerencia/master (ver renderListaSolicitudesOtorgadas) — si la
+    // solicitud venía de jefatura, es una corrección de lo que jefatura
+    // pidió, no una primera decisión. Se avisa antes de guardar y queda
+    // visible para jefatura (CORRECCION_NO_VISTA, ver
+    // renderAvisoCorreccionSolicitud/renderAppTopbar).
+    const empRes = s.EMPLEADO_KEY ? await window.storage.get(CATALOGS.empleados.prefix + s.EMPLEADO_KEY, false) : null;
+    const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+    const tipoInfoAnteriorConfirm = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO };
+    const tipoInfoNuevoConfirm = TIPOS_SOLICITUD_AUSENCIA[nuevoTipo] || { label: nuevoTipo };
+    const detalleTipoConfirm = s.TIPO !== nuevoTipo ? `${tipoInfoAnteriorConfirm.label} → ${tipoInfoNuevoConfirm.label}, ` : "";
+    if (!confirm(`¿Corregir la solicitud de ${emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY}: ${detalleTipoConfirm}${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} → ${fmtFechaSimple(nuevaDesde)} al ${fmtFechaSimple(nuevaHasta)}? Jefatura va a ver un aviso de este cambio.`)) return;
 
-    const todosLosRegistros = await listarRegistrosHorasExtra();
-    const diasDeEstaSolicitud = todosLosRegistros.filter(r => r.SOLICITUD_KEY === key);
-
-    const diasNuevoSet = new Set();
-    const cursor = new Date(nuevaDesde + "T00:00:00");
-    const finCursor = new Date(nuevaHasta + "T00:00:00");
-    while (cursor <= finCursor){ diasNuevoSet.add(isoDeFechaLocal(cursor)); cursor.setDate(cursor.getDate() + 1); }
-
-    let noTocados = 0;
-    // Los días de una solicitud de días libres/vacaciones/permiso sin goce
-    // se crean YA "aprobada" (ver crearOJustificarDiaHorasExtra) — nunca
-    // pasan por "pendiente". Comprobar ESTADO !== "pendiente" acá (tanto
-    // para sincronizar el tipo como para borrar lo que quedó fuera del
-    // nuevo rango) los dejaba SIEMPRE sin tocar: al corregir fechas, los
-    // días de ANTES de la corrección nunca se borraban y quedaban
-    // huérfanos contando de más (el bug real detrás de "sigue guardando
-    // las fechas anteriores"), y un cambio de tipo tampoco se reflejaba en
-    // los días que seguían dentro del rango. Lo que de verdad hay que
-    // respetar es si alguien reclasificó el día a mano a un tipo distinto
-    // del que tenía la solicitud ANTES de esta corrección — eso sí
-    // significa que se procesó aparte y no hay que revertirlo solo.
-    for (const dia of diasDeEstaSolicitud){
-      if (diasNuevoSet.has(dia.FECHA)){
-        // Sigue dentro del rango corregido — no se recrea, pero si cambió el
-        // tipo (vacaciones ↔ día libre) sí hay que reflejarlo en el día ya
-        // guardado, o quedaría con el tipo viejo aunque la solicitud diga
-        // otra cosa (afecta el saldo de vacaciones y el reporte de planilla).
-        if (cambioTipo && dia.TIPO_DIA === tipoAnterior){
-          dia.TIPO_DIA = nuevoTipo;
-          await window.storage.set(dia.key, JSON.stringify(dia), false);
-        }
-        continue;
-      }
-      if (dia.TIPO_DIA !== tipoAnterior){ noTocados++; continue; }
-      await window.storage.delete(dia.key, false);
-    }
-
-    const diasYaJustificados = new Set(diasDeEstaSolicitud.filter(d => diasNuevoSet.has(d.FECHA)).map(d => d.FECHA));
-    const diasBloqueados = [];
-    for (const fecha of diasNuevoSet){
-      if (diasYaJustificados.has(fecha)) continue;
-      const r = await crearOJustificarDiaHorasExtra(s.EMPLEADO_KEY, fecha, nuevoTipo, "solicitud_ausencia", { SOLICITUD_KEY: key });
-      if (!r.creado) diasBloqueados.push(r.motivo);
-    }
-
-    s.TIPO = nuevoTipo;
-    s.FECHA_INICIO = nuevaDesde;
-    s.FECHA_FIN = nuevaHasta;
-    s.DIAS = diasEntreFechasISO(nuevaDesde, nuevaHasta);
-    s.CORREGIDO_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
-    s.FECHA_CORRECCION = new Date().toISOString();
-    if (!Array.isArray(s.HISTORIAL_CORRECCIONES)) s.HISTORIAL_CORRECCIONES = [];
-    s.HISTORIAL_CORRECCIONES.push({
-      antes: { TIPO: tipoAnterior, FECHA_INICIO: fechaAnteriorDesde, FECHA_FIN: fechaAnteriorHasta },
-      despues: { TIPO: nuevoTipo, FECHA_INICIO: nuevaDesde, FECHA_FIN: nuevaHasta },
-      por: s.CORREGIDO_POR, fecha: s.FECHA_CORRECCION,
-    });
-    await window.storage.set(key, JSON.stringify(s), false);
-
-    // El documento de Acción de Personal (vacaciones/permiso sin goce) sigue
-    // al día solo mientras nadie lo haya confirmado (ver
-    // generarDocumentoAccionPersonalDeSolicitud/confirmarDocumentoSolicitud):
-    // si ya se confirmó, esta corrección NUNCA lo regenera sola — solo lo
-    // deja marcado como desactualizado para que gerencia/master decida si
-    // hace falta una acción de personal nueva aparte.
-    let avisoDocumento = "";
-    if (s.DOCUMENTO_CONFIRMADO){
-      if (s.DOCUMENTO_ID){
-        s.DOCUMENTO_DESACTUALIZADO = true;
-        await window.storage.set(key, JSON.stringify(s), false);
-        avisoDocumento = " ⚠️ El documento de Acción de Personal ya estaba confirmado y NO se actualizó solo — quedó marcado como desactualizado.";
-      }
-    } else if (nuevoTipo === "vacaciones" || nuevoTipo === "permiso_sin_goce"){
-      await generarDocumentoAccionPersonalDeSolicitud(key);
-    } else if (s.DOCUMENTO_ID){
-      // Cambió a un tipo que no lleva este documento (día libre/día de
-      // viaje) y el anterior (de cuando era vacaciones/permiso) todavía no
-      // se había confirmado — se anula solo, no debe quedar activo un
-      // "Acción de Personal" para un tipo que ya no aplica.
-      try{ await window.sdgApi.anularDocumento(s.DOCUMENTO_ID, "La solicitud cambió a un tipo que no genera este documento."); }catch(e){ /* best effort */ }
-      s.DOCUMENTO_ID = null; s.DOCUMENTO_SHA256 = null; s.DOCUMENTO_DESACTUALIZADO = false;
-      await window.storage.set(key, JSON.stringify(s), false);
-    }
-
-    const tipoInfoAnterior = TIPOS_SOLICITUD_AUSENCIA[tipoAnterior] || { label: tipoAnterior };
-    const tipoInfoNuevo = TIPOS_SOLICITUD_AUSENCIA[nuevoTipo] || { label: nuevoTipo };
-    const detalleTipo = cambioTipo ? `${tipoInfoAnterior.label} → ${tipoInfoNuevo.label}, ` : "";
-    await agregarBitacora(s.EMPLEADO_KEY, `${tipoInfoNuevo.label} corregido: ${detalleTipo}${fmtFechaSimple(fechaAnteriorDesde)} al ${fmtFechaSimple(fechaAnteriorHasta)} → ${fmtFechaSimple(nuevaDesde)} al ${fmtFechaSimple(nuevaHasta)}.`);
+    if (status) status.textContent = "Guardando…";
+    const resultado = await aplicarCorreccionSolicitud(key, nuevoTipo, nuevaDesde, nuevaHasta);
+    const res2 = await window.storage.get(key, false);
+    const s2 = res2 && res2.value ? JSON.parse(res2.value) : null;
+    if (s2){ s2.CORRECCION_NO_VISTA = true; await window.storage.set(key, JSON.stringify(s2), false); }
 
     corregirSolicitudPendienteKey = null;
     cerrarModalIncompletos();
-    statusMsg(`Corregido.${noTocados ? ` ${noTocados} día(s) fuera del nuevo rango ya se habían procesado aparte y no se tocaron.` : ""}${diasBloqueados.length ? ` ⚠️ ${diasBloqueados.length} día(s) no se pudieron registrar en Horas Extra — ${diasBloqueados.join(" ")} Usá "🔧 Reparar días" para reintentarlo.` : ""}${avisoDocumento}`, true);
+    statusMsg(`Corregido.${resultado.noTocados ? ` ${resultado.noTocados} día(s) fuera del nuevo rango ya se habían procesado aparte y no se tocaron.` : ""}${resultado.diasBloqueados.length ? ` ⚠️ ${resultado.diasBloqueados.length} día(s) no se pudieron registrar en Horas Extra — ${resultado.diasBloqueados.join(" ")} Usá "🔧 Reparar días" para reintentarlo.` : ""}${resultado.avisoDocumento}`, true);
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
   }catch(e){
     if (status) status.textContent = e.message || "No se pudo guardar.";
