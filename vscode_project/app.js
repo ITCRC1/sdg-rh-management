@@ -13834,12 +13834,23 @@ async function renderAppTopbar(){
     if (rol === "jefatura"){
       const registrosHorasExtra = await listarRegistrosHorasExtra();
       alertas += registrosHorasExtra.filter(r => r.CORRECCION_NO_VISTA).length;
+      // Días libres/vacaciones que jefatura mandó y gerencia/master corrigió
+      // después (ver guardarCorreccionSolicitud/renderAvisoCorreccionSolicitud)
+      // — a diferencia de horas_extra:, acá el servidor NO filtra por
+      // departamento, así que hay que acotar a lo que esta jefatura mandó.
+      const sesionActual = window.sdgApi && window.sdgApi.sesionActual();
+      const miEmailActual = sesionActual ? sesionActual.email : "";
+      const solicitudesPropias = await listarSolicitudesAusencia();
+      alertas += solicitudesPropias.filter(s => s.SOLICITADO_POR === miEmailActual && s.CORRECCION_NO_VISTA).length;
     }
     // Gerencia/master: solicitudes de corrección que jefatura mandó y siguen
-    // sin decidir (ver solicitarCorreccionHorasExtra/decidirCorreccionHorasExtra).
+    // sin decidir (ver solicitarCorreccionHorasExtra/decidirCorreccionHorasExtra,
+    // y su contraparte de Días Libres solicitarCorreccionSolicitud/decidirCorreccionSolicitud).
     if (rol === "master" || rol === "gerente"){
       const correccionesHorasExtra = await listarCorreccionesHorasExtra();
       alertas += correccionesHorasExtra.filter(c => c.ESTADO === "pendiente").length;
+      const correccionesSolicitud = await listarCorreccionesSolicitud();
+      alertas += correccionesSolicitud.filter(c => c.ESTADO === "pendiente").length;
     }
     const contratosRes = await window.storage.list("contrato:", false);
     const contratoKeys = (contratosRes && contratosRes.keys) || [];
@@ -20299,11 +20310,19 @@ async function renderDiasLibresVacacionesPanel(){
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
     const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
 
-    const [empleados, solicitudes, registrosHorasExtra] = await Promise.all([
+    const [empleados, solicitudes, registrosHorasExtra, correccionesSolicitud] = await Promise.all([
       cargarEmpleadosDB(),
       listarSolicitudesAusencia(),
       listarRegistrosHorasExtra(),
+      listarCorreccionesSolicitud(),
     ]);
+    // Solo la más reciente por solicitud — si una ya fue decidida y jefatura
+    // pidió otra corrección después, es esa la que importa mostrar.
+    const correccionesPorSolicitud = {};
+    correccionesSolicitud.forEach(c => {
+      const previa = correccionesPorSolicitud[c.SOLICITUD_KEY];
+      if (!previa || (c.SOLICITADO_EN || "") > (previa.SOLICITADO_EN || "")) correccionesPorSolicitud[c.SOLICITUD_KEY] = c;
+    });
     const resPuestos = await window.storage.list(CATALOGS.puestos.prefix, false);
     const puestoKeys = (resPuestos && resPuestos.keys) || [];
     const puestos = await Promise.all(puestoKeys.map(async k => {
@@ -20390,7 +20409,19 @@ async function renderDiasLibresVacacionesPanel(){
 
     html += renderListaSolicitudesPendientes(solicitudesVisibles, empleadosPorKey, departamentoDeEmpleado, puedeAprobar, esJefatura);
 
-    html += renderListaSolicitudesOtorgadas(solicitudesVisibles, cumpleanosOtorgadosVisibles, empleadosPorKey, puedeAprobar);
+    html += renderListaSolicitudesOtorgadas(solicitudesVisibles, cumpleanosOtorgadosVisibles, empleadosPorKey, puedeAprobar, correccionesPorSolicitud);
+
+    // Jefatura no ve "✅ Días libres y vacaciones otorgados" de arriba (ese
+    // bloque es exclusivo de gerencia/master) — sin esto, no tenía forma de
+    // ver sus propias solicitudes ya aprobadas ni de pedir que corrijan algo
+    // que quedó mal, aunque la hubiera mandado ella misma.
+    if (esJefatura) html += renderSolicitudesPropiasJefatura(solicitudesVisibles, empleadosPorKey, correccionesPorSolicitud);
+
+    // Antes una solicitud rechazada quedaba invisible para siempre — ni
+    // jefatura ni gerencia tenían dónde verla de nuevo, así que si el
+    // rechazo era por una fecha mal puesta, la única salida era cargar una
+    // solicitud nueva desde cero (perdiendo el rastro de la rechazada).
+    html += renderListaSolicitudesRechazadas(solicitudesVisibles, empleadosPorKey, puedeAprobar);
 
     html += renderCalendarioMensual(empleadosVisibles, solicitudes, registrosHorasExtra, diasLibresMesCalendario, puestosPorKey);
 
@@ -20959,7 +20990,7 @@ function filtrarOtorgadosInput(val){
   _renderOtorgadosBuscadoDebounced();
 }
 
-function renderListaSolicitudesOtorgadas(solicitudes, cumpleanosOtorgados, empleadosPorKey, puedeAprobar){
+function renderListaSolicitudesOtorgadas(solicitudes, cumpleanosOtorgados, empleadosPorKey, puedeAprobar, correccionesPorSolicitud){
   if (!puedeAprobar) return "";
   // Cumpleaños se asigna directo a Horas Extra (ver otorgarDiaCumpleanos),
   // nunca como "solicitud" — se normaliza acá a la misma forma { kind,
@@ -21018,6 +21049,14 @@ function renderListaSolicitudesOtorgadas(solicitudes, cumpleanosOtorgados, emple
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
       const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
       const keyEsc = String(s.key).replace(/'/g, "\\'");
+      const correccionPendiente = (correccionesPorSolicitud[s.key] && correccionesPorSolicitud[s.key].ESTADO === "pendiente") ? correccionesPorSolicitud[s.key] : null;
+      const bloqueSolicitudCorreccion = correccionPendiente
+        ? `<div style="margin-top:4px; padding:6px 8px; background:#E8F0FE; border:1px solid var(--navy-deep); border-radius:6px; font-size:11px;">
+            📨 Jefatura pidió corregir esta solicitud: "${escapeHtml(etiquetaTipoDia(correccionPendiente.TIPO_ACTUAL))}" (${fmtFechaSimple(correccionPendiente.FECHA_INICIO_ACTUAL)} al ${fmtFechaSimple(correccionPendiente.FECHA_FIN_ACTUAL)}) → "${escapeHtml(etiquetaTipoDia(correccionPendiente.TIPO_PROPUESTO))}" (${fmtFechaSimple(correccionPendiente.FECHA_INICIO_PROPUESTA)} al ${fmtFechaSimple(correccionPendiente.FECHA_FIN_PROPUESTA)})${correccionPendiente.MOTIVO ? ` — motivo: ${escapeHtml(correccionPendiente.MOTIVO)}` : ""} (${escapeHtml((correccionPendiente.SOLICITADO_POR||"").split("@")[0]||"—")})<br>
+            <button class="use" style="padding:2px 8px; font-size:10.5px; margin-top:4px;" onclick="decidirCorreccionSolicitud('${correccionPendiente.key.replace(/'/g,"\\'")}', true)">✅ Aprobar corrección</button>
+            <button class="del" style="padding:2px 8px; font-size:10.5px; margin-top:4px;" onclick="decidirCorreccionSolicitud('${correccionPendiente.key.replace(/'/g,"\\'")}', false)">🚫 Rechazar</button>
+          </div>`
+        : "";
       const tieneDocumento = s.TIPO === "vacaciones" || s.TIPO === "permiso_sin_goce";
       let bloqueDocumento = "";
       if (tieneDocumento){
@@ -21041,6 +21080,7 @@ function renderListaSolicitudesOtorgadas(solicitudes, cumpleanosOtorgados, emple
           <div class="info">
             <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
             <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s)${s.CORREGIDO_POR ? ` · ✏️ corregido por ${escapeHtml(s.CORREGIDO_POR)}` : ""}</div>
+            ${bloqueSolicitudCorreccion}
             ${bloqueDocumento}
           </div>
           <div class="actions">
@@ -21248,6 +21288,341 @@ async function guardarCorreccionSolicitud(){
     if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
   }catch(e){
     if (status) status.textContent = e.message || "No se pudo guardar.";
+  }
+}
+
+// Solicitudes de CORRECCIÓN de una solicitud de ausencia ya otorgada —
+// jefatura no ve el botón "✏️ Corregir fechas" de arriba (exclusivo de
+// gerencia/master, ver renderListaSolicitudesOtorgadas); si se da cuenta de
+// un error en algo ya aprobado, pide el cambio con esto en vez de poder
+// tocarlo ella misma. Queda "pendiente" hasta que gerencia/master la apruebe
+// o la rechace — solo ahí se aplica de verdad (decidirCorreccionSolicitud
+// reutiliza aplicarCorreccionSolicitud). Es la contraparte de
+// guardarCorreccionSolicitud (gerencia/master corrigiendo directo y
+// avisándole a jefatura después): acá es jefatura la que pide primero.
+const CORRECCION_SOLICITUD_PREFIX = "correccion_solicitud:";
+
+async function listarCorreccionesSolicitud(){
+  const res = await window.storage.list(CORRECCION_SOLICITUD_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const items = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ...v };
+    }catch(e){ return null; }
+  }));
+  return items.filter(Boolean);
+}
+
+async function solicitarCorreccionSolicitud(solicitudKey){
+  try{
+    const res = await window.storage.get(solicitudKey, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s){ statusMsg("Esa solicitud ya no existe.", false); return; }
+    const existentes = await listarCorreccionesSolicitud();
+    if (existentes.some(c => c.SOLICITUD_KEY === solicitudKey && c.ESTADO === "pendiente")){
+      statusMsg("Ya hay una corrección pendiente para esta solicitud — esperá a que gerencia la revise.", false);
+      return;
+    }
+    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+    const body = document.getElementById("modal-incompletos-body");
+    document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "✏️ Solicitar corrección";
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
+        Actualmente: ${tipoInfo.emoji} <b>${escapeHtml(tipoInfo.label)}</b> — ${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)}.
+      </div>
+      <div class="field">
+        <label>Corregir a</label>
+        <select id="correccion-solicitud-tipo">
+          <option value="vacaciones"${s.TIPO === "vacaciones" ? " selected" : ""}>🏖️ Vacaciones</option>
+          <option value="dia_libre"${s.TIPO === "dia_libre" ? " selected" : ""}>🛌 Día libre</option>
+          ${(currentPropiedadId === "corcovado" || s.TIPO === "dia_viaje") ? `<option value="dia_viaje"${s.TIPO === "dia_viaje" ? " selected" : ""}>✈️ Día de viaje</option>` : ""}
+          <option value="permiso_sin_goce"${s.TIPO === "permiso_sin_goce" ? " selected" : ""}>📄 Permiso sin goce</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Nueva fecha de inicio</label>
+        <input type="date" id="correccion-solicitud-desde" value="${s.FECHA_INICIO}">
+      </div>
+      <div class="field">
+        <label>Nueva fecha de fin</label>
+        <input type="date" id="correccion-solicitud-hasta" value="${s.FECHA_FIN}">
+      </div>
+      <div class="field">
+        <label>Motivo de la corrección</label>
+        <input type="text" id="correccion-solicitud-motivo" placeholder="¿Por qué hay que corregir esta solicitud?">
+      </div>
+      <button class="btn primary" style="margin-top:8px;" onclick="confirmarSolicitudCorreccionSolicitud('${solicitudKey.replace(/'/g,"\\'")}')">📨 Enviar a gerencia/master</button>`;
+    document.getElementById("modal-incompletos").classList.add("open");
+  }catch(e){ statusMsg("No se pudo abrir el formulario: " + e.message, false); }
+}
+
+async function confirmarSolicitudCorreccionSolicitud(solicitudKey){
+  const tipoEl = document.getElementById("correccion-solicitud-tipo");
+  const desdeEl = document.getElementById("correccion-solicitud-desde");
+  const hastaEl = document.getElementById("correccion-solicitud-hasta");
+  const motivoEl = document.getElementById("correccion-solicitud-motivo");
+  const tipoPropuesto = tipoEl ? tipoEl.value : "";
+  const desdePropuesta = desdeEl ? desdeEl.value : "";
+  const hastaPropuesta = hastaEl ? hastaEl.value : "";
+  const motivo = motivoEl ? motivoEl.value.trim() : "";
+  if (!tipoPropuesto){ statusMsg("Elegí a qué corregirlo.", false); return; }
+  if (!desdePropuesta || !hastaPropuesta){ statusMsg("Elegí ambas fechas.", false); return; }
+  if (hastaPropuesta < desdePropuesta){ statusMsg("La fecha de fin no puede ser anterior a la de inicio.", false); return; }
+  if (!motivo){ statusMsg("Indicá el motivo de la corrección.", false); return; }
+  try{
+    const res = await window.storage.get(solicitudKey, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s){ statusMsg("Esa solicitud ya no existe.", false); return; }
+    if (s.TIPO === tipoPropuesto && s.FECHA_INICIO === desdePropuesta && s.FECHA_FIN === hastaPropuesta){
+      statusMsg("Eso es lo mismo que ya tiene — no hay nada que corregir.", false);
+      return;
+    }
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    const key = CORRECCION_SOLICITUD_PREFIX + (s.EMPLEADO_KEY || "sin-empleado") + ":" + Date.now();
+    await window.storage.set(key, JSON.stringify({
+      SOLICITUD_KEY: solicitudKey,
+      EMPLEADO_KEY: s.EMPLEADO_KEY || "",
+      TIPO_ACTUAL: s.TIPO,
+      FECHA_INICIO_ACTUAL: s.FECHA_INICIO,
+      FECHA_FIN_ACTUAL: s.FECHA_FIN,
+      TIPO_PROPUESTO: tipoPropuesto,
+      FECHA_INICIO_PROPUESTA: desdePropuesta,
+      FECHA_FIN_PROPUESTA: hastaPropuesta,
+      MOTIVO: motivo,
+      ESTADO: "pendiente",
+      SOLICITADO_POR: (sesion && sesion.email) || "",
+      SOLICITADO_EN: new Date().toISOString(),
+    }), false);
+    cerrarModalIncompletos();
+    statusMsg("Corrección enviada — queda pendiente de que gerencia/master la revise.");
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo enviar la corrección: " + e.message, false); }
+}
+
+async function decidirCorreccionSolicitud(correccionKey, aprobar){
+  try{
+    const res = await window.storage.get(correccionKey, false);
+    const c = res && res.value ? JSON.parse(res.value) : null;
+    if (!c || c.ESTADO !== "pendiente") return;
+    const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    if (aprobar){
+      if (!confirm(`¿Aprobar la corrección que pidió jefatura: "${etiquetaTipoDia(c.TIPO_ACTUAL)}" (${fmtFechaSimple(c.FECHA_INICIO_ACTUAL)} al ${fmtFechaSimple(c.FECHA_FIN_ACTUAL)}) → "${etiquetaTipoDia(c.TIPO_PROPUESTO)}" (${fmtFechaSimple(c.FECHA_INICIO_PROPUESTA)} al ${fmtFechaSimple(c.FECHA_FIN_PROPUESTA)})?`)) return;
+      await aplicarCorreccionSolicitud(c.SOLICITUD_KEY, c.TIPO_PROPUESTO, c.FECHA_INICIO_PROPUESTA, c.FECHA_FIN_PROPUESTA);
+      c.ESTADO = "aprobada";
+    } else {
+      c.MOTIVO_RECHAZO = prompt("Motivo del rechazo (opcional):", "") || "";
+      c.ESTADO = "rechazada";
+    }
+    c.DECIDIDO_POR = (sesion && sesion.email) || "";
+    c.DECIDIDO_EN = new Date().toISOString();
+    await window.storage.set(correccionKey, JSON.stringify(c), false);
+    statusMsg(aprobar ? "Corrección aplicada." : "Corrección rechazada.");
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){ statusMsg("No se pudo decidir: " + e.message, false); }
+}
+
+// Aviso que ve jefatura en sus propias solicitudes (renderSolicitudesPropiasJefatura)
+// cuando gerencia/master le corrigió directo algo que ya estaba aprobado
+// (ver guardarCorreccionSolicitud) — solo informa, jefatura no puede volver a
+// tocarlo desde acá. El botón "Visto" solo apaga el aviso de la campana.
+function renderAvisoCorreccionSolicitud(s){
+  if (!s.CORREGIDO_POR || !s.CORRECCION_NO_VISTA) return "";
+  const ultima = Array.isArray(s.HISTORIAL_CORRECCIONES) && s.HISTORIAL_CORRECCIONES.length ? s.HISTORIAL_CORRECCIONES[s.HISTORIAL_CORRECCIONES.length - 1] : null;
+  const quien = (s.CORREGIDO_POR || "").split("@")[0] || "—";
+  const cuando = s.FECHA_CORRECCION ? mostrarFechaHoraCorta(s.FECHA_CORRECCION) : "—";
+  const keyEsc = String(s.key).replace(/'/g, "\\'");
+  const detalle = ultima
+    ? `${etiquetaTipoDia(ultima.antes.TIPO)} (${fmtFechaSimple(ultima.antes.FECHA_INICIO)} al ${fmtFechaSimple(ultima.antes.FECHA_FIN)}) → ${etiquetaTipoDia(ultima.despues.TIPO)} (${fmtFechaSimple(ultima.despues.FECHA_INICIO)} al ${fmtFechaSimple(ultima.despues.FECHA_FIN)})`
+    : "";
+  return `<div style="margin-top:4px; padding:6px 8px; background:#FFF7E0; border:1px solid var(--gold); border-radius:6px; font-size:11px; color:#6b5210;">
+    ⚠️ Gerencia corrigió esta solicitud${detalle ? `: ${detalle}` : ""} (${escapeHtml(quien)}, ${escapeHtml(cuando)}).
+    <button class="btn" style="padding:2px 8px; font-size:10px; margin-left:6px;" onclick="marcarCorreccionSolicitudVista('${keyEsc}')">Visto</button>
+  </div>`;
+}
+
+async function marcarCorreccionSolicitudVista(key){
+  try{
+    const r = await window.storage.get(key, false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (!v) return;
+    v.CORRECCION_NO_VISTA = false;
+    await window.storage.set(key, JSON.stringify(v), false);
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+    renderAppTopbar();
+  }catch(e){ statusMsg("No se pudo marcar como visto: " + e.message, false); }
+}
+
+// Jefatura no ve "✅ Días libres y vacaciones otorgados" (exclusivo de
+// gerencia/master, ver renderListaSolicitudesOtorgadas) — sin esto no tenía
+// forma de ver sus propias solicitudes ya aprobadas ni de pedir que
+// corrijan algo que mandó mal. Solo las de los tipos que de verdad se
+// solicitan (no cumpleaños, que se otorga directo y tiene su propia
+// corrección — ver abrirModalCorregirCumpleanos).
+function renderSolicitudesPropiasJefatura(solicitudes, empleadosPorKey, correccionesPorSolicitud){
+  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+  const miEmail = sesion ? sesion.email : "";
+  const propias = solicitudes
+    .filter(s => s.ESTADO === "aprobada" && s.SOLICITADO_POR === miEmail && (s.TIPO === "vacaciones" || s.TIPO === "dia_libre" || s.TIPO === "dia_viaje" || s.TIPO === "permiso_sin_goce"))
+    .sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||""))
+    .slice(0, 20);
+  if (!propias.length) return "";
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:4px;">📋 Tus solicitudes ya aprobadas</div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si alguna quedó con la fecha o el tipo equivocado, pedí que la corrijan — gerencia/master lo revisa antes de aplicarlo.</div>
+    ${propias.map(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+      const keyEsc = String(s.key).replace(/'/g, "\\'");
+      const correccion = correccionesPorSolicitud[s.key];
+      let bloqueAccion = "";
+      if (correccion && correccion.ESTADO === "pendiente"){
+        bloqueAccion = `<div class="meta" style="margin-top:3px;">⏳ Pediste corregir esto a "${escapeHtml(etiquetaTipoDia(correccion.TIPO_PROPUESTO))}" (${fmtFechaSimple(correccion.FECHA_INICIO_PROPUESTA)} al ${fmtFechaSimple(correccion.FECHA_FIN_PROPUESTA)}) — esperando revisión de gerencia.</div>`;
+      } else if (correccion && correccion.ESTADO === "rechazada"){
+        bloqueAccion = `<div class="meta" style="margin-top:3px; color:#B3261E;">❌ Gerencia rechazó tu corrección${correccion.MOTIVO_RECHAZO ? `: ${escapeHtml(correccion.MOTIVO_RECHAZO)}` : ""}.</div>
+          <button class="btn" style="padding:2px 8px; font-size:10.5px; margin-top:3px;" onclick="solicitarCorreccionSolicitud('${keyEsc}')">✏️ Solicitar corrección</button>`;
+      } else if (correccion && correccion.ESTADO === "aprobada"){
+        bloqueAccion = `<div class="meta" style="margin-top:3px; color:var(--leaf);">✅ Gerencia aprobó tu corrección.</div>`;
+      } else {
+        bloqueAccion = `<button class="btn" style="padding:2px 8px; font-size:10.5px; margin-top:3px;" onclick="solicitarCorreccionSolicitud('${keyEsc}')">✏️ Solicitar corrección</button>`;
+      }
+      return `<div class="catalog-item">
+        <div class="row1">
+          <div class="info">
+            <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
+            <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s)</div>
+            ${renderAvisoCorreccionSolicitud(s)}
+            ${bloqueAccion}
+          </div>
+        </div>
+      </div>`;
+    }).join("")}
+  </div></div>`;
+}
+
+// Lista de solicitudes rechazadas — antes no se mostraban en ninguna parte
+// del panel, así que si el rechazo era por una fecha mal puesta no había
+// forma de corregirla y reenviarla, solo de cargar una solicitud nueva desde
+// cero. Gerencia/master ven todas (para supervisión); jefatura ve solo las
+// suyas (las que ella misma mandó).
+function renderListaSolicitudesRechazadas(solicitudes, empleadosPorKey, puedeAprobar){
+  const sesion = window.sdgApi && window.sdgApi.sesionActual();
+  const miEmail = sesion ? sesion.email : "";
+  let rechazadas = solicitudes.filter(s => s.ESTADO === "rechazada");
+  if (!puedeAprobar) rechazadas = rechazadas.filter(s => s.SOLICITADO_POR === miEmail);
+  rechazadas = rechazadas.sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||"")).slice(0, 30);
+  if (!rechazadas.length) return "";
+  return `<div class="section-card" style="margin-bottom:14px; border-color:#B3261E;"><div class="section-body">
+    <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">🚫 Solicitudes rechazadas${puedeAprobar ? "" : " tuyas"} (${rechazadas.length})</div>
+    <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si el rechazo fue por una fecha mal puesta, se puede reabrir corrigiéndola — vuelve a quedar pendiente de aprobación, no se aprueba sola.</div>
+    ${rechazadas.map(s => {
+      const emp = empleadosPorKey[s.EMPLEADO_KEY];
+      const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+      const keyEsc = String(s.key).replace(/'/g, "\\'");
+      return `<div class="catalog-item">
+        <div class="row1">
+          <div class="info">
+            <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp)||s.EMPLEADO_KEY : s.EMPLEADO_KEY)} — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}</div>
+            <div class="meta">${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)} · ${s.DIAS} día(s)${s.MOTIVO_RECHAZO ? ` · 🚫 ${escapeHtml(s.MOTIVO_RECHAZO)}` : ""}</div>
+          </div>
+          <div class="actions">
+            <button class="use" onclick="abrirModalReabrirSolicitud('${keyEsc}')">🔁 Reabrir con fechas corregidas</button>
+          </div>
+        </div>
+      </div>`;
+    }).join("")}
+  </div></div>`;
+}
+
+let reabrirSolicitudPendienteKey = null;
+
+async function abrirModalReabrirSolicitud(key){
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔁 Reabrir con fechas corregidas";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const res = await window.storage.get(key, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s){ body.innerHTML = `<div class="empty-state">Esa solicitud ya no existe.</div>`; return; }
+    if (s.ESTADO !== "rechazada"){ body.innerHTML = `<div class="empty-state">Esa solicitud ya no está rechazada.</div>`; return; }
+    reabrirSolicitudPendienteKey = key;
+    const empRes = s.EMPLEADO_KEY ? await window.storage.get(CATALOGS.empleados.prefix + s.EMPLEADO_KEY, false) : null;
+    const emp = empRes && empRes.value ? JSON.parse(empRes.value) : null;
+    const tipoInfo = TIPOS_SOLICITUD_AUSENCIA[s.TIPO] || { label: s.TIPO, emoji: "" };
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
+        <b>${escapeHtml(emp ? nombreCompletoEmpleado(emp) : s.EMPLEADO_KEY)}</b> — ${tipoInfo.emoji} ${escapeHtml(tipoInfo.label)}. Rechazada: ${fmtFechaSimple(s.FECHA_INICIO)} al ${fmtFechaSimple(s.FECHA_FIN)}${s.MOTIVO_RECHAZO ? ` — motivo del rechazo: ${escapeHtml(s.MOTIVO_RECHAZO)}` : ""}.
+      </div>
+      <div class="field">
+        <label>Tipo</label>
+        <select id="reabrir-solicitud-tipo">
+          <option value="vacaciones"${s.TIPO === "vacaciones" ? " selected" : ""}>🏖️ Vacaciones</option>
+          <option value="dia_libre"${s.TIPO === "dia_libre" ? " selected" : ""}>🛌 Día libre</option>
+          ${(currentPropiedadId === "corcovado" || s.TIPO === "dia_viaje") ? `<option value="dia_viaje"${s.TIPO === "dia_viaje" ? " selected" : ""}>✈️ Día de viaje</option>` : ""}
+          <option value="permiso_sin_goce"${s.TIPO === "permiso_sin_goce" ? " selected" : ""}>📄 Permiso sin goce</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Nueva fecha de inicio</label>
+        <input type="date" id="reabrir-solicitud-desde" value="${s.FECHA_INICIO}">
+      </div>
+      <div class="field">
+        <label>Nueva fecha de fin</label>
+        <input type="date" id="reabrir-solicitud-hasta" value="${s.FECHA_FIN}">
+      </div>
+      <div id="reabrir-solicitud-status" style="font-size:12px; color:#B3261E; margin:6px 0;"></div>
+      <button class="btn primary" style="margin-top:6px;" onclick="guardarReaperturaSolicitud()">🔁 Reabrir y mandar a aprobación</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message||"")}</div>`; }
+}
+
+// Reabre una solicitud rechazada con el tipo/fechas corregidos — vuelve a
+// "pendiente" (NO se aprueba sola) para que gerencia/master la revise de
+// nuevo, igual que cualquier solicitud nueva. A diferencia de "Corregir
+// fechas" (que es exclusivo de gerencia/master sobre una YA aprobada), esto
+// lo puede usar jefatura sobre sus propias rechazadas — es la forma de
+// arreglar un error de fecha sin perder el rastro de la solicitud original.
+async function guardarReaperturaSolicitud(){
+  const key = reabrirSolicitudPendienteKey;
+  const status = document.getElementById("reabrir-solicitud-status");
+  const nuevoTipo = (document.getElementById("reabrir-solicitud-tipo")||{}).value;
+  const nuevaDesde = (document.getElementById("reabrir-solicitud-desde")||{}).value;
+  const nuevaHasta = (document.getElementById("reabrir-solicitud-hasta")||{}).value;
+  if (!key) return;
+  if (nuevoTipo !== "vacaciones" && nuevoTipo !== "dia_libre" && nuevoTipo !== "dia_viaje" && nuevoTipo !== "permiso_sin_goce"){ if (status) status.textContent = "Elegí el tipo."; return; }
+  if (!nuevaDesde || !nuevaHasta){ if (status) status.textContent = "Elegí ambas fechas."; return; }
+  if (nuevaHasta < nuevaDesde){ if (status) status.textContent = "La fecha de fin no puede ser anterior a la de inicio."; return; }
+  if (status) status.textContent = "Guardando…";
+  try{
+    const res = await window.storage.get(key, false);
+    const s = res && res.value ? JSON.parse(res.value) : null;
+    if (!s) throw new Error("Esa solicitud ya no existe.");
+    if (s.ESTADO !== "rechazada") throw new Error("Esa solicitud ya no está rechazada.");
+    const tipoAnterior = s.TIPO, fechaAnteriorDesde = s.FECHA_INICIO, fechaAnteriorHasta = s.FECHA_FIN, motivoRechazoAnterior = s.MOTIVO_RECHAZO;
+    s.TIPO = nuevoTipo;
+    s.FECHA_INICIO = nuevaDesde;
+    s.FECHA_FIN = nuevaHasta;
+    s.DIAS = diasEntreFechasISO(nuevaDesde, nuevaHasta);
+    s.ESTADO = "pendiente";
+    s.MOTIVO_RECHAZO = null;
+    s.REABIERTA_EN = new Date().toISOString();
+    s.REABIERTA_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+    if (!Array.isArray(s.HISTORIAL_CORRECCIONES)) s.HISTORIAL_CORRECCIONES = [];
+    s.HISTORIAL_CORRECCIONES.push({
+      antes: { TIPO: tipoAnterior, FECHA_INICIO: fechaAnteriorDesde, FECHA_FIN: fechaAnteriorHasta },
+      despues: { TIPO: nuevoTipo, FECHA_INICIO: nuevaDesde, FECHA_FIN: nuevaHasta },
+      por: s.REABIERTA_POR, fecha: s.REABIERTA_EN, reabierta: true,
+    });
+    await window.storage.set(key, JSON.stringify(s), false);
+    const tipoInfoNuevo = TIPOS_SOLICITUD_AUSENCIA[nuevoTipo] || { label: nuevoTipo };
+    await agregarBitacora(s.EMPLEADO_KEY, `${tipoInfoNuevo.label} reabierta con fechas corregidas tras ser rechazada${motivoRechazoAnterior ? ` (motivo del rechazo: ${motivoRechazoAnterior})` : ""}: ${fmtFechaSimple(fechaAnteriorDesde)} al ${fmtFechaSimple(fechaAnteriorHasta)} → ${fmtFechaSimple(nuevaDesde)} al ${fmtFechaSimple(nuevaHasta)} — vuelve a estar pendiente de aprobación.`);
+    reabrirSolicitudPendienteKey = null;
+    cerrarModalIncompletos();
+    statusMsg("Reabierta con las fechas corregidas — vuelve a estar pendiente de aprobación.", true);
+    if (typeof renderDiasLibresVacacionesPanel === "function") renderDiasLibresVacacionesPanel();
+  }catch(e){
+    if (status) status.textContent = e.message || "No se pudo reabrir.";
   }
 }
 
