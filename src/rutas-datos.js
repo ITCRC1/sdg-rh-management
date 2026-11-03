@@ -326,6 +326,37 @@ function registroPorDeptoPerteneceAEquipo(propiedad, clave, departamentoLider) {
 // dar la palabra final sobre lo que se paga, ni para tocar un día que ya la
 // tenga (ver el chequeo de actual.ESTADO === "aprobada" más abajo, antes de
 // cualquier otra cosa).
+// Conductor Externo (puesto exacto en cat_empleado:) no tiene acceso a la
+// marcadora física — su propia cuenta "empleado" puede crear/corregir un día
+// de horas_extra: con sus propios datos, pero solo mientras ese día siga
+// "pendiente" en los dos sentidos: el payload que manda debe pedir ESTADO
+// "pendiente" (nunca puede aprobarse ni rechazarse a sí mismo), y si el día
+// ya tenía un registro, ese registro también debe seguir "pendiente" (no
+// puede pisar una decisión ya tomada por jefatura/gerencia/master). El
+// cálculo de horas lo hace su propio navegador con la misma lógica que usa
+// el resto de la app (ver relojEnviarAHorasExtras/guardarFilasHorasExtra en
+// app.js) — acá solo se valida a quién pertenece la clave y en qué estado
+// queda, igual que con cualquier otra escritura.
+async function conductorExternoPuedeAutoreportar(propiedad, clave, usuario, valorNuevo) {
+  if (!usuario.empleadoClave || !usuario.empleadoClave.startsWith(EMPLEADO_PREFIX)) return false;
+  const empKey = usuario.empleadoClave.slice(EMPLEADO_PREFIX.length);
+  if (!empKey || !clave.startsWith(HORAS_EXTRA_PREFIX + empKey + ":")) return false;
+
+  let nuevo = null;
+  try {
+    nuevo = JSON.parse(valorNuevo);
+  } catch (e) {
+    return false;
+  }
+  if (!nuevo || nuevo.ESTADO !== "pendiente") return false;
+
+  const actual = await valorDeClave(propiedad, clave);
+  if (actual && actual.ESTADO !== "pendiente") return false;
+
+  const empleado = await valorDeClave(propiedad, usuario.empleadoClave);
+  return !!empleado && (empleado.DEPARTAMENTO_EMP || "").trim() === "Conductor Externo";
+}
+
 async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   // Una vez que un día de horas_extra: llega a "aprobada" (palabra final,
   // ya cuenta para planilla), jefatura queda AFUERA de esa clave sin
@@ -350,6 +381,13 @@ async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
   if (A.PUEDEN_ESCRIBIR.has(usuario.rol)) return true;
   if (usuario.rol === "jefatura" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
     return horaExtraPerteneceAEquipo(propiedad, clave, usuario.puesto);
+  }
+  // Conductor Externo: no tiene acceso a la marcadora física, así que su
+  // propia cuenta "empleado" puede auto-reportar horas_extra: para SÍ MISMO
+  // (ver conductorExternoPuedeAutoreportar) — nunca las de otro, nunca
+  // aprobarse, nunca tocar un día que gerencia/master ya decidió.
+  if (usuario.rol === "empleado" && clave.startsWith(HORAS_EXTRA_PREFIX)) {
+    return conductorExternoPuedeAutoreportar(propiedad, clave, usuario, valorNuevo);
   }
   // Días libres/vacaciones: jefatura SOLO puede crear/editar solicitudes de
   // su propio equipo mientras sigan "pendiente" — aprobar o rechazar es

@@ -340,7 +340,7 @@
 
     <div class="card">
       <h2>📋 Bitácora de accesos</h2>
-      <div class="hint">Los últimos 5 ingresos, salidas e intentos fallidos. El registro completo se guarda igual, pero solo por 30 días — pasado ese tiempo se borra solo.</div>
+      <div class="hint">Registro permanente de ingresos, salidas e intentos fallidos — no se borra solo, queda guardado como firma digital de ingreso al sistema y sirve para reportes. Se muestran los últimos 200.</div>
       <div id="lista-bitacora"><div class="hint">Cargando…</div></div>
     </div>
   </div>
@@ -768,7 +768,7 @@ async function resetearPassword(id, email){
 async function cargarBitacora(){
   const cont = document.getElementById("lista-bitacora");
   try{
-    const eventos = await api.usuarios.bitacora(5);
+    const eventos = await api.usuarios.bitacora(200);
     if (!eventos.length){ cont.innerHTML = `<div class="hint">Sin registros.</div>`; return; }
     cont.innerHTML = eventos.map(ev => `
       <div class="user-row">

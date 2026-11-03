@@ -607,10 +607,11 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
   }
 });
 
-// Bitácora de accesos (solo master). Solo se pueden ver los últimos 5 — el
-// resto se sigue guardando (hasta 30 días, ver A.limpiarBitacoraVieja), pero
-// ya no se expone por aquí; no hace falta un historial visible más largo.
-const BITACORA_MAX_VISIBLE = 5;
+// Bitácora de accesos (solo master). Es un registro permanente (nunca se
+// borra sola, ver src/auth.js) que sirve de firma digital de ingreso al
+// sistema y se puede usar en reportes — por eso se permite consultar bastante
+// historial de una vez, aunque sigue limitado para no pedir miles de filas.
+const BITACORA_MAX_VISIBLE = 1000;
 router.get("/bitacora", A.requiereSesion, A.requiereAdmin, async (req, res, next) => {
   try {
     const limite = Math.min(Number(req.query.limite) || BITACORA_MAX_VISIBLE, BITACORA_MAX_VISIBLE);

@@ -293,7 +293,36 @@ async function iniciarPortalEmpleado(u){
     : null;
   aplicarModoSegunRol(u.rol);
   renderAppTopbar();
+  await prepararBotonConductorExterno();
   showTab("miperfil");
+}
+
+// "Conductor Externo" (puesto exacto en su ficha, ver DEPARTAMENTO_EMP) no
+// tiene acceso a la marcadora física — es el único caso del Portal del
+// Colaborador que SÍ puede escribir algo (ver conductorExternoPuedeAutoreportar
+// en rutas-datos.js, en el servidor): reportar a mano la hora de entrada y
+// salida de su turno. El botón solo aparece para esta persona; el resto de
+// cuentas "empleado" siguen de solo lectura en todo.
+let esConductorExterno = false;
+async function prepararBotonConductorExterno(){
+  esConductorExterno = false;
+  const existente = document.getElementById("nav-btn-conductor-externo");
+  if (existente) existente.remove();
+  const nav = document.getElementById("main-navbar");
+  if (!perfilActualKey || !nav) return;
+  try{
+    const r = await window.storage.get(CATALOGS.empleados.prefix + perfilActualKey, false);
+    const emp = r && r.value ? JSON.parse(r.value) : null;
+    if (!emp || (emp.DEPARTAMENTO_EMP || "").trim() !== "Conductor Externo") return;
+  }catch(e){ return; }
+  esConductorExterno = true;
+  const btn = document.createElement("button");
+  btn.id = "nav-btn-conductor-externo";
+  btn.className = "nav-dd-btn";
+  btn.textContent = "🚗 Marcar mis horas";
+  btn.style.display = "block";
+  btn.onclick = function(){ showTab("mishorasconductor"); };
+  nav.appendChild(btn);
 }
 
 // "Mi información": master/gerente/jefatura también son personas empleadas
@@ -5151,7 +5180,7 @@ function showTab(which){
   // Perfil". Cubre el logo, "atrás" del navegador o cualquier otro camino
   // que intente llevarlo a otra pestaña — el servidor bloquea el resto de
   // los datos aparte (ver rutas-datos.js).
-  const TABS_PERMITIDAS_EMPLEADO = ["miperfil", "manual"];
+  const TABS_PERMITIDAS_EMPLEADO = ["miperfil", "manual", "mishorasconductor"];
   if (!TABS_PERMITIDAS_EMPLEADO.includes(which) && window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "empleado"){
     which = "miperfil";
   }
@@ -5189,6 +5218,7 @@ function showTab(which){
   document.getElementById("perfil-panel").style.display = which === "empleados" ? "block" : "none";
   document.getElementById("firmacontratos-panel").style.display = which === "firmacontratos" ? "block" : "none";
   document.getElementById("miperfil-panel").style.display = which === "miperfil" ? "block" : "none";
+  document.getElementById("mishorasconductor-panel").style.display = which === "mishorasconductor" ? "block" : "none";
   document.getElementById("reporte-panel").style.display = which === "reporte" ? "block" : "none";
   document.getElementById("faq-panel").style.display = which === "faq" ? "block" : "none";
   document.getElementById("manual-panel").style.display = which === "manual" ? "block" : "none";
@@ -5281,6 +5311,7 @@ function showTab(which){
   if (which === "archivo") renderArchivoList();
   if (which === "firmacontratos") renderBandejaFirmaContratos();
   if (which === "miperfil") renderMiPerfilEmpleado();
+  if (which === "mishorasconductor") renderMisHorasConductor();
   if (which === "reporte") renderReporteMensual();
   if (which === "faq") renderFaqLaboral();
   if (which === "manual") renderManualPanel();
@@ -24250,6 +24281,127 @@ async function renderMiPerfilEmpleado(){
   if (!panel) return;
   panel.innerHTML = `<div class="empty-state">Cargando tu perfil…</div>`;
   panel.innerHTML = await construirHtmlMiInformacion(perfilActualKey);
+}
+
+// Pestaña exclusiva de Conductor Externo (ver prepararBotonConductorExterno)
+// — reporta a mano la hora de entrada/salida de su turno, porque no tiene
+// marcadora física. Reusa el mismo cálculo de horas que el reloj marcador
+// (filasDesdeEventosMarcacion + guardarFilasHorasExtra, ver renderRelojPanel/
+// relojEnviarAHorasExtras) en vez de inventar una cuenta de horas aparte —
+// así el resultado es idéntico a cualquier otro día de Horas Extra, con el
+// mismo panel de aprobación para gerencia/master. El servidor valida en
+// conductorExternoPuedeAutoreportar (rutas-datos.js) que solo puede escribir
+// SU PROPIO registro, y solo mientras siga "pendiente".
+async function renderMisHorasConductor(){
+  const panel = document.getElementById("mishorasconductor-panel");
+  if (!panel) return;
+  if (!esConductorExterno){
+    panel.innerHTML = `<div class="empty-state">Esta sección es solo para la cuenta de Conductor Externo.</div>`;
+    return;
+  }
+  const hoy = isoDeFechaLocal(new Date());
+  panel.innerHTML = `
+    <div class="section-card">
+      <div class="section-body">
+        <h2 style="margin-top:0;">🚗 Marcar mis horas</h2>
+        <div class="hint">No tenés acceso a la marcadora — reportá aquí la hora en que entraste y en que saliste de tu turno. Gerencia o master revisa y aprueba cada turno antes de que cuente para la planilla.</div>
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="conductor-fecha" max="${hoy}">
+        </div>
+        <div class="field">
+          <label>Hora de entrada</label>
+          <input type="time" id="conductor-entrada">
+        </div>
+        <div class="field">
+          <label>Hora de salida</label>
+          <input type="time" id="conductor-salida">
+        </div>
+        <div class="hint">Si tu turno cruza la medianoche, poné la hora de salida igual (ej. 02:00) — el sistema entiende que fue al día siguiente.</div>
+        <button class="btn primary" id="conductor-btn-enviar" style="margin-top:6px;" onclick="enviarTurnoConductorExterno()">📨 Enviar turno</button>
+      </div>
+    </div>
+    <div class="section-card" style="margin-top:12px;">
+      <div class="section-body">
+        <h2 style="margin-top:0;">Mis turnos reportados</h2>
+        <div id="conductor-lista-turnos"><div class="hint">Cargando…</div></div>
+      </div>
+    </div>`;
+  await renderListaTurnosConductor();
+}
+
+async function renderListaTurnosConductor(){
+  const cont = document.getElementById("conductor-lista-turnos");
+  if (!cont || !perfilActualKey) return;
+  try{
+    const todos = await listarRegistrosHorasExtra();
+    const propios = todos
+      .filter(r => r.EMPLEADO_KEY === perfilActualKey)
+      .sort((a, b) => (b.FECHA || "").localeCompare(a.FECHA || ""))
+      .slice(0, 30);
+    if (!propios.length){ cont.innerHTML = `<div class="hint">Todavía no reportaste ningún turno.</div>`; return; }
+    cont.innerHTML = propios.map(r => {
+      const estadoTxt = r.ESTADO === "aprobada" ? "✅ Aprobado — ya cuenta para planilla"
+        : r.ESTADO === "aprobada_jefatura" ? "🕐 Aprobado por jefatura — esperando aprobación final"
+        : r.ESTADO === "rechazada" ? "🚫 Rechazado" + (r.MOTIVO_RECHAZO ? ": " + escapeHtml(r.MOTIVO_RECHAZO) : "")
+        : "⏳ Pendiente de revisión";
+      const marcas = (Array.isArray(r.MARCAS) && r.MARCAS[0])
+        ? `${escapeHtml(r.MARCAS[0].entrada || "?")} → ${escapeHtml(r.MARCAS[0].salida || "?")}`
+        : "";
+      return `<div class="catalog-item">
+        <div class="row1">
+          <div class="info">
+            <div class="name">${fmtFechaSimple(r.FECHA)}</div>
+            <div class="meta">${marcas}${r.HORAS_EXTRA ? ` · ${r.HORAS_EXTRA} h extra` : ""}</div>
+            <div class="meta">${estadoTxt}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+  }catch(e){
+    cont.innerHTML = `<div class="msg err">No se pudo cargar tu historial.</div>`;
+  }
+}
+
+async function enviarTurnoConductorExterno(){
+  if (!perfilActualKey) return;
+  const fechaEl = document.getElementById("conductor-fecha");
+  const entradaEl = document.getElementById("conductor-entrada");
+  const salidaEl = document.getElementById("conductor-salida");
+  const fecha = (fechaEl && fechaEl.value) || "";
+  const horaEntrada = (entradaEl && entradaEl.value) || "";
+  const horaSalida = (salidaEl && salidaEl.value) || "";
+  if (!fecha || !horaEntrada || !horaSalida){ statusMsg("Completa la fecha, la hora de entrada y la hora de salida.", false); return; }
+  const hoy = isoDeFechaLocal(new Date());
+  if (fecha > hoy){ statusMsg("No podés reportar un día que todavía no llega.", false); return; }
+
+  const tsEntrada = new Date(fecha + "T" + horaEntrada + ":00").getTime();
+  let tsSalida = new Date(fecha + "T" + horaSalida + ":00").getTime();
+  if (tsSalida <= tsEntrada) tsSalida += 24 * 3600000; // cruzó medianoche
+
+  const nombre = (trabajadorActual && trabajadorActual.nombre) || "";
+  const codigo = "conductor:" + perfilActualKey;
+  const { filas } = filasDesdeEventosMarcacion([
+    { codigo, nombre, fecha, ts: tsEntrada },
+    { codigo, nombre, fecha, ts: tsSalida },
+  ], () => null);
+  if (!filas.length){ statusMsg("Revisá las horas: la salida debe ser después de la entrada, y el turno no puede durar más de 20 horas.", false); return; }
+  filas.forEach(f => { f.FICHA_RELOJ = perfilActualKey; });
+
+  const btn = document.getElementById("conductor-btn-enviar");
+  if (btn){ btn.disabled = true; btn.textContent = "Enviando…"; }
+  try{
+    await guardarFilasHorasExtra(filas, "🚗 Reportado por el conductor (sin reloj)");
+    statusMsg("Turno enviado — gerencia o master lo va a revisar.");
+    if (fechaEl) fechaEl.value = "";
+    if (entradaEl) entradaEl.value = "";
+    if (salidaEl) salidaEl.value = "";
+    await renderListaTurnosConductor();
+  }catch(e){
+    statusMsg(e.message || "No se pudo enviar el turno.", false);
+  }finally{
+    if (btn){ btn.disabled = false; btn.textContent = "📨 Enviar turno"; }
+  }
 }
 
 async function renderPerfilEmpleado(){
