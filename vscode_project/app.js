@@ -710,6 +710,7 @@ const CAMPOS_EXPORTAR_EMPLEADOS = [
     ["__ALERTA_CUENTA_BANCARIA", "Alerta cuenta bancaria (para el contador)"],
   ]},
   { grupo: "Datos personales", campos: [
+    ["NACIONALIDAD_EMP", "Nacionalidad"],
     ["ESTADO_CIVIL_EMP", "Estado civil"],
     ["HIJOS_EMP", "Hijos"],
     ["ENFERMEDAD_CRONICA_EMP", "Enfermedad crónica"],
@@ -1194,6 +1195,7 @@ const CATALOGS = {
       ["ADJUNTO_ID_DORSO_EMP","file_adjunto_emp","Foto de cédula / pasaporte / permiso laboral (reverso) — si aplica",""],
       ["ADJUNTO_CUENTA_EMP","file_adjunto_emp","Foto de la cuenta bancaria (para doble confirmación)",""],
       ["grp", "Datos personales"],
+      ["NACIONALIDAD_EMP","select_nacionalidad_emp","Nacionalidad",""],
       ["ESTADO_CIVIL_EMP","select_estado_civil","11. Estado civil",""],
       ["HIJOS_EMP","select_sino_cantidad","12. Hijos",""],
       ["ENFERMEDAD_CRONICA_EMP","select_sino_detalle","13. Padece alguna enfermedad crónica",""],
@@ -3098,6 +3100,16 @@ function catalogFieldHtml(meta){
     let opts = `<option value="">Seleccionar…</option>` + ["Soltero(a)","Casado(a)","Divorciado(a)","Viudo(a)","Unión de hecho"].map(o =>
       `<option value="${escapeHtml(o)}" ${val===o?"selected":""}>${escapeHtml(o)}</option>`).join("");
     control = `<select onchange="catalogEditing.values['${id}']=this.value">${opts}</select>`;
+  } else if (type === "select_nacionalidad_emp"){
+    const opciones = ["Costarricense","Estadounidense","Nicaragüense"];
+    let opts = `<option value="">Seleccionar…</option>` + opciones.map(o =>
+      `<option value="${escapeHtml(o)}" ${val===o?"selected":""}>${escapeHtml(o)}</option>`).join("");
+    opts += `<option value="__custom__">✏️ Otro</option>`;
+    control = `<select onchange="
+        if(this.value==='__custom__'){ const v = prompt('Escribe la nacionalidad:',''); catalogEditing.values['${id}'] = v || ''; }
+        else { catalogEditing.values['${id}']=this.value; }
+        renderCatalogTab('empleados');
+      ">${opts}</select>`;
   } else if (type === "date"){
     control = `<input type="date" value="${escapeHtml(val)}" onchange="catalogEditing.values['${id}']=this.value">`;
   } else if (type === "select_provincia"){
@@ -24732,6 +24744,7 @@ async function aplicarDatosEmpleadoAContrato(emp){
   data.SENAS_TRABAJADOR = emp.SENAS_EMP || "";
   data.DIRECCION_TRABAJADOR = emp.DIRECCION_EMP || "";
   data.ESTADO_CIVIL = emp.ESTADO_CIVIL_EMP || "";
+  data.NACIONALIDAD = emp.NACIONALIDAD_EMP || "";
   if (!emp.PUESTO_KEY && !data.PUESTO) data.PUESTO = emp.DEPARTAMENTO_EMP || "";
 }
 
