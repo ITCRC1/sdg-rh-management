@@ -24722,6 +24722,7 @@ async function aplicarDatosEmpleadoAContrato(emp){
   data.APELLIDOS_TRABAJADOR = emp.APELLIDOS_EMP || "";
   data.NOMBRE_PILA_TRABAJADOR = emp.NOMBRE_EMP || "";
   data.IDENTIFICACION = emp.IDENTIFICACION_EMP || "";
+  data.TIPO_IDENTIFICACION = emp.TIPO_IDENTIFICACION_EMP || "";
   // Dirección: se copia tal cual de la ficha (ya viene partida en
   // Provincia/Cantón/Distrito/Señas desde Empleados) — RH no debería tener
   // que volver a elegirla/escribirla a mano.
