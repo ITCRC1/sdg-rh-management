@@ -17291,9 +17291,8 @@ const ETIQUETAS_AUSENCIA_HORARIO = new Set(["VAC", "LIBRE", "CITA", "INCAP", "CU
 // Carga solicitudes/horas-extra UNA sola vez y devuelve una función liviana
 // para preguntar, por empleado+día, si ese día cae dentro de una ausencia ya
 // aprobada — pensado para los flujos que revisan varios días/empleados de
-// una vez (aplicarHorarioASemana, confirmarAsignacionRapida,
-// confirmarAsignacionMasiva), que si no repetirían esta misma carga completa
-// una vez por cada día que revisan.
+// una vez (confirmarAsignacionRapida, confirmarAsignacionMasiva), que si no
+// repetirían esta misma carga completa una vez por cada día que revisan.
 async function crearVerificadorConflictosHorario(){
   const [solicitudes, registrosHorasExtra] = await Promise.all([
     listarSolicitudesAusencia(),
@@ -17312,8 +17311,9 @@ async function crearVerificadorConflictosHorario(){
 // vacío ("" = "sin asignar"). Ni jefatura ni nadie más borra la clave acá
 // (jefatura no puede hacer DELETE de todas formas); listarHorariosAsignados
 // ya trata el valor vacío como inexistente. Separada de guardarHorarioAsignado
-// (que sí avisa con el toast) para que aplicarHorarioASemana pueda llamarla 7
-// veces seguidas sin spamear 7 avisos.
+// (que sí avisa con el toast) para que los flujos que asignan varios días de
+// una vez (Asignación rápida, "Añadir a varios") puedan llamarla seguido sin
+// spamear un aviso por cada día.
 async function fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey){
   const key = `${HORARIO_ASIGNADO_PREFIX}${empKey}:${fechaISO}`;
   if (!lugarKey || !horarioKey){
@@ -17353,39 +17353,6 @@ async function guardarHorarioAsignado(empKey, fechaISO){
     await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
     statusMsg(lugarKey && horarioKey ? "Horario actualizado." : "Día sin asignar.");
   }catch(e){ statusMsg("No se pudo guardar: " + e.message, false); }
-}
-
-// Botón "📋 Semana" de cada fila: toma el lugar y el turno elegidos en los
-// <select> de esa fila y los replica en los 7 días de la semana que está en
-// pantalla — pensado para quien tiene horario fijo (mismo lugar y turno
-// todos los días), para no tener que elegirlos 7 veces. Sobrescribe lo que
-// hubiera asignado esos días; por eso pide confirmación antes.
-async function aplicarHorarioASemana(empKey){
-  const selLugar = document.getElementById(`replicar-lugar-${empKey}`);
-  const selTurno = document.getElementById(`replicar-horario-${empKey}`);
-  const lugarKey = selLugar ? selLugar.value : "";
-  const horarioKey = selTurno ? selTurno.value : "";
-  if (!lugarKey || !horarioKey){ statusMsg("Elegí lugar de trabajo y turno para aplicar a toda la semana.", false); return; }
-  const diasISO = [];
-  for (let i = 0; i < 7; i++){
-    const d = new Date(horariosSemanaDesde + "T00:00:00");
-    d.setDate(d.getDate() + i);
-    diasISO.push(isoDeFechaLocal(d));
-  }
-  try{
-    const verificar = await crearVerificadorConflictosHorario();
-    const conflictivos = diasISO.filter(f => verificar(empKey, f));
-    let mensaje = "¿Aplicar este lugar y turno a los 7 días de esta semana para este empleado? Sobrescribe lo que ya tenía asignado esos días.";
-    if (conflictivos.length){
-      mensaje = `⚠️ ${conflictivos.length} de esos 7 días ya tiene una ausencia aprobada (vacaciones/libre/incapacidad/etc.): ${conflictivos.map(fmtFechaSimple).join(", ")}.\n\n` + mensaje;
-    }
-    if (!confirm(mensaje)) return;
-    for (const fechaISO of diasISO){
-      await fijarHorarioAsignado(empKey, fechaISO, lugarKey, horarioKey);
-    }
-    statusMsg("Lugar y turno aplicados a toda la semana.");
-    renderHorariosPanel();
-  }catch(e){ statusMsg("No se pudo aplicar a toda la semana: " + e.message, false); }
 }
 
 // Texto legible de un turno según su TIPO: "fijo" es un solo rango de hora;
@@ -17857,19 +17824,7 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
           const faltaCatalogo = !horariosDelDepto.length || !lugaresDelDepto.length;
           return `<tr>
             <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;">
-              <div>${escapeHtml(nombreCompletoEmpleado(emp)||emp.key)}</div>
-              ${puedeGestionar && !faltaCatalogo ? `
-              <div style="display:flex; flex-direction:column; gap:2px; margin-top:4px;">
-                <select id="replicar-lugar-${emp.key}" style="font-size:9px; max-width:100px; padding:1px;" title="Elegí un lugar para aplicar a toda la semana">
-                  <option value="">Lugar…</option>
-                  ${lugaresDelDepto.map(l => `<option value="${l.key}">${escapeHtml(l.NOMBRE)}</option>`).join("")}
-                </select>
-                <select id="replicar-horario-${emp.key}" style="font-size:9px; max-width:100px; padding:1px;" title="Elegí un turno para aplicar a toda la semana">
-                  <option value="">Turno…</option>
-                  ${horariosDelDepto.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)} — ${textoHorarioTurno12(h)}</option>`).join("")}
-                </select>
-                <button class="btn" style="font-size:9px; padding:1px 6px;" onclick="aplicarHorarioASemana('${emp.key}')" title="Aplica el lugar y el turno elegidos a los 7 días de esta semana">📋 Semana</button>
-              </div>` : ""}
+              <div style="font-weight:700; font-size:12.5px;">${escapeHtml(nombreCompletoEmpleado(emp)||emp.key)}</div>
             </td>
             ${dias.map(fechaISO => {
               const claveAsignado = `${HORARIO_ASIGNADO_PREFIX}${emp.key}:${fechaISO}`;
