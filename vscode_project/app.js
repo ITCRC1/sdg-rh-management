@@ -17926,8 +17926,11 @@ async function renderHorariosPanel(){
   try{
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
     const esJefatura = rolActual === "jefatura";
-    const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()); // master/gerente
     const sesion = window.sdgApi && window.sdgApi.sesionActual();
+    // Excepción personal (usuarios.solo_ver_horarios, ver rutas-datos.js): una
+    // cuenta master/gerente puntual que debe quedar de solo lectura ÚNICAMENTE
+    // acá, sin perder ningún otro permiso de su rol en el resto del sistema.
+    const puedeAprobar = !!(window.sdgApi && window.sdgApi.puedeEditar()) && !(sesion && sesion.soloVerHorarios); // master/gerente
     const deptoJefatura = esJefatura && sesion ? (sesion.puesto || "") : null;
 
     const [empleados, puestos, horarios, lugares, asignados] = await Promise.all([

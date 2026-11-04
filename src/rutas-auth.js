@@ -9,7 +9,7 @@ const router = express.Router();
 
 const CAMPOS_PUBLICOS = `id, email, nombre, cedula, puesto, propiedad_id, rol,
   activo, debe_cambiar_password, creado_en, ultimo_acceso, desactivado_en, empleado_clave,
-  puede_firmar_contratos`;
+  puede_firmar_contratos, solo_ver_horarios`;
 
 function aUsuario(r) {
   return {
@@ -27,6 +27,7 @@ function aUsuario(r) {
     desactivadoEn: r.desactivado_en,
     empleadoClave: r.empleado_clave,
     puedeFirmarContratos: r.puede_firmar_contratos,
+    soloVerHorarios: r.solo_ver_horarios,
   };
 }
 
@@ -49,7 +50,7 @@ router.post("/login", async (req, res, next) => {
 
     const { rows } = await query(
       `SELECT id, email, nombre, password_hash, activo, rol, propiedad_id,
-              debe_cambiar_password, bloqueado_hasta, puede_firmar_contratos
+              debe_cambiar_password, bloqueado_hasta, puede_firmar_contratos, solo_ver_horarios
          FROM usuarios WHERE lower(email) = $1`,
       [email]
     );
@@ -83,6 +84,7 @@ router.post("/login", async (req, res, next) => {
         id: u.id, email: u.email, nombre: u.nombre, rol: u.rol,
         propiedadId: u.propiedad_id, debeCambiarPassword: u.debe_cambiar_password,
         puedeFirmarContratos: u.puede_firmar_contratos,
+        soloVerHorarios: u.solo_ver_horarios,
       },
     });
   } catch (e) {
@@ -566,6 +568,7 @@ router.patch("/usuarios/:id", A.requiereSesion, A.requiereAdmin, async (req, res
     if (b.rol !== undefined) set("rol", String(b.rol));
     if (b.empleadoClave !== undefined) set("empleado_clave", b.empleadoClave || null);
     if (b.puedeFirmarContratos !== undefined) set("puede_firmar_contratos", !!b.puedeFirmarContratos);
+    if (b.soloVerHorarios !== undefined) set("solo_ver_horarios", !!b.soloVerHorarios);
     if (b.activo !== undefined) {
       set("activo", !!b.activo);
       set("desactivado_en", b.activo ? null : new Date());

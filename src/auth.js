@@ -106,7 +106,7 @@ async function buscarSesion(token) {
     `SELECT s.token_hash, s.expira_en,
             u.id, u.email, u.nombre, u.cedula, u.puesto,
             u.propiedad_id, u.rol, u.activo, u.debe_cambiar_password, u.empleado_clave,
-            u.puede_firmar_contratos
+            u.puede_firmar_contratos, u.solo_ver_horarios
        FROM sesiones s
        JOIN usuarios u ON u.id = s.usuario_id
       WHERE s.token_hash = $1
@@ -326,6 +326,7 @@ async function requiereSesion(req, res, next) {
       debeCambiarPassword: sesion.debe_cambiar_password,
       empleadoClave: sesion.empleado_clave,
       puedeFirmarContratos: sesion.puede_firmar_contratos,
+      soloVerHorarios: sesion.solo_ver_horarios,
       ip: ipDe(req),
       // Si existe la cookie "de vuelta" es porque un master está viendo el
       // sistema como esta cuenta (ver /auth/impersonar) — se expone para que

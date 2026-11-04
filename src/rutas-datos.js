@@ -358,6 +358,14 @@ async function conductorExternoPuedeAutoreportar(propiedad, clave, usuario, valo
 }
 
 async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
+  // usuarios.solo_ver_horarios: excepción PERSONAL (no de rol) para una
+  // cuenta master/gerente puntual que debe quedar de solo lectura
+  // únicamente en Horarios — el resto de sus permisos de rol siguen
+  // intactos. Va primero, antes del atajo de PUEDEN_ESCRIBIR más abajo,
+  // porque si no, master/gerente pasarían de largo sin que esto aplicara.
+  if (usuario.soloVerHorarios && (clave.startsWith(HORARIO_PREFIX) || clave.startsWith(LUGAR_TRABAJO_PREFIX) || clave.startsWith(HORARIO_ASIGNADO_PREFIX))) {
+    return false;
+  }
   // Una vez que un día de horas_extra: llega a "aprobada" (palabra final,
   // ya cuenta para planilla), jefatura queda AFUERA de esa clave sin
   // excepción — no importa qué traiga valorNuevo (otro ESTADO, un

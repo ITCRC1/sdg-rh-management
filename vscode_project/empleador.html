@@ -605,6 +605,7 @@ function renderListaUsuarios(usuarios){
             ${esc(u.email)} · ${(u.rol === "master" || u.rol === "consultor") ? "todas las propiedades" : esc(nombrePropiedad(u.propiedadId))}
             ${u.rol === "jefatura" ? " · lidera: " + esc(u.puesto || "—") : ""}
             ${u.rol === "consultor" && u.puedeFirmarContratos ? " · ✍️ firma contratos" : ""}
+            ${u.soloVerHorarios ? " · 🔒 solo ve Horarios" : ""}
             ${u.ultimoAcceso ? " · último acceso " + new Date(u.ultimoAcceso).toLocaleString("es-CR") : " · nunca ha entrado"}
           </div>
           <div style="margin-top:6px;">
@@ -618,6 +619,12 @@ function renderListaUsuarios(usuarios){
               <input type="checkbox" style="width:auto; margin-right:4px;" ${u.puedeFirmarContratos ? "checked" : ""}
                      onchange="cambiarPuedeFirmar('${esc(u.id)}', this.checked)">
               Firma contratos
+            </label>` : ""}
+            ${(u.rol === "master" || u.rol === "gerente") ? `
+            <label style="font-size:11.5px; margin-left:8px;" title="Excepción personal: esta cuenta mantiene todos sus demás permisos, pero en Horarios queda solo viendo por departamento, sin crear ni editar.">
+              <input type="checkbox" style="width:auto; margin-right:4px;" ${u.soloVerHorarios ? "checked" : ""}
+                     onchange="cambiarSoloVerHorarios('${esc(u.id)}', this.checked)">
+              🔒 Solo ver Horarios
             </label>` : ""}
           </div>
         </div>
@@ -711,6 +718,21 @@ async function cambiarRol(id, nuevoRol, rolAnterior){
 async function cambiarPuedeFirmar(id, marcado){
   try{
     await api.usuarios.actualizar(id, { puedeFirmarContratos: marcado });
+    await cargarUsuarios();
+  }catch(e){
+    alert(e.message || "No se pudo actualizar.");
+    await cargarUsuarios();
+  }
+}
+
+// Excepción personal, no de rol (ver usuarios.solo_ver_horarios en
+// rutas-datos.js): esta cuenta mantiene TODOS sus demás permisos de
+// master/gerente — únicamente en Horarios queda de solo lectura, viendo por
+// departamento, sin crear ni editar lugares de trabajo, turnos ni
+// asignaciones.
+async function cambiarSoloVerHorarios(id, marcado){
+  try{
+    await api.usuarios.actualizar(id, { soloVerHorarios: marcado });
     await cargarUsuarios();
   }catch(e){
     alert(e.message || "No se pudo actualizar.");
