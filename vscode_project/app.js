@@ -17399,6 +17399,32 @@ function textoHorarioTurno(h){
   return `${escapeHtml(h.HORA_INICIO||"")} a ${escapeHtml(h.HORA_FIN||"")}`;
 }
 
+// "08:00" (24h, como lo guarda el <input type="time">) → "8:00 AM" — formato
+// de 12 horas para que cualquier usuario entienda el turno de un vistazo, sin
+// tener que saber de memoria a qué horas corresponde el nombre que alguien le
+// puso (ej. "MAÑANA" no siempre son las mismas horas en cada departamento).
+function horaCorta12(hhmm){
+  if (!hhmm || hhmm.indexOf(":") < 0) return escapeHtml(hhmm || "");
+  const [hStr, mStr] = hhmm.split(":");
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) return escapeHtml(hhmm);
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${mStr} ${ampm}`;
+}
+
+// Igual que textoHorarioTurno, pero con las horas en formato de 12h — se usa
+// donde se muestra el turno YA ASIGNADO a alguien (grilla de asignación,
+// "Mi horario"), que es lo que de verdad necesita entender cualquier persona
+// del equipo; textoHorarioTurno (24h) se deja para el catálogo de turnos,
+// donde quien gestiona sí está acostumbrado a ese formato.
+function textoHorarioTurno12(h){
+  if (h.TIPO === "quebrado"){
+    return `${horaCorta12(h.HORA_INICIO_1)} a ${horaCorta12(h.HORA_FIN_1)} y ${horaCorta12(h.HORA_INICIO_2)} a ${horaCorta12(h.HORA_FIN_2)}`;
+  }
+  return `${horaCorta12(h.HORA_INICIO)} a ${horaCorta12(h.HORA_FIN)}`;
+}
+
 // Muestra el par de campos de hora según el tipo elegido en el formulario de
 // "Agregar turno" — un solo rango para "fijo", dos rangos independientes
 // (con su propio hueco al medio) para "quebrado".
@@ -17416,7 +17442,7 @@ function renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar,
     ? horariosVisibles.slice()
         .sort((a, b) => (a.DEPARTAMENTO_MINISTERIO||"").localeCompare(b.DEPARTAMENTO_MINISTERIO||"") || (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es"))
         .map(h => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
-          <div style="font-size:12.5px;"><b>${escapeHtml(h.NOMBRE||"")}</b> — ${textoHorarioTurno(h)}${necesitaSelectorDepto ? ` · ${escapeHtml(h.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
+          <div style="font-size:12.5px;"><b>${textoHorarioTurno(h)}</b> — ${escapeHtml(h.NOMBRE||"")}${necesitaSelectorDepto ? ` · ${escapeHtml(h.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
           ${puedeEliminar ? `<button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarHorario('${h.key}')">🗑️ Eliminar</button>` : ""}
         </div>`).join("")
     : `<div class="empty-state" style="padding:8px 0;">No hay turnos fijos creados${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
@@ -17775,7 +17801,7 @@ async function exportarHorarioSemana(){
         const lugar = a ? lugaresPorKey[a.LUGAR_KEY] : null;
         const turno = a ? horariosPorKey[a.HORARIO_KEY] : null;
         const cell = ws.getRow(fila).getCell(i + 2);
-        cell.value = (lugar && turno) ? `${lugar.NOMBRE} — ${turno.NOMBRE}` : "";
+        cell.value = (lugar && turno) ? `${lugar.NOMBRE} — ${textoHorarioTurno12(turno)}` : "";
         cell.border = bordeCelda;
         cell.alignment = { horizontal:"center", wrapText:true };
       });
@@ -17853,7 +17879,7 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
               if (!puedeGestionar){
                 const l = lugaresDelDepto.find(x => x.key === lugarKeyActual);
                 const h = horariosDelDepto.find(x => x.key === horarioKeyActual);
-                const texto = l && h ? `${l.NOMBRE} — ${h.NOMBRE}` : "—";
+                const texto = l && h ? `${l.NOMBRE} — ${textoHorarioTurno12(h)}` : "—";
                 return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">${escapeHtml(texto)}</td>`;
               }
               if (faltaCatalogo){
@@ -17903,7 +17929,7 @@ function renderSeccionMiHorarioSemana(asignadosPropios, horarios, lugares, seman
     dias.push({
       fechaISO,
       etiquetaDia: DIA_SEMANA_CORTO_HORARIOS[d.getDay()],
-      texto: (lugar && turno) ? `${lugar.NOMBRE} — ${turno.NOMBRE}` : "Sin asignar",
+      texto: (lugar && turno) ? `${lugar.NOMBRE} — ${textoHorarioTurno12(turno)}` : "Sin asignar",
     });
   }
 
