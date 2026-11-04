@@ -14298,6 +14298,7 @@ function showToast(txt, ok, actionFn, actionLabel){
 }
 
 let contractsSearchTerm = "";
+let contractsSortMode = "recientes"; // "recientes" | "nombre"
 let empleadosSearchTerm = "";
 let puestosSearchTerm = "";
 let empleadosOrden = "nombre_asc"; // nombre_asc | nombre_desc | fecha_reciente | fecha_antigua
@@ -14489,6 +14490,11 @@ function filtrarContratosInput(val){
   _renderContratosBuscadoDebounced();
 }
 
+function ordenarContratosInput(val){
+  contractsSortMode = val;
+  renderContractsList();
+}
+
 async function renderContractsList(){
   const listEl = document.getElementById("contracts-list");
   listEl.innerHTML = `<div class="empty-state">Cargando…</div>`;
@@ -14539,8 +14545,19 @@ async function renderContractsList(){
         it.puesto.toLowerCase().includes(contractsSearchTerm) ||
         it.empresa.toLowerCase().includes(contractsSearchTerm));
     }
-    const searchBar = `<div class="field" style="margin-bottom:10px;">
-      <input type="text" id="contracts-search" placeholder="🔍 Buscar por nombre, puesto o empresa…" value="${escapeHtml(contractsSearchTerm)}" oninput="filtrarContratosInput(this.value)">
+    if (contractsSortMode === "recientes"){
+      // Sin fecha (contratos viejos sin _updatedAt) van al final, no al
+      // principio — si no, taparían a los recién tocados.
+      items.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    } else {
+      items.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    const searchBar = `<div class="field" style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="text" id="contracts-search" style="flex:1; min-width:180px;" placeholder="🔍 Buscar por nombre, puesto o empresa…" value="${escapeHtml(contractsSearchTerm)}" oninput="filtrarContratosInput(this.value)">
+      <select id="contracts-sort" style="min-width:170px;" onchange="ordenarContratosInput(this.value)">
+        <option value="recientes" ${contractsSortMode === "recientes" ? "selected" : ""}>🕐 Más recientes primero</option>
+        <option value="nombre" ${contractsSortMode === "nombre" ? "selected" : ""}>🔤 Nombre (A-Z)</option>
+      </select>
     </div>`;
     if (items.length === 0){
       listEl.innerHTML = searchBar + `<div class="empty-state">Sin resultados para “${escapeHtml(contractsSearchTerm)}”.</div>`;
