@@ -17587,7 +17587,7 @@ function renderSeccionAsignacionRapida(empleadosVisibles, horarios, lugares, dep
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Turno
         <select id="asignacion-rapida-turno">
           <option value="">— Elegí —</option>
-          ${horarios.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)}</option>`).join("")}
+          ${horarios.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)} — ${textoHorarioTurno12(h)}</option>`).join("")}
         </select>
       </label>
     </div>
@@ -17681,7 +17681,7 @@ function abrirModalAsignacionMasiva(){
       <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Turno
         <select id="asignacion-masiva-turno">
           <option value="">— Elegí —</option>
-          ${horariosVisibles.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)}</option>`).join("")}
+          ${horariosVisibles.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)} — ${textoHorarioTurno12(h)}</option>`).join("")}
         </select>
       </label>
     </div>
@@ -17866,7 +17866,7 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
                 </select>
                 <select id="replicar-horario-${emp.key}" style="font-size:9px; max-width:100px; padding:1px;" title="Elegí un turno para aplicar a toda la semana">
                   <option value="">Turno…</option>
-                  ${horariosDelDepto.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)}</option>`).join("")}
+                  ${horariosDelDepto.map(h => `<option value="${h.key}">${escapeHtml(h.NOMBRE)} — ${textoHorarioTurno12(h)}</option>`).join("")}
                 </select>
                 <button class="btn" style="font-size:9px; padding:1px 6px;" onclick="aplicarHorarioASemana('${emp.key}')" title="Aplica el lugar y el turno elegidos a los 7 días de esta semana">📋 Semana</button>
               </div>` : ""}
@@ -17892,7 +17892,7 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
                 </select>
                 <select id="turno-asignado-${emp.key}-${fechaISO}" style="font-size:9.5px; max-width:110px; display:block; margin:0 auto;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}')">
                   <option value="">Turno…</option>
-                  ${horariosDelDepto.map(h => `<option value="${h.key}"${h.key===horarioKeyActual?" selected":""}>${escapeHtml(h.NOMBRE)}</option>`).join("")}
+                  ${horariosDelDepto.map(h => `<option value="${h.key}"${h.key===horarioKeyActual?" selected":""}>${escapeHtml(h.NOMBRE)} — ${textoHorarioTurno12(h)}</option>`).join("")}
                 </select>
               </td>`;
             }).join("")}
