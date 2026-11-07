@@ -313,7 +313,7 @@ async function prepararBotonConductorExterno(){
   try{
     const r = await window.storage.get(CATALOGS.empleados.prefix + perfilActualKey, false);
     const emp = r && r.value ? JSON.parse(r.value) : null;
-    if (!emp || (emp.DEPARTAMENTO_EMP || "").trim() !== "Conductor Externo") return;
+    if (!emp || (emp.DEPARTAMENTO_EMP || "").trim().toLowerCase() !== "conductor externo") return;
   }catch(e){ return; }
   esConductorExterno = true;
   const btn = document.createElement("button");

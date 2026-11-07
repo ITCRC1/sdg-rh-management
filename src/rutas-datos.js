@@ -354,7 +354,7 @@ async function conductorExternoPuedeAutoreportar(propiedad, clave, usuario, valo
   if (actual && actual.ESTADO !== "pendiente") return false;
 
   const empleado = await valorDeClave(propiedad, usuario.empleadoClave);
-  return !!empleado && (empleado.DEPARTAMENTO_EMP || "").trim() === "Conductor Externo";
+  return !!empleado && (empleado.DEPARTAMENTO_EMP || "").trim().toLowerCase() === "conductor externo";
 }
 
 async function puedeEscribirClave(usuario, propiedad, clave, valorNuevo) {
