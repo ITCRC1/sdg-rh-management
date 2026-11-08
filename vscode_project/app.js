@@ -17841,11 +17841,11 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
                 return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center; font-size:9.5px; color:var(--ink-soft);">Faltan ${!lugaresDelDepto.length ? "lugares" : "turnos"}</td>`;
               }
               return `<td style="padding:2px 4px; border:1px solid var(--paper-line); text-align:center;">
-                <select id="lugar-asignado-${emp.key}-${fechaISO}" style="font-size:9.5px; max-width:110px; display:block; margin:0 auto 2px;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}')">
+                <select id="lugar-asignado-${emp.key}-${fechaISO}" style="font-size:10px; width:180px; max-width:none; display:block; margin:0 auto 2px;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}')">
                   <option value="">Lugar…</option>
                   ${lugaresDelDepto.map(l => `<option value="${l.key}"${l.key===lugarKeyActual?" selected":""}>${escapeHtml(l.NOMBRE)}</option>`).join("")}
                 </select>
-                <select id="turno-asignado-${emp.key}-${fechaISO}" style="font-size:9.5px; max-width:110px; display:block; margin:0 auto;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}')">
+                <select id="turno-asignado-${emp.key}-${fechaISO}" style="font-size:10px; width:180px; max-width:none; display:block; margin:0 auto;" onchange="guardarHorarioAsignado('${emp.key}', '${fechaISO}')">
                   <option value="">Turno…</option>
                   ${horariosDelDepto.map(h => `<option value="${h.key}"${h.key===horarioKeyActual?" selected":""}>${escapeHtml(h.NOMBRE)} — ${textoHorarioTurno12(h)}</option>`).join("")}
                 </select>

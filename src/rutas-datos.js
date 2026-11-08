@@ -629,10 +629,27 @@ async function sincronizarCuentaEmpleado(propiedad, clave, valorNuevoJson, valor
     if (!nombre || !apellidos || !cedula || !numeroEmpleado) return;
 
     const existente = await query(
-      "SELECT id FROM usuarios WHERE propiedad_id = $1 AND cedula = $2",
+      "SELECT id, rol, empleado_clave, activo FROM usuarios WHERE propiedad_id = $1 AND cedula = $2",
       [propiedad, cedula]
     );
-    if (existente.rows[0]) return;
+    if (existente.rows[0]) {
+      const fila = existente.rows[0];
+      // La cuenta ya existe por cédula pero puede haber quedado "huérfana"
+      // apuntando a una clave vieja (ej. un duplicado que se fusionó y se
+      // borró, o el expediente se recreó con otra clave) — eso hace que
+      // "regenerar clave" no la encuentre aunque el expediente esté completo
+      // y diga "no tiene cuenta". La reconectamos con la clave actual en vez
+      // de dejarla huérfana. Nunca se toca una cuenta que no sea de empleado
+      // (misma cédula con rol master/gerente/jefatura es otra persona).
+      if (fila.rol === "empleado" && fila.empleado_clave !== clave) {
+        await query(
+          `UPDATE usuarios SET empleado_clave = $2, activo = true, desactivado_en = NULL
+            WHERE id = $1`,
+          [fila.id, clave]
+        );
+      }
+      return;
+    }
 
     const base = A.generarUsuarioEmpleado(nombre, apellidos);
     if (!base) return;
