@@ -279,16 +279,6 @@ router.post("/regenerar-clave-empleado", A.requiereSesion, A.requiereEscritura, 
       return res.status(400).json({ error: "Clave de empleado inválida." });
     }
 
-    const u = await query(
-      "SELECT id, email FROM usuarios WHERE propiedad_id = $1 AND empleado_clave = $2 AND rol = 'empleado'",
-      [propiedad, empleadoClave]
-    );
-    if (!u.rows[0]) {
-      return res.status(404).json({
-        error: "Esta persona todavía no tiene cuenta de acceso — se crea sola cuando el expediente tenga nombre, apellidos, cédula y número de empleado completos.",
-      });
-    }
-
     const emp = await query(
       "SELECT valor FROM documentos WHERE propiedad_id = $1 AND clave = $2 AND eliminado_en IS NULL",
       [propiedad, empleadoClave]
@@ -300,17 +290,31 @@ router.post("/regenerar-clave-empleado", A.requiereSesion, A.requiereEscritura, 
     } catch (e) {
       datos = {};
     }
-    const numeroEmpleado = String(datos.NUMERO_EMPLEADO || "").trim();
-    if (!numeroEmpleado) {
-      return res.status(400).json({ error: "El expediente no tiene número de empleado — complétalo primero." });
+
+    // No solo busca la cuenta — la crea o la reconecta si estaba huérfana
+    // (misma cédula apuntando a una clave vieja), y si de verdad no se puede
+    // dice exactamente qué dato falta o quién más tiene esa cédula, en vez
+    // del mensaje genérico de antes.
+    const r = await A.asegurarCuentaEmpleado(propiedad, empleadoClave, datos, req.usuario.id);
+    if (!r.id) {
+      if (r.motivo === "cedula_en_otra_cuenta") {
+        return res.status(409).json({
+          error: `Esta cédula ya está en uso por otra cuenta (${r.rol}): ${r.email}. Si es la misma persona, corrige la cédula duplicada antes de continuar.`,
+        });
+      }
+      return res.status(400).json({
+        error: `Faltan datos en el expediente para crear la cuenta: ${r.faltan.join(", ")}.`,
+      });
     }
 
+    const numeroEmpleado = String(datos.NUMERO_EMPLEADO || "").trim();
     const claveTemporal = A.generarClaveTemporalEmpleado(numeroEmpleado);
+    const u = await query("SELECT email FROM usuarios WHERE id = $1", [r.id]);
     await query(
       "UPDATE usuarios SET password_hash = $2, debe_cambiar_password = true WHERE id = $1",
-      [u.rows[0].id, A.hashPassword(claveTemporal)]
+      [r.id, A.hashPassword(claveTemporal)]
     );
-    await A.revocarSesionesDe(u.rows[0].id);
+    await A.revocarSesionesDe(r.id);
 
     res.json({ usuario: u.rows[0].email, claveTemporal });
   } catch (e) {

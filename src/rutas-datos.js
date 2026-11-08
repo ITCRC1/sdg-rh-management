@@ -621,59 +621,10 @@ async function sincronizarCuentaEmpleado(propiedad, clave, valorNuevoJson, valor
       );
     }
 
-    // Alta automática.
-    const nombre = String(emp?.NOMBRE_EMP || "").trim();
-    const apellidos = String(emp?.APELLIDOS_EMP || "").trim();
-    const cedula = String(emp?.IDENTIFICACION_EMP || "").trim();
-    const numeroEmpleado = String(emp?.NUMERO_EMPLEADO || "").trim();
-    if (!nombre || !apellidos || !cedula || !numeroEmpleado) return;
-
-    const existente = await query(
-      "SELECT id, rol, empleado_clave, activo FROM usuarios WHERE propiedad_id = $1 AND cedula = $2",
-      [propiedad, cedula]
-    );
-    if (existente.rows[0]) {
-      const fila = existente.rows[0];
-      // La cuenta ya existe por cédula pero puede haber quedado "huérfana"
-      // apuntando a una clave vieja (ej. un duplicado que se fusionó y se
-      // borró, o el expediente se recreó con otra clave) — eso hace que
-      // "regenerar clave" no la encuentre aunque el expediente esté completo
-      // y diga "no tiene cuenta". La reconectamos con la clave actual en vez
-      // de dejarla huérfana. Nunca se toca una cuenta que no sea de empleado
-      // (misma cédula con rol master/gerente/jefatura es otra persona).
-      if (fila.rol === "empleado" && fila.empleado_clave !== clave) {
-        await query(
-          `UPDATE usuarios SET empleado_clave = $2, activo = true, desactivado_en = NULL
-            WHERE id = $1`,
-          [fila.id, clave]
-        );
-      }
-      return;
-    }
-
-    const base = A.generarUsuarioEmpleado(nombre, apellidos);
-    if (!base) return;
-
-    // El usuario (reutiliza la columna email) es único en todo el sistema,
-    // no solo por propiedad — resuelve choques sumando un número al final:
-    // MVargas, MVargas2, MVargas3...
-    let email = base;
-    let sufijo = 1;
-    for (;;) {
-      const enUso = await query("SELECT 1 FROM usuarios WHERE lower(email) = lower($1)", [email]);
-      if (!enUso.rows[0]) break;
-      sufijo += 1;
-      email = base + sufijo;
-    }
-
-    const password = A.generarClaveTemporalEmpleado(numeroEmpleado);
-    await query(
-      `INSERT INTO usuarios (email, nombre, cedula, puesto, propiedad_id, rol,
-                             password_hash, creado_por, debe_cambiar_password, empleado_clave)
-       VALUES ($1,$2,$3,$4,$5,'empleado',$6,$7,true,$8)`,
-      [email, `${apellidos} ${nombre}`.trim(), cedula, emp.DEPARTAMENTO_EMP || null, propiedad,
-       A.hashPassword(password), actorId || null, clave]
-    );
+    // Alta automática / reconexión — ver A.asegurarCuentaEmpleado, compartida
+    // con el botón "Ver/generar credenciales" (rutas-auth.js) para que el
+    // mismo chequeo diagnostique y repare, no solo el guardado silencioso.
+    await A.asegurarCuentaEmpleado(propiedad, clave, emp, actorId);
   } catch (e) {
     console.error("No se pudo sincronizar la cuenta de empleado automáticamente:", e.message);
   }

@@ -81,6 +81,90 @@ function generarClaveTemporalEmpleado(numeroEmpleado) {
 }
 
 // --------------------------------------------------------------------------
+// asegurarCuentaEmpleado — punto único que crea, reconecta o diagnostica la
+// cuenta de acceso de un expediente de empleado. La usan tanto el guardado
+// normal del expediente (rutas-datos.js: sincronizarCuentaEmpleado, en
+// segundo plano) como el botón "Ver/generar credenciales" (rutas-auth.js:
+// /regenerar-clave-empleado, a demanda) — así el botón ya no solo falla con
+// un mensaje genérico: repara la cuenta huérfana ahí mismo si puede, o dice
+// exactamente qué dato falta o qué otra cuenta ya tiene esa cédula.
+//
+// Devuelve { id, estado: "existente"|"reconectada"|"creada" }
+//       o  { id: null, motivo: "faltan_datos", faltan: [...] }
+//       o  { id: null, motivo: "cedula_en_otra_cuenta", email, rol }
+// --------------------------------------------------------------------------
+async function asegurarCuentaEmpleado(propiedad, clave, emp, actorId) {
+  const nombre = String(emp?.NOMBRE_EMP || "").trim();
+  const apellidos = String(emp?.APELLIDOS_EMP || "").trim();
+  const cedula = String(emp?.IDENTIFICACION_EMP || "").trim();
+  const numeroEmpleado = String(emp?.NUMERO_EMPLEADO || "").trim();
+
+  const directa = await query(
+    "SELECT id FROM usuarios WHERE propiedad_id = $1 AND empleado_clave = $2 AND rol = 'empleado'",
+    [propiedad, clave]
+  );
+  if (directa.rows[0]) return { id: directa.rows[0].id, estado: "existente" };
+
+  const faltan = [];
+  if (!nombre) faltan.push("nombre");
+  if (!apellidos) faltan.push("apellidos");
+  if (!cedula) faltan.push("cédula");
+  if (!numeroEmpleado) faltan.push("número de empleado");
+  if (faltan.length) return { id: null, motivo: "faltan_datos", faltan };
+
+  // ¿Ya existe una cuenta de empleado con esta misma cédula pero apuntando a
+  // otra clave de expediente (huérfana — ej. un duplicado que se fusionó, o
+  // el expediente se recreó)? Se reconecta en vez de dejarla perdida.
+  const porCedula = await query(
+    "SELECT id FROM usuarios WHERE propiedad_id = $1 AND cedula = $2 AND rol = 'empleado'",
+    [propiedad, cedula]
+  );
+  if (porCedula.rows[0]) {
+    await query(
+      `UPDATE usuarios SET empleado_clave = $2, activo = true, desactivado_en = NULL WHERE id = $1`,
+      [porCedula.rows[0].id, clave]
+    );
+    return { id: porCedula.rows[0].id, estado: "reconectada" };
+  }
+
+  // ¿La cédula ya está en uso por una cuenta que NO es de empleado (otra
+  // persona real, ej. jefatura/gerente/master)? No se toca — se reporta.
+  const otraCuenta = await query(
+    "SELECT email, rol FROM usuarios WHERE propiedad_id = $1 AND cedula = $2",
+    [propiedad, cedula]
+  );
+  if (otraCuenta.rows[0]) {
+    return { id: null, motivo: "cedula_en_otra_cuenta", email: otraCuenta.rows[0].email, rol: otraCuenta.rows[0].rol };
+  }
+
+  const base = generarUsuarioEmpleado(nombre, apellidos);
+  if (!base) return { id: null, motivo: "faltan_datos", faltan: ["nombre/apellidos válidos"] };
+
+  // El usuario (reutiliza la columna email) es único en todo el sistema, no
+  // solo por propiedad — resuelve choques sumando un número al final:
+  // MVargas, MVargas2, MVargas3...
+  let email = base;
+  let sufijo = 1;
+  for (;;) {
+    const enUso = await query("SELECT 1 FROM usuarios WHERE lower(email) = lower($1)", [email]);
+    if (!enUso.rows[0]) break;
+    sufijo += 1;
+    email = base + sufijo;
+  }
+
+  const password = generarClaveTemporalEmpleado(numeroEmpleado);
+  const ins = await query(
+    `INSERT INTO usuarios (email, nombre, cedula, puesto, propiedad_id, rol,
+                           password_hash, creado_por, debe_cambiar_password, empleado_clave)
+     VALUES ($1,$2,$3,$4,$5,'empleado',$6,$7,true,$8)
+     RETURNING id`,
+    [email, `${apellidos} ${nombre}`.trim(), cedula, emp.DEPARTAMENTO_EMP || null, propiedad,
+     hashPassword(password), actorId || null, clave]
+  );
+  return { id: ins.rows[0].id, estado: "creada" };
+}
+
+// --------------------------------------------------------------------------
 // Sesiones
 // --------------------------------------------------------------------------
 // En la BD se guarda solo el hash del token. Si alguien lograra leer la tabla
@@ -451,6 +535,7 @@ module.exports = {
   validarPassword,
   generarUsuarioEmpleado,
   generarClaveTemporalEmpleado,
+  asegurarCuentaEmpleado,
   crearSesion,
   buscarSesion,
   revocarSesion,
