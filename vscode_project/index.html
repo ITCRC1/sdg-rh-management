@@ -313,9 +313,37 @@
           <button type="submit" class="auth-btn" id="login-btn">Iniciar sesión</button>
         </form>
         <div id="login-trabajador-msg" class="auth-msg" role="status" aria-live="polite"></div>
-        <p class="auth-nota">
-          ¿Sin cuenta o contraseña olvidada? Escríbele a tu administrador de RH: las
-          cuentas se crean y se restablecen desde el panel del Empleador.
+        <button type="button" class="auth-link" id="btn-olvide-clave" onclick="mostrarFormOlvideClave()"
+                style="background:none; border:none; color:var(--navy-deep, #1d3557); text-decoration:underline; cursor:pointer; font-size:12.5px; padding:4px 0; display:block; margin:0 auto;">
+          ¿Olvidaste tu contraseña?
+        </button>
+        <div id="olvide-clave-form" style="display:none; margin-top:8px; text-align:left;">
+          <div class="auth-field">
+            <label for="olvide-usuario">Usuario o correo</label>
+            <div class="auth-input-wrap">
+              <input type="text" id="olvide-usuario" placeholder="tu.correo@empresa.com o tu usuario"
+                     autocapitalize="none" spellcheck="false">
+            </div>
+          </div>
+          <div class="auth-field">
+            <label for="olvide-cedula">Tu cédula</label>
+            <div class="auth-input-wrap">
+              <input type="text" id="olvide-cedula" placeholder="Ej. 1-2345-6789">
+            </div>
+          </div>
+          <div class="auth-field">
+            <label for="olvide-nacimiento">Tu fecha de nacimiento</label>
+            <div class="auth-input-wrap">
+              <input type="date" id="olvide-nacimiento">
+            </div>
+          </div>
+          <button type="button" class="auth-btn" id="olvide-btn" onclick="hacerAutorecuperarClave()">Recuperar mi contraseña</button>
+          <div id="olvide-clave-msg" class="auth-msg" role="status" aria-live="polite"></div>
+          <div id="olvide-clave-resultado" style="display:none;"></div>
+        </div>
+        <p class="auth-nota" id="nota-sin-cuenta-olvide">
+          ¿Sin cuenta todavía? Escríbele a tu administrador de RH: las cuentas se crean
+          desde el panel del Empleador.
         </p>
       </div>
     </div>

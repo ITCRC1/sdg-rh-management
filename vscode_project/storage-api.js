@@ -223,6 +223,20 @@
       return sesion;
     },
 
+    // Autorecuperación de clave para rol=empleado — sin sesión, verifica
+    // identidad con cédula + fecha de nacimiento (ver /auth/autorecuperar-clave).
+    async autorecuperarClave({ usuario, cedula, fechaNacimiento }) {
+      const r = await fetch(API + "/auth/autorecuperar-clave", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario, cedula, fechaNacimiento }),
+      });
+      const cuerpo = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(cuerpo.error || "No se pudo recuperar la contraseña.");
+      return cuerpo;
+    },
+
     async logout() {
       try {
         await fetch(API + "/auth/logout", { method: "POST", credentials: "same-origin" });

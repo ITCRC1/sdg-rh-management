@@ -193,6 +193,52 @@ async function hacerLoginTrabajador(){
   }
 }
 
+// Muestra/oculta el mini-formulario de "¿Olvidaste tu contraseña?" — ver
+// /api/auth/autorecuperar-clave en rutas-auth.js. Solo sirve para rol=
+// empleado (verifica cédula + fecha de nacimiento de su propia ficha); está
+// pensado para que RRHH no tenga que estar reseteando claves a mano por cada
+// olvido.
+function mostrarFormOlvideClave(){
+  const panel = document.getElementById("olvide-clave-form");
+  if (!panel) return;
+  const abrir = panel.style.display === "none";
+  panel.style.display = abrir ? "block" : "none";
+  const btn = document.getElementById("btn-olvide-clave");
+  if (btn) btn.textContent = abrir ? "‹ Volver a iniciar sesión" : "¿Olvidaste tu contraseña?";
+  if (abrir){
+    const correo = (document.getElementById("login-email").value || "").trim();
+    if (correo) document.getElementById("olvide-usuario").value = correo;
+    authMsg("olvide-clave-msg", "", "info");
+    document.getElementById("olvide-clave-resultado").style.display = "none";
+  }
+}
+
+async function hacerAutorecuperarClave(){
+  const usuario = (document.getElementById("olvide-usuario").value || "").trim();
+  const cedula = (document.getElementById("olvide-cedula").value || "").trim();
+  const fechaNacimiento = document.getElementById("olvide-nacimiento").value || ""; // "AAAA-MM-DD"
+  const btn = document.getElementById("olvide-btn");
+  if (!usuario || !cedula || !fechaNacimiento){
+    authMsg("olvide-clave-msg", "Completa usuario, cédula y fecha de nacimiento.", "err");
+    return;
+  }
+  authMsg("olvide-clave-msg", "Verificando…", "info");
+  if (btn) btn.disabled = true;
+  try{
+    const r = await window.sdgApi.autorecuperarClave({ usuario, cedula, fechaNacimiento });
+    authMsg("olvide-clave-msg", "", "info");
+    const resultado = document.getElementById("olvide-clave-resultado");
+    resultado.style.display = "block";
+    resultado.innerHTML = `<div class="auth-msg ok">✅ Tu contraseña temporal es:
+      <b style="font-family:monospace; font-size:16px;">${escapeHtml(r.claveTemporal)}</b><br>
+      Usala para entrar arriba — el sistema te va a pedir que la cambies de una vez por una tuya.</div>`;
+  }catch(e){
+    authMsg("olvide-clave-msg", String(e.message || "No se pudo recuperar la contraseña."), "err");
+  }finally{
+    if (btn) btn.disabled = false;
+  }
+}
+
 function hacerLogoutTrabajador(){
   // Limpia siempre la propiedad activa guardada: si no, en una computadora
   // compartida la siguiente persona que entre (sobre todo otro master)

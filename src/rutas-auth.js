@@ -93,6 +93,81 @@ router.post("/login", async (req, res, next) => {
 });
 
 // --------------------------------------------------------------------------
+// POST /api/auth/autorecuperar-clave — el propio empleado se resetea la
+// clave SOLO (sin pasar por RRHH), verificando identidad con dos datos de su
+// propia ficha que no son públicos: cédula y fecha de nacimiento. Pensado
+// para que RRHH no tenga que estar reseteando manualmente cada olvido.
+//
+// Deliberadamente NO revela, ante un dato que no coincide, cuál de los tres
+// (usuario/cédula/fecha) fue el que falló — mismo criterio que /login.
+// Nunca aplica a master/gerente/jefatura/consultor (rol='empleado' nomás):
+// esos siguen pidiéndole el reseteo a otro humano con permisos, a propósito.
+// --------------------------------------------------------------------------
+router.post("/autorecuperar-clave", async (req, res, next) => {
+  const email = String(req.body?.usuario || "").trim().toLowerCase();
+  const cedulaInput = String(req.body?.cedula || "").replace(/\D/g, "");
+  const fechaInput = String(req.body?.fechaNacimiento || "").trim(); // "AAAA-MM-DD"
+  const ip = A.ipDe(req);
+  const ua = req.headers["user-agent"];
+  const generico = "No encontramos una cuenta de empleado con esos datos. Revisa el usuario, la cédula y la fecha de nacimiento.";
+
+  try {
+    if (!email || !cedulaInput || !fechaInput) {
+      return res.status(400).json({ error: "Completa usuario, cédula y fecha de nacimiento." });
+    }
+
+    const { rows } = await query(
+      `SELECT id, email, propiedad_id, empleado_clave, activo FROM usuarios
+        WHERE lower(email) = $1 AND rol = 'empleado'`,
+      [email]
+    );
+    const u = rows[0];
+    if (!u || !u.activo || !u.empleado_clave) {
+      await A.registrarAcceso({ email, evento: "clave_olvidada", exito: false, detalle: "cuenta inexistente o inactiva", ip, userAgent: ua });
+      return res.status(401).json({ error: generico });
+    }
+
+    const emp = await query(
+      "SELECT valor FROM documentos WHERE propiedad_id = $1 AND clave = $2 AND eliminado_en IS NULL",
+      [u.propiedad_id, u.empleado_clave]
+    );
+    let datos = {};
+    try {
+      datos = JSON.parse(emp.rows[0]?.valor || "{}");
+    } catch (e) {
+      datos = {};
+    }
+
+    const cedulaFicha = String(datos.IDENTIFICACION_EMP || "").replace(/\D/g, "");
+    const fechaFicha = A.fechaEmpleadoAIso(datos.FECHA_NACIMIENTO_EMP);
+
+    if (!cedulaFicha || cedulaFicha !== cedulaInput || !fechaFicha || fechaFicha !== fechaInput) {
+      await A.marcarIntentoFallido(u.id);
+      await A.registrarAcceso({ email, usuarioId: u.id, evento: "clave_olvidada", exito: false, detalle: "cédula o fecha de nacimiento no coinciden", ip, userAgent: ua });
+      return res.status(401).json({ error: generico });
+    }
+
+    const numeroEmpleado = String(datos.NUMERO_EMPLEADO || "").trim();
+    if (!numeroEmpleado) {
+      return res.status(400).json({ error: "Tu expediente no tiene número de empleado todavía — pídele a RRHH que te lo complete." });
+    }
+
+    const claveTemporal = A.generarClaveTemporalEmpleado(numeroEmpleado);
+    await query(
+      "UPDATE usuarios SET password_hash = $2, debe_cambiar_password = true WHERE id = $1",
+      [u.id, A.hashPassword(claveTemporal)]
+    );
+    await A.revocarSesionesDe(u.id);
+    await A.limpiarIntentos(u.id);
+    await A.registrarAcceso({ email, usuarioId: u.id, evento: "clave_olvidada", exito: true, ip, userAgent: ua });
+
+    res.json({ claveTemporal });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// --------------------------------------------------------------------------
 // POST /api/auth/logout · GET /api/auth/me
 // --------------------------------------------------------------------------
 router.post("/logout", async (req, res, next) => {

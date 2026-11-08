@@ -80,6 +80,21 @@ function generarClaveTemporalEmpleado(numeroEmpleado) {
   return String(numeroEmpleado || "").replace(/\D/g, "").padStart(8, "0");
 }
 
+// Convierte una fecha de ficha de empleado "DD/MM/AAAA" (ver
+// FECHA_NACIMIENTO_EMP en app.js) a "YYYY-MM-DD" — el mismo formato que manda
+// un <input type="date"> — para comparar cadenas directo, sin ambigüedad de
+// zona horaria. Devuelve "" si no se puede interpretar.
+function fechaEmpleadoAIso(texto) {
+  const partes = String(texto || "").trim().split("/");
+  if (partes.length !== 3) return "";
+  const [d, m, y] = partes;
+  if (!/^\d{1,2}$/.test(d) || !/^\d{1,2}$/.test(m) || !/^\d{4}$/.test(y)) return "";
+  const dd = d.padStart(2, "0");
+  const mm = m.padStart(2, "0");
+  if (Number(dd) < 1 || Number(dd) > 31 || Number(mm) < 1 || Number(mm) > 12) return "";
+  return `${y}-${mm}-${dd}`;
+}
+
 // --------------------------------------------------------------------------
 // asegurarCuentaEmpleado — punto único que crea, reconecta o diagnostica la
 // cuenta de acceso de un expediente de empleado. La usan tanto el guardado
@@ -535,6 +550,7 @@ module.exports = {
   validarPassword,
   generarUsuarioEmpleado,
   generarClaveTemporalEmpleado,
+  fechaEmpleadoAIso,
   asegurarCuentaEmpleado,
   crearSesion,
   buscarSesion,
