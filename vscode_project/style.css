@@ -581,7 +581,7 @@
 
 /* En solo lectura se ocultan las acciones que escriben. El servidor rechaza
    la escritura de todos modos; esto solo evita ofrecer botones que fallarian. */
-body.solo-lectura .btn.primary,
+body.solo-lectura .btn.primary:not(#mishorasconductor-panel .btn.primary),
 body.solo-lectura .catalog-toolbar,
 body.solo-lectura .contract-card .actions .del,
 body.solo-lectura .toolbar button[onclick*="guardar"],
@@ -591,9 +591,9 @@ body.solo-lectura button[onclick*="Eliminar"],
 body.solo-lectura input[type="file"]{
   display:none !important;
 }
-body.solo-lectura input:not([type="file"]),
-body.solo-lectura textarea,
-body.solo-lectura select{
+body.solo-lectura input:not([type="file"]):not(#mishorasconductor-panel input),
+body.solo-lectura textarea:not(#mishorasconductor-panel textarea),
+body.solo-lectura select:not(#mishorasconductor-panel select){
   background:#F4F1EA; color:var(--ink-soft); pointer-events:none;
 }
 
