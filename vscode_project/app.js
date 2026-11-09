@@ -13232,6 +13232,16 @@ async function aprobarHoraExtra(key){
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) return;
+    // Si la persona ya corrigió las horas en el campo de esta misma fila (ver
+    // renderInputHorasExtra) pero todavía no tocó "Confirmar todo", esa
+    // edición cuenta para esta aprobación — así bajar las horas a 0 para
+    // quitar la hora extra aprueba directo sin pedir motivo, y no se pierde
+    // el cambio solo porque se aprobó en el mismo clic.
+    if (Object.prototype.hasOwnProperty.call(horasExtraEdicionesPendientes, key)){
+      const horasEditadas = parseFloat(String(horasExtraEdicionesPendientes[key]).replace(",", "."));
+      if (!isNaN(horasEditadas) && horasEditadas >= 0) v.HORAS_EXTRA = Math.round(horasEditadas * 100) / 100;
+      delete horasExtraEdicionesPendientes[key];
+    }
     if ((v.TIPO_DIA || "laboral") === "laboral" && Number(v.HORAS_EXTRA) > 0){
       const motivo = leerMotivoHorasExtra(key);
       if (!motivo){ statusMsg("Tenés que indicar el motivo de las horas extra antes de aprobar.", false); return; }
@@ -13255,6 +13265,15 @@ async function aprobarHoraExtraFinal(key){
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) return;
+    // Mismo caso que aprobarHoraExtra: una edición de horas sin confirmar
+    // todavía en esta fila cuenta para esta aprobación final, para no
+    // perderla solo porque se aprobó en el mismo clic en vez de pasar antes
+    // por "Confirmar todo".
+    if (Object.prototype.hasOwnProperty.call(horasExtraEdicionesPendientes, key)){
+      const horasEditadas = parseFloat(String(horasExtraEdicionesPendientes[key]).replace(",", "."));
+      if (!isNaN(horasEditadas) && horasEditadas >= 0) v.HORAS_EXTRA = Math.round(horasEditadas * 100) / 100;
+      delete horasExtraEdicionesPendientes[key];
+    }
     v.ESTADO = "aprobada";
     v.APROBADO_FINAL_POR = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
     v.FECHA_DECISION_FINAL = new Date().toISOString();
