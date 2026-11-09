@@ -9053,6 +9053,8 @@ const HORAS_EXTRA_PREFIX = "horas_extra:";
 let horasExtraFiltro = "pendiente"; // pendiente | sinmatch | aprobada | rechazada
 let horasExtraEmpleadoSeleccionado = null; // key del empleado abierto en el detalle de "Pendientes" (vista lista → detalle)
 let horasExtraFiltroNombre = ""; // buscador por nombre de empleado — aplica a todas las pestañas, incluida "Pendientes"
+let horasExtraGrupoSinMatchSeleccionado = null; // código/nombre del archivo abierto en el detalle de "Sin identificar" (vista lista → detalle, igual que "Pendientes")
+let horasExtraSinMatchGruposCache = {}; // grupoKey -> registros de ese mismo código/nombre sin identificar, recalculado en cada render para que el modal de identificar en lote sepa qué keys tocan
 
 // Historial de "Motivos de marcas" — además de guardarse en el propio
 // registro de horas_extra: (MOTIVO_HORAS_EXTRA, lo último que se escribió),
@@ -12916,7 +12918,7 @@ async function renderHorasExtrasPanel(){
       <input type="text" id="horasextra-buscar-nombre" placeholder="🔎 Buscar empleado…" value="${escapeHtml(horasExtraFiltroNombre)}" oninput="filtrarHorasExtraNombre(this.value)">
     </div>`;
     html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
-      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
+      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; horasExtraGrupoSinMatchSeleccionado=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
     </div>`;
 
     let lista;
@@ -13132,8 +13134,57 @@ async function renderHorasExtrasPanel(){
     } else if (!lista.length){
       html += `<div class="empty-state">No hay registros en esta vista.</div>`;
     } else if (horasExtraFiltro === "sinmatch"){
-      // Sin empleado identificado todavía — no hay departamento que resolver.
-      html += lista.map(renderFilaHorasExtra).join("");
+      // Agrupado por código/nombre del archivo (igual que "Pendientes" agrupa
+      // por empleado): el mismo código/nombre sin ficha asignada repitiéndose
+      // día tras día es casi siempre la misma persona, así que identificarla
+      // una vez aplica de un tirón a todos sus días sin identificar, en vez
+      // de repetir "Identificar" uno por uno por cada día (ver
+      // mostrarModalAsignarHoraExtraGrupo).
+      const grupoDeSinMatch = r => r.CODIGO_ARCHIVO || r.NOMBRE_ARCHIVO || r.CEDULA || r.key;
+      const gruposSinMatch = {};
+      lista.forEach(r => { (gruposSinMatch[grupoDeSinMatch(r)] = gruposSinMatch[grupoDeSinMatch(r)] || []).push(r); });
+      horasExtraSinMatchGruposCache = gruposSinMatch;
+
+      const grupoSel = horasExtraGrupoSinMatchSeleccionado;
+      const diasGrupoSel = grupoSel ? (gruposSinMatch[grupoSel] || []) : [];
+
+      if (grupoSel && diasGrupoSel.length){
+        diasGrupoSel.sort((a, b) => (a.FECHA || "").localeCompare(b.FECHA || ""));
+        const primero = diasGrupoSel[0];
+        const datosArchivo = [
+          primero.CODIGO_ARCHIVO ? "código " + primero.CODIGO_ARCHIVO : "",
+          primero.NOMBRE_ARCHIVO || "",
+          primero.CEDULA ? "cédula " + primero.CEDULA : "",
+        ].filter(Boolean).join(" — ") || "—";
+        html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraGrupoSinMatchSeleccionado=null; renderHorasExtrasPanel();">← Volver a la lista</button>`;
+        html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
+          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(datosArchivo)}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${diasGrupoSel.length} día(s) sin identificar · ${diasGrupoSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra en total</div>
+          <button class="btn primary" style="margin-top:8px;" onclick="mostrarModalAsignarHoraExtraGrupo('${grupoSel.replace(/'/g,"\\'")}')">🔗 Identificar — aplica a los ${diasGrupoSel.length} día(s)</button>
+        </div></div>`;
+        html += diasGrupoSel.map(renderFilaHorasExtra).join("");
+      } else {
+        if (grupoSel) horasExtraGrupoSinMatchSeleccionado = null; // ese grupo ya no tiene días sin identificar — vuelve al roster
+        const clavesGrupos = Object.keys(gruposSinMatch);
+        if (!clavesGrupos.length){
+          html += `<div class="empty-state">No hay registros en esta vista.</div>`;
+        } else {
+          html += clavesGrupos.map(g => {
+            const dias = gruposSinMatch[g];
+            const primero = dias[0];
+            const nombreMostrar = primero.NOMBRE_ARCHIVO || (primero.CODIGO_ARCHIVO ? "Código " + primero.CODIGO_ARCHIVO : (primero.CEDULA || "(sin nombre)"));
+            return `<div class="catalog-item" style="cursor:pointer;" onclick="horasExtraGrupoSinMatchSeleccionado='${g.replace(/'/g,"\\'")}'; renderHorasExtrasPanel();">
+              <div class="row1">
+                <div class="info">
+                  <div class="name">${escapeHtml(nombreMostrar)}</div>
+                  <div class="meta">${dias.length} día(s) sin identificar · ${dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra</div>
+                </div>
+                <div class="actions"><span class="meta">Ver →</span></div>
+              </div>
+            </div>`;
+          }).join("");
+        }
+      }
     } else {
       // Agrupado por departamento — para master/gerente, que ven varios a la
       // vez; para jefatura da igual, porque el servidor ya le filtra solo el
@@ -13854,14 +13905,15 @@ async function mostrarModalAsignarHoraExtra(key){
   }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
 }
 
-async function confirmarAsignarHoraExtra(key){
-  const sel = document.getElementById("horasextra-asignar-select");
-  const empKey = sel && sel.value;
-  if (!empKey){ statusMsg("Selecciona un empleado.", false); return; }
-  try{
+// Compartida por confirmarAsignarHoraExtra (un día) y
+// confirmarAsignarHoraExtraGrupo (todos los días sin identificar de la misma
+// persona de un tirón, ver mostrarModalAsignarHoraExtraGrupo) — misma lógica
+// de fusión con un registro ya existente para cada key, una por una.
+async function asignarEmpleadoAHorasExtraKeys(empKey, keys){
+  for (const key of keys){
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
-    if (!v) return;
+    if (!v) continue;
     const nuevaKey = HORAS_EXTRA_PREFIX + empKey + ":" + v.FECHA;
     v.EMPLEADO_KEY = empKey;
     // Si ya existía un registro pendiente para ese empleado+fecha (ej. otra
@@ -13881,8 +13933,71 @@ async function confirmarAsignarHoraExtra(key){
     } else {
       await window.storage.set(key, JSON.stringify(v), false);
     }
+  }
+}
+
+async function confirmarAsignarHoraExtra(key){
+  const sel = document.getElementById("horasextra-asignar-select");
+  const empKey = sel && sel.value;
+  if (!empKey){ statusMsg("Selecciona un empleado.", false); return; }
+  try{
+    await asignarEmpleadoAHorasExtraKeys(empKey, [key]);
     cerrarModalIncompletos();
     statusMsg("Empleado identificado.");
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo asignar: " + e.message, false); }
+}
+
+// Identifica de un tirón TODOS los días en caché bajo este mismo código/
+// nombre de archivo (ver el agrupado de "Sin identificar" en
+// renderHorasExtrasPanel) — evita repetir "Identificar" uno por uno cuando
+// es la misma persona apareciendo en varios días.
+async function mostrarModalAsignarHoraExtraGrupo(grupoKey){
+  const dias = (horasExtraSinMatchGruposCache[grupoKey] || []).slice();
+  if (!dias.length){ statusMsg("Ese grupo ya no tiene días sin identificar.", false); return; }
+  const body = document.getElementById("modal-incompletos-body");
+  document.getElementById("modal-incompletos").querySelector(".modal-head span").textContent = "🔗 Identificar empleado";
+  body.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  document.getElementById("modal-incompletos").classList.add("open");
+  try{
+    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+    const empKeys = (res && res.keys) || [];
+    const empleados = await Promise.all(empKeys.map(async k => {
+      const rr = await window.storage.get(k, false);
+      const vv = rr && rr.value ? JSON.parse(rr.value) : {};
+      return { key: k.replace(CATALOGS.empleados.prefix, ""), ...vv };
+    }));
+    const activos = empleados.filter(e => !e.ARCHIVADO).sort(compararPorApellido);
+    const primero = dias[0];
+    const datosArchivo = [
+      primero.CODIGO_ARCHIVO ? "código " + primero.CODIGO_ARCHIVO : "",
+      primero.NOMBRE_ARCHIVO || "",
+      primero.CEDULA ? "cédula " + primero.CEDULA : "",
+    ].filter(Boolean).join(" — ") || "—";
+    const keysJson = escapeHtml(JSON.stringify(dias.map(d => d.key)));
+    body.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Datos en el archivo: <b>${escapeHtml(datosArchivo)}</b> — se va a identificar de un tirón los <b>${dias.length}</b> día(s) sin identificar de esta persona.</div>
+      <div class="field">
+        <label>Empleado correcto</label>
+        <select id="horasextra-asignar-select">
+          <option value="">— Selecciona —</option>
+          ${activos.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(nombreCompletoEmpleado(e) || e.key)}${e.IDENTIFICACION_EMP ? " (" + escapeHtml(e.IDENTIFICACION_EMP) + ")" : ""}</option>`).join("")}
+        </select>
+      </div>
+      <button class="btn primary" style="margin-top:8px;" data-keys='${keysJson}' onclick="confirmarAsignarHoraExtraGrupo(JSON.parse(this.dataset.keys))">Asignar a los ${dias.length} día(s)</button>`;
+  }catch(e){ body.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`; }
+}
+
+async function confirmarAsignarHoraExtraGrupo(keys){
+  const sel = document.getElementById("horasextra-asignar-select");
+  const empKey = sel && sel.value;
+  if (!empKey){ statusMsg("Selecciona un empleado.", false); return; }
+  if (!Array.isArray(keys) || !keys.length) return;
+  try{
+    await asignarEmpleadoAHorasExtraKeys(empKey, keys);
+    cerrarModalIncompletos();
+    horasExtraGrupoSinMatchSeleccionado = null;
+    statusMsg(`Empleado identificado en ${keys.length} día(s).`);
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo asignar: " + e.message, false); }
 }
