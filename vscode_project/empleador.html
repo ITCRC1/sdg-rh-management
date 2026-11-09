@@ -456,6 +456,18 @@ const ROLES = {
   consultor: { nombre: "Consultor (Consultants)",    desc: "Solo lectura en TODAS las propiedades: planillas, expedientes, datos y documentos de empleados, horas extra y días libres/vacaciones por empleado, incapacidades. Nunca crea ni edita nada — ni siquiera contratos u otros documentos." },
 };
 
+// Los <select> de rol (uno por fila de usuario) son nativos del navegador —
+// en Chrome/Edge, si el cursor queda sobre uno que tiene el foco, la rueda
+// del mouse cambia su valor sola (y dispara su onchange) sin que nadie haya
+// hecho clic en ninguna opción. Así se explican cambios de rol que "pasaron
+// solos" al scrollear la lista de usuarios. Delegado en document porque las
+// filas se vuelven a pintar enteras en cada cargarUsuarios().
+document.addEventListener("wheel", function(e){
+  if (e.target && e.target.classList && e.target.classList.contains("select-rol")) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
 // DEPARTAMENTOS_MINISTERIO ya no se declara acá — viene de
 // departamentos-ministerio.js (cargado arriba, antes de este script), el
 // único lugar donde vive esta lista compartida con app.js. Una cuenta de
