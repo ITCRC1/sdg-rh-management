@@ -85,7 +85,15 @@ function generarClaveTemporalEmpleado(numeroEmpleado) {
 // un <input type="date"> — para comparar cadenas directo, sin ambigüedad de
 // zona horaria. Devuelve "" si no se puede interpretar.
 function fechaEmpleadoAIso(texto) {
-  const partes = String(texto || "").trim().split("/");
+  const s = String(texto || "").trim();
+  // Defensivo, igual que parsearFechaEmpleado en app.js: por el mismo bug ya
+  // corregido del selector de fecha (ver valorCampoExportarEmpleado en
+  // app.js), algunos expedientes viejos quedaron con FECHA_NACIMIENTO_EMP
+  // guardada en ISO "AAAA-MM-DD" en vez de "DD/MM/AAAA" — sin esto, cualquier
+  // empleado con su fecha guardada así nunca podía autorecuperar su clave en
+  // /autorecuperar-clave aunque escribiera su fecha de nacimiento correcta.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const partes = s.split("/");
   if (partes.length !== 3) return "";
   const [d, m, y] = partes;
   if (!/^\d{1,2}$/.test(d) || !/^\d{1,2}$/.test(m) || !/^\d{4}$/.test(y)) return "";
@@ -235,10 +243,19 @@ async function revocarSesionesDe(usuarioId) {
   );
 }
 
-async function tocarSesion(tokenHash) {
-  query("UPDATE sesiones SET ultima_vez = now() WHERE token_hash = $1", [tokenHash]).catch(
+// Ventana deslizante: cada petición autenticada empuja la expiración otras
+// DURACION_SESION_HORAS hacia adelante (y requiereSesion refresca la cookie
+// con esa misma fecha) — así una persona que sigue usando el sistema nunca
+// se cae en medio de su jornada; solo expira si de verdad queda inactiva
+// ese tiempo seguido (cierra todo, se va de vacaciones, etc.). Se calcula la
+// fecha ya mismo (no se espera el UPDATE) para no sumarle latencia a cada
+// petición ni atar la cookie a que la escritura en BD haya terminado.
+function tocarSesion(tokenHash) {
+  const nuevaExpira = new Date(Date.now() + DURACION_SESION_HORAS * 3600 * 1000);
+  query("UPDATE sesiones SET ultima_vez = now(), expira_en = $2 WHERE token_hash = $1", [tokenHash, nuevaExpira]).catch(
     () => {}
   );
+  return nuevaExpira;
 }
 
 // --------------------------------------------------------------------------
@@ -413,7 +430,8 @@ async function requiereSesion(req, res, next) {
       borrarCookie(res);
       return res.status(401).json({ error: "No hay sesión activa.", codigo: "sin_sesion" });
     }
-    tocarSesion(sesion.token_hash);
+    const nuevaExpira = tocarSesion(sesion.token_hash);
+    ponerCookie(res, token, nuevaExpira);
     req.usuario = {
       id: sesion.id,
       email: sesion.email,
