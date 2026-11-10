@@ -19119,25 +19119,65 @@ function diasDelMes(mesISO){
   return Array.from({ length: totalDias }, (_, i) => `${mesISO}-${String(i + 1).padStart(2, "0")}`);
 }
 
-function renderSeccionBitacorasGuardadas(mesISO, diasPorTipo, deptoActivo){
+// Suma galones/onzas de un registro con forma "un valor por producto" (ver
+// PRODUCTOS_MAQUINARIA_REALES) — sirve tanto para Ingreso Combustible (cada
+// producto trae {PICHINGA_GAL_n, CANTIDAD_n} para combustibles o
+// {CANTIDAD_OZ} para aceites) como para Maquinaria/Otros (número directo).
+// null cuando el registro no aporta ninguna cantidad real, para distinguir
+// "no hay nada guardado" de "se guardó con todo en cero".
+function sumaGalonesYOnzasBitacora(entrada){
+  if (!entrada) return null;
+  let galones = 0, onzas = 0, hubo = false;
+  PRODUCTOS_MAQUINARIA_REALES.forEach(([campo]) => {
+    const val = entrada[campo];
+    if (val === undefined || val === null) return;
+    if (PRODUCTOS_EN_ONZAS.has(campo)){
+      const cantidad = (val && typeof val === "object") ? Number(val.CANTIDAD_OZ) : Number(val);
+      if (cantidad){ onzas += cantidad; hubo = true; }
+    } else if (val && typeof val === "object"){
+      const p1 = val.PICHINGA_GAL_1, c1 = val.CANTIDAD_1, p2 = val.PICHINGA_GAL_2, c2 = val.CANTIDAD_2;
+      const total = (p1 && c1 ? p1 * c1 : 0) + (p2 && c2 ? p2 * c2 : 0);
+      if (total){ galones += total; hubo = true; }
+    } else {
+      const cantidad = Number(val);
+      if (cantidad){ galones += cantidad; hubo = true; }
+    }
+  });
+  return hubo ? { galones: Math.round(galones * 100) / 100, onzas: Math.round(onzas * 100) / 100 } : null;
+}
+
+// Texto compacto para una celda del calendario — null si no hay nada que
+// mostrar (el llamador decide entre "✕" y "—" según si el día ya pasó).
+function fmtCantidadBitacoraDual(obj){
+  if (!obj) return null;
+  const partes = [];
+  if (obj.galones) partes.push(`${obj.galones} gal`);
+  if (obj.onzas) partes.push(`${obj.onzas} oz`);
+  return partes.length ? partes.join(" · ") : null;
+}
+function fmtCantidadBitacoraSimple(n){
+  return (n === undefined || n === null) ? null : `${n} gal`;
+}
+
+function renderSeccionBitacorasGuardadas(mesISO, cantidadesPorTipo, deptoActivo){
   const hoy = isoDeHoy();
   const filasHtml = diasDelMes(mesISO).map(fechaISO => {
     const esFutura = fechaISO > hoy;
-    const celda = (set) => set.has(fechaISO)
-      ? `<span style="color:#2e7d32; font-weight:700;">✓</span>`
+    const celda = (texto) => texto
+      ? `<span style="color:#2e7d32; font-weight:700;">${escapeHtml(texto)}</span>`
       : (esFutura ? `<span style="color:var(--ink-soft);">—</span>` : `<span style="color:#b23b3b; font-weight:700;">✕</span>`);
     const dia = Number(fechaISO.slice(-2));
     return `<tr${fechaISO===hoy ? ` style="background:#fff8e1;"` : ""}>
       <td style="padding:3px 8px; border:1px solid var(--paper-line); cursor:pointer; text-decoration:underline; color:var(--navy-deep);" onclick="irABitacoraDelDia('${fechaISO}')">${dia}${fechaISO===hoy ? " (hoy)" : ""}</td>
-      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.ingreso)}</td>
-      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.diaria)}</td>
-      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.rebote)}</td>
-      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(diasPorTipo.maquinaria)}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(cantidadesPorTipo.ingreso[fechaISO])}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(cantidadesPorTipo.diaria[fechaISO])}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(cantidadesPorTipo.rebote[fechaISO])}</td>
+      <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${celda(cantidadesPorTipo.maquinaria[fechaISO])}</td>
     </tr>`;
   }).join("");
 
   return `
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">✓ = ese día ya tiene algo guardado. ✕ = no tiene nada todavía. Hacé clic en el día para ir a revisarlo o corregirlo arriba.</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Cantidad guardada ese día (galones; los aceites se muestran en onzas aparte). ✕ = no tiene ningún consumo cargado todavía (un "Viaje" sin combustible cargado tampoco cuenta como cantidad). Hacé clic en el día para ir a revisarlo o corregirlo arriba.</div>
     <div style="margin-bottom:10px;">
       <input type="month" value="${escapeHtml(mesISO)}" onchange="bitacorasMesRevision=this.value; cargarSeccionBitacorasGuardadas('${deptoActivo}');">
     </div>
@@ -19155,50 +19195,278 @@ function renderSeccionBitacorasGuardadas(mesISO, diasPorTipo, deptoActivo){
     </div>`;
 }
 
-// "Bitácoras guardadas" pide TODO el historial de cuatro prefijos (sin
-// límite de fecha) — con suficientes meses de uso, eso es la misma clase de
-// consulta pesada que hacía que Horarios tardara una eternidad para
-// jefatura (ver filtrarFilasPorEquipo en rutas-datos.js). En vez de cargarla
-// de una vez con el resto del panel (bloqueando toda la pantalla de
-// Bitácoras mientras tanto), queda detrás de un botón: el resto del módulo
-// aparece de inmediato, y esto se trae aparte, solo si alguien lo pide.
+// "Bitácoras guardadas" solo necesita el mes elegido en pantalla — a
+// diferencia de antes (que pedía el histórico completo de claves, sin
+// valores, solo para un ✓/✕), ahora hace falta el VALOR de cada registro
+// para sumar cantidades reales, así que primero se acotan las claves al mes
+// (listarTodasLasClavesBitacora sigue siendo la consulta barata) y solo
+// esas se piden completas (ver clavesYValoresDelMesBitacora) — nunca se baja
+// el histórico completo de valores, que con meses de uso sí sería la misma
+// clase de consulta pesada que hacía que Horarios tardara una eternidad
+// para jefatura (ver filtrarFilasPorEquipo en rutas-datos.js). Queda detrás
+// de un botón (no entra con el resto del panel) por la misma razón de
+// siempre: el resto del módulo aparece de inmediato.
 async function cargarSeccionBitacorasGuardadas(deptoActivo){
   const cont = document.getElementById("bitacoras-guardadas-contenedor");
   if (!cont) return;
   cont.innerHTML = `<div class="empty-state">Cargando…</div>`;
   try{
     if (!bitacorasMesRevision) bitacorasMesRevision = bitacorasFechaActiva.slice(0, 7);
-    const [botes, maquinas, clavesIngreso, clavesDiaria, clavesRebote, clavesMaquinaria] = await Promise.all([
-      listarBotes(),
-      listarMaquinas(),
-      listarTodasLasClavesBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX),
-      listarTodasLasClavesBitacora(BITACORA_BOTE_PREFIX),
-      listarTodasLasClavesBitacora(BITACORA_REBOTE_PREFIX),
-      listarTodasLasClavesBitacora(BITACORA_MAQUINARIA_PREFIX),
+    const mesISO = bitacorasMesRevision;
+    const [botes, maquinas] = await Promise.all([listarBotes(), listarMaquinas()]);
+    const botesVisibles = botes.filter(b => b.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const maquinasVisibles = maquinas.filter(m => m.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const botesPorKey = {}; botesVisibles.forEach(b => { botesPorKey[b.key] = b; });
+    const maquinasPorKey = {}; maquinasVisibles.forEach(m => { maquinasPorKey[m.key] = m; });
+
+    const [registrosIngreso, registrosDiaria, registrosRebote, registrosMaquinaria, registrosMaquinariaOtros] = await Promise.all([
+      clavesYValoresDelMesBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX, mesISO, resto => resto === deptoActivo),
+      clavesYValoresDelMesBitacora(BITACORA_BOTE_PREFIX, mesISO, resto => botesPorKey[resto]),
+      clavesYValoresDelMesBitacora(BITACORA_REBOTE_PREFIX, mesISO, resto => botesPorKey[resto]),
+      clavesYValoresDelMesBitacora(BITACORA_MAQUINARIA_PREFIX, mesISO, resto => maquinasPorKey[resto]),
+      clavesYValoresDelMesBitacora(BITACORA_MAQUINARIA_OTROS_PREFIX, mesISO, resto => resto === deptoActivo),
     ]);
-    const botesVisiblesKeys = new Set(botes.filter(b => b.DEPARTAMENTO_MINISTERIO === deptoActivo).map(b => b.key));
-    const maquinasVisiblesKeys = new Set(maquinas.filter(m => m.DEPARTAMENTO_MINISTERIO === deptoActivo).map(m => m.key));
-    const diasPorTipo = { ingreso: new Set(), diaria: new Set(), rebote: new Set(), maquinaria: new Set() };
-    clavesIngreso.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_INGRESO_COMBUSTIBLE_PREFIX, clave);
-      if (resto === deptoActivo) diasPorTipo.ingreso.add(fecha);
+
+    // Ingreso y Maquinaria: dos días distintos pueden tener registros propios
+    // (Maquinaria además puede tener varias máquinas el mismo día) — se suman
+    // todos los que caigan en la misma fecha.
+    const acumularDual = (mapa, fecha, parcial) => {
+      if (!parcial) return;
+      const actual = mapa[fecha];
+      mapa[fecha] = actual ? { galones: actual.galones + parcial.galones, onzas: actual.onzas + parcial.onzas } : parcial;
+    };
+    const porDiaIngreso = {}, porDiaMaquinaria = {};
+    registrosIngreso.forEach(r => acumularDual(porDiaIngreso, r.fecha, sumaGalonesYOnzasBitacora(r)));
+    registrosMaquinaria.forEach(r => acumularDual(porDiaMaquinaria, r.fecha, sumaGalonesYOnzasBitacora(r)));
+    registrosMaquinariaOtros.forEach(r => {
+      (Array.isArray(r.ITEMS) ? r.ITEMS : []).forEach(item => acumularDual(porDiaMaquinaria, r.fecha, sumaGalonesYOnzasBitacora(item)));
     });
-    clavesDiaria.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_BOTE_PREFIX, clave);
-      if (botesVisiblesKeys.has(resto)) diasPorTipo.diaria.add(fecha);
+
+    // Botes/Rebotes: GAST (ENT − DEV) de cada ruta tocada, sumado por día —
+    // puede haber varios botes el mismo día.
+    const agruparGastoPorDia = (registros) => {
+      const mapa = {};
+      registros.forEach(r => {
+        Object.values(r.RUTAS || {}).forEach(fila => {
+          const g = calcularGastoBitacora(fila.ENT, fila.DEV);
+          if (g === null) return;
+          mapa[r.fecha] = Math.round(((mapa[r.fecha] || 0) + g) * 100) / 100;
+        });
+      });
+      return mapa;
+    };
+    const porDiaDiariaGast = agruparGastoPorDia(registrosDiaria);
+    const porDiaReboteGast = agruparGastoPorDia(registrosRebote);
+
+    const cantidadesPorTipo = { ingreso: {}, diaria: {}, rebote: {}, maquinaria: {} };
+    diasDelMes(mesISO).forEach(fecha => {
+      cantidadesPorTipo.ingreso[fecha] = fmtCantidadBitacoraDual(porDiaIngreso[fecha]);
+      cantidadesPorTipo.diaria[fecha] = fmtCantidadBitacoraSimple(porDiaDiariaGast[fecha]);
+      cantidadesPorTipo.rebote[fecha] = fmtCantidadBitacoraSimple(porDiaReboteGast[fecha]);
+      cantidadesPorTipo.maquinaria[fecha] = fmtCantidadBitacoraDual(porDiaMaquinaria[fecha]);
     });
-    clavesRebote.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_REBOTE_PREFIX, clave);
-      if (botesVisiblesKeys.has(resto)) diasPorTipo.rebote.add(fecha);
-    });
-    clavesMaquinaria.forEach(clave => {
-      const { fecha, resto } = fechaYRestoDeClaveBitacora(BITACORA_MAQUINARIA_PREFIX, clave);
-      if (maquinasVisiblesKeys.has(resto)) diasPorTipo.maquinaria.add(fecha);
-    });
-    cont.innerHTML = renderSeccionBitacorasGuardadas(bitacorasMesRevision, diasPorTipo, deptoActivo);
+
+    // Consumo mensual (totales por bote/máquina, para enviar a reportes) —
+    // pedido explícito del usuario (ver calcularConsumoMensualBitacoras).
+    const consumoMensual = await calcularConsumoMensualBitacoras(mesISO, deptoActivo, botesVisibles, maquinasVisibles);
+    cont.innerHTML = renderSeccionBitacorasGuardadas(mesISO, cantidadesPorTipo, deptoActivo)
+      + renderSeccionConsumoMensualBitacoras(mesISO, consumoMensual);
   }catch(e){
     cont.innerHTML = `<div class="empty-state">No se pudo cargar: ${escapeHtml(e.message || "")}</div>`;
   }
+}
+
+// ==========================================================================
+// "⛽ Consumo mensual de hidrocarburos" — pedido explícito del usuario:
+// "Bitácoras guardadas" solo decía qué días tienen algo guardado (✓/✕), sin
+// cantidades. Esto suma lo ya cargado en Botes/Rebotes/Maquinaria durante el
+// mes elegido arriba, por bote/máquina, y lo deja listo para exportar a
+// Excel — mismo mes y departamento que el resto de la sección, sin un
+// selector aparte.
+// ==========================================================================
+
+// Trae SOLO las claves del mes elegido (listarTodasLasClavesBitacora ya trae
+// todo el historial gratis, sin valores) y recién ahí pide el valor completo
+// de esas — nunca el histórico completo, igual de acotado que el resto de
+// "Bitácoras guardadas".
+async function clavesYValoresDelMesBitacora(prefix, mesISO, filtroResto){
+  const claves = await listarTodasLasClavesBitacora(prefix);
+  const delMes = [];
+  claves.forEach(clave => {
+    const { fecha, resto } = fechaYRestoDeClaveBitacora(prefix, clave);
+    if (fecha.startsWith(mesISO) && (!filtroResto || filtroResto(resto))) delMes.push({ clave, fecha, resto });
+  });
+  const valores = await Promise.all(delMes.map(async ({ clave, fecha, resto }) => {
+    try{
+      const r = await window.storage.get(clave, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      return v ? { fecha, resto, ...v } : null;
+    }catch(e){ return null; }
+  }));
+  return valores.filter(Boolean);
+}
+
+async function calcularConsumoMensualBitacoras(mesISO, deptoActivo, botesVisibles, maquinasVisibles){
+  const botesPorKey = {}; botesVisibles.forEach(b => { botesPorKey[b.key] = b; });
+  const maquinasPorKey = {}; maquinasVisibles.forEach(m => { maquinasPorKey[m.key] = m; });
+
+  const [registrosDiaria, registrosRebote, registrosMaquinaria, registrosMaquinariaOtros] = await Promise.all([
+    clavesYValoresDelMesBitacora(BITACORA_BOTE_PREFIX, mesISO, resto => botesPorKey[resto]),
+    clavesYValoresDelMesBitacora(BITACORA_REBOTE_PREFIX, mesISO, resto => botesPorKey[resto]),
+    clavesYValoresDelMesBitacora(BITACORA_MAQUINARIA_PREFIX, mesISO, resto => maquinasPorKey[resto]),
+    clavesYValoresDelMesBitacora(BITACORA_MAQUINARIA_OTROS_PREFIX, mesISO, resto => resto === deptoActivo),
+  ]);
+
+  // Botes — suma el GAST (ENT − DEV) de cada ruta tocada ese día, por bote;
+  // Operación diaria y Rebotes quedan en columnas separadas, igual que los
+  // dos reportes de arriba nunca se mezclan entre sí.
+  const porBote = {};
+  const sumarBote = (registros, campo) => {
+    registros.forEach(r => {
+      if (!porBote[r.resto]){
+        const bote = botesPorKey[r.resto];
+        porBote[r.resto] = { nombre: (bote && bote.NOMBRE) || r.resto, diaria: 0, rebote: 0 };
+      }
+      Object.values(r.RUTAS || {}).forEach(fila => {
+        const gasto = calcularGastoBitacora(fila.ENT, fila.DEV);
+        if (gasto !== null) porBote[r.resto][campo] += gasto;
+      });
+    });
+  };
+  sumarBote(registrosDiaria, "diaria");
+  sumarBote(registrosRebote, "rebote");
+
+  // Maquinaria — suma directa de cada producto (ya es "lo consumido ese
+  // día", no ENT/DEV) por máquina del catálogo, más los equipos "Otros"
+  // descritos a mano (sin catálogo), agrupados por nombre tal cual se
+  // escribió — el mismo nombre en días distintos se suma en una sola fila.
+  const porMaquina = {};
+  registrosMaquinaria.forEach(r => {
+    if (!porMaquina[r.resto]){
+      const maq = maquinasPorKey[r.resto];
+      porMaquina[r.resto] = { nombre: (maq && maq.NOMBRE) || r.resto, GAS_REGULAR: 0, DIESEL: 0, ACEITE_MEZCLA: 0, ACEITE_15W40: 0 };
+    }
+    PRODUCTOS_MAQUINARIA_REALES.forEach(([campo]) => { porMaquina[r.resto][campo] += Number(r[campo]) || 0; });
+  });
+  const porMaquinaOtros = {};
+  registrosMaquinariaOtros.forEach(r => {
+    (Array.isArray(r.ITEMS) ? r.ITEMS : []).forEach(item => {
+      const nombre = String(item.NOMBRE || "").trim();
+      if (!nombre) return;
+      const clave = nombre.toLowerCase();
+      if (!porMaquinaOtros[clave]) porMaquinaOtros[clave] = { nombre, GAS_REGULAR: 0, DIESEL: 0, ACEITE_MEZCLA: 0, ACEITE_15W40: 0 };
+      PRODUCTOS_MAQUINARIA_REALES.forEach(([campo]) => { porMaquinaOtros[clave][campo] += Number(item[campo]) || 0; });
+    });
+  });
+
+  return {
+    botes: Object.values(porBote).sort((a,b) => a.nombre.localeCompare(b.nombre, "es")),
+    maquinas: Object.values(porMaquina).concat(Object.values(porMaquinaOtros)).sort((a,b) => a.nombre.localeCompare(b.nombre, "es")),
+  };
+}
+
+function renderSeccionConsumoMensualBitacoras(mesISO, consumo){
+  const fmt = n => (Math.round((n || 0) * 100) / 100).toLocaleString("es-CR", { maximumFractionDigits: 2 });
+  const filasBotes = consumo.botes.length
+    ? consumo.botes.map(b => `<tr>
+        <td style="padding:3px 8px; border:1px solid var(--paper-line);"><b>${escapeHtml(b.nombre)}</b></td>
+        <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${fmt(b.diaria)}</td>
+        <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${fmt(b.rebote)}</td>
+        <td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center; font-weight:700;">${fmt(b.diaria + b.rebote)}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="4" style="padding:6px 8px; border:1px solid var(--paper-line); text-align:center; color:var(--ink-soft);">Sin registros este mes.</td></tr>`;
+
+  const filasMaquinas = consumo.maquinas.length
+    ? consumo.maquinas.map(m => `<tr>
+        <td style="padding:3px 8px; border:1px solid var(--paper-line);"><b>${escapeHtml(m.nombre)}</b></td>
+        ${PRODUCTOS_MAQUINARIA_REALES.map(([campo]) => `<td style="padding:3px 8px; border:1px solid var(--paper-line); text-align:center;">${fmt(m[campo])}</td>`).join("")}
+      </tr>`).join("")
+    : `<tr><td colspan="${1 + PRODUCTOS_MAQUINARIA_REALES.length}" style="padding:6px 8px; border:1px solid var(--paper-line); text-align:center; color:var(--ink-soft);">Sin registros este mes.</td></tr>`;
+
+  return `
+    <div style="font-weight:700; color:var(--navy-deep); margin:16px 0 8px; padding-top:12px; border-top:1px dashed var(--paper-line);">⛽ Consumo mensual de hidrocarburos — ${escapeHtml(mesISO)}</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Suma de lo cargado en Botes, Rebotes y Consumo de Maquinaria durante el mes elegido arriba. Botes en galones de Gas Regular; máquinas en galones (combustibles) u onzas (aceites) según el producto.</div>
+
+    <div style="font-size:12px; font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🛶 Por embarcación (galones de Gas Regular)</div>
+    <div style="overflow-x:auto; margin-bottom:14px;">
+    <table style="border-collapse:collapse; font-size:11px;">
+      <thead><tr>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Bote</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Operación diaria</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Rebotes</th>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line);">Total</th>
+      </tr></thead>
+      <tbody>${filasBotes}</tbody>
+    </table>
+    </div>
+
+    <div style="font-size:12px; font-weight:700; color:var(--navy-deep); margin-bottom:4px;">🔧 Por máquina/equipo</div>
+    <div style="overflow-x:auto; margin-bottom:10px;">
+    <table style="border-collapse:collapse; font-size:11px;">
+      <thead><tr>
+        <th style="padding:4px 8px; border:1px solid var(--paper-line); text-align:left;">Máquina/equipo</th>
+        ${PRODUCTOS_MAQUINARIA_REALES.map(([,label]) => `<th style="padding:4px 8px; border:1px solid var(--paper-line);">${escapeHtml(label)}</th>`).join("")}
+      </tr></thead>
+      <tbody>${filasMaquinas}</tbody>
+    </table>
+    </div>
+    <button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="exportarConsumoMensualBitacoras('${mesISO}')">⬇️ Descargar Excel</button>
+    <div id="bitacoras-consumo-mensual-status" style="font-size:12px; margin-top:6px;"></div>`;
+}
+
+async function exportarConsumoMensualBitacoras(mesISO){
+  const status = document.getElementById("bitacoras-consumo-mensual-status");
+  if (typeof ExcelJS === "undefined"){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo cargar el generador de Excel.</span>`; return; }
+  const deptoActivo = bitacorasDeptoActivoActual;
+  if (!deptoActivo){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí un departamento primero.</span>`; return; }
+  try{
+    const [botes, maquinas] = await Promise.all([listarBotes(), listarMaquinas()]);
+    const botesVisibles = botes.filter(b => b.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const maquinasVisibles = maquinas.filter(m => m.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const consumo = await calcularConsumoMensualBitacoras(mesISO, deptoActivo, botesVisibles, maquinasVisibles);
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+    const wb = new ExcelJS.Workbook();
+
+    const escribirHoja = (nombreHoja, titulo, columnas, filas) => {
+      const ws = wb.addWorksheet(nombreHoja);
+      ws.columns = columnas.map(() => ({ width: 24 }));
+      ws.mergeCells(1,1,1,columnas.length);
+      const t = ws.getCell(1,1); t.value = nombrePropiedad; t.fill={type:"pattern",pattern:"solid",fgColor:{argb:NEGRO}}; t.font={color:{argb:BLANCO},bold:true,size:13}; t.alignment={horizontal:"center"};
+      ws.mergeCells(2,1,2,columnas.length);
+      const st = ws.getCell(2,1); st.value = titulo; st.font={italic:true,size:10}; st.alignment={horizontal:"center"};
+      const hdr = ws.getRow(3);
+      columnas.forEach((c,i) => { const cell = hdr.getCell(i+1); cell.value=c; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRIS_HEADER}}; cell.font={bold:true}; cell.alignment={horizontal:"center"}; cell.border=bordeCelda; });
+      let fila = 4;
+      filas.forEach(valores => {
+        valores.forEach((v,i) => { const cell = ws.getRow(fila).getCell(i+1); cell.value=v; cell.border=bordeCelda; });
+        fila++;
+      });
+    };
+
+    const redondeo = n => Math.round((n||0) * 100) / 100;
+    escribirHoja(
+      "BOTES",
+      `Consumo mensual de combustible por bote — ${deptoActivo} — ${mesISO}`,
+      ["Bote","Operación diaria (gal)","Rebotes (gal)","Total (gal)"],
+      consumo.botes.map(b => [b.nombre, redondeo(b.diaria), redondeo(b.rebote), redondeo(b.diaria + b.rebote)])
+    );
+    escribirHoja(
+      "MAQUINARIA",
+      `Consumo mensual por máquina/equipo — ${deptoActivo} — ${mesISO}`,
+      ["Máquina/equipo", ...PRODUCTOS_MAQUINARIA_REALES.map(([,label]) => label)],
+      consumo.maquinas.map(m => [m.nombre, ...PRODUCTOS_MAQUINARIA_REALES.map(([campo]) => redondeo(m[campo]))])
+    );
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    descargarBlobComoArchivo(blob, `consumo_combustible_${deptoActivo}_${mesISO}.xlsx`);
+    if (status) status.innerHTML = "Descargado.";
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo generar: ${escapeHtml(e.message)}</span>`; }
 }
 
 // Salta directo a un día desde "Bitácoras guardadas" — cambia la fecha madre
