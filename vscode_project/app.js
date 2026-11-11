@@ -10262,12 +10262,9 @@ function detectarColumnasHorasExtra(rows){
   };
 }
 
-// Puesto → MODALIDAD_JORNADA del empleado (con caché por PUESTO_KEY para no
-// repetir la misma consulta por cada empleado de un mismo puesto). Separada
-// de jornadaDiariaDeEmpleado (que ya convierte esto a horas) porque el
-// emparejado de turnos que cruzan medianoche (ver filasDesdeEventosMarcacion)
-// necesita la modalidad en sí ("turno_nocturno"/"turno_mixto"), no las horas.
-async function modalidadJornadaDeEmpleado(empleado, cachePuestos){
+// Puesto del empleado (con caché por PUESTO_KEY para no repetir la misma
+// consulta por cada empleado de un mismo puesto).
+async function puestoDeEmpleado(empleado, cachePuestos){
   if (!empleado || !empleado.PUESTO_KEY) return null;
   if (!(empleado.PUESTO_KEY in cachePuestos)){
     try{
@@ -10275,13 +10272,27 @@ async function modalidadJornadaDeEmpleado(empleado, cachePuestos){
       cachePuestos[empleado.PUESTO_KEY] = r && r.value ? JSON.parse(r.value) : null;
     }catch(e){ cachePuestos[empleado.PUESTO_KEY] = null; }
   }
-  const puesto = cachePuestos[empleado.PUESTO_KEY];
+  return cachePuestos[empleado.PUESTO_KEY];
+}
+
+async function modalidadJornadaDeEmpleado(empleado, cachePuestos){
+  const puesto = await puestoDeEmpleado(empleado, cachePuestos);
   return (puesto && puesto.MODALIDAD_JORNADA) || null;
 }
 
 async function jornadaDiariaDeEmpleado(empleado, cachePuestos){
   const modalidad = await modalidadJornadaDeEmpleado(empleado, cachePuestos);
   return jornadaDiariaDePuesto(modalidad ? { MODALIDAD_JORNADA: modalidad } : null);
+}
+
+// Alcance acotado a pedido: por ahora la jornada automática por horario real
+// (ver jornadaAutomaticaDesdeMinutos) solo aplica a los puestos de
+// seguridad ("Oficial de seguridad" y "Oficial de seguridad supervisor" /
+// "Supervisor de oficial de seguridad") — el resto de los puestos sigue
+// usando la MODALIDAD_JORNADA fija del puesto, exactamente como antes de
+// este cambio, hasta que se confirme ampliarlo a más departamentos.
+function esPuestoDeSeguridad(puesto){
+  return !!(puesto && typeof puesto.PUESTO === "string" && /oficial\s+de\s+seguridad/i.test(puesto.PUESTO));
 }
 
 // Puesto de confianza (Art. 143 CT, ver campo EMPLEADO_CONFIANZA en
@@ -10612,18 +10623,17 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     if (esEmpleadoConfianza(info.EMPLEADO)){ confianzaOmitidos++; continue; }
     // La jornada de referencia (diurna 8h, mixta 7h o nocturna 6h, Art. 136
     // CT) se calcula del horario REAL marcado ese día (ver
-    // jornadaAutomaticaDesdeMinutos) cuando se conoce — así un guarda de
-    // seguridad con turno nocturno queda bien clasificado aunque su ficha no
-    // estuviera identificada de antemano, y alguien con un turno distinto al
-    // fijo de su puesto también queda bien. Solo si no hay ninguna hora de
-    // entrada/salida que clasificar (archivo viejo con un total ya calculado,
-    // sin horario) se usa la MODALIDAD_JORNADA fija del puesto como respaldo
-    // — sin match todavía, esa jornada por defecto deja la fila visible en
-    // "Sin identificar" en vez de perderse.
+    // jornadaAutomaticaDesdeMinutos) SOLO para los puestos de seguridad (ver
+    // esPuestoDeSeguridad) — así un guarda con turno nocturno queda bien
+    // clasificado aunque su ficha no estuviera identificada de antemano. El
+    // resto de los puestos sigue con la MODALIDAD_JORNADA fija del puesto,
+    // igual que antes de este cambio, hasta que se confirme ampliar el
+    // cálculo automático a más departamentos.
+    const puestoInfo = await puestoDeEmpleado(info.EMPLEADO, cachePuestos);
     const totalMinutosClasificados = info.MINUTOS_DIURNOS + info.MINUTOS_NOCTURNOS;
-    const jornada = totalMinutosClasificados > 0
+    const jornada = (esPuestoDeSeguridad(puestoInfo) && totalMinutosClasificados > 0)
       ? jornadaDiariaDePuesto({ MODALIDAD_JORNADA: jornadaAutomaticaDesdeMinutos(info.MINUTOS_DIURNOS, info.MINUTOS_NOCTURNOS) })
-      : await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
+      : jornadaDiariaDePuesto(puestoInfo);
     // Turno con una sola marca (entrada sin salida, o al revés): YA NO se
     // asume la jornada completa del puesto, ni siquiera con el empleado
     // identificado — eso ocultaba que faltó una marca (la fila quedaba con
