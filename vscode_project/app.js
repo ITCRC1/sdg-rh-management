@@ -8715,7 +8715,7 @@ async function generarReporteIncidencias(){
     const filas = [];
     empleados.forEach(e => {
       const ingreso = parsearFechaEmpleado(e.FECHA_INGRESO_EMP);
-      const salida = e.ARCHIVADO ? parsearFechaDDMMYYYY(e.FECHA_ARCHIVADO) : null;
+      const salida = e.ARCHIVADO ? parsearFechaEmpleado(e.FECHA_ARCHIVADO) : null;
       const ingresoEnRango = ingreso && ingreso >= desde && ingreso <= hasta;
       const salidaEnRango = salida && salida >= desde && salida <= hasta;
       if (!ingresoEnRango && !salidaEnRango) return;
@@ -10341,7 +10341,7 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
     const fechasConRegistro = fechasPorEmpleado.get(empKey) || new Set();
     const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
     const salidaStr = (empleado && empleado.ARCHIVADO && empleado.FECHA_ARCHIVADO)
-      ? (parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO) ? isoDeFechaLocal(parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO)) : null)
+      ? (parsearFechaEmpleado(empleado.FECHA_ARCHIVADO) ? isoDeFechaLocal(parsearFechaEmpleado(empleado.FECHA_ARCHIVADO)) : null)
       : null;
     const ingresoStr = ingreso ? isoDeFechaLocal(ingreso) : null;
 
@@ -12260,7 +12260,14 @@ function rangoQuincenaActual(hoy){
 // de 15 esa vez en particular.
 function diasBaseParaEmpleadoEnQuincena(empleado, rango){
   const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
-  const salida = (empleado && empleado.ARCHIVADO) ? parsearFechaDDMMYYYY(empleado.FECHA_ARCHIVADO) : null;
+  // parsearFechaEmpleado (no parsearFechaDDMMYYYY a secas) — igual que
+  // ingreso arriba: FECHA_ARCHIVADO "debería" guardarse siempre DD/MM/AAAA,
+  // pero algunos registros viejos quedaron en ISO (mismo caso ya visto con
+  // FECHA_NACIMIENTO_EMP) y el parser estricto los rechazaba en silencio,
+  // devolviendo null — eso hacía que a alguien archivado a mitad de una
+  // quincena el sistema lo tratara como si NO hubiera salido, pagándole la
+  // quincena completa en vez de prorratearla.
+  const salida = (empleado && empleado.ARCHIVADO) ? parsearFechaEmpleado(empleado.FECHA_ARCHIVADO) : null;
   const inicioEfectivo = (ingreso && ingreso > rango.inicio) ? ingreso : rango.inicio;
   const finEfectivo = (salida && salida < rango.fin) ? salida : rango.fin;
   if (inicioEfectivo > finEfectivo) return null;
@@ -15599,7 +15606,7 @@ async function construirConstanciaLaboral(key, emp, empresaInfo){
   const ingreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
   const fechaIngresoTexto = ingreso ? `${ingreso.getDate()} de ${MESES[ingreso.getMonth()]} de ${ingreso.getFullYear()}` : "";
   const archivado = !!emp.ARCHIVADO;
-  const salida = archivado ? parsearFechaDDMMYYYY(emp.FECHA_ARCHIVADO) : null;
+  const salida = archivado ? parsearFechaEmpleado(emp.FECHA_ARCHIVADO) : null;
   const fechaSalidaTexto = salida ? `${salida.getDate()} de ${MESES[salida.getMonth()]} de ${salida.getFullYear()}` : "";
 
   // La jornada es un dato del PUESTO (MODALIDAD_JORNADA en cat_puesto, ver
