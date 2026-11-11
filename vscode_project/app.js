@@ -8855,6 +8855,26 @@ function fmtFechaEmpleado(str){
 // todavía pendiente de revisión no entra a planilla hasta que jefatura/
 // gerencia lo confirme, a propósito (empuja a resolverlo a tiempo en vez de
 // dejarlo pendiente y que salga corto en el pago).
+// Nota de días libres pendientes para el Excel de planilla — se calcula EN
+// VIVO con calcularSaldoDiasLibres (la misma función que usa el resto del
+// sistema, ej. el perfil del empleado), en vez de leer el número congelado
+// que quedó guardado en DIAS_PENDIENTES_LIQUIDACION al momento de archivar.
+// Ese campo se congela UNA sola vez (ver confirmarArchivarEmpleado) y nunca
+// se vuelve a tocar — así que un empleado archivado ANTES de una corrección
+// a esta fórmula se queda con el número viejo para siempre, aunque se
+// regenere el reporte mil veces. Calculándolo acá cada vez, el reporte
+// siempre refleja la fórmula actual, sin depender de cuándo se archivó.
+function notaDiasLibresPendientes(emp, registros){
+  if (!emp || !emp.ARCHIVADO) return "";
+  const fechaSalida = parsearFechaEmpleado(emp.FECHA_ARCHIVADO);
+  if (!fechaSalida) return "";
+  const diasOtorgadosLibres = registros
+    .filter(r => r.EMPLEADO_KEY === emp.key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
+    .map(r => r.FECHA);
+  const dias = Math.floor(Math.max(0, calcularSaldoDiasLibres(emp, diasOtorgadosLibres, fechaSalida, true)));
+  return dias > 0 ? `${dias} día(s) libre(s) pendientes de pago (liquidación aparte)` : "";
+}
+
 async function generarReporteHorarioPlanilla(){
   const status = document.getElementById("horario-status");
   const mesStr = (document.getElementById("horario-mes") || {}).value;
@@ -9026,9 +9046,7 @@ async function generarReporteHorarioPlanilla(){
         Math.round(horasExtraNormal * 100) / 100,
         Math.round(horasExtraFeriado * 100) / 100,
         ...etiquetasDeduccion.map(l => montoPorEtiquetaDeduccion[l] ? Math.round(montoPorEtiquetaDeduccion[l]) : ""),
-        (f.emp.ARCHIVADO && Number(f.emp.DIAS_PENDIENTES_LIQUIDACION) > 0)
-          ? `${Number(f.emp.DIAS_PENDIENTES_LIQUIDACION)} día(s) libre(s) pendientes de pago (liquidación aparte)`
-          : "",
+        notaDiasLibresPendientes(f.emp, registros),
       ];
       const fila = ws.getRow(filaActual);
       valores.forEach((v, i) => {
