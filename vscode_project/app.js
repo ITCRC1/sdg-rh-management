@@ -9026,6 +9026,10 @@ async function generarReporteHorarioPlanilla(){
         celda.value = v;
         celda.border = bordeCelda;
         celda.alignment = { vertical: "middle", horizontal: i >= 3 ? "center" : "left" };
+        // Empleado ya archivado (salió, aunque le hayan tocado días de esta
+        // quincena antes de irse) — rojo pastel para distinguirlo de un
+        // vistazo de quien sigue activo, sin tener que abrir cada expediente.
+        if (f.emp.ARCHIVADO) celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8D7DA" } };
       });
       filaActual++;
     });
