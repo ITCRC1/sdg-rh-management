@@ -11172,6 +11172,13 @@ function relojHM(minutos){
   return Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0");
 }
 
+// 1.5 → "1:30" — mismo formato de horas reloj que relojHM, pero para valores
+// que ya están guardados en decimal (HORAS_EXTRA) en vez de en minutos.
+function fmtHorasReloj(horasDecimal){
+  const n = Number(horasDecimal);
+  return relojHM(isNaN(n) ? 0 : n * 60);
+}
+
 // Mismas frases, en el mismo orden y unidas igual que Dia.observacion.
 function relojObservacion(d){
   const partes = [];
@@ -12866,7 +12873,7 @@ async function renderHorasExtrasPanel(){
       ? `<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">Esperando aprobación de gerencia</div></div>
-          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
+          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${fmtHorasReloj(horasAprobadasTotal)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='alerta_marcas_nuevas'; renderHorasExtrasPanel();"><div class="ic">⚠️</div><div class="val">${conAlertaMarcasNuevas.length}</div><div class="lbl">Marcas nuevas tras decidir</div></div>
         </div>`
@@ -12874,7 +12881,7 @@ async function renderHorasExtrasPanel(){
           <div class="kpi-card c-warn" style="cursor:pointer;" onclick="horasExtraFiltro='pendiente'; renderHorasExtrasPanel();"><div class="ic">⏳</div><div class="val">${pendientes.length}</div><div class="lbl">Pendientes</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='sinmatch'; renderHorasExtrasPanel();"><div class="ic">❓</div><div class="val">${sinMatch.length}</div><div class="lbl">Sin identificar</div></div>
           <div class="kpi-card c-navy" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada_jefatura'; renderHorasExtrasPanel();"><div class="ic">👔</div><div class="val">${aprobadasJefatura.length}</div><div class="lbl">${puedeEditar ? "Por aprobar (tuyo)" : "Por aprobar (gerencia)"}</div></div>
-          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${horasAprobadasTotal.toFixed(1)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
+          <div class="kpi-card c-gold" style="cursor:pointer;" onclick="horasExtraFiltro='aprobada'; renderHorasExtrasPanel();"><div class="ic">✅</div><div class="val">${fmtHorasReloj(horasAprobadasTotal)}</div><div class="lbl">Horas aprobadas (rango elegido)</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='rechazada'; renderHorasExtrasPanel();"><div class="ic">🚫</div><div class="val">${rechazadas.length}</div><div class="lbl">Rechazadas</div></div>
           <div class="kpi-card c-danger" style="cursor:pointer;" onclick="horasExtraFiltro='alerta_marcas_nuevas'; renderHorasExtrasPanel();"><div class="ic">⚠️</div><div class="val">${conAlertaMarcasNuevas.length}</div><div class="lbl">Marcas nuevas tras decidir</div></div>
         </div>`;
@@ -13050,7 +13057,7 @@ async function renderHorasExtrasPanel(){
       const infoLinea = (r.ESTADO === "pendiente" && r.INCOMPLETO)
         ? `⚠️ Turno sin marcar — solo se registró: <b>${escapeHtml(mostrarFechaHoraCorta(r.MARCA_SUELTA))}</b>`
         : (tipoDia === "laboral"
-          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${r.HORAS_EXTRA} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}${r.AUTOCOMPLETADO_DIA_SALIDA ? ` · ✈️ autocompletado — último día antes de una ausencia aprobada (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")})` : (r.AUTOCOMPLETADO ? ` · 🤖 autocompletado (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")}, se asumió la jornada completa)` : "")}`
+          ? `${puesto ? escapeHtml(puesto) + " · " : ""}${fmtHorasReloj(r.HORAS_EXTRA)} h extra${monto ? " · ≈ ₡" + Math.round(monto).toLocaleString("es-CR") + (nombreFeriado ? " (triple)" : "") : ""}${nombreFeriado ? ` · 🎉 Feriado: ${escapeHtml(nombreFeriado)} (día doble)` : ""}${r.ORIGEN_ARCHIVO ? " · " + escapeHtml(r.ORIGEN_ARCHIVO) : ""}${r.AUTOCOMPLETADO_DIA_SALIDA ? ` · ✈️ autocompletado — último día antes de una ausencia aprobada (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")})` : (r.AUTOCOMPLETADO ? ` · 🤖 autocompletado (solo se marcó ${escapeHtml((r.MARCAS && r.MARCAS[0] && r.MARCAS[0].entrada) || "una hora")}, se asumió la jornada completa)` : "")}`
           : `${etiquetaTipo}${puesto ? " · " + escapeHtml(puesto) : ""}${r.ORIGEN === "permiso_sin_goce" ? " · generado desde la acción de personal" : ""}${r.ORIGEN_ARCHIVO ? ` · reclasificado desde marcación (${escapeHtml(r.ORIGEN_ARCHIVO)})` : ""}`);
       return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">
@@ -13088,7 +13095,7 @@ async function renderHorasExtrasPanel(){
         html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraEmpleadoSeleccionado=null; renderHorasExtrasPanel();">← Volver a la lista</button>`;
         html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
           <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(emp ? nombreCompletoEmpleado(emp) || empKeySel : empKeySel)}</div>
-          <div style="font-size:12px; color:var(--ink-soft);">${diasSel.length} día(s) pendientes · ${diasSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra en total${diasIncompletos.length ? ` · ⚠️ ${diasIncompletos.length} turno(s) sin marcar` : ""}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${diasSel.length} día(s) pendientes · ${fmtHorasReloj(diasSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0))}h extra en total${diasIncompletos.length ? ` · ⚠️ ${diasIncompletos.length} turno(s) sin marcar` : ""}</div>
         </div></div>`;
         if (puedeAprobar && diasCompletos.length > 1){
           const keysJson = escapeHtml(JSON.stringify(keysSel));
@@ -13122,7 +13129,7 @@ async function renderHorasExtrasPanel(){
                 <div class="row1">
                   <div class="info">
                     <div class="name">${escapeHtml(emp ? nombreCompletoEmpleado(emp) || empKey : empKey)}</div>
-                    <div class="meta">${dias.length} día(s) pendientes · ${dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra${incompletos ? ` · ⚠️ ${incompletos} sin marcar` : ""}</div>
+                    <div class="meta">${dias.length} día(s) pendientes · ${fmtHorasReloj(dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0))}h extra${incompletos ? ` · ⚠️ ${incompletos} sin marcar` : ""}</div>
                   </div>
                   <div class="actions"><span class="meta">Ver →</span></div>
                 </div>
@@ -13159,7 +13166,7 @@ async function renderHorasExtrasPanel(){
         html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraGrupoSinMatchSeleccionado=null; renderHorasExtrasPanel();">← Volver a la lista</button>`;
         html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
           <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(datosArchivo)}</div>
-          <div style="font-size:12px; color:var(--ink-soft);">${diasGrupoSel.length} día(s) sin identificar · ${diasGrupoSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra en total</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${diasGrupoSel.length} día(s) sin identificar · ${fmtHorasReloj(diasGrupoSel.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0))}h extra en total</div>
           <button class="btn primary" style="margin-top:8px;" onclick="mostrarModalAsignarHoraExtraGrupo('${grupoSel.replace(/'/g,"\\'")}')">🔗 Identificar — aplica a los ${diasGrupoSel.length} día(s)</button>
         </div></div>`;
         html += diasGrupoSel.map(renderFilaHorasExtra).join("");
@@ -13177,7 +13184,7 @@ async function renderHorasExtrasPanel(){
               <div class="row1">
                 <div class="info">
                   <div class="name">${escapeHtml(nombreMostrar)}</div>
-                  <div class="meta">${dias.length} día(s) sin identificar · ${dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0).toFixed(1)}h extra</div>
+                  <div class="meta">${dias.length} día(s) sin identificar · ${fmtHorasReloj(dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0))}h extra</div>
                 </div>
                 <div class="actions"><span class="meta">Ver →</span></div>
               </div>
@@ -13912,7 +13919,7 @@ async function mostrarModalAsignarHoraExtra(key){
       v.CEDULA ? "cédula " + v.CEDULA : "",
     ].filter(Boolean).join(" — ") || "—";
     body.innerHTML = `
-      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Datos en el archivo: <b>${escapeHtml(datosArchivo)}</b>, ${v.HORAS_EXTRA} h extra el ${fmtFechaSimple(v.FECHA)}.</div>
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Datos en el archivo: <b>${escapeHtml(datosArchivo)}</b>, ${fmtHorasReloj(v.HORAS_EXTRA)} h extra el ${fmtFechaSimple(v.FECHA)}.</div>
       <div class="field">
         <label>Empleado correcto</label>
         <select id="horasextra-asignar-select">
@@ -24703,7 +24710,7 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
         <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
         <div class="kpi-card ${saldoDiasLibres < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoDiasLibres < 0 ? "🔻" : "🗓️"}</div><div class="val">${saldoDiasLibres < 0 ? Math.abs(saldoDiasLibres) : saldoDiasLibres}</div><div class="lbl">${saldoDiasLibres < 0 ? "Día(s) libres en adelanto (a recuperar)" : "Día(s) libres disponibles (mes actual)"}</div></div>
         <div class="kpi-card c-warn"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
-        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (rango elegido)</div></div>
+        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${fmtHorasReloj(resumenHorasExtra.horasAprobadas)}</div><div class="lbl">Horas extra aprobadas (rango elegido)</div></div>
       </div>
 
       ${miHorarioSemanaHtml}
@@ -24812,7 +24819,7 @@ async function renderListaTurnosConductor(){
         <div class="row1">
           <div class="info">
             <div class="name">${fmtFechaSimple(r.FECHA)}</div>
-            <div class="meta">${marcas}${r.HORAS_EXTRA ? ` · ${r.HORAS_EXTRA} h extra` : ""}</div>
+            <div class="meta">${marcas}${r.HORAS_EXTRA ? ` · ${fmtHorasReloj(r.HORAS_EXTRA)} h extra` : ""}</div>
             <div class="meta">${estadoTxt}</div>
           </div>
         </div>
@@ -25009,7 +25016,7 @@ async function renderPerfilEmpleado(){
       <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr); margin-top:10px;">
         <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}" style="cursor:pointer;" onclick="showTab('vacaciones')"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
         <div class="kpi-card c-warn" style="cursor:pointer;" onclick="showTab('horasextras')"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
-        <div class="kpi-card c-navy" style="cursor:pointer;" onclick="showTab('horasextras')"><div class="ic">✅</div><div class="val">${resumenHorasExtra.horasAprobadas.toFixed(1)}</div><div class="lbl">Horas extra aprobadas (histórico)</div></div>
+        <div class="kpi-card c-navy" style="cursor:pointer;" onclick="showTab('horasextras')"><div class="ic">✅</div><div class="val">${fmtHorasReloj(resumenHorasExtra.horasAprobadas)}</div><div class="lbl">Horas extra aprobadas (histórico)</div></div>
       </div>
 
       ${alertas.length ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body">
