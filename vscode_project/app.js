@@ -12255,13 +12255,12 @@ function rangoQuincenaActual(hoy){
 //
 // Vacaciones/días libres pendientes (sin disfrutar) al salir —
 // DIAS_PENDIENTES_LIQUIDACION, un total fijo calculado UNA vez al archivar
-// (ver confirmarArchivarEmpleado) — se pagan TODOS DE UNA SOLA VEZ, como
-// días base "de más", únicamente en la quincena en la que la fecha de
-// salida cae de verdad. A propósito NO se topan en 15 ni se reparten con
-// una quincena siguiente: como el empleado ya no vuelve a trabajar después,
-// no tiene sentido que reaparezca en otro reporte solo para cobrar el
-// resto — se liquida entero aquí, aunque "días laborados" termine pasando
-// de 15 esa vez en particular.
+// (ver confirmarArchivarEmpleado) — ya NO se suma acá como días base "de
+// más": las liquidaciones las arma otro programa aparte, así que sumarlos
+// también en este reporte de planilla duplicaba el pago y confundía los
+// días laborados reales. El campo se sigue calculando y guardando en el
+// empleado al archivar (por si sirve de referencia para esa liquidación
+// externa), simplemente esta función ya no lo usa.
 function diasBaseParaEmpleadoEnQuincena(empleado, rango){
   const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   // parsearFechaEmpleado (no parsearFechaDDMMYYYY a secas) — igual que
@@ -12275,9 +12274,7 @@ function diasBaseParaEmpleadoEnQuincena(empleado, rango){
   const inicioEfectivo = (ingreso && ingreso > rango.inicio) ? ingreso : rango.inicio;
   const finEfectivo = (salida && salida < rango.fin) ? salida : rango.fin;
   if (inicioEfectivo > finEfectivo) return null;
-  const salidaEstaEnEstaQuincena = salida && salida >= rango.inicio && salida <= rango.fin;
-  const diasPendientes = salidaEstaEnEstaQuincena ? (Number(empleado.DIAS_PENDIENTES_LIQUIDACION) || 0) : 0;
-  const activoTodaLaQuincena = inicioEfectivo.getTime() === rango.inicio.getTime() && finEfectivo.getTime() === rango.fin.getTime() && diasPendientes === 0;
+  const activoTodaLaQuincena = inicioEfectivo.getTime() === rango.inicio.getTime() && finEfectivo.getTime() === rango.fin.getTime();
   if (activoTodaLaQuincena) return { inicioEfectivo, finEfectivo, diasBase: DIAS_BASE_QUINCENA };
   let dias = 0;
   const cursor = new Date(inicioEfectivo);
@@ -12285,7 +12282,7 @@ function diasBaseParaEmpleadoEnQuincena(empleado, rango){
     if (cursor.getDate() !== 31) dias++;
     cursor.setDate(cursor.getDate() + 1);
   }
-  return { inicioEfectivo, finEfectivo, diasBase: Math.min(dias, DIAS_BASE_QUINCENA) + diasPendientes };
+  return { inicioEfectivo, finEfectivo, diasBase: Math.min(dias, DIAS_BASE_QUINCENA) };
 }
 
 // Por empleado, dentro de la quincena dada: horas extra aprobadas en todo el
@@ -25984,13 +25981,12 @@ async function confirmarArchivarEmpleado(){
     emp.FECHA_PROCESO_ARCHIVO = fechaArchivoISO;
 
     // Vacaciones y días libres que le quedaban pendientes (sin disfrutar) a
-    // la fecha de salida se liquidan como días base "de más" en la planilla
-    // — sin importar el tipo de salida (a cualquiera se le deben los días ya
-    // acumulados). Se congela el TOTAL acá (nunca cambia después, aunque el
-    // saldo en pantalla siga moviéndose por otros motivos) y
-    // diasBaseParaEmpleadoEnQuincena hace el resto: los cuenta como días
-    // laborados, extendiendo la quincena en que salió (y, si no caben
-    // todos ahí, la siguiente) — ver esa función.
+    // la fecha de salida — sin importar el tipo de salida (a cualquiera se
+    // le deben los días ya acumulados). Se congela el TOTAL acá (nunca
+    // cambia después, aunque el saldo en pantalla siga moviéndose por otros
+    // motivos) solo como referencia para la liquidación, que arma OTRO
+    // programa aparte — diasBaseParaEmpleadoEnQuincena YA NO lo suma a los
+    // días de este reporte de planilla, para no pagarlo dos veces.
     const fechaSalidaDate = new Date(fechaSalidaISO + "T00:00:00");
     let diasPendientesLiquidacion = 0;
     try{
@@ -26033,7 +26029,7 @@ async function confirmarArchivarEmpleado(){
       fecha: emp.FECHA_ARCHIVADO,
       texto: `Archivado — ${tipoSalida}.` + (archivarPendingPdfDataUrl ? ` Carta firmada adjuntada ("${archivarPendingPdfNombre}").` : "") +
         (saldoPrestamosPendientes > 0 ? ` Queda un saldo de préstamo/adelanto pendiente de ${fmtMontoColilla(saldoPrestamosPendientes, emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC")} por descontar de la liquidación.` : "") +
-        (diasPendientesLiquidacion > 0 ? ` ${diasPendientesLiquidacion} día(s) de vacaciones/días libres pendientes se liquidan de una vez, sumados a "Días laborados" en el reporte de planilla de esta quincena.` : "") +
+        (diasPendientesLiquidacion > 0 ? ` Quedan ${diasPendientesLiquidacion} día(s) de vacaciones/días libres pendientes de liquidar (no se suman a "Días laborados" de la planilla — eso lo paga la liquidación aparte).` : "") +
         (fechaArchivoISO !== fechaSalidaISO ? ` (procesado en el sistema el ${fmtFecha(fechaArchivoISO + "T00:00:00")}).` : ""),
     });
     await window.storage.set(fullKey, JSON.stringify(emp), false);
