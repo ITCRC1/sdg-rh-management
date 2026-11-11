@@ -24535,14 +24535,24 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
       const mes = String(r.FECHA).slice(0, 7); // "AAAA-MM"
       (porMes[mes] = porMes[mes] || []).push(r.FECHA);
     });
-  const hoy = new Date();
+  // Para un empleado ARCHIVADO, "hoy" para este cálculo es su fecha real de
+  // salida, no la fecha de hoy de verdad — si no, cada vez que alguien abre
+  // su expediente más adelante (semanas o meses después de que se fue) el
+  // sistema le sigue acreditando cupo de meses que nunca trabajó, e infla el
+  // "pendiente" sin parar. Esto es justo lo que hacía que este número nunca
+  // coincidiera con el de la nota del Excel de planilla (ver
+  // notaDiasLibresPendientes), que sí se detiene en su fecha de salida.
+  const fechaSalidaArchivado = emp.ARCHIVADO ? parsearFechaEmpleado(emp.FECHA_ARCHIVADO) : null;
+  const hoy = fechaSalidaArchivado || new Date();
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
 
   // Selector: 12 meses hacia atrás y 4 hacia adelante, a propósito — para
   // poder ver también lo que ya se otorgó (o falta otorgar) de un mes que
-  // todavía no llega, no solo el historial de lo ya pasado.
+  // todavía no llega, no solo el historial de lo ya pasado. Si ya está
+  // archivado no tiene sentido proyectar meses futuros — nunca va a trabajar
+  // ninguno — así que el tope hacia adelante es su propio mes de salida.
   const opcionesMes = [];
-  for (let delta = -12; delta <= 4; delta++){
+  for (let delta = -12; delta <= (fechaSalidaArchivado ? 0 : 4); delta++){
     const d = new Date(hoy.getFullYear(), hoy.getMonth() + delta, 1);
     const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     opcionesMes.push({ valor, etiqueta: `${MESES[d.getMonth()]} ${d.getFullYear()}`, esActual: delta === 0 });
@@ -24578,7 +24588,11 @@ function renderDiasLibresPorMesEmpleado(confirmados, emp){
     // si se otorgó más de lo acumulado a esa fecha (un adelanto), el saldo
     // queda negativo y se muestra así, no se oculta en un falso "0". Se
     // recupera solo con la acumulación de los meses siguientes.
-    const saldo = calcularSaldoDiasLibres(emp, todasLasFechasOtorgadas, fechaCorte);
+    // prorratearMesDeCorte=true cuando está archivado: su mes de salida debe
+    // prorratearse por el día real en que se fue (igual que
+    // notaDiasLibresPendientes), no acreditarse completo solo por ser "el
+    // mes en curso" — esa regla es para alguien que sigue activo.
+    const saldo = calcularSaldoDiasLibres(emp, todasLasFechasOtorgadas, fechaCorte, !!fechaSalidaArchivado);
     return { mes, etiqueta: `${MESES[mesNum - 1]} ${anio}`, fechasDelMes, saldo };
   });
 
