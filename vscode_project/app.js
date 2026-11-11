@@ -8942,7 +8942,14 @@ async function generarReporteHorarioPlanilla(){
         if (!(clave in etiquetaDisplay)){ etiquetaDisplay[clave] = d.label; etiquetasDeduccion.push(clave); }
       });
     });
-    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)", ...etiquetasDeduccion.map(clave => etiquetaDisplay[clave])];
+    // "Notas" al final: por ahora solo avisa cuántos días de vacaciones/
+    // libres pendientes le quedaron a quien ya salió — esos días YA NO se
+    // suman a "Días laborados" (los paga la liquidación, que arma otro
+    // programa aparte, ver diasBaseParaEmpleadoEnQuincena), pero deben
+    // seguir siendo visibles en algún lado de este reporte para no perder de
+    // vista que existen y hay que pagarlos por otro lado.
+    const COLUMNAS = ["Nombre","N° de empleado","Departamento","Días laborados","Incapacidad","Permiso sin goce","Cita médica","Ausencia injust.","Días libres (mes)","Feriados trabajados (día doble)","Horas extra totales","Horas extra (normal, 1.5x)","Horas extra en feriado (3x)", ...etiquetasDeduccion.map(clave => etiquetaDisplay[clave]), "Notas"];
+    const COL_NOTAS = COLUMNAS.length;
     const NEGRO = "FF000000", BLANCO = "FFFFFFFF", GRIS_HEADER = "FFD9D9D9";
     const bordeFino = { style: "thin", color: { argb: "FF000000" } };
     const bordeCelda = { top: bordeFino, left: bordeFino, bottom: bordeFino, right: bordeFino };
@@ -8950,7 +8957,7 @@ async function generarReporteHorarioPlanilla(){
     const wb = new ExcelJS.Workbook();
     wb.creator = "SDG RH Management";
     const ws = wb.addWorksheet("HORARIOS");
-    ws.columns = COLUMNAS.map(() => ({ width: 20 }));
+    ws.columns = COLUMNAS.map((titulo, i) => ({ width: i + 1 === COL_NOTAS ? 48 : 20 }));
 
     ws.mergeCells(1, 1, 1, COLUMNAS.length);
     const tituloCelda = ws.getCell(1, 1);
@@ -9019,13 +9026,16 @@ async function generarReporteHorarioPlanilla(){
         Math.round(horasExtraNormal * 100) / 100,
         Math.round(horasExtraFeriado * 100) / 100,
         ...etiquetasDeduccion.map(l => montoPorEtiquetaDeduccion[l] ? Math.round(montoPorEtiquetaDeduccion[l]) : ""),
+        (f.emp.ARCHIVADO && Number(f.emp.DIAS_PENDIENTES_LIQUIDACION) > 0)
+          ? `${Number(f.emp.DIAS_PENDIENTES_LIQUIDACION)} día(s) de vacaciones/días libres pendientes de pago (liquidación aparte)`
+          : "",
       ];
       const fila = ws.getRow(filaActual);
       valores.forEach((v, i) => {
         const celda = fila.getCell(i + 1);
         celda.value = v;
         celda.border = bordeCelda;
-        celda.alignment = { vertical: "middle", horizontal: i >= 3 ? "center" : "left" };
+        celda.alignment = { vertical: "middle", horizontal: (i >= 3 && i + 1 !== COL_NOTAS) ? "center" : "left", wrapText: i + 1 === COL_NOTAS };
         // Empleado ya archivado (salió, aunque le hayan tocado días de esta
         // quincena antes de irse) — rojo pastel para distinguirlo de un
         // vistazo de quien sigue activo, sin tener que abrir cada expediente.
