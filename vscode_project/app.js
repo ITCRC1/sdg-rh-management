@@ -11179,6 +11179,16 @@ function fmtHorasReloj(horasDecimal){
   return relojHM(isNaN(n) ? 0 : n * 60);
 }
 
+// Inverso de fmtHorasReloj, para leer lo que la persona escribió en el campo
+// de horas: "1:30" → 1.5. También acepta decimal ("1.5" o "1,5") por si lo
+// escriben así de costumbre — nunca se exigió un formato en ese campo.
+function parseHorasReloj(texto){
+  const s = String(texto == null ? "" : texto).trim();
+  const m = /^(\d+):([0-5]?\d)$/.exec(s);
+  if (m) return Number(m[1]) + Number(m[2]) / 60;
+  return parseFloat(s.replace(",", "."));
+}
+
 // Mismas frases, en el mismo orden y unidas igual que Dia.observacion.
 function relojObservacion(d){
   const partes = [];
@@ -13245,7 +13255,7 @@ async function aprobarHoraExtra(key){
     // quitar la hora extra aprueba directo sin pedir motivo, y no se pierde
     // el cambio solo porque se aprobó en el mismo clic.
     if (Object.prototype.hasOwnProperty.call(horasExtraEdicionesPendientes, key)){
-      const horasEditadas = parseFloat(String(horasExtraEdicionesPendientes[key]).replace(",", "."));
+      const horasEditadas = parseHorasReloj(horasExtraEdicionesPendientes[key]);
       if (!isNaN(horasEditadas) && horasEditadas >= 0) v.HORAS_EXTRA = Math.round(horasEditadas * 100) / 100;
       delete horasExtraEdicionesPendientes[key];
     }
@@ -13277,7 +13287,7 @@ async function aprobarHoraExtraFinal(key){
     // perderla solo porque se aprobó en el mismo clic en vez de pasar antes
     // por "Confirmar todo".
     if (Object.prototype.hasOwnProperty.call(horasExtraEdicionesPendientes, key)){
-      const horasEditadas = parseFloat(String(horasExtraEdicionesPendientes[key]).replace(",", "."));
+      const horasEditadas = parseHorasReloj(horasExtraEdicionesPendientes[key]);
       if (!isNaN(horasEditadas) && horasEditadas >= 0) v.HORAS_EXTRA = Math.round(horasEditadas * 100) / 100;
       delete horasExtraEdicionesPendientes[key];
     }
@@ -13429,9 +13439,9 @@ function leerMotivoHorasExtra(key){
 }
 
 function renderInputHorasExtra(r, keyEsc){
-  const valorActual = horasExtraEdicionesPendientes[r.key] !== undefined ? horasExtraEdicionesPendientes[r.key] : r.HORAS_EXTRA;
+  const valorActual = horasExtraEdicionesPendientes[r.key] !== undefined ? horasExtraEdicionesPendientes[r.key] : fmtHorasReloj(r.HORAS_EXTRA);
   return `<span style="display:inline-flex; align-items:center; gap:4px;">
-    <input type="number" step="0.25" min="0" value="${escapeHtml(String(valorActual))}" style="width:58px; padding:3px 5px; border:1px solid #ccc; border-radius:5px; font-size:12px;" oninput="marcarEdicionHorasExtraPendiente('${keyEsc}', this.value)">
+    <input type="text" inputmode="numeric" placeholder="H:MM" value="${escapeHtml(String(valorActual))}" style="width:58px; padding:3px 5px; border:1px solid #ccc; border-radius:5px; font-size:12px; font-variant-numeric:tabular-nums;" oninput="marcarEdicionHorasExtraPendiente('${keyEsc}', this.value)">
     <span class="meta" style="font-size:10.5px;">hrs</span>
   </span>`;
 }
@@ -13457,7 +13467,7 @@ async function guardarEdicionesPendientesHorasExtra(){
   if (!entradas.length) return { ok: 0, invalidas: 0 };
   let ok = 0, invalidas = 0;
   for (const [key, valorTexto] of entradas){
-    const horas = parseFloat(String(valorTexto).replace(",", "."));
+    const horas = parseHorasReloj(valorTexto);
     if (isNaN(horas) || horas < 0){ invalidas++; continue; }
     try{
       const r = await window.storage.get(key, false);
