@@ -14,7 +14,9 @@
       "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\extract_planilla.js\")",
       "PowerShell($f = [System.IO.Path]::Combine\\([System.IO.Path]::GetTempPath\\(\\),'test_planilla.js'\\); node --check $f)",
       "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\test_run_planilla.js\")",
-      "PowerShell(node -e \"const d = new Date\\('2026-10-20T00:00:00'\\); console.log\\(JSON.stringify\\(d.toLocaleDateString\\('es-CR', { day:'2-digit', month:'2-digit', year:'numeric' }\\)\\)\\);\")"
+      "PowerShell(node -e \"const d = new Date\\('2026-10-20T00:00:00'\\); console.log\\(JSON.stringify\\(d.toLocaleDateString\\('es-CR', { day:'2-digit', month:'2-digit', year:'numeric' }\\)\\)\\);\")",
+      "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\extract_diaslibres.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\test_run_diaslibres.js\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\Usuario\\AppData\\Local\\Temp"
