@@ -9822,6 +9822,51 @@ function jornadaDiariaDePuesto(puesto){
   return (info && info.horasDiarias) || JORNADA_DIARIA_POR_DEFECTO;
 }
 
+// Jornada automática por horario real marcado (Art. 136 CT): la noche legal
+// va de 7pm a 5am. Si 3.5h (210min) o más del turno cae en esa ventana, todo
+// el turno se computa como jornada nocturna (6h ordinarias); si cae algo pero
+// menos de 3.5h, es jornada mixta (7h); si no cae nada, diurna (8h). Esto
+// reemplaza depender de la MODALIDAD_JORNADA fija del puesto para calcular el
+// excedente de un turno YA marcado con horas reales — el puesto queda como
+// respaldo solo para cuando no hay horas de entrada/salida que clasificar
+// (ver guardarFilasHorasExtra). Se calcula con los ts "hora de pared como
+// UTC" (ver formatoFechaHoraCortaUTC/isoLocalDesdeTs) para no depender de la
+// zona horaria del navegador.
+const MINUTOS_NOCTURNOS_PARA_JORNADA_NOCTURNA = 210; // 3.5h
+
+function minutosDiurnosYNocturnosEntre(tsIni, tsFin){
+  let diurnos = 0, nocturnos = 0;
+  let cursor = tsIni;
+  while (cursor < tsFin){
+    const d = new Date(cursor);
+    const inicioDiaCivil = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const horaActual = (cursor - inicioDiaCivil) / 3600000;
+    const esNocturno = horaActual >= 19 || horaActual < 5;
+    const siguienteCorteHora = esNocturno ? (horaActual < 5 ? 5 : 24) : 19;
+    const siguienteCorte = inicioDiaCivil + siguienteCorteHora * 3600000;
+    const fin = Math.min(tsFin, siguienteCorte);
+    const minutos = (fin - cursor) / 60000;
+    if (esNocturno) nocturnos += minutos; else diurnos += minutos;
+    cursor = fin;
+  }
+  return { diurnos, nocturnos };
+}
+
+// Mismo cálculo, para cuando solo se tiene la hora del día (sin fecha real) —
+// ej. columnas de entrada/salida de un archivo sin información de cruce de
+// medianoche más allá de la propia duración.
+function minutosDiurnosYNocturnosPorHorarioSinFecha(horaInicioDecimal, duracionHoras){
+  const base = Date.UTC(2000, 0, 1);
+  const tsIni = base + ((horaInicioDecimal % 24 + 24) % 24) * 3600000;
+  return minutosDiurnosYNocturnosEntre(tsIni, tsIni + duracionHoras * 3600000);
+}
+
+function jornadaAutomaticaDesdeMinutos(minutosDiurnos, minutosNocturnos){
+  if (minutosNocturnos <= 0) return "turno_continuo_diurno";
+  if (minutosDiurnos <= 0 || minutosNocturnos >= MINUTOS_NOCTURNOS_PARA_JORNADA_NOCTURNA) return "turno_nocturno";
+  return "turno_mixto";
+}
+
 // Tolerancia de cortesía: el tiempo entre que alguien marca y llega a su
 // puesto (o se retira tras marcar salida) se acumula en el reloj pero no es
 // tiempo efectivo de trabajo. Si el excedente sobre la jornada de ESE día no
@@ -10068,13 +10113,22 @@ async function leerRegistrosMarcacionPDF(file){
 // empareje con exactamente las mismas reglas — mismo corte por fecha civil,
 // mismo tope de 20h por par, mismas filas INCOMPLETO — en vez de una copia
 // que con el tiempo diverja.
-// `jornadaPorCodigo(codigo)`, si se pasa, es una función SÍNCRONA que
-// devuelve la MODALIDAD_JORNADA del empleado dueño de ese código ("turno_
-// nocturno"/"turno_mixto"/"turno_continuo_diurno"/null) — solo la usa el
-// Reloj marcador (relojEnviarAHorasExtras y su envío automático), que ya
-// conoce la ficha de cada persona antes de armar las filas; el importador de
-// PDF de marcas sueltas nunca la pasa, así que su comportamiento no cambia.
-function filasDesdeEventosMarcacion(eventos, jornadaPorCodigo){
+// Se acepta un segundo parámetro por compatibilidad con llamadas anteriores
+// (ya no se usa): antes decidía si un empleado "podía cruzar medianoche"
+// según su MODALIDAD_JORNADA conocida DE ANTEMANO — pero eso dependía de que
+// la ficha ya estuviera bien identificada en el momento exacto de la
+// sincronización, y si no lo estaba (caso real: QUIROS MADRIZ MANUEL JESUS,
+// identificado DESPUÉS en "Sin identificar"), el emparejado por fecha civil
+// mezclaba el DESCANSO entre dos turnos nocturnos seguidos como si fuera un
+// turno de 17-18 horas trabajadas. Ahora la decisión sale de los DATOS
+// mismos, no de un dato externo: se intenta primero el emparejado normal por
+// fecha civil, y si eso deja algún turno sospechosamente largo (más de
+// UMBRAL_TURNO_SOSPECHOSO_HORAS), se reintenta con el emparejado cronológico
+// (que no corta por fecha civil) y se usa el que de verdad resuelve el
+// problema — así nunca hace falta saber de antemano si alguien es nocturno.
+const UMBRAL_TURNO_SOSPECHOSO_HORAS = 12;
+
+function filasDesdeEventosMarcacion(eventos){
   if (!eventos.length) return { filas: [], sinPar: 0, turnosSinMarcar: 0 };
 
   const porEmpleado = {};
@@ -10093,72 +10147,77 @@ function filasDesdeEventosMarcacion(eventos, jornadaPorCodigo){
     // par en vez de inventar un turno que no calza.
     if (horas <= 0 || horas > 20){ sinPar += 2; return; }
     const key = codigo + "|" + fecha;
-    if (!porDia[key]) porDia[key] = { codigo, nombre, fecha, horas: 0, marcas: [] };
+    if (!porDia[key]) porDia[key] = { codigo, nombre, fecha, horas: 0, marcas: [], minutosDiurnos: 0, minutosNocturnos: 0 };
     porDia[key].horas += horas;
     porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcaIn.ts), salida: formatoFechaHoraCortaUTC(marcaOut.ts) });
+    const { diurnos, nocturnos } = minutosDiurnosYNocturnosEntre(marcaIn.ts, marcaOut.ts);
+    porDia[key].minutosDiurnos += diurnos;
+    porDia[key].minutosNocturnos += nocturnos;
   };
   const registrarSuelta = (codigo, nombre, fecha, marca) => {
     filasIncompletas.push({ CODIGO: codigo, NOMBRE: nombre, FECHA: fecha, MARCA_SUELTA: isoLocalDesdeTs(marca.ts), INCOMPLETO: true });
     turnosSinMarcar += 1;
   };
 
-  Object.entries(porEmpleado).forEach(([codigo, info]) => {
-    const puedeCruzarMedianoche = typeof jornadaPorCodigo === "function" &&
-      ["turno_nocturno", "turno_mixto"].includes(jornadaPorCodigo(codigo));
-
-    if (puedeCruzarMedianoche){
-      // Turno nocturno/mixto que cruza medianoche (típico de seguridad): en
-      // vez de agrupar por fecha CIVIL y después adivinar cuáles marcas
-      // cruzan medianoche (lo que hacía esto antes), se empareja la
-      // secuencia COMPLETA de marcas de la persona en orden cronológico
-      // (entrada-salida-entrada-salida...), sin importar en qué día
-      // calendario cae cada una. Esto corrige el bug real que motivó este
-      // cambio: con turnos nocturnos SEGUIDOS (ej. dos o más noches
-      // seguidas), el día de en medio siempre trae 2 marcas — la salida de
-      // la noche anterior (~6am) y la entrada de esa noche (~6pm) — y el
-      // agrupado por fecha civil las emparejaba ENTRE SÍ como si fueran un
-      // solo turno de ~12 horas, cuando esas 12 horas son en realidad el
-      // DESCANSO entre dos turnos, no trabajo — de ahí salían las horas
-      // extra disparadas de la nada. Cada turno emparejado así queda
-      // archivado bajo la fecha civil de su marca de ENTRADA (primera del
-      // par), igual que ya hacía la versión anterior para el caso simple.
-      const marcas = info.marcas.slice().sort((a, b) => a.ts - b.ts);
-      let inicio = 0;
-      // Si la PRIMERA marca del archivo es de madrugada (antes del
-      // mediodía), probablemente es la salida de un turno que arrancó ANTES
-      // del rango importado (no tenemos su entrada) — se deja aparte como
-      // suelta en vez de emparejarla con la siguiente marca, que sería la
-      // entrada de un turno nuevo, no la salida del que ya traía a medias.
-      if (new Date(marcas[0].ts).getUTCHours() < 12){
-        registrarSuelta(codigo, info.nombre, marcas[0].fecha, marcas[0]);
-        inicio = 1;
-      }
-      for (let i = inicio; i + 1 < marcas.length; i += 2){
-        registrarPar(codigo, info.nombre, marcas[i].fecha, marcas[i], marcas[i + 1]);
-      }
-      if ((marcas.length - inicio) % 2 === 1){
-        const suelta = marcas[marcas.length - 1];
-        registrarSuelta(codigo, info.nombre, suelta.fecha, suelta);
-      }
-      return;
-    }
-
+  // Agrupado normal: por fecha CIVIL, una marca entra y otra sale el mismo
+  // día. Funciona para cualquier turno que no cruce medianoche (la inmensa
+  // mayoría), y es el más seguro porque un hueco de marca en un día nunca
+  // contamina los demás días de la persona.
+  const paresCiviles = marcas => {
+    const pares = [], sueltas = [];
     const porFecha = {};
-    info.marcas.forEach(ev => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
-    Object.entries(porFecha).forEach(([fecha, marcasDelDiaOriginal]) => {
-      const marcas = marcasDelDiaOriginal.slice().sort((a, b) => a.ts - b.ts);
-      for (let i = 0; i + 1 < marcas.length; i += 2){
-        registrarPar(codigo, info.nombre, fecha, marcas[i], marcas[i + 1]);
-      }
-      if (marcas.length % 2 === 1){
-        registrarSuelta(codigo, info.nombre, fecha, marcas[marcas.length - 1]);
-      }
+    marcas.forEach(ev => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
+    Object.values(porFecha).forEach(marcasDelDiaOriginal => {
+      const dia = marcasDelDiaOriginal.slice().sort((a, b) => a.ts - b.ts);
+      for (let i = 0; i + 1 < dia.length; i += 2) pares.push([dia[i], dia[i + 1]]);
+      if (dia.length % 2 === 1) sueltas.push(dia[dia.length - 1]);
     });
+    return { pares, sueltas };
+  };
+
+  // Turno nocturno/mixto que cruza medianoche (típico de seguridad): en vez
+  // de agrupar por fecha civil y después adivinar cuáles marcas cruzan
+  // medianoche, se empareja la secuencia COMPLETA de marcas de la persona en
+  // orden cronológico (entrada-salida-entrada-salida...), sin importar en qué
+  // día calendario cae cada una. Esto corrige el bug real que motivó este
+  // método: con turnos nocturnos SEGUIDOS (dos o más noches seguidas), el día
+  // de en medio siempre trae 2 marcas — la salida de la noche anterior
+  // (~6am) y la entrada de esa noche (~6pm) — y el agrupado por fecha civil
+  // las empareja ENTRE SÍ como si fueran un solo turno de ~12 horas, cuando
+  // esas 12 horas son en realidad el DESCANSO entre dos turnos, no trabajo.
+  const paresCronologicos = marcas => {
+    const ordenadas = marcas.slice().sort((a, b) => a.ts - b.ts);
+    const pares = [], sueltas = [];
+    let inicio = 0;
+    // Si la PRIMERA marca es de madrugada (antes del mediodía), probablemente
+    // es la salida de un turno que arrancó ANTES del rango importado (no
+    // tenemos su entrada) — se deja aparte como suelta en vez de emparejarla
+    // con la siguiente marca, que sería la entrada de un turno nuevo.
+    if (ordenadas.length && new Date(ordenadas[0].ts).getUTCHours() < 12){
+      sueltas.push(ordenadas[0]);
+      inicio = 1;
+    }
+    for (let i = inicio; i + 1 < ordenadas.length; i += 2) pares.push([ordenadas[i], ordenadas[i + 1]]);
+    if ((ordenadas.length - inicio) % 2 === 1) sueltas.push(ordenadas[ordenadas.length - 1]);
+    return { pares, sueltas };
+  };
+
+  const duracionMaximaHoras = pares => pares.reduce((max, [a, b]) => Math.max(max, (b.ts - a.ts) / 3600000), 0);
+
+  Object.entries(porEmpleado).forEach(([codigo, info]) => {
+    const civil = paresCiviles(info.marcas);
+    let elegido = civil;
+    if (duracionMaximaHoras(civil.pares) > UMBRAL_TURNO_SOSPECHOSO_HORAS){
+      const cronologico = paresCronologicos(info.marcas);
+      if (duracionMaximaHoras(cronologico.pares) < duracionMaximaHoras(civil.pares)) elegido = cronologico;
+    }
+    elegido.pares.forEach(([entrada, salida]) => registrarPar(codigo, info.nombre, entrada.fecha, entrada, salida));
+    elegido.sueltas.forEach(m => registrarSuelta(codigo, info.nombre, m.fecha, m));
   });
 
   const filas = Object.values(porDia)
     .filter(d => d.horas > 0)
-    .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS TRABAJADAS": Math.round(d.horas * 100) / 100, MARCAS: d.marcas }));
+    .map(d => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, "HORAS TRABAJADAS": Math.round(d.horas * 100) / 100, MARCAS: d.marcas, MINUTOS_DIURNOS: d.minutosDiurnos, MINUTOS_NOCTURNOS: d.minutosNocturnos }));
 
   return { filas: filas.concat(filasIncompletas), sinPar, turnosSinMarcar };
 }
@@ -10384,6 +10443,14 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     const esIncompleto = !!row.INCOMPLETO;
     let horasExtraDirecta = 0, horasTrabajadas = 0, horasExtraYaCalculada = false;
     let marcasFila = Array.isArray(row.MARCAS) ? row.MARCAS : null; // ya vienen armadas (PDF de marcación)
+    // Minutos diurnos/nocturnos del turno real (ver minutosDiurnosYNocturnosEntre):
+    // si ya vienen calculados (filas armadas por filasDesdeEventosMarcacion,
+    // reloj marcador o PDF de marcas) se usan tal cual; si la fila trae
+    // entrada/salida en crudo se calculan aquí mismo. Con esto se puede
+    // clasificar la jornada (diurna/mixta/nocturna) por el horario REAL de
+    // cada turno en vez de por la modalidad fija del puesto (ver más abajo).
+    let minutosDiurnosFila = typeof row.MINUTOS_DIURNOS === "number" ? row.MINUTOS_DIURNOS : 0;
+    let minutosNocturnosFila = typeof row.MINUTOS_NOCTURNOS === "number" ? row.MINUTOS_NOCTURNOS : 0;
     // horasExtra y horasTrabajadas ya NO son mutuamente excluyentes: algunos
     // sistemas de marcación (ej. el de Corcovado) entregan ambas columnas a
     // la vez por día — horas_trabajadas para saber si hubo jornada completa
@@ -10400,8 +10467,15 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     } else if (!cols.horasExtra && cols.entrada && cols.salida){
       const entradaRaw = String(row[cols.entrada] ?? "").trim();
       const salidaRaw = String(row[cols.salida] ?? "").trim();
-      horasTrabajadas = parsearHorasDecimal(salidaRaw) - parsearHorasDecimal(entradaRaw);
-      if (horasTrabajadas > 0) marcasFila = [{ entrada: entradaRaw, salida: salidaRaw }];
+      const entradaDec = parsearHorasDecimal(entradaRaw);
+      const salidaDec = parsearHorasDecimal(salidaRaw);
+      horasTrabajadas = salidaDec - entradaDec;
+      if (horasTrabajadas > 0){
+        marcasFila = [{ entrada: entradaRaw, salida: salidaRaw }];
+        const partido = minutosDiurnosYNocturnosPorHorarioSinFecha(entradaDec, horasTrabajadas);
+        minutosDiurnosFila = partido.diurnos;
+        minutosNocturnosFila = partido.nocturnos;
+      }
     }
     // Una fila "turno sin marcar" no trae horas que calcular — igual debe
     // pasar, porque lo que importa es dejar la marca suelta para revisión.
@@ -10472,10 +10546,14 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
         MARCAS: [],
         INCOMPLETO: false,
         MARCA_SUELTA: null,
+        MINUTOS_DIURNOS: 0,
+        MINUTOS_NOCTURNOS: 0,
       };
     }
     acumulado[accKey].HORAS_EXTRA_DIRECTA += horasExtraDirecta;
     acumulado[accKey].HORAS_TRABAJADAS += horasTrabajadas;
+    acumulado[accKey].MINUTOS_DIURNOS += minutosDiurnosFila;
+    acumulado[accKey].MINUTOS_NOCTURNOS += minutosNocturnosFila;
     if (horasExtraYaCalculada) acumulado[accKey].HORAS_EXTRA_YA_CALCULADA = true;
     if (marcasFila) acumulado[accKey].MARCAS.push(...marcasFila);
     if (esIncompleto){
@@ -10532,10 +10610,20 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     // omite del archivo de marcación por completo, aunque su código/nombre
     // sí aparezca en alguna fila (ver esEmpleadoConfianza).
     if (esEmpleadoConfianza(info.EMPLEADO)){ confianzaOmitidos++; continue; }
-    // La jornada de referencia es la del puesto del empleado (turno diurno,
-    // mixto o nocturno) — sin match todavía, se usa la jornada por defecto,
-    // así que esa fila queda visible en "Sin identificar" en vez de perderse.
-    const jornada = await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
+    // La jornada de referencia (diurna 8h, mixta 7h o nocturna 6h, Art. 136
+    // CT) se calcula del horario REAL marcado ese día (ver
+    // jornadaAutomaticaDesdeMinutos) cuando se conoce — así un guarda de
+    // seguridad con turno nocturno queda bien clasificado aunque su ficha no
+    // estuviera identificada de antemano, y alguien con un turno distinto al
+    // fijo de su puesto también queda bien. Solo si no hay ninguna hora de
+    // entrada/salida que clasificar (archivo viejo con un total ya calculado,
+    // sin horario) se usa la MODALIDAD_JORNADA fija del puesto como respaldo
+    // — sin match todavía, esa jornada por defecto deja la fila visible en
+    // "Sin identificar" en vez de perderse.
+    const totalMinutosClasificados = info.MINUTOS_DIURNOS + info.MINUTOS_NOCTURNOS;
+    const jornada = totalMinutosClasificados > 0
+      ? jornadaDiariaDePuesto({ MODALIDAD_JORNADA: jornadaAutomaticaDesdeMinutos(info.MINUTOS_DIURNOS, info.MINUTOS_NOCTURNOS) })
+      : await jornadaDiariaDeEmpleado(info.EMPLEADO, cachePuestos);
     // Turno con una sola marca (entrada sin salida, o al revés): YA NO se
     // asume la jornada completa del puesto, ni siquiera con el empleado
     // identificado — eso ocultaba que faltó una marca (la fila quedaba con
@@ -11831,16 +11919,10 @@ async function relojEnviarAHorasExtras(){
   const btn = document.getElementById("reloj-btn-enviar");
   if (btn){ btn.disabled = true; btn.textContent = "Enviando…"; }
   try{
-    // Modalidad de jornada por persona, para que el emparejado sepa a quién
-    // se le permite cruzar medianoche (ver filasDesdeEventosMarcacion) —
-    // solo a quien ya tiene ficha resuelta en pantalla, igual que el resto
-    // del envío.
-    const cachePuestos = {};
-    const modalidadPorCodigo = {};
-    for (const p of v.personas){
-      modalidadPorCodigo[p.codigo] = p.ficha ? await modalidadJornadaDeEmpleado(p.ficha, cachePuestos) : null;
-    }
-    const { filas, sinPar, turnosSinMarcar } = filasDesdeEventosMarcacion(eventos, codigo => modalidadPorCodigo[codigo] || null);
+    // El emparejado de marcas (incluido si cruza medianoche) ya se decide
+    // solo con las marcas mismas (ver filasDesdeEventosMarcacion) — no hace
+    // falta saber de antemano la modalidad de jornada de cada persona.
+    const { filas, sinPar, turnosSinMarcar } = filasDesdeEventosMarcacion(eventos);
     // Cada fila lleva la ficha que resolvió el reporte, para que Horas extras
     // asigne exactamente a quien ve la persona en pantalla.
     const fichaPorCodigo = {};
@@ -24852,8 +24934,17 @@ async function enviarTurnoConductorExterno(){
   const hoy = isoDeFechaLocal(new Date());
   if (fecha > hoy){ statusMsg("No podés reportar un día que todavía no llega.", false); return; }
 
-  const tsEntrada = new Date(fecha + "T" + horaEntrada + ":00").getTime();
-  let tsSalida = new Date(fecha + "T" + horaSalida + ":00").getTime();
+  // Se arma el ts con Date.UTC (hora de pared como si fuera UTC), igual que
+  // el resto del sistema (ver formatoFechaHoraCortaUTC/isoLocalDesdeTs) — no
+  // con new Date(...).getTime(), que interpreta la hora en la zona horaria
+  // del navegador y desalinearía la clasificación diurna/nocturna automática
+  // (ver minutosDiurnosYNocturnosEntre) si el navegador no está en hora de
+  // Costa Rica.
+  const [anioC, mesC, diaC] = fecha.split("-").map(Number);
+  const [hEntrada, mEntrada] = horaEntrada.split(":").map(Number);
+  const [hSalida, mSalida] = horaSalida.split(":").map(Number);
+  const tsEntrada = Date.UTC(anioC, mesC - 1, diaC, hEntrada, mEntrada);
+  let tsSalida = Date.UTC(anioC, mesC - 1, diaC, hSalida, mSalida);
   if (tsSalida <= tsEntrada) tsSalida += 24 * 3600000; // cruzó medianoche
 
   const nombre = (trabajadorActual && trabajadorActual.nombre) || "";
@@ -24861,7 +24952,7 @@ async function enviarTurnoConductorExterno(){
   const { filas } = filasDesdeEventosMarcacion([
     { codigo, nombre, fecha, ts: tsEntrada },
     { codigo, nombre, fecha, ts: tsSalida },
-  ], () => null);
+  ]);
   if (!filas.length){ statusMsg("Revisá las horas: la salida debe ser después de la entrada, y el turno no puede durar más de 20 horas.", false); return; }
   filas.forEach(f => { f.FICHA_RELOJ = perfilActualKey; });
 
