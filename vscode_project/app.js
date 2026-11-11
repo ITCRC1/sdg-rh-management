@@ -9027,7 +9027,7 @@ async function generarReporteHorarioPlanilla(){
         Math.round(horasExtraFeriado * 100) / 100,
         ...etiquetasDeduccion.map(l => montoPorEtiquetaDeduccion[l] ? Math.round(montoPorEtiquetaDeduccion[l]) : ""),
         (f.emp.ARCHIVADO && Number(f.emp.DIAS_PENDIENTES_LIQUIDACION) > 0)
-          ? `${Number(f.emp.DIAS_PENDIENTES_LIQUIDACION)} día(s) de vacaciones/días libres pendientes de pago (liquidación aparte)`
+          ? `${Number(f.emp.DIAS_PENDIENTES_LIQUIDACION)} día(s) libre(s) pendientes de pago (liquidación aparte)`
           : "",
       ];
       const fila = ws.getRow(filaActual);
@@ -12263,14 +12263,14 @@ function rangoQuincenaActual(hoy){
 // para no pagarle días de una quincena en la que ni siquiera estaba
 // contratado. null si ni un día de la quincena cae dentro de su contrato.
 //
-// Vacaciones/días libres pendientes (sin disfrutar) al salir —
-// DIAS_PENDIENTES_LIQUIDACION, un total fijo calculado UNA vez al archivar
-// (ver confirmarArchivarEmpleado) — ya NO se suma acá como días base "de
+// Días libres pendientes (sin disfrutar) al salir — DIAS_PENDIENTES_LIQUIDACION,
+// un total fijo calculado UNA vez al archivar (ver confirmarArchivarEmpleado,
+// solo días libres, no vacaciones) — ya NO se suma acá como días base "de
 // más": las liquidaciones las arma otro programa aparte, así que sumarlos
 // también en este reporte de planilla duplicaba el pago y confundía los
 // días laborados reales. El campo se sigue calculando y guardando en el
-// empleado al archivar (por si sirve de referencia para esa liquidación
-// externa), simplemente esta función ya no lo usa.
+// empleado al archivar (se muestra como nota en el Excel de planilla, ver
+// generarReporteHorarioPlanilla), simplemente esta función ya no lo usa.
 function diasBaseParaEmpleadoEnQuincena(empleado, rango){
   const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   // parsearFechaEmpleado (no parsearFechaDDMMYYYY a secas) — igual que
@@ -25990,28 +25990,27 @@ async function confirmarArchivarEmpleado(){
     const fechaArchivoISO = (document.getElementById("archivar-fecha-archivo") || {}).value || isoDeHoy();
     emp.FECHA_PROCESO_ARCHIVO = fechaArchivoISO;
 
-    // Vacaciones y días libres que le quedaban pendientes (sin disfrutar) a
-    // la fecha de salida — sin importar el tipo de salida (a cualquiera se
-    // le deben los días ya acumulados). Se congela el TOTAL acá (nunca
+    // Días libres pendientes (sin disfrutar) a la fecha de salida — SOLO
+    // días libres, no vacaciones: las vacaciones casi todo el mundo las trae
+    // con algo acumulado (se van generando solas mes a mes), así que
+    // incluirlas acá hacía que la nota de planilla saliera en casi
+    // cualquier archivado sin decir nada puntual; días libres es el saldo
+    // que de verdad hace falta no perder de vista para la liquidación
+    // aparte (pedido explícito del usuario). Se congela el TOTAL acá (nunca
     // cambia después, aunque el saldo en pantalla siga moviéndose por otros
-    // motivos) solo como referencia para la liquidación, que arma OTRO
-    // programa aparte — diasBaseParaEmpleadoEnQuincena YA NO lo suma a los
-    // días de este reporte de planilla, para no pagarlo dos veces.
+    // motivos) solo como referencia para esa liquidación, que arma OTRO
+    // programa — diasBaseParaEmpleadoEnQuincena no lo suma a los días de
+    // este reporte de planilla, para no pagarlo dos veces.
     const fechaSalidaDate = new Date(fechaSalidaISO + "T00:00:00");
     let diasPendientesLiquidacion = 0;
     try{
-      const [solicitudesTodas, registrosHorasExtraTodos] = await Promise.all([
-        listarSolicitudesAusencia(), listarRegistrosHorasExtra(),
-      ]);
-      const solicitudesVacacionesAprobadas = solicitudesTodas.filter(s => s.EMPLEADO_KEY === key && s.TIPO === "vacaciones" && s.ESTADO === "aprobada");
-      const diasIncapacidadPausan = diasIncapacidadQuePausanVacaciones(registrosHorasExtraTodos, key);
-      const saldoVacaciones = Math.max(0, calcularSaldoVacaciones(emp, solicitudesVacacionesAprobadas, diasIncapacidadPausan, fechaSalidaDate));
+      const registrosHorasExtraTodos = await listarRegistrosHorasExtra();
       const diasOtorgadosLibres = registrosHorasExtraTodos
         .filter(r => r.EMPLEADO_KEY === key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
         .map(r => r.FECHA);
       const saldoDiasLibres = Math.max(0, calcularSaldoDiasLibres(emp, diasOtorgadosLibres, fechaSalidaDate));
-      diasPendientesLiquidacion = Math.floor(saldoVacaciones) + Math.floor(saldoDiasLibres);
-    }catch(e){ /* si falla el cálculo de saldos, se archiva igual sin liquidar días pendientes — se puede ajustar a mano después */ }
+      diasPendientesLiquidacion = Math.floor(saldoDiasLibres);
+    }catch(e){ /* si falla el cálculo del saldo, se archiva igual sin liquidar días pendientes — se puede ajustar a mano después */ }
     emp.DIAS_PENDIENTES_LIQUIDACION = diasPendientesLiquidacion;
 
     if (archivarPendingPdfDataUrl){
@@ -26039,7 +26038,7 @@ async function confirmarArchivarEmpleado(){
       fecha: emp.FECHA_ARCHIVADO,
       texto: `Archivado — ${tipoSalida}.` + (archivarPendingPdfDataUrl ? ` Carta firmada adjuntada ("${archivarPendingPdfNombre}").` : "") +
         (saldoPrestamosPendientes > 0 ? ` Queda un saldo de préstamo/adelanto pendiente de ${fmtMontoColilla(saldoPrestamosPendientes, emp.MONEDA_SALARIO_EMP === "USD" ? "USD" : "CRC")} por descontar de la liquidación.` : "") +
-        (diasPendientesLiquidacion > 0 ? ` Quedan ${diasPendientesLiquidacion} día(s) de vacaciones/días libres pendientes de liquidar (no se suman a "Días laborados" de la planilla — eso lo paga la liquidación aparte).` : "") +
+        (diasPendientesLiquidacion > 0 ? ` Quedan ${diasPendientesLiquidacion} día(s) libre(s) pendientes de liquidar (no se suman a "Días laborados" de la planilla — eso lo paga la liquidación aparte).` : "") +
         (fechaArchivoISO !== fechaSalidaISO ? ` (procesado en el sistema el ${fmtFecha(fechaArchivoISO + "T00:00:00")}).` : ""),
     });
     await window.storage.set(fullKey, JSON.stringify(emp), false);
