@@ -12195,7 +12195,20 @@ function diasLibresMesDeEmpleado(emp){
 // pendiente desde su primer día.
 const INICIO_ACUMULACION_DIAS_LIBRES = new Date(2026, 8, 1); // 1° de setiembre de 2026
 
-function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
+// `prorratearMesDeCorte` (opcional, default false): si se pasa true, el mes
+// en el que cae fechaCorte también se prorratea por día (como ya se hacía
+// con el mes de ingreso) en vez de acreditar el cupo completo. Para el saldo
+// EN VIVO de alguien que sigue activo esto se deja en false a propósito —
+// "el mes en curso acredita completo aunque no haya terminado" es la regla
+// ya establecida para esa pantalla. Pero para una LIQUIDACIÓN (fechaCorte =
+// fecha real de salida) hay que prorratearlo sí o sí: sin esto, alguien que
+// entraba el día 1 y salía el día 10 del mismo mes se llevaba acreditado el
+// cupo del mes ENTERO (el "mes de ingreso" se prorrateaba desde el ingreso
+// hasta fin de mes, no hasta la fecha de salida real) — y si entraba en un
+// mes distinto al de salida, el mes de salida igual se acreditaba completo
+// por ser "el mes en curso". Ver confirmarArchivarEmpleado, el único lugar
+// que debe pasar true.
+function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte, prorratearMesDeCorte){
   let ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
   if (!ingreso || ingreso > fechaCorte) return 0;
   if (ingreso < INICIO_ACUMULACION_DIAS_LIBRES) ingreso = INICIO_ACUMULACION_DIAS_LIBRES;
@@ -12205,16 +12218,20 @@ function calcularSaldoDiasLibres(empleado, diasOtorgados, fechaCorte){
   let acreditado = 0;
   let inicioMes = new Date(ingreso.getFullYear(), ingreso.getMonth(), 1);
   while (inicioMes <= fechaCorte){
+    const finMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 0);
+    const diasEnElMes = finMes.getDate();
     const esMesDeIngreso = inicioMes.getFullYear() === ingreso.getFullYear() && inicioMes.getMonth() === ingreso.getMonth();
-    if (esMesDeIngreso){
-      const finMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 0);
-      const diasEnElMes = finMes.getDate();
-      const diasTrabajadosDelMes = diasEnElMes - ingreso.getDate() + 1;
+    const esMesDeCorte = prorratearMesDeCorte && inicioMes.getFullYear() === fechaCorte.getFullYear() && inicioMes.getMonth() === fechaCorte.getMonth();
+    if (esMesDeIngreso || esMesDeCorte){
+      const diaInicio = esMesDeIngreso ? ingreso.getDate() : 1;
+      const diaFin = esMesDeCorte ? fechaCorte.getDate() : diasEnElMes;
+      const diasTrabajadosDelMes = diaFin - diaInicio + 1;
       acreditado += Math.round(cupoMes * (diasTrabajadosDelMes / diasEnElMes));
     } else {
       // Cualquier otro mes (completo, incluido el mes en curso aunque
-      // todavía no haya terminado) acredita el cupo fijo entero — simple,
-      // sin prorratear día por día.
+      // todavía no haya terminado, cuando no se pide prorratear el de
+      // corte) acredita el cupo fijo entero — simple, sin prorratear día
+      // por día.
       acreditado += cupoMes;
     }
     inicioMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 1);
@@ -26008,7 +26025,7 @@ async function confirmarArchivarEmpleado(){
       const diasOtorgadosLibres = registrosHorasExtraTodos
         .filter(r => r.EMPLEADO_KEY === key && r.ESTADO === "aprobada" && (r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "libre"))
         .map(r => r.FECHA);
-      const saldoDiasLibres = Math.max(0, calcularSaldoDiasLibres(emp, diasOtorgadosLibres, fechaSalidaDate));
+      const saldoDiasLibres = Math.max(0, calcularSaldoDiasLibres(emp, diasOtorgadosLibres, fechaSalidaDate, true));
       diasPendientesLiquidacion = Math.floor(saldoDiasLibres);
     }catch(e){ /* si falla el cálculo del saldo, se archiva igual sin liquidar días pendientes — se puede ajustar a mano después */ }
     emp.DIAS_PENDIENTES_LIQUIDACION = diasPendientesLiquidacion;
