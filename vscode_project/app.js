@@ -5566,6 +5566,45 @@ function parseColillas(text){
       });
     });
   }
+  // Si este proveedor ("Empleado: N Nombre Salario Mensual: monto") no
+  // reconoció nada, puede ser el otro formato conocido ("PlanillaSDG", ver
+  // parseColillasPlanillaSDG) — nunca hay que mezclar los dos lectores en el
+  // mismo archivo, pero sí probar el segundo si el primero no encontró nada.
+  return empleados.length ? empleados : parseColillasPlanillaSDG(text);
+}
+
+// Lector del formato "PlanillaSDG" (proveedor Integrity Planillas) — boleta
+// por boleta, SIN el label "Empleado:" ni "Cédula" (este proveedor no la
+// imprime en la boleta, a diferencia del otro). Cada boleta trae, en este
+// orden: "IQ de <MES> <AÑO> <CRC|USD>", "Del DD/MM/AAAA al DD/MM/AAAA - pago
+// DD/MM/AAAA", las iniciales en su propia línea, el nombre completo, "N° -
+// PUESTO - DEPARTAMENTO (en inglés)" y "Salario ₡monto al mes - Hora ₡monto".
+// NETO A PAGAR (lo que de verdad cobró esa quincena, con horas extra y
+// deducciones ya aplicadas) se captura aparte en netoPeriodo — NUNCA se usa
+// para actualizar el salario base del empleado (eso sigue siendo
+// "Salario ... al mes", el monto fijo mensual, igual que con el otro
+// proveedor) porque fluctúa quincena a quincena; se guarda solo para que no
+// se pierda ese dato real de la boleta por si hace falta más adelante.
+function parseColillasPlanillaSDG(text){
+  const empleados = [];
+  const re = /IQ de [^\n]*?\b(CRC|USD)\b\s*\nDel\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})\s*-\s*pago\s+\d{2}\/\d{2}\/\d{4}\s*\n[A-Z]{1,4}\s*\n([^\n]{1,60}?)\s*\n(\d+)\s*-\s*([^\n]{1,60}?)\s*-\s*([^\n]{1,60}?)\s*\nSalario\s*[₡$]?\s*([\d,]+\.\d+)\s*al mes[^\n]*\n[\s\S]*?NETO A PAGAR\s*\n\s*[₡$]?\s*([\d,]+\.\d+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null){
+    const salario = parseFloat(m[8].replace(/,/g,""));
+    const netoPeriodo = parseFloat(m[9].replace(/,/g,""));
+    empleados.push({
+      numero: m[5],
+      nombre: m[4].trim().replace(/\s+/g," "),
+      salario: isNaN(salario) ? 0 : salario,
+      netoPeriodo: isNaN(netoPeriodo) ? 0 : netoPeriodo,
+      departamento: m[7].trim(),
+      ocupacion: m[6].trim(),
+      cedula: "",
+      periodoInicio: m[2],
+      periodoFin: m[3],
+      moneda: m[1],
+    });
+  }
   return empleados;
 }
 
@@ -6427,7 +6466,7 @@ async function extraerTextoPDF(file){
 // bajo su empleado, con nombre de archivo que diga a qué quincena pertenece.
 function parseColillaConPeriodo(texto){
   const chunks = texto.split(/Empleado:\s*/).slice(1);
-  if (!chunks.length) return null;
+  if (!chunks.length) return parseColillaConPeriodoPlanillaSDG(texto);
   const chunk = chunks[0];
   const m = chunk.match(/^(\d+)\s+([^\n]{1,60}?)\s+Salario Mensual:\s*([\d,]+\.\d+)(?:\s+(\d{2}\/\d{2}\/\d{4})\s+Al\s*:\s*(\d{2}\/\d{2}\/\d{4}))?/s);
   if (!m) return null;
@@ -6439,6 +6478,27 @@ function parseColillaConPeriodo(texto){
     numero, nombre, salario: isNaN(salario) ? 0 : salario,
     periodoInicio: m[4] || "", periodoFin: m[5] || "",
     cedula: cedulaMatch ? cedulaMatch[1].trim() : "",
+  };
+}
+
+// Igual que parseColillasPlanillaSDG, pero para el texto de UNA sola página
+// (una boleta) — reusa exactamente el mismo patrón; alcanza con buscar UN
+// solo match en vez de recorrer todos con /g.
+function parseColillaConPeriodoPlanillaSDG(texto){
+  const re = /IQ de [^\n]*?\b(CRC|USD)\b\s*\nDel\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})\s*-\s*pago\s+\d{2}\/\d{2}\/\d{4}\s*\n[A-Z]{1,4}\s*\n([^\n]{1,60}?)\s*\n(\d+)\s*-\s*([^\n]{1,60}?)\s*-\s*([^\n]{1,60}?)\s*\nSalario\s*[₡$]?\s*([\d,]+\.\d+)\s*al mes[^\n]*\n[\s\S]*?NETO A PAGAR\s*\n\s*[₡$]?\s*([\d,]+\.\d+)/;
+  const m = texto.match(re);
+  if (!m) return null;
+  const salario = parseFloat(m[8].replace(/,/g,""));
+  const netoPeriodo = parseFloat(m[9].replace(/,/g,""));
+  return {
+    numero: m[5],
+    nombre: m[4].trim().replace(/\s+/g," "),
+    salario: isNaN(salario) ? 0 : salario,
+    netoPeriodo: isNaN(netoPeriodo) ? 0 : netoPeriodo,
+    departamento: m[7].trim(),
+    ocupacion: m[6].trim(),
+    periodoInicio: m[2], periodoFin: m[3],
+    cedula: "",
   };
 }
 
