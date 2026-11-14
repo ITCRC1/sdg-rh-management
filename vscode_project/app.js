@@ -5605,11 +5605,21 @@ function limpiarMontoPlanillaSDG(crudo){
 
 function dividirEnBoletasPlanillaSDG(text){
   const normal = normalizarTextoPlanillaSDG(text);
-  // "IQ de <mes> <año> <CRC|USD>" aparece una sola vez por boleta y no se
-  // parte nunca a la mitad (es una sola celda) — mejor punto de corte que
-  // "Boleta de pago", que si queda pegado a la columna de al lado podría no
-  // calzar siempre igual.
-  return normal.split(/(?=IQ de\s+\S+[^\n]{0,20}?\b(?:CRC|USD)\b)/).filter(b => /\bIQ de\b/.test(b));
+  // El texto real que saca la app de este proveedor NO siempre trae "IQ de
+  // ... CRC/USD" ni el período (confirmado con una boleta real pegada por el
+  // usuario que arrancaba directo en las iniciales del avatar) — depender de
+  // ese encabezado dejaba la boleta entera sin reconocer. Lo único que SÍ
+  // aparece siempre al inicio de cada boleta son las iniciales del avatar
+  // solas en su propia línea (ej. "IA"), seguidas del nombre y, más abajo,
+  // "número - puesto - departamento" + "Salario".
+  let bloques = normal
+    .split(/(?=(?:^|\n)[A-ZÁÉÍÓÚÑ]{1,4}\n(?=[\s\S]{0,400}?\n\s*Salario))/)
+    .filter(b => /\bSalario\b/.test(b));
+  // Si ni así se encontró nada (ej. el extractor se comió la línea de
+  // iniciales), probar el texto completo como una sola boleta en vez de
+  // devolver cero — mejor leer una boleta "a medias" que ninguna.
+  if (!bloques.length && /\bSalario\b/.test(normal)) bloques = [normal];
+  return bloques;
 }
 
 function parsearBoletaPlanillaSDG(bloque){
@@ -5618,20 +5628,27 @@ function parsearBoletaPlanillaSDG(bloque){
   // N° de empleado - puesto - departamento, seguido (en algún punto, sin
   // asumir si quedó en la misma línea o no) de "Salario". Un prefijo corto
   // antes del número (ej. las iniciales del avatar, si quedaron pegadas a
-  // esta misma línea) se tolera con [^\n]{0,8}?.
-  const puestoMatch = bloque.match(/\n[^\n]{0,8}?(\d{4,})\s*-\s*([^\n]{2,60}?)\s*-\s*([^\n]{2,60})\s*\n\s*Salario/);
+  // esta misma línea) se tolera con [^\n]{0,8}?. Se acepta también que el
+  // número sea lo primero del bloque (sin "\n" antes), por si no se encontró
+  // la línea de iniciales y se usó el texto completo como única boleta.
+  const puestoMatch = bloque.match(/(?:^|\n)[^\n]{0,8}?(\d{4,})\s*-\s*([^\n]{2,60}?)\s*-\s*([^\n]{2,60})\s*\n\s*Salario/);
   // El monto no exige "₡"/"$"/"," literales (ver normalizarTextoPlanillaSDG) —
   // solo que haya dígitos, algo raro de por medio (el separador de miles) y
   // dos decimales al final.
   const salarioMatch = bloque.match(/Salario[^\d\n]{0,3}(\d[\d\D]{0,15}?\.\d{2})\s*al mes/);
-  if (!puestoMatch || !salarioMatch || !periodoMatch) return null;
+  // El período y la moneda NO son obligatorios para reconocer la boleta (ver
+  // comentario arriba) — si no aparecen, periodoInicio/periodoFin quedan
+  // vacíos y moneda cae a "CRC" por defecto.
+  if (!puestoMatch || !salarioMatch) return null;
 
-  // Nombre: el texto entre el final de la línea de período y el número de
-  // empleado — de ahí se descarta cualquier línea que sea SOLO las iniciales
-  // del avatar (ej. "IA"), y si las iniciales quedaron pegadas a la línea
-  // del nombre (ej. "IA Isidro Orlando..."), se recortan del frente.
-  const desdePeriodo = bloque.slice(bloque.indexOf(periodoMatch[0]) + periodoMatch[0].length);
-  const hastaNumero = desdePeriodo.slice(0, Math.max(0, desdePeriodo.indexOf(puestoMatch[1])));
+  // Nombre: el texto entre el final de la línea de período (o desde el
+  // inicio del bloque si no hay período) y el número de empleado — de ahí se
+  // descarta cualquier línea que sea SOLO las iniciales del avatar (ej.
+  // "IA"), y si las iniciales quedaron pegadas a la línea del nombre (ej.
+  // "IA Isidro Orlando..."), se recortan del frente.
+  const finEncabezado = periodoMatch ? bloque.indexOf(periodoMatch[0]) + periodoMatch[0].length : 0;
+  const desdeEncabezado = bloque.slice(finEncabezado);
+  const hastaNumero = desdeEncabezado.slice(0, Math.max(0, desdeEncabezado.indexOf(puestoMatch[1])));
   const candidatos = hastaNumero.split("\n").map(s => s.trim()).filter(s => s && !/^[A-ZÁÉÍÓÚÑ]{1,4}$/.test(s));
   let nombre = candidatos.length ? candidatos[candidatos.length - 1] : "";
   nombre = nombre.replace(/^[A-ZÁÉÍÓÚÑ]{1,4}\s+(?=[A-ZÁÉÍÓÚÑ][a-záéíóúñ])/, "").replace(/\s+/g, " ").trim();
@@ -5658,8 +5675,8 @@ function parsearBoletaPlanillaSDG(bloque){
     ocupacion: puestoMatch[2].trim(),
     departamento: puestoMatch[3].trim(),
     cedula: "",
-    periodoInicio: periodoMatch[1],
-    periodoFin: periodoMatch[2],
+    periodoInicio: periodoMatch ? periodoMatch[1] : "",
+    periodoFin: periodoMatch ? periodoMatch[2] : "",
     moneda: monedaMatch ? monedaMatch[1] : "CRC",
   };
 }
