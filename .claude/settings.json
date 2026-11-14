@@ -17,7 +17,11 @@
       "PowerShell(node -e \"const d = new Date\\('2026-10-20T00:00:00'\\); console.log\\(JSON.stringify\\(d.toLocaleDateString\\('es-CR', { day:'2-digit', month:'2-digit', year:'numeric' }\\)\\)\\);\")",
       "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\extract_diaslibres.js\")",
       "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\test_run_diaslibres.js\")",
-      "Read(//c/USERS/Usuario/OneDrive/Documentos/GitHub/sdg-rh-management/vscode_project/**)"
+      "Read(//c/USERS/Usuario/OneDrive/Documentos/GitHub/sdg-rh-management/vscode_project/**)",
+      "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\extract_colillas.js\")",
+      "PowerShell($f = [System.IO.Path]::Combine\\([System.IO.Path]::GetTempPath\\(\\),'test_colillas.js'\\); node --check $f)",
+      "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\test_run_colillas.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\Usuario\\\\AppData\\\\Local\\\\Temp\\\\extract_colillas2.js\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\Usuario\\AppData\\Local\\Temp"
