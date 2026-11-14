@@ -5575,37 +5575,104 @@ function parseColillas(text){
 
 // Lector del formato "PlanillaSDG" (proveedor Integrity Planillas) — boleta
 // por boleta, SIN el label "Empleado:" ni "Cédula" (este proveedor no la
-// imprime en la boleta, a diferencia del otro). Cada boleta trae, en este
-// orden: "IQ de <MES> <AÑO> <CRC|USD>", "Del DD/MM/AAAA al DD/MM/AAAA - pago
-// DD/MM/AAAA", las iniciales en su propia línea, el nombre completo, "N° -
-// PUESTO - DEPARTAMENTO (en inglés)" y "Salario ₡monto al mes - Hora ₡monto".
-// NETO A PAGAR (lo que de verdad cobró esa quincena, con horas extra y
-// deducciones ya aplicadas) se captura aparte en netoPeriodo — NUNCA se usa
-// para actualizar el salario base del empleado (eso sigue siendo
-// "Salario ... al mes", el monto fijo mensual, igual que con el otro
-// proveedor) porque fluctúa quincena a quincena; se guarda solo para que no
-// se pierda ese dato real de la boleta por si hace falta más adelante.
-function parseColillasPlanillaSDG(text){
-  const empleados = [];
-  const re = /IQ de [^\n]*?\b(CRC|USD)\b\s*\nDel\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})\s*-\s*pago\s+\d{2}\/\d{2}\/\d{4}\s*\n[A-Z]{1,4}\s*\n([^\n]{1,60}?)\s*\n(\d+)\s*-\s*([^\n]{1,60}?)\s*-\s*([^\n]{1,60}?)\s*\nSalario\s*[₡$]?\s*([\d,]+\.\d+)\s*al mes[^\n]*\n[\s\S]*?NETO A PAGAR\s*\n\s*[₡$]?\s*([\d,]+\.\d+)/g;
-  let m;
-  while ((m = re.exec(text)) !== null){
-    const salario = parseFloat(m[8].replace(/,/g,""));
-    const netoPeriodo = parseFloat(m[9].replace(/,/g,""));
-    empleados.push({
-      numero: m[5],
-      nombre: m[4].trim().replace(/\s+/g," "),
-      salario: isNaN(salario) ? 0 : salario,
-      netoPeriodo: isNaN(netoPeriodo) ? 0 : netoPeriodo,
-      departamento: m[7].trim(),
-      ocupacion: m[6].trim(),
-      cedula: "",
-      periodoInicio: m[2],
-      periodoFin: m[3],
-      moneda: m[1],
-    });
+// imprime en la boleta, a diferencia del otro).
+//
+// El PDF que manda este proveedor tiene una fuente sin tabla ToUnicode real:
+// el texto que cualquier lector saca de él (el de esta app incluido) no son
+// las letras que se ven, sino sus códigos corridos siempre +29 más abajo
+// (confirmado comparando boleta por boleta: "Isidro" sale con cada letra 29
+// posiciones por debajo de la real, igual "DEVENGADO", "Ingresos", etc.) —
+// normalizarTextoPlanillaSDG deshace ese corrimiento ANTES de buscar
+// cualquier palabra clave. El símbolo de colón/dólar y la coma de los miles
+// no siguen ese mismo corrimiento (quedan en otro código que no es ninguna
+// letra), así que los montos se leen tolerando cualquier caracter raro ahí
+// en vez de exigir "₡" o "," literales — limpiarMontoPlanillaSDG se queda
+// solo con los dígitos y arma el monto a partir de eso.
+function normalizarTextoPlanillaSDG(texto){
+  let out = "";
+  for (const ch of texto){
+    const cp = ch.codePointAt(0);
+    out += (cp >= 0xF0000 && cp <= 0xFFFFD) ? String.fromCharCode((cp - 0xF0000) + 29) : ch;
   }
-  return empleados;
+  return out;
+}
+
+function limpiarMontoPlanillaSDG(crudo){
+  const digitos = String(crudo || "").replace(/\D/g, "");
+  if (digitos.length < 3) return NaN;
+  return parseFloat(`${digitos.slice(0, -2)}.${digitos.slice(-2)}`);
+}
+
+function dividirEnBoletasPlanillaSDG(text){
+  const normal = normalizarTextoPlanillaSDG(text);
+  // "IQ de <mes> <año> <CRC|USD>" aparece una sola vez por boleta y no se
+  // parte nunca a la mitad (es una sola celda) — mejor punto de corte que
+  // "Boleta de pago", que si queda pegado a la columna de al lado podría no
+  // calzar siempre igual.
+  return normal.split(/(?=IQ de\s+\S+[^\n]{0,20}?\b(?:CRC|USD)\b)/).filter(b => /\bIQ de\b/.test(b));
+}
+
+function parsearBoletaPlanillaSDG(bloque){
+  const monedaMatch = bloque.match(/IQ de[^\n]*?\b(CRC|USD)\b/);
+  const periodoMatch = bloque.match(/Del\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})/);
+  // N° de empleado - puesto - departamento, seguido (en algún punto, sin
+  // asumir si quedó en la misma línea o no) de "Salario". Un prefijo corto
+  // antes del número (ej. las iniciales del avatar, si quedaron pegadas a
+  // esta misma línea) se tolera con [^\n]{0,8}?.
+  const puestoMatch = bloque.match(/\n[^\n]{0,8}?(\d{4,})\s*-\s*([^\n]{2,60}?)\s*-\s*([^\n]{2,60})\s*\n\s*Salario/);
+  // El monto no exige "₡"/"$"/"," literales (ver normalizarTextoPlanillaSDG) —
+  // solo que haya dígitos, algo raro de por medio (el separador de miles) y
+  // dos decimales al final.
+  const salarioMatch = bloque.match(/Salario[^\d\n]{0,3}(\d[\d\D]{0,15}?\.\d{2})\s*al mes/);
+  if (!puestoMatch || !salarioMatch || !periodoMatch) return null;
+
+  // Nombre: el texto entre el final de la línea de período y el número de
+  // empleado — de ahí se descarta cualquier línea que sea SOLO las iniciales
+  // del avatar (ej. "IA"), y si las iniciales quedaron pegadas a la línea
+  // del nombre (ej. "IA Isidro Orlando..."), se recortan del frente.
+  const desdePeriodo = bloque.slice(bloque.indexOf(periodoMatch[0]) + periodoMatch[0].length);
+  const hastaNumero = desdePeriodo.slice(0, Math.max(0, desdePeriodo.indexOf(puestoMatch[1])));
+  const candidatos = hastaNumero.split("\n").map(s => s.trim()).filter(s => s && !/^[A-ZÁÉÍÓÚÑ]{1,4}$/.test(s));
+  let nombre = candidatos.length ? candidatos[candidatos.length - 1] : "";
+  nombre = nombre.replace(/^[A-ZÁÉÍÓÚÑ]{1,4}\s+(?=[A-ZÁÉÍÓÚÑ][a-záéíóúñ])/, "").replace(/\s+/g, " ").trim();
+
+  const salario = limpiarMontoPlanillaSDG(salarioMatch[1]);
+  // NETO A PAGAR: en vez de buscar ese rótulo seguido de su monto (que puede
+  // no calzar si DEVENGADO/DEDUCCIONES/NETO A PAGAR quedaron en la misma
+  // línea con sus 3 montos en la línea siguiente), se toma el ÚLTIMO monto
+  // que aparece entre "DEVENGADO" e "Ingresos" — ese orden de lectura
+  // (devengado, deducciones, neto) no cambia aunque el PDF junte o separe
+  // esas líneas distinto a lo que se ve en pantalla.
+  let netoPeriodo = 0;
+  const devengadoBloque = bloque.match(/DEVENGADO([\s\S]*?)Ingresos/);
+  if (devengadoBloque){
+    const montos = devengadoBloque[1].match(/\d[\d\D]{0,15}?\.\d{2}/g) || [];
+    if (montos.length) netoPeriodo = limpiarMontoPlanillaSDG(montos[montos.length - 1]);
+  }
+
+  return {
+    numero: puestoMatch[1],
+    nombre,
+    salario: isNaN(salario) ? 0 : salario,
+    netoPeriodo: isNaN(netoPeriodo) ? 0 : netoPeriodo,
+    ocupacion: puestoMatch[2].trim(),
+    departamento: puestoMatch[3].trim(),
+    cedula: "",
+    periodoInicio: periodoMatch[1],
+    periodoFin: periodoMatch[2],
+    moneda: monedaMatch ? monedaMatch[1] : "CRC",
+  };
+}
+
+// NETO A PAGAR nunca se usa para actualizar el salario base del empleado
+// (eso sigue siendo "Salario ... al mes", el monto fijo mensual, igual que
+// con el otro proveedor) porque fluctúa quincena a quincena; se guarda solo
+// para que no se pierda ese dato real de la boleta por si hace falta
+// más adelante.
+function parseColillasPlanillaSDG(text){
+  return dividirEnBoletasPlanillaSDG(text)
+    .map(parsearBoletaPlanillaSDG)
+    .filter(Boolean);
 }
 
 function levenshtein(a, b){
@@ -6485,21 +6552,8 @@ function parseColillaConPeriodo(texto){
 // (una boleta) — reusa exactamente el mismo patrón; alcanza con buscar UN
 // solo match en vez de recorrer todos con /g.
 function parseColillaConPeriodoPlanillaSDG(texto){
-  const re = /IQ de [^\n]*?\b(CRC|USD)\b\s*\nDel\s+(\d{2}\/\d{2}\/\d{4})\s+al\s+(\d{2}\/\d{2}\/\d{4})\s*-\s*pago\s+\d{2}\/\d{2}\/\d{4}\s*\n[A-Z]{1,4}\s*\n([^\n]{1,60}?)\s*\n(\d+)\s*-\s*([^\n]{1,60}?)\s*-\s*([^\n]{1,60}?)\s*\nSalario\s*[₡$]?\s*([\d,]+\.\d+)\s*al mes[^\n]*\n[\s\S]*?NETO A PAGAR\s*\n\s*[₡$]?\s*([\d,]+\.\d+)/;
-  const m = texto.match(re);
-  if (!m) return null;
-  const salario = parseFloat(m[8].replace(/,/g,""));
-  const netoPeriodo = parseFloat(m[9].replace(/,/g,""));
-  return {
-    numero: m[5],
-    nombre: m[4].trim().replace(/\s+/g," "),
-    salario: isNaN(salario) ? 0 : salario,
-    netoPeriodo: isNaN(netoPeriodo) ? 0 : netoPeriodo,
-    departamento: m[7].trim(),
-    ocupacion: m[6].trim(),
-    periodoInicio: m[2], periodoFin: m[3],
-    cedula: "",
-  };
+  const bloques = dividirEnBoletasPlanillaSDG(texto);
+  return bloques.length ? parsearBoletaPlanillaSDG(bloques[0]) : null;
 }
 
 // Identifica una colilla archivada por empleado (cédula, o nombre si no tiene
