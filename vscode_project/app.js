@@ -14027,24 +14027,66 @@ let turnoCompletarTipoMarca = "entrada";
 
 // Repinta los dos campos de hora según turnoCompletarTipoMarca — la marca
 // registrada (guardada en el data-attribute del contenedor) va siempre del
-// lado que corresponda, y el otro campo queda vacío para completarlo.
-// Ambos campos siguen siendo editables a mano después: si hasta la marca
-// registrada estuviera mal (el reloj la tomó con la hora equivocada), se
-// corrige igual que cualquier otro campo.
+// lado que corresponda, con fecha y hora completas (se puede corregir a mano
+// si hasta esa marca estuviera mal). El lado que FALTA ya no pide una fecha
+// de cero (eso era lo confuso — la fecha del día que no marcó ya se conoce
+// casi siempre): solo pide la hora, y un check aparte para los pocos casos
+// en que el turno sí cruza a otro día calendario (típico de jornada nocturna
+// o mixta — ver MODALIDADES_JORNADA), que corre la fecha un día para adelante
+// (si falta la Salida) o un día para atrás (si falta la Entrada). Ese check
+// arranca marcado solo, por defecto, en esas dos modalidades.
 function renderCamposCompletarTurno(){
   const wrap = document.getElementById("turno-completar-campos");
   if (!wrap) return;
   const esEntrada = turnoCompletarTipoMarca === "entrada";
   const marcaRegistrada = wrap.dataset.marcaRegistrada || "";
-  wrap.innerHTML = `
+  const modalidad = wrap.dataset.modalidad || "";
+  const cruceProbable = modalidad === "turno_nocturno" || modalidad === "turno_mixto";
+  wrap.dataset.fechaBase = marcaRegistrada.slice(0, 10);
+
+  const campoConocido = (label, id) => `
     <div class="field">
-      <label>Entrada</label>
-      <input type="datetime-local" id="turno-entrada" value="${esEntrada ? escapeHtml(marcaRegistrada) : ""}">
-    </div>
-    <div class="field">
-      <label>Salida</label>
-      <input type="datetime-local" id="turno-salida" value="${esEntrada ? "" : escapeHtml(marcaRegistrada)}">
+      <label>${label} <span style="font-weight:400; color:var(--ink-soft);">(marca registrada)</span></label>
+      <input type="datetime-local" id="${id}" value="${escapeHtml(marcaRegistrada)}">
     </div>`;
+  const campoFaltante = (label, id) => `
+    <div class="field">
+      <label>${label} <span style="font-weight:400; color:var(--ink-soft);">(falta — completala)</span></label>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="time" id="${id}-hora" oninput="recalcularCampoFaltanteCompletarTurno('${id}')">
+        <label style="display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--ink-soft); font-weight:400;">
+          <input type="checkbox" id="${id}-otro-dia" ${cruceProbable ? "checked" : ""} onchange="recalcularCampoFaltanteCompletarTurno('${id}')"> cruzó a otro día
+        </label>
+        <span id="${id}-fecha-resuelta" style="font-size:11px; color:var(--ink-soft);"></span>
+      </div>
+      <input type="hidden" id="${id}">
+    </div>`;
+
+  wrap.innerHTML = esEntrada
+    ? campoConocido("Entrada", "turno-entrada") + campoFaltante("Salida", "turno-salida")
+    : campoFaltante("Entrada", "turno-entrada") + campoConocido("Salida", "turno-salida");
+}
+
+// Combina la hora suelta + el check "cruzó a otro día" del campo que falta
+// en un valor completo de fecha+hora (el mismo formato que ya espera
+// confirmarCompletarTurno) — la fecha base es el día de la marca SÍ
+// registrada; "Salida" faltante cruza hacia el día SIGUIENTE, "Entrada"
+// faltante cruza hacia el día ANTERIOR (entró la noche antes de que saliera).
+function recalcularCampoFaltanteCompletarTurno(id){
+  const wrap = document.getElementById("turno-completar-campos");
+  const fechaBase = wrap ? wrap.dataset.fechaBase : "";
+  const horaEl = document.getElementById(id + "-hora");
+  const otroDiaEl = document.getElementById(id + "-otro-dia");
+  const resueltoEl = document.getElementById(id + "-fecha-resuelta");
+  const hiddenEl = document.getElementById(id);
+  if (!horaEl || !hiddenEl || !fechaBase) return;
+  if (!horaEl.value){ hiddenEl.value = ""; if (resueltoEl) resueltoEl.textContent = ""; return; }
+  const offset = id === "turno-entrada" ? -1 : 1;
+  const d = new Date(fechaBase + "T00:00:00");
+  if (otroDiaEl && otroDiaEl.checked) d.setDate(d.getDate() + offset);
+  const fechaResuelta = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  hiddenEl.value = `${fechaResuelta}T${horaEl.value}`;
+  if (resueltoEl) resueltoEl.textContent = "→ " + fmtFechaSimple(fechaResuelta);
 }
 
 function cambiarTipoMarcaCompletarTurno(tipo){
@@ -14072,12 +14114,18 @@ async function mostrarModalCompletarTurno(key){
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v){ body.innerHTML = `<div class="empty-state">Ese registro ya no existe.</div>`; return; }
     let nombre = v.NOMBRE_ARCHIVO || v.CEDULA || "";
+    let modalidad = "";
     if (v.EMPLEADO_KEY){
       try{
         const re = await window.storage.get(CATALOGS.empleados.prefix + v.EMPLEADO_KEY, false);
         const emp = re && re.value ? JSON.parse(re.value) : null;
         if (emp && emp.NOMBRE_EMP) nombre = nombreCompletoEmpleado(emp);
-      }catch(e){ /* se queda con el nombre del archivo */ }
+        if (emp && emp.PUESTO_KEY){
+          const rp = await window.storage.get(CATALOGS.puestos.prefix + emp.PUESTO_KEY, false);
+          const puesto = rp && rp.value ? JSON.parse(rp.value) : null;
+          modalidad = (puesto && puesto.MODALIDAD_JORNADA) || "";
+        }
+      }catch(e){ /* se queda con el nombre del archivo, o sin modalidad conocida */ }
     }
     body.innerHTML = `
       <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">
@@ -14090,7 +14138,7 @@ async function mostrarModalCompletarTurno(key){
           <button type="button" id="turno-tipo-salida" onclick="cambiarTipoMarcaCompletarTurno('salida')">🔴 Fue la SALIDA — faltó marcar la entrada</button>
         </div>
       </div>
-      <div id="turno-completar-campos" data-marca-registrada="${escapeHtml(v.MARCA_SUELTA || "")}"></div>
+      <div id="turno-completar-campos" data-marca-registrada="${escapeHtml(v.MARCA_SUELTA || "")}" data-modalidad="${escapeHtml(modalidad)}"></div>
       <div class="field">
         <label>📝 Motivo de las horas extra (solo si el turno completado da horas extra)</label>
         <input type="text" id="turno-motivo" value="${escapeHtml(leerMotivoHorasExtra(key) || v.MOTIVO_HORAS_EXTRA || "")}" placeholder="¿Por qué tuvo horas extra este empleado?">
