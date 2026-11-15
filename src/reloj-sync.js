@@ -177,9 +177,11 @@ function formatoFechaHoraCortaUTC(ts) {
   const d = new Date(ts);
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const h24 = d.getUTCHours();
   const mi = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${dd}/${mm} ${hh}:${mi}`;
+  let h12 = h24 % 12; if (h12 === 0) h12 = 12;
+  const ap = h24 >= 12 ? "PM" : "AM";
+  return `${dd}/${mm} ${h12}:${mi} ${ap}`;
 }
 function isoLocalDesdeTs(ts) {
   const d = new Date(ts);

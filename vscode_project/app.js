@@ -10140,9 +10140,11 @@ function formatoFechaHoraCortaUTC(ts){
   const d = new Date(ts);
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const h24 = d.getUTCHours();
   const mi = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${dd}/${mm} ${hh}:${mi}`;
+  let h12 = h24 % 12; if (h12 === 0) h12 = 12;
+  const ap = h24 >= 12 ? "PM" : "AM";
+  return `${dd}/${mm} ${h12}:${mi} ${ap}`;
 }
 
 // "2026-08-15T20:52" — mismo formato que produce/espera un
@@ -10159,7 +10161,11 @@ function isoLocalDesdeTs(ts){
 }
 function mostrarFechaHoraCorta(isoLocal){
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(isoLocal || ""));
-  return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : String(isoLocal || "");
+  if (!m) return String(isoLocal || "");
+  const h24 = parseInt(m[4], 10);
+  let h12 = h24 % 12; if (h12 === 0) h12 = 12;
+  const ap = h24 >= 12 ? "PM" : "AM";
+  return `${m[3]}/${m[2]} ${h12}:${m[5]} ${ap}`;
 }
 
 // "Zpráva o podrobnostech docházky" ("Reporte de detalles de asistencia")
