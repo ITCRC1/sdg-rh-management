@@ -11700,7 +11700,7 @@ function relojAbrirDia(indicePersona, indiceDia, corregir){
       <input type="hidden" id="reloj-m-persona" value="${escapeHtml(p.codigo)}">
       <input type="hidden" id="reloj-m-fecha" value="${d.fecha}">
       <div class="reloj-fila-2">
-        <div class="field"><label for="reloj-m-hora">Hora</label><input type="time" id="reloj-m-hora"></div>
+        <div class="field"><label for="reloj-m-hora__h">Hora</label>${renderHora12("reloj-m-hora", "")}</div>
         <div class="field"><label for="reloj-m-motivo">Motivo</label>
           <select id="reloj-m-motivo">${RELOJ_MOTIVOS_MANUAL.map(m => `<option>${escapeHtml(m)}</option>`).join("")}</select></div>
       </div>
@@ -11708,7 +11708,7 @@ function relojAbrirDia(indicePersona, indiceDia, corregir){
         <textarea id="reloj-m-detalle" rows="2" placeholder="Qué pasó y quién lo confirma"></textarea></div>
       <button class="btn primary" style="width:100%;" onclick="relojGuardarManual()">Guardar marca</button>` : ""}`;
   document.getElementById("modal-reloj").classList.add("open");
-  if (corregir && puedeEditar) document.getElementById("reloj-m-hora").focus();
+  if (corregir && puedeEditar){ const h = document.getElementById("reloj-m-hora__h"); if (h) h.focus(); }
 }
 
 // ---------- Modal: detalle de marca, anular / restaurar ----------
@@ -11797,7 +11797,7 @@ function relojAbrirManual(indicePersona, fecha){
     </div>
     <div class="reloj-fila-2">
       <div class="field"><label for="reloj-m-fecha">Fecha</label><input type="date" id="reloj-m-fecha" value="${fecha || relojCtx.hasta}"></div>
-      <div class="field"><label for="reloj-m-hora">Hora</label><input type="time" id="reloj-m-hora"></div>
+      <div class="field"><label for="reloj-m-hora__h">Hora</label>${renderHora12("reloj-m-hora", "")}</div>
     </div>
     <div class="field">
       <label for="reloj-m-motivo">Motivo</label>
@@ -11810,7 +11810,7 @@ function relojAbrirManual(indicePersona, fecha){
     <button class="btn primary" style="width:100%;" onclick="relojGuardarManual()">Guardar marca manual</button>
     <p class="reloj-nota">Cuenta igual que una marca del reloj para las horas y al enviar a Horas extras. Queda registrado quién la creó.</p>`;
   document.getElementById("modal-reloj").classList.add("open");
-  document.getElementById(persona ? "reloj-m-hora" : "reloj-m-persona").focus();
+  document.getElementById(persona ? "reloj-m-hora__h" : "reloj-m-persona").focus();
 }
 
 async function relojGuardarManual(){
@@ -14047,13 +14047,13 @@ function renderCamposCompletarTurno(){
   const campoConocido = (label, id) => `
     <div class="field">
       <label>${label} <span style="font-weight:400; color:var(--ink-soft);">(marca registrada)</span></label>
-      <input type="datetime-local" id="${id}" value="${escapeHtml(marcaRegistrada)}">
+      ${renderFechaHora12(id, marcaRegistrada)}
     </div>`;
   const campoFaltante = (label, id) => `
     <div class="field">
       <label>${label} <span style="font-weight:400; color:var(--ink-soft);">(falta — completala)</span></label>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <input type="time" id="${id}-hora" oninput="recalcularCampoFaltanteCompletarTurno('${id}')">
+        ${renderHora12(id + "-hora", "", `recalcularCampoFaltanteCompletarTurno('${id}')`)}
         <label style="display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--ink-soft); font-weight:400;">
           <input type="checkbox" id="${id}-otro-dia" ${cruceProbable ? "checked" : ""} onchange="recalcularCampoFaltanteCompletarTurno('${id}')"> cruzó a otro día
         </label>
@@ -17901,6 +17901,76 @@ function horaCorta12(hhmm){
   return `${h}:${mStr} ${ampm}`;
 }
 
+// Picker de hora en 12h con AM/PM explícito, para reemplazar el
+// <input type="time"> nativo — ese control muestra 24h o 12h según el idioma
+// del sistema operativo de quien lo usa (fuera del control de esta app), que
+// es justo lo que generaba la confusión ("hora militar"). Se arma con 3
+// controles sueltos (hora 1-12, minutos, AM/PM) que se combinan en un campo
+// oculto con el MISMO id que antes tenía el <input type="time">, en el mismo
+// formato "HH:MM" (24h) que ya esperaba el resto del código — así nadie más
+// tiene que cambiar cómo lee ese id con document.getElementById(id).value.
+function hora12DesdeHHMM(hhmm){
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || ""));
+  if (!m) return { h: "", min: "", ap: "AM" };
+  const h24 = parseInt(m[1], 10);
+  let h12 = h24 % 12; if (h12 === 0) h12 = 12;
+  return { h: String(h12), min: m[2], ap: h24 >= 12 ? "PM" : "AM" };
+}
+function hhmmDesdeHora12(h12, min, ap){
+  if (h12 === "" || h12 === null || min === "" || min === null) return "";
+  let h = parseInt(h12, 10) % 12;
+  if (ap === "PM") h += 12;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+// afterOnChange: fragmento de JS (como texto) que se agrega después de
+// actualizar el campo oculto — para cuando quien usa este picker ya tenía su
+// propio oninput en el <input type="time"> original (ej. recalcular otro
+// campo que depende de esta hora).
+function renderHora12(id, valorHHMM, afterOnChange){
+  const v = hora12DesdeHHMM(valorHHMM);
+  const after = afterOnChange ? `; ${afterOnChange}` : "";
+  return `<span style="display:inline-flex; gap:4px; align-items:center;">
+    <input type="number" id="${id}__h" min="1" max="12" placeholder="hh" value="${escapeHtml(v.h)}" style="width:48px;" oninput="actualizarHora12('${id}')${after}">
+    <span>:</span>
+    <input type="number" id="${id}__min" min="0" max="59" placeholder="mm" value="${escapeHtml(v.min)}" style="width:48px;" oninput="actualizarHora12('${id}')${after}">
+    <select id="${id}__ap" style="width:60px;" onchange="actualizarHora12('${id}')${after}">
+      <option value="AM"${v.ap === "AM" ? " selected" : ""}>AM</option>
+      <option value="PM"${v.ap === "PM" ? " selected" : ""}>PM</option>
+    </select>
+    <input type="hidden" id="${id}" value="${escapeHtml(valorHHMM || "")}">
+  </span>`;
+}
+function actualizarHora12(id){
+  const hEl = document.getElementById(id + "__h");
+  const minEl = document.getElementById(id + "__min");
+  const apEl = document.getElementById(id + "__ap");
+  const hiddenEl = document.getElementById(id);
+  if (!hEl || !minEl || !apEl || !hiddenEl) return;
+  const h = hEl.value === "" ? "" : Math.min(12, Math.max(1, parseInt(hEl.value, 10) || 1));
+  const min = minEl.value === "" ? "" : Math.min(59, Math.max(0, parseInt(minEl.value, 10) || 0));
+  hiddenEl.value = hhmmDesdeHora12(h, min, apEl.value);
+}
+
+// Igual que renderHora12, pero combinando además una fecha completa — para
+// reemplazar un <input type="datetime-local">. El campo oculto queda en
+// formato "AAAA-MM-DDTHH:MM", igual al que entregaba el control nativo.
+function renderFechaHora12(id, valorISO){
+  const fecha = String(valorISO || "").slice(0, 10);
+  const hhmm = String(valorISO || "").slice(11, 16);
+  return `<span style="display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap;">
+    <input type="date" id="${id}__fecha" value="${escapeHtml(fecha)}" oninput="actualizarFechaHora12('${id}')">
+    ${renderHora12(id + "__t", hhmm, `actualizarFechaHora12('${id}')`)}
+    <input type="hidden" id="${id}" value="${escapeHtml(valorISO || "")}">
+  </span>`;
+}
+function actualizarFechaHora12(id){
+  const fechaEl = document.getElementById(id + "__fecha");
+  const horaOculta = document.getElementById(id + "__t");
+  const hiddenEl = document.getElementById(id);
+  if (!fechaEl || !horaOculta || !hiddenEl) return;
+  hiddenEl.value = (fechaEl.value && horaOculta.value) ? `${fechaEl.value}T${horaOculta.value}` : "";
+}
+
 // Igual que textoHorarioTurno, pero con las horas en formato de 12h — se usa
 // donde se muestra el turno YA ASIGNADO a alguien (grilla de asignación,
 // "Mi horario"), que es lo que de verdad necesita entender cualquier persona
@@ -17948,24 +18018,24 @@ function renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar,
       </label>
       <div id="horario-nuevo-fijo-wrap" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de inicio
-          <input type="time" id="horario-nuevo-inicio">
+          ${renderHora12("horario-nuevo-inicio", "")}
         </label>
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hora de fin
-          <input type="time" id="horario-nuevo-fin">
+          ${renderHora12("horario-nuevo-fin", "")}
         </label>
       </div>
       <div id="horario-nuevo-quebrado-wrap" style="display:none; gap:8px; flex-wrap:wrap; align-items:flex-end;">
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 1 — entrada
-          <input type="time" id="horario-nuevo-inicio1">
+          ${renderHora12("horario-nuevo-inicio1", "")}
         </label>
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 1 — salida
-          <input type="time" id="horario-nuevo-fin1">
+          ${renderHora12("horario-nuevo-fin1", "")}
         </label>
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 2 — entrada
-          <input type="time" id="horario-nuevo-inicio2">
+          ${renderHora12("horario-nuevo-inicio2", "")}
         </label>
         <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Bloque 2 — salida
-          <input type="time" id="horario-nuevo-fin2">
+          ${renderHora12("horario-nuevo-fin2", "")}
         </label>
       </div>
       ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
@@ -25126,11 +25196,11 @@ async function renderMisHorasConductor(){
         </div>
         <div class="field">
           <label>Hora de entrada</label>
-          <input type="time" id="conductor-entrada">
+          ${renderHora12("conductor-entrada", "")}
         </div>
         <div class="field">
           <label>Hora de salida</label>
-          <input type="time" id="conductor-salida">
+          ${renderHora12("conductor-salida", "")}
         </div>
         <div class="hint">Si tu turno cruza la medianoche, poné la hora de salida igual (ej. 02:00) — el sistema entiende que fue al día siguiente.</div>
         <button class="btn primary" id="conductor-btn-enviar" style="margin-top:6px;" onclick="enviarTurnoConductorExterno()">📨 Enviar turno</button>
