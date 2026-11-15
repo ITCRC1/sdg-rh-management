@@ -54,6 +54,44 @@ const HORAS_POR_MODALIDAD = { turno_continuo_diurno: 8, turno_mixto: 7, turno_no
 const TOLERANCIA_CORTESIA_HORAS = 20 / 60;
 const RELOJ_VENTANA_DUPLICADO_MIN = 5;
 
+// Jornada automática por horario real marcado (Art. 136 CT) — réplica exacta
+// de minutosDiurnosYNocturnosEntre/jornadaAutomaticaDesdeMinutos/
+// esPuestoDeSeguridad en app.js. La noche legal va de 7pm a 5am: si 3.5h
+// (210min) o más del turno cae ahí, todo el turno es jornada nocturna (6h
+// ordinarias); si cae algo pero menos, es mixta (7h); si no cae nada, diurna
+// (8h). Por ahora acotado solo a los puestos de seguridad (ver el comentario
+// de esPuestoDeSeguridad en app.js) — el resto sigue con la
+// MODALIDAD_JORNADA fija del puesto.
+const MINUTOS_NOCTURNOS_PARA_JORNADA_NOCTURNA = 210; // 3.5h
+
+function minutosDiurnosYNocturnosEntre(tsIni, tsFin) {
+  let diurnos = 0, nocturnos = 0;
+  let cursor = tsIni;
+  while (cursor < tsFin) {
+    const d = new Date(cursor);
+    const inicioDiaCivil = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const horaActual = (cursor - inicioDiaCivil) / 3600000;
+    const esNocturno = horaActual >= 19 || horaActual < 5;
+    const siguienteCorteHora = esNocturno ? (horaActual < 5 ? 5 : 24) : 19;
+    const siguienteCorte = inicioDiaCivil + siguienteCorteHora * 3600000;
+    const fin = Math.min(tsFin, siguienteCorte);
+    const minutos = (fin - cursor) / 60000;
+    if (esNocturno) nocturnos += minutos; else diurnos += minutos;
+    cursor = fin;
+  }
+  return { diurnos, nocturnos };
+}
+
+function jornadaAutomaticaDesdeMinutos(minutosDiurnos, minutosNocturnos) {
+  if (minutosNocturnos <= 0) return "turno_continuo_diurno";
+  if (minutosDiurnos <= 0 || minutosNocturnos >= MINUTOS_NOCTURNOS_PARA_JORNADA_NOCTURNA) return "turno_nocturno";
+  return "turno_mixto";
+}
+
+function esPuestoDeSeguridad(puesto) {
+  return !!(puesto && typeof puesto.PUESTO === "string" && /oficial\s+de\s+seguridad/i.test(puesto.PUESTO));
+}
+
 const ACTOR_SISTEMA = { id: null, email: "sistema:reloj-marcador (envío automático)", ip: null };
 
 // Feriados de ley de Costa Rica (Arts. 147-148 CT) — réplica exacta de
@@ -261,10 +299,20 @@ function marcasUsadasPorEmpleado(marcasReloj, anulaciones, manuales, desde, hast
 }
 
 // --------------------------------------------------------------------------
-// Réplica de filasDesdeEventosMarcacion (app.js), incluido el emparejado de
-// turnos nocturnos/mixtos que cruzan medianoche.
+// Réplica de filasDesdeEventosMarcacion (app.js): empareja por fecha civil
+// primero (una marca entra y otra sale el mismo día), y si eso deja algún
+// turno sospechosamente largo (más de UMBRAL_TURNO_SOSPECHOSO_HORAS — típico
+// de un turno nocturno/mixto que cruza medianoche), reintenta con el
+// emparejado cronológico puro (sin cortar por fecha civil) y se queda con el
+// que de verdad resuelve el problema. Ya no depende de conocer de antemano
+// la modalidad de jornada de cada persona (jornadaPorCodigo) — la decisión
+// sale de las marcas mismas. También acumula los minutos diurnos/nocturnos
+// de cada turno (ver minutosDiurnosYNocturnosEntre), que guardarFilas usa
+// para clasificar automáticamente la jornada de los puestos de seguridad.
 // --------------------------------------------------------------------------
-function filasDesdeEventosMarcacion(eventos, jornadaPorCodigo) {
+const UMBRAL_TURNO_SOSPECHOSO_HORAS = 12;
+
+function filasDesdeEventosMarcacion(eventos) {
   if (!eventos.length) return [];
 
   const porEmpleado = {};
@@ -274,50 +322,63 @@ function filasDesdeEventosMarcacion(eventos, jornadaPorCodigo) {
 
   const porDia = {};
   const filasIncompletas = [];
-  Object.entries(porEmpleado).forEach(([codigo, info]) => {
+
+  const registrarPar = (codigo, nombre, fecha, marcaIn, marcaOut) => {
+    const horas = (marcaOut.ts - marcaIn.ts) / 3600000;
+    if (horas <= 0 || horas > 20) return;
+    const key = codigo + "|" + fecha;
+    if (!porDia[key]) porDia[key] = { codigo, nombre, fecha, horas: 0, marcas: [], minutosDiurnos: 0, minutosNocturnos: 0 };
+    porDia[key].horas += horas;
+    porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcaIn.ts), salida: formatoFechaHoraCortaUTC(marcaOut.ts) });
+    const { diurnos, nocturnos } = minutosDiurnosYNocturnosEntre(marcaIn.ts, marcaOut.ts);
+    porDia[key].minutosDiurnos += diurnos;
+    porDia[key].minutosNocturnos += nocturnos;
+  };
+  const registrarSuelta = (codigo, nombre, fecha, marca) => {
+    filasIncompletas.push({ CODIGO: codigo, NOMBRE: nombre, FECHA: fecha, MARCA_SUELTA: isoLocalDesdeTs(marca.ts), INCOMPLETO: true });
+  };
+
+  const paresCiviles = (marcas) => {
+    const pares = [], sueltas = [];
     const porFecha = {};
-    info.marcas.forEach((ev) => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
-
-    const puedeCruzarMedianoche = ["turno_nocturno", "turno_mixto"].includes(jornadaPorCodigo(codigo));
-    const fusionaConMañana = new Set();
-    const fusionadaDesdeAyer = new Set();
-    if (puedeCruzarMedianoche) {
-      Object.keys(porFecha).sort().forEach((fecha) => {
-        if (porFecha[fecha].length !== 1) return;
-        const mañana = relojSumarDias(fecha, 1);
-        const marcasMañana = porFecha[mañana];
-        if (!marcasMañana || marcasMañana.length !== 1) return;
-        const horas = (marcasMañana[0].ts - porFecha[fecha][0].ts) / 3600000;
-        if (horas <= 0 || horas > 20) return;
-        fusionaConMañana.add(fecha);
-        fusionadaDesdeAyer.add(mañana);
-      });
-    }
-
-    Object.entries(porFecha).forEach(([fecha, marcasDelDiaOriginal]) => {
-      if (fusionadaDesdeAyer.has(fecha)) return;
-      const marcasDelDia = fusionaConMañana.has(fecha)
-        ? [marcasDelDiaOriginal[0], porFecha[relojSumarDias(fecha, 1)][0]]
-        : marcasDelDiaOriginal;
-      const marcas = marcasDelDia.slice().sort((a, b) => a.ts - b.ts);
-      for (let i = 0; i + 1 < marcas.length; i += 2) {
-        const horas = (marcas[i + 1].ts - marcas[i].ts) / 3600000;
-        if (horas <= 0 || horas > 20) continue;
-        const key = codigo + "|" + fecha;
-        if (!porDia[key]) porDia[key] = { codigo, nombre: info.nombre, fecha, horas: 0, marcas: [] };
-        porDia[key].horas += horas;
-        porDia[key].marcas.push({ entrada: formatoFechaHoraCortaUTC(marcas[i].ts), salida: formatoFechaHoraCortaUTC(marcas[i + 1].ts) });
-      }
-      if (marcas.length % 2 === 1) {
-        const suelta = marcas[marcas.length - 1];
-        filasIncompletas.push({ CODIGO: codigo, NOMBRE: info.nombre, FECHA: fecha, MARCA_SUELTA: isoLocalDesdeTs(suelta.ts), INCOMPLETO: true });
-      }
+    marcas.forEach((ev) => { (porFecha[ev.fecha] = porFecha[ev.fecha] || []).push(ev); });
+    Object.values(porFecha).forEach((marcasDelDiaOriginal) => {
+      const dia = marcasDelDiaOriginal.slice().sort((a, b) => a.ts - b.ts);
+      for (let i = 0; i + 1 < dia.length; i += 2) pares.push([dia[i], dia[i + 1]]);
+      if (dia.length % 2 === 1) sueltas.push(dia[dia.length - 1]);
     });
+    return { pares, sueltas };
+  };
+
+  const paresCronologicos = (marcas) => {
+    const ordenadas = marcas.slice().sort((a, b) => a.ts - b.ts);
+    const pares = [], sueltas = [];
+    let inicio = 0;
+    if (ordenadas.length && new Date(ordenadas[0].ts).getUTCHours() < 12) {
+      sueltas.push(ordenadas[0]);
+      inicio = 1;
+    }
+    for (let i = inicio; i + 1 < ordenadas.length; i += 2) pares.push([ordenadas[i], ordenadas[i + 1]]);
+    if ((ordenadas.length - inicio) % 2 === 1) sueltas.push(ordenadas[ordenadas.length - 1]);
+    return { pares, sueltas };
+  };
+
+  const duracionMaximaHoras = (pares) => pares.reduce((max, [a, b]) => Math.max(max, (b.ts - a.ts) / 3600000), 0);
+
+  Object.entries(porEmpleado).forEach(([codigo, info]) => {
+    const civil = paresCiviles(info.marcas);
+    let elegido = civil;
+    if (duracionMaximaHoras(civil.pares) > UMBRAL_TURNO_SOSPECHOSO_HORAS) {
+      const cronologico = paresCronologicos(info.marcas);
+      if (duracionMaximaHoras(cronologico.pares) < duracionMaximaHoras(civil.pares)) elegido = cronologico;
+    }
+    elegido.pares.forEach(([entrada, salida]) => registrarPar(codigo, info.nombre, entrada.fecha, entrada, salida));
+    elegido.sueltas.forEach((m) => registrarSuelta(codigo, info.nombre, m.fecha, m));
   });
 
   const filas = Object.values(porDia)
     .filter((d) => d.horas > 0)
-    .map((d) => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, HORAS_TRABAJADAS: Math.round(d.horas * 100) / 100, MARCAS: d.marcas }));
+    .map((d) => ({ CODIGO: d.codigo, NOMBRE: d.nombre, FECHA: d.fecha, HORAS_TRABAJADAS: Math.round(d.horas * 100) / 100, MARCAS: d.marcas, MINUTOS_DIURNOS: d.minutosDiurnos, MINUTOS_NOCTURNOS: d.minutosNocturnos }));
   return filas.concat(filasIncompletas);
 }
 
@@ -354,7 +415,13 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo, diasSale
     if (esEmpleadoConfianza(empleado)) { confianzaOmitidos++; continue; }
 
     const puesto = empleado && empleado.PUESTO_KEY ? puestoPorKey[empleado.PUESTO_KEY] || null : null;
-    const jornada = jornadaDiariaDePuesto(puesto && puesto.MODALIDAD_JORNADA);
+    // Jornada automática por horario real marcado (ver comentario arriba de
+    // esPuestoDeSeguridad) — solo para puestos de seguridad; el resto sigue
+    // con la MODALIDAD_JORNADA fija del puesto.
+    const totalMinutosClasificados = (fila.MINUTOS_DIURNOS || 0) + (fila.MINUTOS_NOCTURNOS || 0);
+    const jornada = (esPuestoDeSeguridad(puesto) && totalMinutosClasificados > 0)
+      ? jornadaDiariaDePuesto(jornadaAutomaticaDesdeMinutos(fila.MINUTOS_DIURNOS || 0, fila.MINUTOS_NOCTURNOS || 0))
+      : jornadaDiariaDePuesto(puesto && puesto.MODALIDAD_JORNADA);
 
     const marcas = fila.MARCAS || [];
     const incompleto = !!fila.INCOMPLETO;
@@ -541,10 +608,7 @@ async function sincronizarRango(desde, hasta) {
   const fichasDe = construirIndiceFichas(empleados);
 
   const eventos = [];
-  const jornadaPorCodigoMap = {};
   Object.entries(usadasPorCodigo).forEach(([codigo, info]) => {
-    const ficha = fichasDe(codigo, info.nombreReloj);
-    jornadaPorCodigoMap[codigo] = ficha && ficha.PUESTO_KEY ? (puestoPorKey[ficha.PUESTO_KEY] || {}).MODALIDAD_JORNADA || null : null;
     info.usadas.forEach((m) => {
       eventos.push({ codigo, nombre: info.nombreReloj, fecha: m.fecha, ts: Math.floor(m.ts / 60000) * 60000 });
     });
@@ -556,7 +620,7 @@ async function sincronizarRango(desde, hasta) {
 
   if (!eventos.length) return { configurado: true, creadas: feriadosCreados, actualizadas: 0, omitidas: 0, sinMatch: 0, confianzaOmitidos: 0, feriadosCreados };
 
-  const filasSinFiltrar = filasDesdeEventosMarcacion(eventos, (codigo) => jornadaPorCodigoMap[codigo] || null);
+  const filasSinFiltrar = filasDesdeEventosMarcacion(eventos);
   // El día de hoy (Costa Rica) sigue en curso — una sola marca todavía NO
   // significa "turno sin marcar" (⚠️), puede ser que la persona simplemente
   // no ha terminado su jornada. Se descartan esas filas incompletas de HOY
