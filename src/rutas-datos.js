@@ -589,7 +589,7 @@ function filtrarFilasPropias(filas, empleadoClave) {
 //
 // REACTIVACIÓN: si el expediente pasa de ARCHIVADO=true a ARCHIVADO=false
 // (RRHH deshizo el archivado — reactivarEmpleado en app.js) y su cuenta de
-// empleado quedó desactivada (por el cierre automático a los 90 días de
+// empleado quedó desactivada (por el cierre automático a los 30 días de
 // archivado, ver A.archivarUsuariosDeEmpleadosVencidos, o a mano), se
 // reactiva sola: la decisión de traer de vuelta al empleado ya la tomó RRHH
 // al desarchivarlo, así que su acceso vuelve con él.
