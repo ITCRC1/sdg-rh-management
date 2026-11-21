@@ -152,7 +152,7 @@ async function arrancar() {
   await crearAdminInicial();
 
   // Mantenimiento periódico: desactiva las cuentas de empleado cuyo
-  // expediente lleva más de 30 días archivado (ver
+  // expediente lleva más de 90 días archivado (ver
   // A.archivarUsuariosDeEmpleadosVencidos) — una vez al arrancar y luego una
   // vez al día, mientras el proceso siga vivo.
   tareasDiarias();

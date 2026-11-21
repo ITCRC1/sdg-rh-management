@@ -285,14 +285,14 @@ async function registrarAcceso({ email, usuarioId, evento, exito, detalle, ip, u
 // desde dónde — funciona como firma digital de ingreso al sistema y se usa
 // para reportes, así que nunca se borra sola (ver GET /api/auth/bitacora).
 
-const DIAS_GRACIA_ARCHIVADO = 30;
+const DIAS_GRACIA_ARCHIVADO = 90;
 
 // Cuando RRHH archiva a alguien (salida de la empresa), su cuenta de acceso
-// (rol "empleado") sigue activa 1 mes — por si necesita bajar alguna
+// (rol "empleado") sigue activa 3 meses — por si necesita bajar alguna
 // colilla o documento propio antes de irse del todo — y pasado ese tiempo se
 // desactiva sola (nunca se borra: sigue siendo reactivable a mano desde el
 // panel de Empleador, igual que cualquier otra cuenta desactivada). Si
-// alguien vuelve a activar el expediente antes de ese mes
+// alguien vuelve a activar el expediente antes de esos 3 meses
 // (reactivarEmpleado en el front), la cuenta se reactiva sola en el mismo
 // guardado — ver sincronizarCuentaEmpleado en rutas-datos.js.
 async function archivarUsuariosDeEmpleadosVencidos() {
