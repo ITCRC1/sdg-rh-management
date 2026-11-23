@@ -105,6 +105,10 @@ const BITACORA_REBOTE_PREFIX = "bitacora_rebote:";
 // ese día.
 const MAQUINA_PREFIX = "cat_maquina:";
 const BITACORA_MAQUINARIA_PREFIX = "bitacora_maquinaria:";
+// Capitanes agregados a mano (ver renderSeccionCapitanesExtra en app.js) —
+// mismo esquema que cat_bote:/cat_ruta_bote:/cat_maquina:: catálogo con su
+// propio DEPARTAMENTO_MINISTERIO, de solo lectura para jefatura.
+const CAPITAN_EXTRA_PREFIX = "cat_capitan_extra:";
 // Cuarto reporte de Bitácoras: ingreso de combustible/aceite al inventario
 // de la propiedad, por producto (pichinga + cantidad). A diferencia de los
 // tres de arriba, no es "de" un bote/máquina de catálogo — es un registro
@@ -280,6 +284,11 @@ async function maquinaPerteneceAEquipo(propiedad, claveMaquina, departamentoLide
   if (!departamentoLider) return false;
   const maquina = await valorDeClaveCacheado(propiedad, claveMaquina, cache);
   return !!maquina && maquina.DEPARTAMENTO_MINISTERIO === departamentoLider;
+}
+async function capitanExtraPerteneceAEquipo(propiedad, claveCapitan, departamentoLider, cache) {
+  if (!departamentoLider) return false;
+  const capitan = await valorDeClaveCacheado(propiedad, claveCapitan, cache);
+  return !!capitan && capitan.DEPARTAMENTO_MINISTERIO === departamentoLider;
 }
 
 // bitacora_bote:/bitacora_rebote:/bitacora_maquinaria: tampoco son "de" un
@@ -500,6 +509,7 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
     if (fila.clave.startsWith(BOTE_PREFIX)) return botePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
     if (fila.clave.startsWith(RUTA_BOTE_PREFIX)) return rutaBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
     if (fila.clave.startsWith(MAQUINA_PREFIX)) return maquinaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
+    if (fila.clave.startsWith(CAPITAN_EXTRA_PREFIX)) return capitanExtraPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
     if (fila.clave.startsWith(BITACORA_BOTE_PREFIX) || fila.clave.startsWith(BITACORA_REBOTE_PREFIX)) return bitacoraBotePerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
     if (fila.clave.startsWith(BITACORA_MAQUINARIA_PREFIX)) return bitacoraMaquinariaPerteneceAEquipo(propiedad, fila.clave, usuario.puesto, cache);
     if (fila.clave.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX)) return registroPorDeptoPerteneceAEquipo(propiedad, fila.clave, usuario.puesto);
@@ -523,7 +533,7 @@ async function filtrarFilasPorEquipo(filas, propiedad, usuario) {
 // y cat_empleado:/cat_puesto: (para poder resolver nombre, puesto y
 // departamento de su propio equipo — nada de contratos, documentos, otros
 // catálogos, etc.).
-const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX, BOTE_PREFIX, RUTA_BOTE_PREFIX, MAQUINA_PREFIX, BITACORA_BOTE_PREFIX, BITACORA_REBOTE_PREFIX, BITACORA_MAQUINARIA_PREFIX, BITACORA_INGRESO_COMBUSTIBLE_PREFIX, BITACORA_MAQUINARIA_OTROS_PREFIX, BITACORA_OBS_DIARIA_PREFIX, BITACORA_OBS_REBOTE_PREFIX];
+const PREFIJOS_LECTURA_JEFATURA = [HORAS_EXTRA_PREFIX, SOLICITUD_AUSENCIA_PREFIX, INCAPACIDAD_PREFIX, EMPLEADO_PREFIX, PUESTO_PREFIX, HORARIO_PREFIX, LUGAR_TRABAJO_PREFIX, HORARIO_ASIGNADO_PREFIX, BOTE_PREFIX, RUTA_BOTE_PREFIX, MAQUINA_PREFIX, CAPITAN_EXTRA_PREFIX, BITACORA_BOTE_PREFIX, BITACORA_REBOTE_PREFIX, BITACORA_MAQUINARIA_PREFIX, BITACORA_INGRESO_COMBUSTIBLE_PREFIX, BITACORA_MAQUINARIA_OTROS_PREFIX, BITACORA_OBS_DIARIA_PREFIX, BITACORA_OBS_REBOTE_PREFIX];
 
 // Un "empleado" (portal de autoservicio) no tiene "página de RH" tampoco —
 // solo su propio expediente (cat_empleado:<su clave>, exacta, nunca la lista
@@ -657,7 +667,7 @@ router.get("/", async (req, res, next) => {
     // nombre de gente de otros departamentos no aparezca ni siquiera en
     // pantallas que solo listan empleados, como el calendario de Días Libres.
     const filtrarPorEquipo = req.usuario.rol === "jefatura" &&
-      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX) || prefijo.startsWith(BOTE_PREFIX) || prefijo.startsWith(RUTA_BOTE_PREFIX) || prefijo.startsWith(MAQUINA_PREFIX) || prefijo.startsWith(BITACORA_BOTE_PREFIX) || prefijo.startsWith(BITACORA_REBOTE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_PREFIX) || prefijo.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX) || prefijo.startsWith(BITACORA_OBS_DIARIA_PREFIX) || prefijo.startsWith(BITACORA_OBS_REBOTE_PREFIX));
+      (prefijo.startsWith(HORAS_EXTRA_PREFIX) || prefijo.startsWith(SOLICITUD_AUSENCIA_PREFIX) || prefijo.startsWith(INCAPACIDAD_PREFIX) || prefijo.startsWith(EMPLEADO_PREFIX) || prefijo.startsWith(HORARIO_PREFIX) || prefijo.startsWith(LUGAR_TRABAJO_PREFIX) || prefijo.startsWith(HORARIO_ASIGNADO_PREFIX) || prefijo.startsWith(BOTE_PREFIX) || prefijo.startsWith(RUTA_BOTE_PREFIX) || prefijo.startsWith(MAQUINA_PREFIX) || prefijo.startsWith(CAPITAN_EXTRA_PREFIX) || prefijo.startsWith(BITACORA_BOTE_PREFIX) || prefijo.startsWith(BITACORA_REBOTE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_PREFIX) || prefijo.startsWith(BITACORA_INGRESO_COMBUSTIBLE_PREFIX) || prefijo.startsWith(BITACORA_MAQUINARIA_OTROS_PREFIX) || prefijo.startsWith(BITACORA_OBS_DIARIA_PREFIX) || prefijo.startsWith(BITACORA_OBS_REBOTE_PREFIX));
     // Un empleado solo ve sus propias filas — nunca las de un compañero,
     // aunque pida el mismo prefijo que vería un master/gerente.
     const filtrarPropias = req.usuario.rol === "empleado" &&
