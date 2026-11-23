@@ -18599,6 +18599,15 @@ const BITACORA_TIPOS = {
 // simple que los de botes, una cantidad por producto fijo, sin ruta ni
 // entrada/devolución. Los productos están fijos a propósito (no es un
 // catálogo editable como Botes/Rutas/Máquinas): son siempre los mismos 5.
+// Capitanes agregados a mano — pedido explícito del usuario: antes la única
+// forma de que alguien apareciera en el selector de "Capitán" era que su
+// PUESTO en RRHH dijera literalmente "capitán" (ver esPuestoCapitan), o que
+// se agregara su nombre a mano en el código (EXCEPCIONES_CAPITAN_NOMBRE,
+// ej. "nerys varela") — eso exigía que alguien tocara el código y
+// desplegara de nuevo cada vez. Este catálogo es la forma normal: un nombre
+// suelto (no necesita ser un empleado de RRHH) por departamento, que se
+// suma a los capitanes detectados automáticamente en el selector.
+const CAPITAN_EXTRA_PREFIX = "cat_capitan_extra:";
 const MAQUINA_PREFIX = "cat_maquina:";
 const BITACORA_MAQUINARIA_PREFIX = "bitacora_maquinaria:"; // bitacora_maquinaria:<fechaISO>:<maquinaKey>
 const PRODUCTOS_MAQUINARIA = [
@@ -18648,6 +18657,7 @@ let bitacorasDeptoActivoActual = null; // depto realmente en pantalla ahora (cac
 let boteEnEdicion = null;
 let rutaBoteEnEdicion = null;
 let maquinaEnEdicion = null;
+let capitanExtraEnEdicion = null;
 let bitacorasMesRevision = null; // "YYYY-MM", para la sección "Bitácoras guardadas" — se fija al mes de hoy la primera vez
 
 // Este reporte (botes/rutas/rebotes/maquinaria) es, por ahora, SOLO para
@@ -18735,6 +18745,108 @@ async function listarMaquinas(){
     }catch(e){ return null; }
   }));
   return maquinas.filter(Boolean);
+}
+
+async function listarCapitanesExtra(){
+  const res = await window.storage.list(CAPITAN_EXTRA_PREFIX, false);
+  const keys = (res && res.keys) || [];
+  const capitanes = await Promise.all(keys.map(async k => {
+    try{
+      const r = await window.storage.get(k, false);
+      const v = r && r.value ? JSON.parse(r.value) : {};
+      return { key: k, ES_EXTRA: true, ...v };
+    }catch(e){ return null; }
+  }));
+  return capitanes.filter(Boolean);
+}
+
+async function guardarNuevoCapitanExtra(){
+  const status = document.getElementById("bitacoras-capitanes-status");
+  const nombre = ((document.getElementById("capitan-extra-nuevo-nombre")||{}).value || "").trim();
+  const selectorDepto = document.getElementById("capitan-extra-nuevo-depto");
+  const depto = selectorDepto ? selectorDepto.value : bitacorasDeptoActivoActual;
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre.</span>`; return; }
+  if (!depto){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Elegí el departamento.</span>`; return; }
+  try{
+    const key = CAPITAN_EXTRA_PREFIX + "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await window.storage.set(key, JSON.stringify({ NOMBRE: nombre, DEPARTAMENTO_MINISTERIO: depto }), false);
+    statusMsg("Nombre agregado.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo agregar: ${escapeHtml(e.message)}</span>`; }
+}
+
+async function eliminarCapitanExtra(key){
+  if (!confirm("¿Eliminar este nombre? Los reportes diarios que ya lo tenían asignado quedan igual, pero sin nombre.")) return;
+  try{
+    await window.storage.delete(key, false);
+    statusMsg("Nombre eliminado.");
+    renderBitacorasPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + (e.message || ""), false); }
+}
+
+function editarCapitanExtra(key){
+  capitanExtraEnEdicion = key;
+  renderBitacorasPanel();
+}
+function cancelarEdicionCapitanExtra(){
+  capitanExtraEnEdicion = null;
+  renderBitacorasPanel();
+}
+async function guardarEdicionCapitanExtra(key){
+  const status = document.getElementById("bitacoras-capitanes-status");
+  const nombre = ((document.getElementById("capitan-extra-editar-nombre")||{}).value || "").trim();
+  if (!nombre){ if (status) status.innerHTML = `<span style="color:#b23b3b;">Escribí el nombre.</span>`; return; }
+  try{
+    const r = await window.storage.get(key, false);
+    const actual = r && r.value ? JSON.parse(r.value) : {};
+    await window.storage.set(key, JSON.stringify({ ...actual, NOMBRE: nombre }), false);
+    capitanExtraEnEdicion = null;
+    statusMsg("Nombre actualizado.");
+    renderBitacorasPanel();
+  }catch(e){ if (status) status.innerHTML = `<span style="color:#b23b3b;">No se pudo guardar: ${escapeHtml(e.message)}</span>`; }
+}
+
+function renderSeccionCapitanesExtra(capitanesExtra, deptoActivo, puedeGestionar){
+  const necesitaSelectorDepto = !deptoActivo;
+  const filasHtml = capitanesExtra.length
+    ? capitanesExtra.slice().sort((a,b) => (a.NOMBRE||"").localeCompare(b.NOMBRE||"", "es")).map(c => {
+        if (puedeGestionar && capitanExtraEnEdicion === c.key){
+          return `<div style="display:flex; justify-content:space-between; align-items:flex-end; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line); flex-wrap:wrap;">
+            <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre
+              <input type="text" id="capitan-extra-editar-nombre" value="${escapeHtml(c.NOMBRE||"")}" style="min-width:160px;">
+            </label>
+            <div style="display:flex; gap:6px;">
+              <button class="btn primary" style="padding:4px 10px; font-size:11px;" onclick="guardarEdicionCapitanExtra('${c.key}')">💾 Guardar</button>
+              <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="cancelarEdicionCapitanExtra();">Cancelar</button>
+            </div>
+          </div>`;
+        }
+        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--paper-line);">
+        <div style="font-size:12.5px;"><b>${escapeHtml(c.NOMBRE||"")}</b>${necesitaSelectorDepto ? ` · ${escapeHtml(c.DEPARTAMENTO_MINISTERIO||"")}` : ""}</div>
+        ${puedeGestionar ? `<div style="display:flex; gap:6px; flex-shrink:0;"><button class="btn" style="padding:4px 10px; font-size:11px;" onclick="editarCapitanExtra('${c.key}')">✏️ Corregir</button><button class="del" style="padding:4px 10px; font-size:11px;" onclick="eliminarCapitanExtra('${c.key}')">🗑️ Eliminar</button></div>` : ""}
+      </div>`;
+      }).join("")
+    : `<div class="empty-state" style="padding:8px 0;">No hay nombres agregados a mano${deptoActivo ? " para este departamento" : ""} todavía.</div>`;
+  const formHtml = puedeGestionar ? `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);">
+      <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Nombre
+        <input type="text" id="capitan-extra-nuevo-nombre" placeholder="Ej. Nerys Varela" style="min-width:160px;">
+      </label>
+      ${necesitaSelectorDepto ? `<label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Departamento
+        <select id="capitan-extra-nuevo-depto">
+          <option value="">— Elegí —</option>
+          ${DEPARTAMENTOS_MINISTERIO.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+        </select>
+      </label>` : ""}
+      <button class="btn primary" onclick="guardarNuevoCapitanExtra();">➕ Agregar nombre</button>
+    </div>` : "";
+  return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
+    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">🧑‍✈️ Capitanes (nombres agregados a mano)${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Se suman a los empleados cuyo puesto en RRHH ya es de Capitán — usá esto para alguien que cumple esa función pero su puesto no lo dice así, sin tener que ser un empleado del catálogo.</div>
+    ${filasHtml}
+    ${formHtml}
+    <div id="bitacoras-capitanes-status" style="font-size:12px; margin-top:8px;"></div>
+  </div></div>`;
 }
 
 async function listarBitacoraMaquinariaDelDia(fechaISO){
@@ -19301,13 +19413,14 @@ function renderGrillaBitacoraBotes(tipo, botes, rutas, capitanes, entradasDelDia
         const actual = entradasPorClave[claveEntrada] || null;
         const capitanActual = actual ? (actual.CAPITAN_KEY || "") : "";
         const rutasActual = actual ? (actual.RUTAS || {}) : {};
-        const nombreCapitanActual = capitanActual ? (nombreCompletoEmpleado(capitanes.find(c => c.key === capitanActual)) || capitanActual) : "—";
+        const capitanObjActual = capitanes.find(c => c.key === capitanActual);
+        const nombreCapitanActual = capitanActual ? ((capitanObjActual && capitanObjActual.NOMBRE) || nombreCompletoEmpleado(capitanObjActual) || capitanActual) : "—";
         return `<tr>
           <td style="position:sticky; left:0; background:var(--paper); padding:4px 8px; border:1px solid var(--paper-line); white-space:nowrap;"><b>${escapeHtml(bote.NOMBRE||"")}</b></td>
           <td style="padding:2px 4px; border:1px solid var(--paper-line);">${puedeGestionar ? `
             <select id="bitacora-${tipo}-${bote.key}-capitan" style="font-size:10.5px; max-width:130px;">
               <option value="">— Elegí —</option>
-              ${capitanes.map(c => `<option value="${c.key}"${c.key===capitanActual?" selected":""}>${escapeHtml(nombreCompletoEmpleado(c)||c.key)}</option>`).join("")}
+              ${capitanes.map(c => `<option value="${c.key}"${c.key===capitanActual?" selected":""}>${escapeHtml(c.NOMBRE || nombreCompletoEmpleado(c) || c.key)}</option>`).join("")}
             </select>` : escapeHtml(nombreCapitanActual)}
           </td>
           ${rutasOrdenadas.map(r => {
@@ -19920,12 +20033,13 @@ async function renderBitacorasPanel(){
 
     if (!bitacorasFechaActiva) bitacorasFechaActiva = isoDeHoy();
 
-    const [empleados, puestos, botes, rutas, maquinas] = await Promise.all([
+    const [empleados, puestos, botes, rutas, maquinas, capitanesExtra] = await Promise.all([
       cargarEmpleadosDB(),
       cargarPuestosDB(),
       listarBotes(),
       listarRutasBote(),
       listarMaquinas(),
+      listarCapitanesExtra(),
     ]);
     const puestosPorKey = {};
     puestos.forEach(p => { puestosPorKey[p.key] = p; });
@@ -19939,7 +20053,9 @@ async function renderBitacorasPanel(){
     const botesVisibles = botes.filter(b => !deptoActivo || b.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const rutasVisibles = rutas.filter(r => !deptoActivo || r.DEPARTAMENTO_MINISTERIO === deptoActivo);
     const maquinasVisibles = maquinas.filter(m => !deptoActivo || m.DEPARTAMENTO_MINISTERIO === deptoActivo);
-    const capitanes = deptoActivo ? empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === deptoActivo && esPuestoCapitan(puestosPorKey[e.PUESTO_KEY], e)) : [];
+    const capitanesExtraVisibles = capitanesExtra.filter(c => !deptoActivo || c.DEPARTAMENTO_MINISTERIO === deptoActivo);
+    const capitanesEmpleados = deptoActivo ? empleados.filter(e => !e.ARCHIVADO && departamentoDeEmpleado(e) === deptoActivo && esPuestoCapitan(puestosPorKey[e.PUESTO_KEY], e)) : [];
+    const capitanes = deptoActivo ? [...capitanesEmpleados, ...capitanesExtraVisibles] : [];
 
     let html = `<div style="margin-bottom:14px;">
       <div style="font-size:18px; font-weight:800; color:var(--navy-deep);">📘 Bitácoras${deptoActivo ? ` — ${escapeHtml(deptoActivo)}` : ""}</div>
@@ -20007,6 +20123,7 @@ async function renderBitacorasPanel(){
       html += renderSeccionBotes(botesVisibles, deptoActivo, puedeGestionar);
       html += renderSeccionRutasBote(rutasVisibles, deptoActivo, puedeGestionar);
       html += renderSeccionMaquinas(maquinasVisibles, deptoActivo, puedeGestionar);
+      html += renderSeccionCapitanesExtra(capitanesExtraVisibles, deptoActivo, puedeGestionar);
     }
 
     const [entradasDiaria, entradasRebote, entradasMaquinaria, entradasMaquinariaOtros, obsDiaria, obsRebote] = await Promise.all([
