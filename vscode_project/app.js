@@ -13265,6 +13265,18 @@ async function renderHorasExtrasPanel(){
     else lista = pendientes;
     lista = lista.slice().sort((a,b) => (b.FECHA || "").localeCompare(a.FECHA || ""));
 
+    // Limpieza masiva de avisos viejos: si el reloj llegó a repasar un rango
+    // muy amplio hacia atrás (ver REVISION_PROFUNDA_DIAS en reloj-sync.js) y
+    // encontró diferencias contra días de un período que ya se pagó, esos
+    // avisos ya no le sirven a nadie — ese período no se va a volver a
+    // decidir. En vez de descartarlos uno por uno (ver descartarAlertaMarcasNuevas),
+    // esto los limpia todos de una vez antes de una fecha de corte.
+    if (horasExtraFiltro === "alerta_marcas_nuevas" && conAlertaMarcasNuevas.length && puedeEditar){
+      html += `<div style="margin-bottom:10px;">
+        <button class="btn" onclick="descartarAlertasMarcasNuevasAntesDe()">🧹 Descartar avisos de un período ya pagado…</button>
+      </div>`;
+    }
+
     const renderFilaHorasExtra = r => {
       const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
       const nombre = emp ? nombreCompletoEmpleado(emp) : (r.NOMBRE_ARCHIVO || r.CODIGO_ARCHIVO || r.CEDULA || "");
@@ -13842,6 +13854,38 @@ async function reabrirHoraExtraRechazada(key){
 // para que jefatura/gerencia confirme que ya lo revisó. Si de verdad hay
 // que recalcular las horas con las marcas nuevas, la corrección se hace
 // aparte (editando el campo de horas, o "↩️ Reabrir" si está rechazado).
+// Limpieza masiva (ver botón "🧹 Descartar avisos de un período ya pagado…"
+// en la pestaña "Marcas nuevas"): descarta de un tirón el aviso de cualquier
+// registro con FECHA anterior a la fecha de corte que se escriba, sin tocar
+// la decisión (ESTADO/HORAS_EXTRA) de ninguno — mismo efecto que
+// descartarAlertaMarcasNuevas, uno por uno, para quien no quiere hacerlo a
+// mano cuando son cientos (ej. los que dejó un repaso automático que alcanzó
+// a mirar demasiado atrás, ver REVISION_PROFUNDA_DIAS en reloj-sync.js).
+async function descartarAlertasMarcasNuevasAntesDe(){
+  if (!window.sdgApi.puedeEditar()) return;
+  const fechaCorte = prompt("Descartar los avisos de \"marcas nuevas\" de ANTES de esta fecha (AAAA-MM-DD) — el resto queda tal cual:", "");
+  if (!fechaCorte) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaCorte)){ statusMsg("Fecha inválida — usa el formato AAAA-MM-DD.", false); return; }
+  try{
+    const registros = await listarRegistrosHorasExtra();
+    const aLimpiar = registros.filter(r => r.ALERTA_MARCAS_NUEVAS && r.FECHA && r.FECHA < fechaCorte);
+    if (!aLimpiar.length){ statusMsg("No hay avisos antes de esa fecha."); return; }
+    if (!confirm(`Se van a descartar ${aLimpiar.length} aviso(s) de "marcas nuevas" de antes del ${fechaCorte}, sin tocar la decisión ya tomada en cada uno. ¿Continuar?`)) return;
+    for (const r of aLimpiar){
+      const rr = await window.storage.get(r.key, false);
+      const v = rr && rr.value ? JSON.parse(rr.value) : null;
+      if (!v) continue;
+      delete v.ALERTA_MARCAS_NUEVAS;
+      delete v.ALERTA_MARCAS_NUEVAS_DETALLE;
+      delete v.ALERTA_MARCAS_NUEVAS_EN;
+      delete v.ALERTA_MARCAS_NUEVAS_MARCAS;
+      await window.storage.set(r.key, JSON.stringify(v), false);
+    }
+    statusMsg(`${aLimpiar.length} aviso(s) descartado(s).`);
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo limpiar: " + e.message, false); }
+}
+
 async function descartarAlertaMarcasNuevas(key){
   if (!window.sdgApi.puedeEditar()) return;
   try{
