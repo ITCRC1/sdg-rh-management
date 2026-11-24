@@ -13863,14 +13863,27 @@ async function reabrirHoraExtraRechazada(key){
 // a mirar demasiado atrás, ver REVISION_PROFUNDA_DIAS en reloj-sync.js).
 async function descartarAlertasMarcasNuevasAntesDe(){
   if (!window.sdgApi.puedeEditar()) return;
-  const fechaCorte = prompt("Descartar los avisos de \"marcas nuevas\" de ANTES de esta fecha (AAAA-MM-DD) — el resto queda tal cual:", "");
-  if (!fechaCorte) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaCorte)){ statusMsg("Fecha inválida — usa el formato AAAA-MM-DD.", false); return; }
+  // Mismo límite que ya protege la sincronización automática del reloj
+  // marcador (ver limiteSincronizacionAutomaticaISO en src/reloj-sync.js):
+  // el último período que se descargó para pagar (ver "config:ultimo_periodo_planilla_pagado",
+  // que escribe generarReporteHorarioPlanilla), o si todavía no se ha
+  // descargado ninguno, el inicio de la quincena en curso por calendario.
+  let ultimoPagadoHasta = null;
+  try{
+    const r = await window.storage.get("config:ultimo_periodo_planilla_pagado", false);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (v && /^\d{4}-\d{2}-\d{2}$/.test(v.FECHA_HASTA || "")) ultimoPagadoHasta = v.FECHA_HASTA;
+  }catch(e){ /* todavía no se ha descargado ningún reporte de planilla */ }
+  const fechaCorte = ultimoPagadoHasta ? relojSumarDias(ultimoPagadoHasta, 1) : isoDeFechaLocal(rangoQuincenaActual().inicio);
+
   try{
     const registros = await listarRegistrosHorasExtra();
     const aLimpiar = registros.filter(r => r.ALERTA_MARCAS_NUEVAS && r.FECHA && r.FECHA < fechaCorte);
-    if (!aLimpiar.length){ statusMsg("No hay avisos antes de esa fecha."); return; }
-    if (!confirm(`Se van a descartar ${aLimpiar.length} aviso(s) de "marcas nuevas" de antes del ${fechaCorte}, sin tocar la decisión ya tomada en cada uno. ¿Continuar?`)) return;
+    if (!aLimpiar.length){ statusMsg("No hay avisos de un período ya pagado para limpiar."); return; }
+    const mensaje = ultimoPagadoHasta
+      ? `El último período pagado fue hasta el ${fmtFechaSimple(ultimoPagadoHasta)}. ¿Deseas eliminar los ${aLimpiar.length} aviso(s) de "marcas nuevas" anteriores a esa fecha? La decisión ya tomada en cada registro no se toca.`
+      : `Todavía no se ha descargado ningún "Reporte de horarios para pago de planilla" — se usará el inicio de la quincena en curso (${fmtFechaSimple(fechaCorte)}) como referencia. ¿Deseas eliminar los ${aLimpiar.length} aviso(s) de "marcas nuevas" anteriores a esa fecha? La decisión ya tomada en cada registro no se toca.`;
+    if (!confirm(mensaje)) return;
     for (const r of aLimpiar){
       const rr = await window.storage.get(r.key, false);
       const v = rr && rr.value ? JSON.parse(rr.value) : null;
