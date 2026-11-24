@@ -458,6 +458,26 @@ function marcasComoTexto(marcas) {
   return (Array.isArray(marcas) ? marcas : []).map((m) => `${m.entrada || "?"} → ${m.salida || "?"}`).join(", ");
 }
 
+// Normaliza cualquier texto de marcas ("dd/mm HH:MM" de 24h o "dd/mm H:MM
+// AM/PM" de 12h, mezclados o no) a una forma canónica de 24h, para poder
+// comparar si dos textos representan la MISMA hora sin que un simple cambio
+// de formato (ver formatoFechaHoraCortaUTC — pasó de 24h a 12h con AM/PM a
+// mitad de este sistema) se confunda con una marca realmente distinta. Sin
+// esto, CUALQUIER registro ya decidido antes de ese cambio de formato
+// disparaba "llegaron marcas nuevas" la próxima vez que se reprocesara, aunque
+// el reloj no hubiera agregado ni cambiado una sola marca real — réplica
+// exacta de normalizarTextoMarcasComparable (app.js).
+function normalizarTextoMarcasComparable(texto) {
+  return String(texto || "").replace(/(\d{2}\/\d{2}) (\d{1,2}):(\d{2})(?:\s*(AM|PM))?/g, (_, fecha, h, mi, ap) => {
+    let hora = Number(h);
+    if (ap) {
+      hora = hora % 12;
+      if (ap === "PM") hora += 12;
+    }
+    return `${fecha} ${String(hora).padStart(2, "0")}:${mi}`;
+  });
+}
+
 // Réplica de marcasJornadaCompletaDesde (app.js) — arma entrada/salida de
 // una jornada completa a partir de UNA marca suelta + la jornada del
 // puesto, para autocompletar el "día de salida" (ver guardarFilas). null si
@@ -524,11 +544,16 @@ async function guardarFilas(filas, porKey, puestoPorKey, nombreArchivo, diasSale
       omitidas++;
       if (Array.isArray(marcas) && marcas.length) {
         const detalleFresco = marcasComoTexto(marcas);
-        if (detalleFresco !== marcasComoTexto(existente.MARCAS) && existente.ALERTA_MARCAS_NUEVAS_DETALLE !== detalleFresco) {
+        const huboCambioReal = normalizarTextoMarcasComparable(detalleFresco) !== normalizarTextoMarcasComparable(marcasComoTexto(existente.MARCAS));
+        if (huboCambioReal && existente.ALERTA_MARCAS_NUEVAS_DETALLE !== detalleFresco) {
           try {
             existente.ALERTA_MARCAS_NUEVAS = true;
             existente.ALERTA_MARCAS_NUEVAS_DETALLE = detalleFresco;
             existente.ALERTA_MARCAS_NUEVAS_EN = new Date().toISOString();
+            // Marcas crudas (no solo el texto) para poder reclasificar el día
+            // de un clic si resulta que sí se trabajó — réplica de
+            // guardarFilasHorasExtra (app.js), antes faltaba acá.
+            existente.ALERTA_MARCAS_NUEVAS_MARCAS = marcas;
             await guardarDocumento(key, existente);
           } catch (e) { /* no crítico: se reintenta en la próxima corrida */ }
         }

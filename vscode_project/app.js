@@ -10595,6 +10595,23 @@ function marcasComoTexto(marcas){
   return (Array.isArray(marcas) ? marcas : []).map(m => `${m.entrada||"?"} → ${m.salida||"?"}`).join(", ");
 }
 
+// Normaliza cualquier texto de marcas ("dd/mm HH:MM" de 24h o "dd/mm H:MM
+// AM/PM" de 12h, mezclados o no) a una forma canónica de 24h, para poder
+// comparar si dos textos representan la MISMA hora sin que un simple cambio
+// de formato (ver formatoFechaHoraCortaUTC — pasó de 24h a 12h con AM/PM a
+// mitad de este sistema) se confunda con una marca realmente distinta. Sin
+// esto, CUALQUIER registro ya decidido antes de ese cambio de formato
+// disparaba "llegaron marcas nuevas" la próxima vez que se reprocesara, aunque
+// el reloj no hubiera agregado ni cambiado una sola marca real — réplica
+// exacta en src/reloj-sync.js (el envío automático).
+function normalizarTextoMarcasComparable(texto){
+  return String(texto || "").replace(/(\d{2}\/\d{2}) (\d{1,2}):(\d{2})(?:\s*(AM|PM))?/g, (_, fecha, h, mi, ap) => {
+    let hora = Number(h);
+    if (ap){ hora = hora % 12; if (ap === "PM") hora += 12; }
+    return `${fecha} ${String(hora).padStart(2, "0")}:${mi}`;
+  });
+}
+
 // Arma la entrada/salida de una jornada completa a partir de UNA marca
 // suelta + la jornada del puesto — mismo cálculo que ya usa a mano "⚡ Marcar
 // jornada completa" (marcarJornadaCompletaTurno), reutilizado acá para
@@ -10873,7 +10890,8 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
       omitidas++;
       if (Array.isArray(info.MARCAS) && info.MARCAS.length){
         const detalleFresco = marcasComoTexto(info.MARCAS);
-        if (detalleFresco !== marcasComoTexto(existente.MARCAS) && existente.ALERTA_MARCAS_NUEVAS_DETALLE !== detalleFresco){
+        const huboCambioReal = normalizarTextoMarcasComparable(detalleFresco) !== normalizarTextoMarcasComparable(marcasComoTexto(existente.MARCAS));
+        if (huboCambioReal && existente.ALERTA_MARCAS_NUEVAS_DETALLE !== detalleFresco){
           try{
             existente.ALERTA_MARCAS_NUEVAS = true;
             existente.ALERTA_MARCAS_NUEVAS_DETALLE = detalleFresco;
@@ -13273,7 +13291,8 @@ async function renderHorasExtrasPanel(){
     // decidir. En vez de descartarlos uno por uno (ver descartarAlertaMarcasNuevas),
     // esto los limpia todos de una vez antes de una fecha de corte.
     if (horasExtraFiltro === "alerta_marcas_nuevas" && conAlertaMarcasNuevas.length && puedeEditar){
-      html += `<div style="margin-bottom:10px;">
+      html += `<div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn" onclick="limpiarAlertasMarcasNuevasFalsasPorFormato()">🧹 Descartar avisos que son solo el cambio de formato de hora (AM/PM)…</button>
         <button class="btn" onclick="descartarAlertasMarcasNuevasAntesDe()">🧹 Descartar avisos de un período ya pagado…</button>
       </div>`;
     }
@@ -13899,6 +13918,38 @@ async function reabrirHoraExtraRechazada(key){
     statusMsg("Día reabierto — vuelve a estar pendiente de aprobación.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo reabrir: " + e.message, false); }
+}
+
+// Limpieza masiva de avisos FALSOS: compara (ya normalizado — ver
+// normalizarTextoMarcasComparable) el detalle guardado al prender el aviso
+// contra las marcas con las que se había decidido el día. Si da igual, el
+// aviso no era una marca nueva de verdad — era el mismo registro viejo
+// (guardado en 24h, antes del cambio de formato a 12h con AM/PM) comparado
+// contra el texto fresco en el formato nuevo, que por eso parecía distinto.
+// Deja intactos los avisos donde sí cambió algo real, para que se revisen a mano.
+async function limpiarAlertasMarcasNuevasFalsasPorFormato(){
+  if (!window.sdgApi.puedeEditar()) return;
+  try{
+    const registros = await listarRegistrosHorasExtra();
+    const conAlerta = registros.filter(r => r.ALERTA_MARCAS_NUEVAS);
+    const falsas = conAlerta.filter(r =>
+      normalizarTextoMarcasComparable(r.ALERTA_MARCAS_NUEVAS_DETALLE || "") === normalizarTextoMarcasComparable(marcasComoTexto(r.MARCAS))
+    );
+    if (!falsas.length){ statusMsg("No se encontraron avisos que sean solo el cambio de formato de hora."); return; }
+    if (!confirm(`Se encontraron ${falsas.length} aviso(s) de "marcas nuevas" que en realidad son LA MISMA hora — solo que el registro se guardó en formato de 24 horas y ahora se compara contra el formato de 12 horas (AM/PM). No es una marca nueva de verdad. ¿Descartar estos ${falsas.length} aviso(s)? (Los que sí tengan un cambio real quedan intactos.)`)) return;
+    for (const r of falsas){
+      const rr = await window.storage.get(r.key, false);
+      const v = rr && rr.value ? JSON.parse(rr.value) : null;
+      if (!v) continue;
+      delete v.ALERTA_MARCAS_NUEVAS;
+      delete v.ALERTA_MARCAS_NUEVAS_DETALLE;
+      delete v.ALERTA_MARCAS_NUEVAS_EN;
+      delete v.ALERTA_MARCAS_NUEVAS_MARCAS;
+      await window.storage.set(r.key, JSON.stringify(v), false);
+    }
+    statusMsg(`${falsas.length} aviso(s) descartado(s) — eran solo el cambio de formato de hora, no una marca nueva.`);
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo limpiar: " + e.message, false); }
 }
 
 // Limpieza masiva (ver botón "🧹 Descartar avisos de un período ya pagado…"
