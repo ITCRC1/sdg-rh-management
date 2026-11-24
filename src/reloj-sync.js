@@ -232,50 +232,42 @@ function inicioQuincenaActualISO() {
   return anioMes + (Number(hoy.slice(8, 10)) <= 15 ? "01" : "16");
 }
 
-// Último período de planilla YA PAGADO según las colillas de pago archivadas
-// (ver archivarColillasPDF en app.js: el título queda siempre "Colilla de
-// pago — DD/MM/AAAA al DD/MM/AAAA — Nombre") — más confiable que adivinar la
-// quincena por el calendario, porque es la fecha real que ya se pagó
-// (sugerencia del usuario: usar la última descarga de Planillas como
-// referencia). Si todavía no hay ninguna colilla archivada para esta
+// Último período de planilla YA PAGADO, según la última vez que alguien
+// descargó el "Reporte de horarios para pago de planilla" (ver
+// generarReporteHorarioPlanilla en app.js, que guarda esta clave en cada
+// descarga) — es la referencia real que el usuario ya usa para pagar, más
+// confiable que adivinar la quincena por calendario. FECHA_HASTA ahí es el
+// rango de datos real (el campo opcional "Datos — hasta", para cuando el
+// archivo de marcación no calza con el calendario de la quincena) si lo
+// pusieron, o si no el fin de quincena normal — igual criterio que usa ese
+// mismo reporte. Si todavía no se ha descargado nunca ese reporte para esta
 // propiedad, devuelve null y el llamador cae de vuelta al calendario.
+const CLAVE_ULTIMO_PERIODO_PLANILLA = "config:ultimo_periodo_planilla_pagado";
 async function finUltimoPeriodoPagadoISO() {
-  const { rows } = await query(
-    `SELECT titulo FROM documentos_emitidos
-      WHERE propiedad_id = $1 AND tipo = 'colilla_pago' AND anulado_en IS NULL
-      ORDER BY emitido_en DESC LIMIT 200`,
-    [PROPIEDAD_RELOJ]
-  );
-  const re = /al (\d{2})\/(\d{2})\/(\d{4})/;
-  let maxISO = null;
-  rows.forEach((r) => {
-    const m = re.exec(r.titulo || "");
-    if (!m) return;
-    const iso = `${m[3]}-${m[2]}-${m[1]}`;
-    if (!maxISO || iso > maxISO) maxISO = iso;
-  });
-  return maxISO;
+  const doc = await obtenerDocumento(CLAVE_ULTIMO_PERIODO_PLANILLA);
+  const fecha = doc && doc.FECHA_HASTA;
+  return /^\d{4}-\d{2}-\d{2}$/.test(fecha || "") ? fecha : null;
 }
 
 // Límite real hacia atrás de cualquier proceso AUTOMÁTICO del reloj marcador
 // (nunca del botón manual "Enviar a Horas extras", que es una acción
 // explícita de quien lo aprieta, con el rango de fechas a la vista): el más
 // tardío entre el inicio de la quincena de calendario en curso y el día
-// siguiente al último período ya pagado según las colillas archivadas — así,
-// si el proveedor de planillas cierra un período distinto al que adivina el
-// calendario (o ya pagó algo que el calendario todavía consideraría
-// "abierto"), manda el dato real. Nunca se vuelve MÁS permisivo que la
-// quincena de calendario, solo más estricto.
+// siguiente al último período ya descargado para pagar — así, si todavía no
+// se ha descargado el reporte de la quincena en curso, el calendario sigue
+// protegiendo esa quincena igual; y si se descargó con un rango de datos más
+// angosto o más amplio que el calendario, manda ese dato real. Nunca se
+// vuelve MÁS permisivo que la quincena de calendario, solo más estricto.
 async function limiteSincronizacionAutomaticaISO() {
   const porCalendario = inicioQuincenaActualISO();
-  let porColilla = null;
+  let porReporte = null;
   try {
     const finPagado = await finUltimoPeriodoPagadoISO();
-    if (finPagado) porColilla = relojSumarDias(finPagado, 1);
+    if (finPagado) porReporte = relojSumarDias(finPagado, 1);
   } catch (e) {
     // No crítico: si la consulta falla, se sigue con el límite de calendario.
   }
-  return porColilla && porColilla > porCalendario ? porColilla : porCalendario;
+  return porReporte && porReporte > porCalendario ? porReporte : porCalendario;
 }
 
 // --------------------------------------------------------------------------

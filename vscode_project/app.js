@@ -9200,6 +9200,22 @@ async function generarReporteHorarioPlanilla(){
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const nombreArchivo = `horarios_planilla_${mesStr}_q${rango.esPrimeraQuincena ? 1 : 2}.xlsx`;
     descargarBlobComoArchivo(blob, nombreArchivo);
+    // Deja registrado hasta qué fecha quedó "ya pagado" con esta descarga —
+    // el reloj marcador (Corcovado, ver src/reloj-sync.js) usa esto para que
+    // su sincronización automática nunca vuelva a crear registros
+    // "pendiente" en un período que ya se descargó para pagar. Usa el rango
+    // de datos real (Desde/Hasta) si lo pusiste, igual que el resto de este
+    // reporte — ver el aviso de arriba sobre "corre del 27 al 12".
+    try{
+      const quien = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
+      await window.storage.set("config:ultimo_periodo_planilla_pagado", JSON.stringify({
+        FECHA_HASTA: datosHastaStr || isoDeFechaLocal(rango.fin),
+        MES: mesStr,
+        QUINCENA: rango.esPrimeraQuincena ? 1 : 2,
+        GENERADO_EN: new Date().toISOString(),
+        GENERADO_POR_EMAIL: quien,
+      }));
+    }catch(e){ /* no crítico: no debe impedir la descarga ya hecha */ }
     if (status) status.innerHTML = `Descargado: ${filas.length} empleado(s) de la ${rango.esPrimeraQuincena ? "1ª" : "2ª"} quincena (${fmtFechaDesdeDate(rango.inicio)} al ${fmtFechaDesdeDate(rango.fin)})`
       + textoRangoDatos(datosDesdeStr, datosHastaStr) + ".";
   }catch(e){
