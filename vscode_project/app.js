@@ -9235,6 +9235,7 @@ let horasExtraEmpleadoSeleccionado = null; // key del empleado abierto en el det
 let horasExtraFiltroNombre = ""; // buscador por nombre de empleado — aplica a todas las pestañas, incluida "Pendientes"
 let horasExtraGrupoSinMatchSeleccionado = null; // código/nombre del archivo abierto en el detalle de "Sin identificar" (vista lista → detalle, igual que "Pendientes")
 let horasExtraSinMatchGruposCache = {}; // grupoKey -> registros de ese mismo código/nombre sin identificar, recalculado en cada render para que el modal de identificar en lote sepa qué keys tocan
+let horasExtraEmpleadoAlertaSeleccionado = null; // key del empleado abierto en el detalle de "Marcas nuevas" (vista lista → detalle, igual que "Pendientes")
 
 // Historial de "Motivos de marcas" — además de guardarse en el propio
 // registro de horas_extra: (MOTIVO_HORAS_EXTRA, lo último que se escribió),
@@ -13253,7 +13254,7 @@ async function renderHorasExtrasPanel(){
       <input type="text" id="horasextra-buscar-nombre" placeholder="🔎 Buscar empleado…" value="${escapeHtml(horasExtraFiltroNombre)}" oninput="filtrarHorasExtraNombre(this.value)">
     </div>`;
     html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
-      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; horasExtraGrupoSinMatchSeleccionado=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
+      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; horasExtraGrupoSinMatchSeleccionado=null; horasExtraEmpleadoAlertaSeleccionado=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
     </div>`;
 
     let lista;
@@ -13525,6 +13526,57 @@ async function renderHorasExtrasPanel(){
                 <div class="info">
                   <div class="name">${escapeHtml(nombreMostrar)}</div>
                   <div class="meta">${dias.length} día(s) sin identificar · ${fmtHorasReloj(dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0))}h extra</div>
+                </div>
+                <div class="actions"><span class="meta">Ver →</span></div>
+              </div>
+            </div>`;
+          }).join("");
+        }
+      }
+    } else if (horasExtraFiltro === "alerta_marcas_nuevas"){
+      // Agrupado por empleado (igual que "Pendientes"/"Sin identificar"): la
+      // misma persona con varios días en conflicto es común (ej. un repaso
+      // automático que alcanzó a comparar varios días seguidos contra lo ya
+      // decidido), así que revisar o reclasificar de un tirón aplica a todos
+      // sus días, en vez de repetir el botón uno por uno.
+      const gruposAlerta = {};
+      lista.forEach(r => { (gruposAlerta[r.EMPLEADO_KEY || r.key] = gruposAlerta[r.EMPLEADO_KEY || r.key] || []).push(r); });
+
+      const empKeyAlertaSel = horasExtraEmpleadoAlertaSeleccionado;
+      const diasAlertaSel = empKeyAlertaSel ? (gruposAlerta[empKeyAlertaSel] || []) : [];
+
+      if (empKeyAlertaSel && diasAlertaSel.length){
+        const emp = empleadosPorKey[empKeyAlertaSel];
+        diasAlertaSel.sort((a, b) => (a.FECHA || "").localeCompare(b.FECHA || ""));
+        const keysAlertaSel = diasAlertaSel.map(d => d.key);
+        html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraEmpleadoAlertaSeleccionado=null; renderHorasExtrasPanel();">← Volver a la lista</button>`;
+        html += `<div class="section-card" style="margin-bottom:10px;"><div class="section-body">
+          <div style="font-weight:700; color:var(--navy-deep);">${escapeHtml(emp ? nombreCompletoEmpleado(emp) || empKeyAlertaSel : (diasAlertaSel[0].NOMBRE_ARCHIVO || empKeyAlertaSel))}</div>
+          <div style="font-size:12px; color:var(--ink-soft);">${diasAlertaSel.length} día(s) con marcas nuevas tras decidir</div>
+        </div></div>`;
+        if (puedeEditar){
+          const keysJson = escapeHtml(JSON.stringify(keysAlertaSel));
+          html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
+            <button class="btn primary" onclick="descartarAlertaMarcasNuevasGrupo(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>✔️ Revisado, quitar aviso en los ${diasAlertaSel.length} día(s)</button>
+            <button class="btn" onclick="reclasificarAlertaMarcasNuevasComoLaboralGrupo(JSON.parse(this.dataset.keys))" data-keys='${keysJson}'>🔁 Era(n) día(s) trabajado(s) — reclasificar los ${diasAlertaSel.length} día(s)</button>
+          </div>`;
+        }
+        html += diasAlertaSel.map(renderFilaHorasExtra).join("");
+      } else {
+        if (empKeyAlertaSel) horasExtraEmpleadoAlertaSeleccionado = null; // ya no tiene días con aviso — vuelve al roster
+        const clavesGruposAlerta = Object.keys(gruposAlerta);
+        if (!clavesGruposAlerta.length){
+          html += `<div class="empty-state">No hay registros en esta vista.</div>`;
+        } else {
+          html += clavesGruposAlerta.map(g => {
+            const dias = gruposAlerta[g];
+            const emp = empleadosPorKey[g];
+            const nombreMostrar = (emp && nombreCompletoEmpleado(emp)) || dias[0].NOMBRE_ARCHIVO || dias[0].CODIGO_ARCHIVO || g;
+            return `<div class="catalog-item" style="cursor:pointer;" onclick="horasExtraEmpleadoAlertaSeleccionado='${g.replace(/'/g,"\\'")}'; renderHorasExtrasPanel();">
+              <div class="row1">
+                <div class="info">
+                  <div class="name">${escapeHtml(nombreMostrar)}</div>
+                  <div class="meta">${dias.length} día(s) con marcas nuevas tras decidir</div>
                 </div>
                 <div class="actions"><span class="meta">Ver →</span></div>
               </div>
@@ -13849,11 +13901,6 @@ async function reabrirHoraExtraRechazada(key){
   }catch(e){ statusMsg("No se pudo reabrir: " + e.message, false); }
 }
 
-// Quita el aviso de "llegaron marcas nuevas" (ver guardarFilasHorasExtra)
-// sin tocar la decisión ya tomada (ESTADO/HORAS_EXTRA/TIPO_DIA) — es solo
-// para que jefatura/gerencia confirme que ya lo revisó. Si de verdad hay
-// que recalcular las horas con las marcas nuevas, la corrección se hace
-// aparte (editando el campo de horas, o "↩️ Reabrir" si está rechazado).
 // Limpieza masiva (ver botón "🧹 Descartar avisos de un período ya pagado…"
 // en la pestaña "Marcas nuevas"): descarta de un tirón el aviso de cualquier
 // registro con FECHA anterior a la fecha de corte que se escriba, sin tocar
@@ -13899,6 +13946,11 @@ async function descartarAlertasMarcasNuevasAntesDe(){
   }catch(e){ statusMsg("No se pudo limpiar: " + e.message, false); }
 }
 
+// Quita el aviso de "llegaron marcas nuevas" (ver guardarFilasHorasExtra)
+// sin tocar la decisión ya tomada (ESTADO/HORAS_EXTRA/TIPO_DIA) — es solo
+// para que jefatura/gerencia confirme que ya lo revisó. Si de verdad hay
+// que recalcular las horas con las marcas nuevas, la corrección se hace
+// aparte (editando el campo de horas, o "↩️ Reabrir" si está rechazado).
 async function descartarAlertaMarcasNuevas(key){
   if (!window.sdgApi.puedeEditar()) return;
   try{
@@ -13913,6 +13965,30 @@ async function descartarAlertaMarcasNuevas(key){
     statusMsg("Aviso descartado.");
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo descartar el aviso: " + e.message, false); }
+}
+
+// Versión en lote de descartarAlertaMarcasNuevas — ver el roster agrupado
+// por empleado en "⚠️ Marcas nuevas" (renderHorasExtrasPanel): la misma
+// persona con varios días en conflicto se revisa de un tirón, en vez de
+// repetir el botón uno por uno.
+async function descartarAlertaMarcasNuevasGrupo(keys){
+  if (!window.sdgApi.puedeEditar()) return;
+  if (!Array.isArray(keys) || !keys.length) return;
+  try{
+    for (const key of keys){
+      const r = await window.storage.get(key, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      if (!v) continue;
+      delete v.ALERTA_MARCAS_NUEVAS;
+      delete v.ALERTA_MARCAS_NUEVAS_DETALLE;
+      delete v.ALERTA_MARCAS_NUEVAS_EN;
+      delete v.ALERTA_MARCAS_NUEVAS_MARCAS;
+      await window.storage.set(key, JSON.stringify(v), false);
+    }
+    horasExtraEmpleadoAlertaSeleccionado = null;
+    statusMsg(`Aviso descartado en ${keys.length} día(s).`);
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo descartar: " + e.message, false); }
 }
 
 // El día quedó decidido (ej. "vacaciones") pero el reloj trajo marcas reales
@@ -13947,6 +14023,40 @@ async function reclasificarAlertaMarcasNuevasComoLaboral(key){
     await window.storage.set(key, JSON.stringify(v), false);
     if (v.EMPLEADO_KEY) await agregarBitacora(v.EMPLEADO_KEY, `${fmtFechaSimple(v.FECHA)}: reclasificado de día de ausencia a día laboral (llegaron marcas del reloj) — pendiente de aprobar horas.`);
     statusMsg("Reclasificado como día laboral pendiente — recordá corregir su solicitud en 'Días libres y vacaciones otorgados'.", true);
+    renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo reclasificar: " + e.message, false); }
+}
+
+// Versión en lote de reclasificarAlertaMarcasNuevasComoLaboral — ver el
+// roster agrupado por empleado en "⚠️ Marcas nuevas": la misma persona con
+// varios días en conflicto se reclasifica de un tirón, en vez de repetir el
+// botón uno por uno.
+async function reclasificarAlertaMarcasNuevasComoLaboralGrupo(keys){
+  if (!window.sdgApi.puedeEditar()) return;
+  if (!Array.isArray(keys) || !keys.length) return;
+  if (!confirm(`¿Reclasificar estos ${keys.length} día(s) como trabajados? Van a quedar pendientes de aprobación con las marcas del reloj, para cargarles las horas. Recordá corregir aparte las fechas de la solicitud de vacaciones/día libre de cada uno para liberarles el día del saldo.`)) return;
+  try{
+    for (const key of keys){
+      const r = await window.storage.get(key, false);
+      const v = r && r.value ? JSON.parse(r.value) : null;
+      if (!v) continue;
+      if (Array.isArray(v.ALERTA_MARCAS_NUEVAS_MARCAS) && v.ALERTA_MARCAS_NUEVAS_MARCAS.length){
+        v.MARCAS = v.ALERTA_MARCAS_NUEVAS_MARCAS;
+      }
+      v.TIPO_DIA = "laboral";
+      v.ESTADO = "pendiente";
+      v.HORAS_EXTRA = 0;
+      v.INCOMPLETO = false;
+      v.MARCA_SUELTA = null;
+      delete v.ALERTA_MARCAS_NUEVAS;
+      delete v.ALERTA_MARCAS_NUEVAS_DETALLE;
+      delete v.ALERTA_MARCAS_NUEVAS_EN;
+      delete v.ALERTA_MARCAS_NUEVAS_MARCAS;
+      await window.storage.set(key, JSON.stringify(v), false);
+      if (v.EMPLEADO_KEY) await agregarBitacora(v.EMPLEADO_KEY, `${fmtFechaSimple(v.FECHA)}: reclasificado de día de ausencia a día laboral (llegaron marcas del reloj) — pendiente de aprobar horas.`);
+    }
+    horasExtraEmpleadoAlertaSeleccionado = null;
+    statusMsg(`Reclasificado(s) ${keys.length} día(s) como laboral pendiente — recordá corregir sus solicitudes en 'Días libres y vacaciones otorgados'.`, true);
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo reclasificar: " + e.message, false); }
 }
