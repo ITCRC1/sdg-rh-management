@@ -220,6 +220,17 @@ function fechaCRDeAhora(offsetDias) {
   d.setUTCDate(d.getUTCDate() + (offsetDias || 0));
   return d.toISOString().slice(0, 10);
 }
+// Réplica exacta de rangoQuincenaActual (app.js): el 1-15 o el 16-fin de mes
+// en curso, según el día de hoy (hora de Costa Rica). Un período anterior ya
+// se cerró y se pagó — una revisión automática no debe inventar registros
+// "pendiente" nuevos ahí, por más atrás que alcance a mirar (ver
+// ejecutarRevisionProfunda y el aviso del usuario: "ya se pagaron y no las
+// voy a decidir").
+function inicioQuincenaActualISO() {
+  const hoy = fechaCRDeAhora(0);
+  const anioMes = hoy.slice(0, 8); // "AAAA-MM-"
+  return anioMes + (Number(hoy.slice(8, 10)) <= 15 ? "01" : "16");
+}
 
 // --------------------------------------------------------------------------
 // Lectura de catálogos y correcciones desde Postgres (equivalente a
@@ -710,7 +721,12 @@ async function marcarUltimaFechaSincronizada(hasta, resultado) {
 async function ejecutarRevisionProfunda() {
   if (!process.env.RELOJ_MYSQL_URL) return { configurado: false };
   const hoy = fechaCRDeAhora(0);
-  const desdeSinTope = relojSumarDias(hoy, -REVISION_PROFUNDA_DIAS);
+  const desdePorDias = relojSumarDias(hoy, -REVISION_PROFUNDA_DIAS);
+  // Nunca cruza hacia atrás el inicio del período de planilla en curso (ver
+  // inicioQuincenaActualISO): un período ya cerrado y pagado no se vuelve a
+  // tocar solo porque el reloj trajo algo atrasado de esas fechas.
+  const inicioPeriodo = inicioQuincenaActualISO();
+  const desdeSinTope = desdePorDias > inicioPeriodo ? desdePorDias : inicioPeriodo;
   const desde = desdeSinTope < FECHA_INICIO_SYNC ? FECHA_INICIO_SYNC : desdeSinTope;
   const resultado = await sincronizarRango(desde, hoy);
   return { desde, hasta: hoy, ...resultado };
