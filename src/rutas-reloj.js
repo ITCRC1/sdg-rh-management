@@ -245,36 +245,6 @@ router.get("/personas", async (req, res, next) => {
   }
 });
 
-// POST /api/reloj/resincronizar-horas-extra {desde, hasta} — recalcula al
-// instante ese rango contra el reloj marcador (mismo resultado que el botón
-// "Enviar a Horas extras"/el envío automático, ver src/reloj-sync.js).
-// Pensado para que el panel de Horas Extra lo dispare solo al abrirse (ver
-// renderHorasExtrasPanel en app.js), así lo que se ve "pendiente" nunca queda
-// más desactualizado que el momento en que alguien lo está mirando, en vez de
-// depender de que llegue la próxima corrida programada. jefatura queda
-// fuera (solo lee el reloj, nunca decide Horas extra) aunque ROLES_LECTURA la
-// deje pasar el filtro de arriba — por eso el chequeo aparte.
-// require() adentro del handler (no arriba del archivo): reloj-sync.js ya
-// hace `require("./rutas-reloj")` para reusar este mismo pool/consultar/etc,
-// así que requerirlo aquí arriba crearía un ciclo — adentro del handler ya
-// no hay problema, para ese momento los dos módulos ya terminaron de cargar.
-router.post("/resincronizar-horas-extra", async (req, res, next) => {
-  if (!ROLES_LECTURA_COMPLETA.has(req.usuario.rol)) {
-    return res.status(403).json({ error: "Tu cuenta no tiene permiso para actualizar Horas extra desde el reloj." });
-  }
-  const { desde, hasta } = req.body || {};
-  if (!fechaValida(desde) || !fechaValida(hasta) || hasta < desde) {
-    return res.status(400).json({ error: "Indica un rango de fechas válido (desde y hasta)." });
-  }
-  try {
-    const { sincronizarRango } = require("./reloj-sync");
-    const r = await sincronizarRango(desde, hasta);
-    res.json(r);
-  } catch (e) {
-    errorConexion(e, res, next);
-  }
-});
-
 // `consultar`/`obtenerPool`/`aPared`/`aUtc`/`OFFSET_MIN` se exportan además
 // de la ruta para que reloj-sync.js (envío automático diario a Horas extra)
 // pueda leer la misma base MySQL de solo lectura sin abrir un segundo pool ni

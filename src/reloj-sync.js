@@ -232,6 +232,52 @@ function inicioQuincenaActualISO() {
   return anioMes + (Number(hoy.slice(8, 10)) <= 15 ? "01" : "16");
 }
 
+// Último período de planilla YA PAGADO según las colillas de pago archivadas
+// (ver archivarColillasPDF en app.js: el título queda siempre "Colilla de
+// pago — DD/MM/AAAA al DD/MM/AAAA — Nombre") — más confiable que adivinar la
+// quincena por el calendario, porque es la fecha real que ya se pagó
+// (sugerencia del usuario: usar la última descarga de Planillas como
+// referencia). Si todavía no hay ninguna colilla archivada para esta
+// propiedad, devuelve null y el llamador cae de vuelta al calendario.
+async function finUltimoPeriodoPagadoISO() {
+  const { rows } = await query(
+    `SELECT titulo FROM documentos_emitidos
+      WHERE propiedad_id = $1 AND tipo = 'colilla_pago' AND anulado_en IS NULL
+      ORDER BY emitido_en DESC LIMIT 200`,
+    [PROPIEDAD_RELOJ]
+  );
+  const re = /al (\d{2})\/(\d{2})\/(\d{4})/;
+  let maxISO = null;
+  rows.forEach((r) => {
+    const m = re.exec(r.titulo || "");
+    if (!m) return;
+    const iso = `${m[3]}-${m[2]}-${m[1]}`;
+    if (!maxISO || iso > maxISO) maxISO = iso;
+  });
+  return maxISO;
+}
+
+// Límite real hacia atrás de cualquier proceso AUTOMÁTICO del reloj marcador
+// (nunca del botón manual "Enviar a Horas extras", que es una acción
+// explícita de quien lo aprieta, con el rango de fechas a la vista): el más
+// tardío entre el inicio de la quincena de calendario en curso y el día
+// siguiente al último período ya pagado según las colillas archivadas — así,
+// si el proveedor de planillas cierra un período distinto al que adivina el
+// calendario (o ya pagó algo que el calendario todavía consideraría
+// "abierto"), manda el dato real. Nunca se vuelve MÁS permisivo que la
+// quincena de calendario, solo más estricto.
+async function limiteSincronizacionAutomaticaISO() {
+  const porCalendario = inicioQuincenaActualISO();
+  let porColilla = null;
+  try {
+    const finPagado = await finUltimoPeriodoPagadoISO();
+    if (finPagado) porColilla = relojSumarDias(finPagado, 1);
+  } catch (e) {
+    // No crítico: si la consulta falla, se sigue con el límite de calendario.
+  }
+  return porColilla && porColilla > porCalendario ? porColilla : porCalendario;
+}
+
 // --------------------------------------------------------------------------
 // Lectura de catálogos y correcciones desde Postgres (equivalente a
 // window.storage.list en app.js, pero directo contra la tabla).
@@ -689,7 +735,13 @@ async function ejecutarSincronizacionDiaria() {
   const ultimaFecha = estado && estado.ULTIMA_FECHA;
   const desdeCatchUp = ultimaFecha ? relojSumarDias(ultimaFecha, 1) : FECHA_INICIO_SYNC;
   const desdeConMargen = ultimaFecha ? relojSumarDias(ultimaFecha, 1 - LOOKBACK_DIAS) : FECHA_INICIO_SYNC;
-  const desde = desdeConMargen < FECHA_INICIO_SYNC ? FECHA_INICIO_SYNC : desdeConMargen;
+  let desde = desdeConMargen < FECHA_INICIO_SYNC ? FECHA_INICIO_SYNC : desdeConMargen;
+  // Tampoco esta corrida corta (cada 5 min) cruza hacia atrás un período ya
+  // pagado (ver limiteSincronizacionAutomaticaISO) — los 7 días de margen son
+  // para corregir un turno nocturno recién cerrado, no para tocar algo de la
+  // quincena anterior si esta corrida justo cae al inicio de una nueva.
+  const limite = await limiteSincronizacionAutomaticaISO();
+  if (desde < limite) desde = limite;
 
   if (desde > hoy) return { configurado: true, saltado: true };
 
@@ -722,11 +774,11 @@ async function ejecutarRevisionProfunda() {
   if (!process.env.RELOJ_MYSQL_URL) return { configurado: false };
   const hoy = fechaCRDeAhora(0);
   const desdePorDias = relojSumarDias(hoy, -REVISION_PROFUNDA_DIAS);
-  // Nunca cruza hacia atrás el inicio del período de planilla en curso (ver
-  // inicioQuincenaActualISO): un período ya cerrado y pagado no se vuelve a
+  // Nunca cruza hacia atrás un período de planilla ya pagado (ver
+  // limiteSincronizacionAutomaticaISO): un período cerrado no se vuelve a
   // tocar solo porque el reloj trajo algo atrasado de esas fechas.
-  const inicioPeriodo = inicioQuincenaActualISO();
-  const desdeSinTope = desdePorDias > inicioPeriodo ? desdePorDias : inicioPeriodo;
+  const limite = await limiteSincronizacionAutomaticaISO();
+  const desdeSinTope = desdePorDias > limite ? desdePorDias : limite;
   const desde = desdeSinTope < FECHA_INICIO_SYNC ? FECHA_INICIO_SYNC : desdeSinTope;
   const resultado = await sincronizarRango(desde, hoy);
   return { desde, hasta: hoy, ...resultado };
