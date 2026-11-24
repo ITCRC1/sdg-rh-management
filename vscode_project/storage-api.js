@@ -420,6 +420,12 @@
         pedir("/reloj/marcas?desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta))
           .then((r) => r.marcas),
       personas: () => pedir("/reloj/personas").then((r) => r.personas),
+      // Recalcula al instante un rango contra el reloj marcador — ver
+      // renderHorasExtrasPanel en app.js (se llama sola al abrir ese panel,
+      // para que lo "pendiente" nunca esté más desactualizado que el
+      // momento en que alguien lo está mirando).
+      resincronizar: (desde, hasta) =>
+        pedir("/reloj/resincronizar-horas-extra", { method: "POST", body: JSON.stringify({ desde, hasta }) }),
     },
 
     // Administración (solo master)

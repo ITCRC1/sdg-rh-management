@@ -13010,6 +13010,19 @@ async function renderHorasExtrasPanel(){
   // "Confirmar todo" no se haya presionado explícitamente.
   await guardarEdicionesPendientesHorasExtra();
   panel.innerHTML = `<div class="empty-state">Cargando…</div>`;
+  // Antes de leer lo ya guardado: si esta cuenta puede aprobar, se dispara un
+  // resync del reloj marcador del último mes, para que lo "pendiente" de un
+  // registro automático nunca quede más desactualizado que el momento en que
+  // alguien lo está mirando (ver POST /api/reloj/resincronizar-horas-extra).
+  // Si falla (reloj apagado, otra propiedad, sin permiso) se ignora en
+  // silencio: el panel igual se carga con lo que ya hubiera en Horas extra.
+  if (window.sdgApi.reloj && window.sdgApi.puedeEditar()){
+    try{
+      const hoy = isoDeFechaLocal(new Date());
+      const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30);
+      await window.sdgApi.reloj.resincronizar(isoDeFechaLocal(hace30), hoy);
+    }catch(e){ /* no crítico */ }
+  }
   try{
     const registros = await listarRegistrosHorasExtra();
     const correcciones = await listarCorreccionesHorasExtra();
