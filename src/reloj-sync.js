@@ -47,7 +47,20 @@ const RELOJ_MANUAL_PREFIX = "reloj_manual:";
 const SYNC_ESTADO_CLAVE = "config:reloj_sync_estado";
 
 const FECHA_INICIO_SYNC = process.env.RELOJ_SYNC_FECHA_INICIO || "2026-09-10";
-const LOOKBACK_DIAS = 2;
+// 7 días (antes 2): un terminal que se queda sin batería guarda las marcas en
+// su memoria interna y las sube al servidor varios días después, cuando se
+// recarga — con solo 2 días de margen esa marca tardía llegaba después de que
+// el marcador ya hubiera avanzado más allá de esa fecha, y el día se quedaba
+// congelado con el cálculo viejo e incompleto para siempre (ver
+// ejecutarRevisionProfunda más abajo para el caso de marcas que ni con 7 días
+// alcanzan).
+const LOOKBACK_DIAS = 7;
+// Red de seguridad aparte de LOOKBACK_DIAS: una corrida mucho más generosa
+// hacia atrás, pero solo una vez al día (no cada 5 minutos como la normal),
+// para el caso extremo de una marca que llega más tarde incluso que los 7
+// días de arriba (ej. un terminal varias semanas sin batería). Ver
+// ejecutarRevisionProfunda.
+const REVISION_PROFUNDA_DIAS = 30;
 
 const JORNADA_DIARIA_POR_DEFECTO = 8;
 const HORAS_POR_MODALIDAD = { turno_continuo_diurno: 8, turno_mixto: 7, turno_nocturno: 6 };
@@ -686,4 +699,27 @@ async function marcarUltimaFechaSincronizada(hasta, resultado) {
   await guardarDocumento(SYNC_ESTADO_CLAVE, { ULTIMA_FECHA: hasta, ACTUALIZADO_EN: new Date().toISOString(), ULTIMO_RESULTADO: resultado || null });
 }
 
-module.exports = { sincronizarRango, ejecutarSincronizacionDiaria, marcarUltimaFechaSincronizada, FECHA_INICIO_SYNC };
+// Revisión profunda (ver REVISION_PROFUNDA_DIAS arriba): repasa los últimos
+// REVISION_PROFUNDA_DIAS días completos, sin importar dónde vaya el bookmark
+// de la corrida normal. Reprocesar un día ya sincronizado es seguro (ver el
+// aviso de guardarFilas): cualquier día con ESTADO distinto de "pendiente" se
+// salta tal cual, nunca se pisa una decisión ya tomada — así que esta corrida
+// solo puede rellenar huecos, nunca deshacer nada. A propósito NO toca el
+// bookmark (ULTIMA_FECHA): es un repaso extra, no la fuente de verdad de
+// hasta dónde ya se sincronizó esa ventana normal.
+async function ejecutarRevisionProfunda() {
+  if (!process.env.RELOJ_MYSQL_URL) return { configurado: false };
+  const hoy = fechaCRDeAhora(0);
+  const desdeSinTope = relojSumarDias(hoy, -REVISION_PROFUNDA_DIAS);
+  const desde = desdeSinTope < FECHA_INICIO_SYNC ? FECHA_INICIO_SYNC : desdeSinTope;
+  const resultado = await sincronizarRango(desde, hoy);
+  return { desde, hasta: hoy, ...resultado };
+}
+
+module.exports = {
+  sincronizarRango,
+  ejecutarSincronizacionDiaria,
+  ejecutarRevisionProfunda,
+  marcarUltimaFechaSincronizada,
+  FECHA_INICIO_SYNC,
+};

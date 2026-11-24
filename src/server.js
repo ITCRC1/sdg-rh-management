@@ -7,7 +7,7 @@ const A = require("./auth");
 const rutasAuth = require("./rutas-auth");
 const { datos, historial, emitidos } = require("./rutas-datos");
 const { reloj } = require("./rutas-reloj");
-const { ejecutarSincronizacionDiaria } = require("./reloj-sync");
+const { ejecutarSincronizacionDiaria, ejecutarRevisionProfunda } = require("./reloj-sync");
 const estatico = require("./estatico");
 
 const PORT = Number(process.env.PORT) || 8000;
@@ -110,6 +110,28 @@ const TAREAS_DIARIAS_MS = 24 * 60 * 60 * 1000; // una vez al día basta
 
 function tareasDiarias() {
   A.archivarUsuariosDeEmpleadosVencidos();
+  correrRevisionProfundaReloj();
+}
+
+// Revisión profunda del Reloj marcador (ver ejecutarRevisionProfunda en
+// src/reloj-sync.js): a diferencia de correrSincronizacionReloj (cada 5
+// minutos, ventana corta), esta repasa un mes completo hacia atrás pero solo
+// una vez al día — red de seguridad para una marca que llegó tarde incluso
+// para el margen de 7 días de la corrida normal (ej. un terminal varias
+// semanas sin batería). Nunca pisa un día ya decidido, así que es seguro
+// dejarla correr sola todos los días sin supervisión.
+async function correrRevisionProfundaReloj() {
+  try {
+    const r = await ejecutarRevisionProfunda();
+    if (r.configurado && ((r.creadas || 0) > 0 || (r.actualizadas || 0) > 0)) {
+      console.log(
+        `Reloj marcador (revisión profunda, ${r.desde} a ${r.hasta}): ` +
+          `${r.creadas || 0} creado(s), ${r.actualizadas || 0} actualizado(s).`
+      );
+    }
+  } catch (e) {
+    console.error("No se pudo completar la revisión profunda del Reloj marcador:", e.message);
+  }
 }
 
 // Envío automático del Reloj marcador a Horas extra — cada pocos minutos
@@ -153,8 +175,10 @@ async function arrancar() {
 
   // Mantenimiento periódico: desactiva las cuentas de empleado cuyo
   // expediente lleva más de 90 días archivado (ver
-  // A.archivarUsuariosDeEmpleadosVencidos) — una vez al arrancar y luego una
-  // vez al día, mientras el proceso siga vivo.
+  // A.archivarUsuariosDeEmpleadosVencidos) y repasa un mes de Reloj marcador
+  // por si quedó algo pendiente fuera del alcance de la corrida de cada 5
+  // minutos (ver correrRevisionProfundaReloj) — una vez al arrancar y luego
+  // una vez al día, mientras el proceso siga vivo.
   tareasDiarias();
   const tareasProgramadas = setInterval(tareasDiarias, TAREAS_DIARIAS_MS);
   tareasProgramadas.unref();
