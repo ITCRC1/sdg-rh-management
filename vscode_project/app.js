@@ -11870,6 +11870,39 @@ async function relojGuardarManual(){
 }
 
 // ---------- Vincular persona del reloj con su ficha ----------
+// Guarda el código del reloj en su propio campo (ID_RELOJ) — el número de
+// planilla (NUMERO_EMPLEADO) no se toca nunca desde aquí, porque es el que
+// usan las colillas. Un ID del reloj es de una sola persona: si ya le
+// pertenecía a otra ficha, o esta ficha ya tenía otro distinto, se confirma
+// antes de reasignarlo. Compartida por relojVincular (panel Reloj marcador)
+// y por "Identificar" en Horas Extra (ver asignarEmpleadoAHorasExtraKeys):
+// vincular una sola vez alcanza para que los próximos días de esa persona
+// entren solos, sin volver a aparecer como "sin identificar".
+async function vincularCodigoRelojAFicha(fullKey, codigoReloj){
+  const r = await window.storage.get(fullKey, false);
+  const emp = JSON.parse(r.value);
+  const nombre = nombreCompletoEmpleado(emp);
+  if (emp.ID_RELOJ && relojNumeroExacto(emp.ID_RELOJ) === relojNumeroExacto(codigoReloj)){
+    return { ok: true, nombre, yaEstaba: true };
+  }
+  if (emp.ID_RELOJ){
+    if (!confirm(`${nombre} ya tiene el ID de reloj ${emp.ID_RELOJ}. ¿Cambiarlo por ${codigoReloj}?`)) return { ok: false, nombre };
+  }
+  const res = await window.storage.list(CATALOGS.empleados.prefix, false);
+  for (const k of (res && res.keys) || []){
+    if (k === fullKey) continue;
+    const otro = JSON.parse((await window.storage.get(k, false)).value || "{}");
+    if (otro.ID_RELOJ && relojNumeroExacto(otro.ID_RELOJ) === relojNumeroExacto(codigoReloj)){
+      if (!confirm(`El ID de reloj ${codigoReloj} está asignado a ${nombreCompletoEmpleado(otro)}. ¿Quitárselo y dárselo a ${nombre}?`)) return { ok: false, nombre };
+      delete otro.ID_RELOJ;
+      await window.storage.set(k, JSON.stringify(otro), false);
+    }
+  }
+  emp.ID_RELOJ = codigoReloj;
+  await window.storage.set(fullKey, JSON.stringify(emp), false);
+  return { ok: true, nombre, yaEstaba: false };
+}
+
 async function relojVincular(indice){
   const p = relojCtx && relojCtx.sinFicha ? relojCtx.sinFicha[indice] : null;
   const sel = document.getElementById("reloj-vinc-" + indice);
@@ -11877,27 +11910,8 @@ async function relojVincular(indice){
   if (!sel.value){ statusMsg("Elige la ficha que corresponde.", false); return; }
   const fullKey = CATALOGS.empleados.prefix + sel.value;
   try{
-    const r = await window.storage.get(fullKey, false);
-    const emp = JSON.parse(r.value);
-    const nombre = nombreCompletoEmpleado(emp);
-    // Guarda el ID en su propio campo: el número de planilla (NUMERO_EMPLEADO)
-    // no se toca nunca desde aquí, porque es el que usan las colillas.
-    if (emp.ID_RELOJ && relojNumeroExacto(emp.ID_RELOJ) !== relojNumeroExacto(p.codigo)){
-      if (!confirm(`${nombre} ya tiene el ID de reloj ${emp.ID_RELOJ}. ¿Cambiarlo por ${p.codigo}?`)) return;
-    }
-    // Un ID del reloj es de una sola persona: si otra ficha lo tenía, se le quita.
-    const res = await window.storage.list(CATALOGS.empleados.prefix, false);
-    for (const k of (res && res.keys) || []){
-      if (k === fullKey) continue;
-      const otro = JSON.parse((await window.storage.get(k, false)).value || "{}");
-      if (otro.ID_RELOJ && relojNumeroExacto(otro.ID_RELOJ) === relojNumeroExacto(p.codigo)){
-        if (!confirm(`El ID de reloj ${p.codigo} está asignado a ${nombreCompletoEmpleado(otro)}. ¿Quitárselo y dárselo a ${nombre}?`)) return;
-        delete otro.ID_RELOJ;
-        await window.storage.set(k, JSON.stringify(otro), false);
-      }
-    }
-    emp.ID_RELOJ = p.codigo;
-    await window.storage.set(fullKey, JSON.stringify(emp), false);
+    const { ok, nombre } = await vincularCodigoRelojAFicha(fullKey, p.codigo);
+    if (!ok) return;
     statusMsg(`${nombre} quedó vinculado con el ID ${p.codigo} del reloj. Su número de planilla no cambió.`);
     renderRelojPanel();
   }catch(e){ statusMsg("No se pudo vincular: " + e.message, false); }
@@ -14298,10 +14312,19 @@ async function mostrarModalAsignarHoraExtra(key){
 // persona de un tirón, ver mostrarModalAsignarHoraExtraGrupo) — misma lógica
 // de fusión con un registro ya existente para cada key, una por una.
 async function asignarEmpleadoAHorasExtraKeys(empKey, keys){
+  // Si alguno de estos días viene del reloj marcador (CODIGO_ARCHIVO es el
+  // PersonID real del dispositivo, no un dato suelto de un Excel importado),
+  // se aprovecha para vincular ese código a la ficha de una vez (ver
+  // vincularCodigoRelojAFicha) — así los próximos días de esta misma persona
+  // ya entran identificados solos, sin repetir "Identificar" cada vez.
+  let codigoRelojAVincular = null;
   for (const key of keys){
     const r = await window.storage.get(key, false);
     const v = r && r.value ? JSON.parse(r.value) : null;
     if (!v) continue;
+    if (!codigoRelojAVincular && v.CODIGO_ARCHIVO && String(v.ORIGEN_ARCHIVO || "").startsWith("Reloj marcador")){
+      codigoRelojAVincular = v.CODIGO_ARCHIVO;
+    }
     const nuevaKey = HORAS_EXTRA_PREFIX + empKey + ":" + v.FECHA;
     v.EMPLEADO_KEY = empKey;
     // Si ya existía un registro pendiente para ese empleado+fecha (ej. otra
@@ -14322,6 +14345,13 @@ async function asignarEmpleadoAHorasExtraKeys(empKey, keys){
       await window.storage.set(key, JSON.stringify(v), false);
     }
   }
+  if (!codigoRelojAVincular) return { vinculado: false };
+  try{
+    const { ok, yaEstaba } = await vincularCodigoRelojAFicha(CATALOGS.empleados.prefix + empKey, codigoRelojAVincular);
+    return { vinculado: ok && !yaEstaba, codigo: codigoRelojAVincular };
+  }catch(e){
+    return { vinculado: false }; // no crítico: la asignación de arriba ya quedó guardada
+  }
 }
 
 async function confirmarAsignarHoraExtra(key){
@@ -14329,9 +14359,9 @@ async function confirmarAsignarHoraExtra(key){
   const empKey = sel && sel.value;
   if (!empKey){ statusMsg("Selecciona un empleado.", false); return; }
   try{
-    await asignarEmpleadoAHorasExtraKeys(empKey, [key]);
+    const { vinculado, codigo } = await asignarEmpleadoAHorasExtraKeys(empKey, [key]);
     cerrarModalIncompletos();
-    statusMsg("Empleado identificado.");
+    statusMsg("Empleado identificado." + (vinculado ? ` Además quedó vinculado con el ID ${codigo} del reloj: los próximos días de esta persona ya entran solos.` : ""));
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo asignar: " + e.message, false); }
 }
@@ -14382,10 +14412,10 @@ async function confirmarAsignarHoraExtraGrupo(keys){
   if (!empKey){ statusMsg("Selecciona un empleado.", false); return; }
   if (!Array.isArray(keys) || !keys.length) return;
   try{
-    await asignarEmpleadoAHorasExtraKeys(empKey, keys);
+    const { vinculado, codigo } = await asignarEmpleadoAHorasExtraKeys(empKey, keys);
     cerrarModalIncompletos();
     horasExtraGrupoSinMatchSeleccionado = null;
-    statusMsg(`Empleado identificado en ${keys.length} día(s).`);
+    statusMsg(`Empleado identificado en ${keys.length} día(s).` + (vinculado ? ` Además quedó vinculado con el ID ${codigo} del reloj: los próximos días de esta persona ya entran solos.` : ""));
     renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo asignar: " + e.message, false); }
 }
