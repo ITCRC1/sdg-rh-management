@@ -5940,13 +5940,30 @@ function construirIndicesEmpleados(empleadosDB){
 // busca SOLO entre quienes ya están marcados como que cobran en dólares — el
 // número de un empleado en colones ni siquiera entra en la búsqueda, así que
 // no hay con qué chocar.
+//
+// Recibe el catálogo COMPLETO (activos + archivados) y arma dos juegos de
+// índices separados: uno de activos (se busca primero) y otro de archivados
+// (respaldo). Un número de empleado solo se reasigna cuando a ese MISMO
+// archivado se le reactiva — nunca a una persona nueva distinta mientras
+// sigue archivado — así que no hay choque real entre ambos grupos: si nadie
+// activo tiene ese número/nombre, el archivado que lo tenía es un candidato
+// seguro (ver emparejarRegistroColilla).
 function construirIndicesPorMoneda(empleadosDB){
-  const empleadosUsd = empleadosDB.filter(e => e.MONEDA_SALARIO_EMP === "USD");
-  const empleadosCrc = empleadosDB.filter(e => e.MONEDA_SALARIO_EMP !== "USD");
+  const activos = empleadosDB.filter(e => !e.ARCHIVADO);
+  const archivados = empleadosDB.filter(e => e.ARCHIVADO);
+  const empleadosUsd = activos.filter(e => e.MONEDA_SALARIO_EMP === "USD");
+  const empleadosCrc = activos.filter(e => e.MONEDA_SALARIO_EMP !== "USD");
+  const archivadosUsd = archivados.filter(e => e.MONEDA_SALARIO_EMP === "USD");
+  const archivadosCrc = archivados.filter(e => e.MONEDA_SALARIO_EMP !== "USD");
   return {
     USD: construirIndicesEmpleados(empleadosUsd),
     CRC: construirIndicesEmpleados(empleadosCrc),
     empleadosUsd, empleadosCrc,
+    archivadosIndices: {
+      USD: construirIndicesEmpleados(archivadosUsd),
+      CRC: construirIndicesEmpleados(archivadosCrc),
+    },
+    archivadosUsd, archivadosCrc,
   };
 }
 
@@ -5955,11 +5972,28 @@ function construirIndicesPorMoneda(empleadosDB){
 // archivar la colilla individual de cada quien. `indicesPorMoneda` viene de
 // construirIndicesPorMoneda — la búsqueda queda acotada desde el principio a
 // la "pila" de empleados de la misma moneda que trae esta colilla.
+//
+// Se busca primero entre los ACTIVOS con esa misma cascada; si nadie activo
+// calza, se repite la misma cascada entre los ARCHIVADOS — esto cubre el caso
+// real de alguien que ya se fue pero igual aparece en esta planilla (pago
+// atrasado, liquidación) sin tener que asignarlo a mano uno por uno. Se marca
+// `matchArchivado: true` para que la vista lo deje visible.
 function emparejarRegistroColilla(p, indicesPorMoneda){
-  let match = null, nombreCorregido = null, matchedBy = null, numeroAmbiguo = false;
   const esUsd = p.moneda === "USD";
   const indices = esUsd ? indicesPorMoneda.USD : indicesPorMoneda.CRC;
   const empleadosDelGrupo = esUsd ? indicesPorMoneda.empleadosUsd : indicesPorMoneda.empleadosCrc;
+  const resultado = buscarEnIndiceColilla(p, indices, empleadosDelGrupo);
+  if (resultado.match) return resultado;
+
+  const indicesArchivados = esUsd ? indicesPorMoneda.archivadosIndices.USD : indicesPorMoneda.archivadosIndices.CRC;
+  const archivadosDelGrupo = esUsd ? indicesPorMoneda.archivadosUsd : indicesPorMoneda.archivadosCrc;
+  const resultadoArchivado = buscarEnIndiceColilla(p, indicesArchivados, archivadosDelGrupo);
+  if (resultadoArchivado.match) resultadoArchivado.matchArchivado = true;
+  return resultadoArchivado;
+}
+
+function buscarEnIndiceColilla(p, indices, empleadosDelGrupo){
+  let match = null, nombreCorregido = null, matchedBy = null, numeroAmbiguo = false;
   if (p.numero){
     const candidatos = indices.porNumero[p.numero.replace(/^0+/,"")] || [];
     if (candidatos.length === 1){
@@ -6016,14 +6050,12 @@ async function procesarColillas(){
     statusMsg("No se pudo cargar la lista de empleados/puestos para comparar: " + e.message, false);
     return;
   }
-  // Un archivado nunca debe ser candidato para emparejar una colilla de la
-  // planilla actual — sin este filtro, un número de empleado reasignado a
-  // alguien nuevo podía seguir emparejando con la persona que ya se fue
-  // (ver nombresSinRelacion/construirIndicesEmpleados: el número "coincide"
-  // mecánicamente contra cualquiera que lo haya tenido, archivado o no).
-  empleadosDB = empleadosDB.filter(e => !e.ARCHIVADO);
   window._puestosDBCache = puestosDB; // lo usa el selector de mapeo en renderColillasPreview
-  window._empleadosActivosColillasCache = empleadosDB; // lo usa renderColillasPreview para avisar de los que faltan
+  // "Empleados faltantes" (renderColillasPreview) solo tiene sentido contra
+  // activos — a un archivado no se le espera colilla este período salvo que
+  // de verdad aparezca una (ver emparejarRegistroColilla, que sí lo busca
+  // como respaldo).
+  window._empleadosActivosColillasCache = empleadosDB.filter(e => !e.ARCHIVADO);
   const indicesPorMoneda = construirIndicesPorMoneda(empleadosDB);
 
   // Para no repetir una actualización ya aplicada: si esta misma persona ya
@@ -6035,7 +6067,7 @@ async function procesarColillas(){
   catch(e){ clavesYaArchivadas = new Set(); }
 
   colillasResultadosCache = parsed.map(p => {
-    const { match, nombreCorregido, matchedBy, numeroAmbiguo } = emparejarRegistroColilla(p, indicesPorMoneda);
+    const { match, nombreCorregido, matchedBy, numeroAmbiguo, matchArchivado } = emparejarRegistroColilla(p, indicesPorMoneda);
     const puestoInfo = calcularPuestoInfo(p, match, mapaOcupaciones);
     const yaArchivada = !!(match && p.periodoInicio && clavesYaArchivadas.has(claveColillaArchivada(match.IDENTIFICACION_EMP, nombreCompletoEmpleado(match), p.periodoInicio)));
     // Un salario en colones que cae a menos de un tercio del que ya tenía
@@ -6054,7 +6086,7 @@ async function procesarColillas(){
     if (match && (matchedBy === "número de empleado" || matchedBy === "cédula") && nombresSinRelacion(p.nombre, nombreCompletoEmpleado(match))){
       nombreSospechoso = true;
     }
-    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso, nombreSospechoso, numeroAmbiguo, yaArchivada });
+    return Object.assign({}, p, { match, puestoInfo, nombreCorregido, matchedBy, salarioSospechoso, nombreSospechoso, numeroAmbiguo, yaArchivada, matchArchivado });
   });
   renderColillasPreview();
 }
@@ -6176,7 +6208,7 @@ function renderColillasPreview(){
         const anteriorUsd = r.match.SALARIO_USD_EMP;
         const cambia = String(anteriorUsd||"").trim() !== String(r.salario).trim();
         return `<div style="font-size:12px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
-          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
+          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span>${r.matchArchivado ? ' <span style="color:#B3261E;">· archivado</span>' : ""}<br>
           ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
           Salario en dólares: ${anteriorUsd ? "$"+Number(anteriorUsd).toLocaleString("en-US") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">$${r.salario.toLocaleString("en-US")}</b>
           ${renderPuestoAvisoHtml(r)}
@@ -6234,7 +6266,7 @@ function renderColillasPreview(){
       ${encontrados.map(r => {
         const cambia = String(r.match.SALARIO_EMP||"").trim() !== String(r.salario).trim();
         return `<div style="font-size:12px; padding:5px 0; border-bottom:1px solid var(--paper-line);">
-          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span><br>
+          <b>${escapeHtml(nombreCompletoEmpleado(r.match))}</b> — № ${escapeHtml(r.numero)} <span style="color:var(--ink-soft);">(emparejado por ${escapeHtml(r.matchedBy || "nombre")})</span>${r.matchArchivado ? ' <span style="color:#B3261E;">· archivado</span>' : ""}<br>
           ${r.nombreCorregido ? `<span style="color:#8a6d1f;">✏️ Nombre corregido automáticamente: "${escapeHtml(r.nombreCorregido.anterior)}" → "${escapeHtml(r.nombreCorregido.nuevo)}"</span><br>` : ""}
           Salario: ${r.match.SALARIO_EMP ? "₡"+Number(r.match.SALARIO_EMP).toLocaleString("es-CR") : "—"} → <b style="color:${cambia?'var(--navy-deep)':'var(--ink-soft)'};">₡${r.salario.toLocaleString("es-CR")}</b>
           ${renderPuestoAvisoHtml(r)}
@@ -6676,11 +6708,10 @@ async function archivarColillasPDF(file, clavesYaArchivadas, moneda, clavesPendi
   }
   if (!registros.length) return { archivados: 0, duplicados: 0, sinCoincidencia: [], total: 0 };
 
-  // Mismo filtro que procesarColillas: un archivado nunca debe ser candidato
-  // para emparejar una colilla de la planilla actual (ver el comentario de
-  // allá para el caso concreto: número de empleado reasignado a alguien
-  // nuevo que seguía emparejando con quien ya se fue).
-  const empleadosDB = (await cargarEmpleadosDB()).filter(e => !e.ARCHIVADO);
+  // Igual que procesarColillas: se le pasa el catálogo completo a
+  // construirIndicesPorMoneda, que ya prioriza activos y solo cae a
+  // archivados como respaldo (ver emparejarRegistroColilla).
+  const empleadosDB = await cargarEmpleadosDB();
   const indicesPorMoneda = construirIndicesPorMoneda(empleadosDB);
   if (!clavesYaArchivadas) clavesYaArchivadas = await cargarClavesColillasArchivadas();
   if (!clavesPendientesYaGuardadas) clavesPendientesYaGuardadas = await cargarClavesColillasPendientes();
