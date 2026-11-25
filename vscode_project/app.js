@@ -20656,9 +20656,13 @@ function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasI
     if (!pausado) eventos.push({ fecha: finPeriodo, tipo: "acredita", dias: ACUMULACION_MENSUAL_VACACIONES });
     inicioPeriodo = finPeriodo;
   }
+  // fecha >= ingreso descarta solicitudes de un ingreso ANTERIOR al vigente
+  // (ver reactivarEmpleado: un reingreso cuenta como ingreso nuevo, así que
+  // el uso de vacaciones de un paso anterior por la empresa no debe restar
+  // del saldo que arranca de cero con el reingreso).
   (solicitudesVacacionesAprobadas || []).forEach(s => {
     const fecha = new Date(s.FECHA_INICIO + "T00:00:00");
-    if (fecha <= fechaCorte) eventos.push({ fecha, tipo: "usa", dias: s.DIAS || 0 });
+    if (fecha <= fechaCorte && fecha >= ingreso) eventos.push({ fecha, tipo: "usa", dias: s.DIAS || 0 });
   });
   // Ajustes manuales (ver agregarAjusteVacaciones) — master/gerente corrige
   // el saldo a mano (típicamente para quitar un excedente que ya se sabe que
@@ -20669,7 +20673,7 @@ function calcularSaldoVacaciones(empleado, solicitudesVacacionesAprobadas, diasI
   // TOPE_SALDO_VACACIONES a propósito; ya no).
   (empleado && empleado.AJUSTES_VACACIONES || []).forEach(a => {
     const fecha = new Date(a.fecha + "T00:00:00");
-    if (fecha <= fechaCorte) eventos.push({ fecha, tipo: "ajuste", dias: a.dias || 0 });
+    if (fecha <= fechaCorte && fecha >= ingreso) eventos.push({ fecha, tipo: "ajuste", dias: a.dias || 0 });
   });
   eventos.sort((a,b) => a.fecha - b.fecha);
 
@@ -26772,12 +26776,24 @@ async function confirmarArchivarEmpleado(){
   }catch(e){ statusMsg("No se pudo archivar.", false); }
 }
 
-async function reactivarEmpleado(key){
+// `opts.reingreso` distingue dos casos que usan el mismo botón/flujo:
+//  - deshacer inmediato (el "undo" del toast justo después de archivar por
+//    error): nunca pasa reingreso=true, así que es pura continuidad — nada
+//    cambia de la antigüedad, porque en la práctica nunca se fue.
+//  - "♻️ Reactivar" desde Archivo (ver reactivarEmpleadoDesdeArchivo): alguien
+//    que de verdad se reincorpora después de haberse ido. Por regla del
+//    negocio, esto SIEMPRE cuenta como un ingreso NUEVO, no como continuidad
+//    del anterior — FECHA_INGRESO_EMP pasa a ser hoy, y con eso antigüedad,
+//    vacaciones acumuladas (ver calcularSaldoVacaciones) y aguinaldo/cesantía
+//    proporcional arrancan de cero. El ingreso y la salida anteriores quedan
+//    intactos en el HISTORIAL, como referencia de que ya trabajó acá antes.
+async function reactivarEmpleado(key, opts){
   try{
     const fullKey = CATALOGS.empleados.prefix + key;
     const res = await window.storage.get(fullKey, false);
     if (!res || !res.value){ statusMsg("No se pudo cargar ese empleado.", false); return; }
     const emp = JSON.parse(res.value);
+    const esReingreso = !!(opts && opts.reingreso);
     emp.ARCHIVADO = false;
     emp.ESTADO_EMP = "Activo";
     delete emp.DIAS_PENDIENTES_LIQUIDACION; // ya no aplica — sigue activo, no hay nada que liquidar
@@ -26787,11 +26803,32 @@ async function reactivarEmpleado(key){
     (emp.DEDUCCIONES_RECURRENTES || []).forEach(d => {
       if (d.desactivadaPorArchivado){ d.activo = true; delete d.desactivadaPorArchivado; }
     });
+    if (esReingreso){
+      const ingresoAnterior = emp.FECHA_INGRESO_EMP || "";
+      const salidaAnterior = emp.FECHA_ARCHIVADO || "";
+      const hoy = new Date();
+      const d = hoy.getDate(), m = hoy.getMonth() + 1, y = hoy.getFullYear();
+      emp.FECHA_INGRESO_EMP = `${String(d).padStart(2,"0")}/${String(m).padStart(2,"0")}/${y}`;
+      emp.FECHA_INGRESO_LETRAS_EMP = `${numeroALetrasEs(d)} de ${MESES[m-1]} del ${numeroALetrasEs(y)}`;
+      if (!Array.isArray(emp.HISTORIAL)) emp.HISTORIAL = [];
+      emp.HISTORIAL.unshift({
+        fecha: emp.FECHA_INGRESO_EMP,
+        texto: "Reingreso — se registra como ingreso nuevo, no como continuidad." +
+          (ingresoAnterior ? ` Ingreso anterior: ${ingresoAnterior}` : "") +
+          (salidaAnterior ? `, salida: ${salidaAnterior}.` : ".") +
+          " Antigüedad y vacaciones acumuladas arrancan de cero desde hoy.",
+      });
+    }
     await window.storage.set(fullKey, JSON.stringify(emp), false);
     const empleadosVisible = document.getElementById("empleados-panel").style.display !== "none";
     if (empleadosVisible) renderCatalogTab("empleados"); else renderArchivoList();
-    statusMsg((nombreCompletoEmpleado(emp) || "El empleado") + " fue reactivado.");
+    statusMsg((nombreCompletoEmpleado(emp) || "El empleado") + (esReingreso ? " fue reactivado como nuevo ingreso (hoy)." : " fue reactivado."));
   }catch(e){ statusMsg("No se pudo reactivar.", false); }
+}
+
+function reactivarEmpleadoDesdeArchivo(key){
+  if (!confirm("Esta reactivación se registra como un INGRESO NUEVO con fecha de hoy, no como continuidad del empleo anterior: la antigüedad y las vacaciones acumuladas arrancan de cero. El ingreso y la salida anteriores quedan guardados en el historial del expediente.\n\n¿Reactivar?")) return;
+  reactivarEmpleado(key, { reingreso: true });
 }
 
 async function renderArchivoList(){
@@ -26829,7 +26866,7 @@ async function renderArchivoList(){
             <button onclick="generarDespidoDeEmpleado('${k2}')">⚖️ Despido</button>
             <button onclick="generarRecomendacionDeEmpleado('${k2}')">📝 Recomendación</button>
             <button onclick="subirSalidaFirmadaArchivo('${k2}')">📎 Subir carta</button>
-            <button onclick="reactivarEmpleado('${k2}')">♻️ Reactivar</button>
+            <button onclick="reactivarEmpleadoDesdeArchivo('${k2}')">♻️ Reactivar</button>
           </div>
         </div>
       </div>`;
