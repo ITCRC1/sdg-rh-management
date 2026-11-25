@@ -9267,6 +9267,7 @@ let horasExtraFiltroNombre = ""; // buscador por nombre de empleado — aplica a
 let horasExtraGrupoSinMatchSeleccionado = null; // código/nombre del archivo abierto en el detalle de "Sin identificar" (vista lista → detalle, igual que "Pendientes")
 let horasExtraSinMatchGruposCache = {}; // grupoKey -> registros de ese mismo código/nombre sin identificar, recalculado en cada render para que el modal de identificar en lote sepa qué keys tocan
 let horasExtraEmpleadoAlertaSeleccionado = null; // key del empleado abierto en el detalle de "Marcas nuevas" (vista lista → detalle, igual que "Pendientes")
+let horasExtraDeptoDistribucion = null; // departamento clickeado en "📊 Distribución por departamento" — acota la lista de abajo a ese único departamento (null = todos)
 
 // Historial de "Motivos de marcas" — además de guardarse en el propio
 // registro de horas_extra: (MOTIVO_HORAS_EXTRA, lo último que se escribió),
@@ -9500,6 +9501,7 @@ function enRangoHorasExtra(fechaISO){
 function cambiarRangoHorasExtra(campo, valor){
   if (campo === "desde") horasExtraRangoDesde = valor || null;
   else horasExtraRangoHasta = valor || null;
+  horasExtraDeptoDistribucion = null;
   renderHorasExtrasPanel();
 }
 
@@ -9559,6 +9561,7 @@ async function aprobarDiasSinMarcarComoLaboral(empKey){
 function limpiarRangoHorasExtra(){
   horasExtraRangoDesde = null;
   horasExtraRangoHasta = null;
+  horasExtraDeptoDistribucion = null;
   renderHorasExtrasPanel();
 }
 
@@ -13417,7 +13420,7 @@ async function renderHorasExtrasPanel(){
       <input type="text" id="horasextra-buscar-nombre" placeholder="🔎 Buscar empleado…" value="${escapeHtml(horasExtraFiltroNombre)}" oninput="filtrarHorasExtraNombre(this.value)">
     </div>`;
     html += `<div class="catalog-toolbar" style="margin-bottom:10px;">
-      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; horasExtraGrupoSinMatchSeleccionado=null; horasExtraEmpleadoAlertaSeleccionado=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
+      ${filtroTabs.map(([v,l]) => `<button class="btn ${horasExtraFiltro===v?"primary":""}" onclick="horasExtraFiltro='${v}'; horasExtraEmpleadoSeleccionado=null; horasExtraGrupoSinMatchSeleccionado=null; horasExtraEmpleadoAlertaSeleccionado=null; horasExtraDeptoDistribucion=null; renderHorasExtrasPanel();">${l}</button>`).join("")}
     </div>`;
 
     let lista;
@@ -13782,14 +13785,22 @@ async function renderHorasExtrasPanel(){
       // sumadas) — un vistazo rápido sin tener que bajar hasta el final de
       // cada grupo ni descargar el Excel (ver exportarResumenHorasExtraPorDepartamento,
       // que es la versión para llevarse/archivar).
+      // Si el departamento seleccionado ya no tiene registros en esta vista
+      // (ej. se cambió de pestaña/rango y ya no aparece), se limpia solo —
+      // mejor volver a "todos" que dejar la lista vacía sin explicar por qué.
+      if (horasExtraDeptoDistribucion && !grupos[horasExtraDeptoDistribucion]) horasExtraDeptoDistribucion = null;
+
       if (deptosOrdenados.length > 1){
         html += `<div class="section-card" style="margin-bottom:12px;"><div class="section-body">
           <div style="font-weight:700; color:var(--navy-deep); margin-bottom:6px;">📊 Distribución por departamento</div>
+          <div style="font-size:11px; color:var(--ink-soft); margin-bottom:6px;">Toca un departamento para ver solo sus registros abajo.</div>
           <div style="display:flex; flex-wrap:wrap; gap:8px;">
             ${deptosOrdenados.map(depto => {
               const filasDepto = grupos[depto];
               const horas = filasDepto.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
-              return `<div style="flex:1 1 160px; border:1px solid var(--paper-line); border-radius:6px; padding:6px 10px;">
+              const activo = horasExtraDeptoDistribucion === depto;
+              const deptoEsc = depto.replace(/'/g,"\\'");
+              return `<div style="flex:1 1 160px; border:1px solid ${activo ? "var(--navy-deep)" : "var(--paper-line)"}; ${activo ? "background:#EEF3FA;" : ""} border-radius:6px; padding:6px 10px; cursor:pointer;" onclick="horasExtraDeptoDistribucion=${activo ? "null" : `'${deptoEsc}'`}; renderHorasExtrasPanel();">
                 <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px;">${escapeHtml(depto)}</div>
                 <div style="font-size:12.5px; margin-top:2px;">${filasDepto.length} registro(s) · <b>${fmtHorasReloj(horas)} h</b></div>
               </div>`;
@@ -13798,7 +13809,11 @@ async function renderHorasExtrasPanel(){
         </div></div>`;
       }
 
-      html += deptosOrdenados.map(depto => {
+      const deptosAMostrar = horasExtraDeptoDistribucion ? [horasExtraDeptoDistribucion] : deptosOrdenados;
+      if (horasExtraDeptoDistribucion){
+        html += `<button class="btn" style="margin-bottom:10px;" onclick="horasExtraDeptoDistribucion=null; renderHorasExtrasPanel();">← Ver todos los departamentos</button>`;
+      }
+      html += deptosAMostrar.map(depto => {
         const filasDepto = grupos[depto];
         const batchFinal = (puedeEditar && horasExtraFiltro === "aprobada_jefatura" && filasDepto.length > 1)
           ? `<div class="catalog-toolbar" style="margin-bottom:8px;">
