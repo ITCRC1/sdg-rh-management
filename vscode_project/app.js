@@ -13506,7 +13506,7 @@ async function renderHorasExtrasPanel(){
         // día que sí se trabajó): quedaba atrapado sin ningún control para
         // cambiarlo. No toca ESTADO — sigue "aprobada", solo corrige
         // TIPO_DIA (y las horas si se reclasifica a laboral).
-        acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}</span>
+        acciones = `<span class="meta">✅ Aprobación final: ${escapeHtml((r.APROBADO_FINAL_POR || "").split("@")[0] || "—")}${r.MOTIVO_HORAS_EXTRA ? ` · 📝 ${escapeHtml(r.MOTIVO_HORAS_EXTRA)}` : ""}</span>
           <select class="btn" style="padding:5px 6px;" onchange="cambiarTipoDiaHoraExtra('${keyEsc}', this.value)">
             ${Object.keys(TIPOS_DIA_HORARIO).map(t => `<option value="${t}"${t === tipoDia ? " selected" : ""}>${TIPOS_DIA_HORARIO[t].emoji} ${TIPOS_DIA_HORARIO[t].label}</option>`).join("")}
           </select>
@@ -13763,6 +13763,41 @@ async function renderHorasExtrasPanel(){
         if (b === "Sin departamento") return -1;
         return a.localeCompare(b);
       });
+      // Nombre de cada fila para ordenar (y para la distribución de abajo) —
+      // mismo criterio para todas las pestañas de esta rama (aprobación
+      // final/aprobadas/rechazadas): antes quedaban en el orden en que
+      // llegaron del servidor, saltando de una persona a otra sin criterio.
+      const nombreDeFila = r => {
+        const emp = r.EMPLEADO_KEY ? empleadosPorKey[r.EMPLEADO_KEY] : null;
+        return (emp && nombreCompletoEmpleado(emp)) || r.NOMBRE_ARCHIVO || r.CEDULA || "";
+      };
+      deptosOrdenados.forEach(depto => {
+        grupos[depto].sort((a, b) => {
+          const cmp = nombreDeFila(a).localeCompare(nombreDeFila(b), "es");
+          return cmp !== 0 ? cmp : (a.FECHA || "").localeCompare(b.FECHA || "");
+        });
+      });
+
+      // Distribución por departamento (cantidad de registros y horas extra
+      // sumadas) — un vistazo rápido sin tener que bajar hasta el final de
+      // cada grupo ni descargar el Excel (ver exportarResumenHorasExtraPorDepartamento,
+      // que es la versión para llevarse/archivar).
+      if (deptosOrdenados.length > 1){
+        html += `<div class="section-card" style="margin-bottom:12px;"><div class="section-body">
+          <div style="font-weight:700; color:var(--navy-deep); margin-bottom:6px;">📊 Distribución por departamento</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            ${deptosOrdenados.map(depto => {
+              const filasDepto = grupos[depto];
+              const horas = filasDepto.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
+              return `<div style="flex:1 1 160px; border:1px solid var(--paper-line); border-radius:6px; padding:6px 10px;">
+                <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px;">${escapeHtml(depto)}</div>
+                <div style="font-size:12.5px; margin-top:2px;">${filasDepto.length} registro(s) · <b>${fmtHorasReloj(horas)} h</b></div>
+              </div>`;
+            }).join("")}
+          </div>
+        </div></div>`;
+      }
+
       html += deptosOrdenados.map(depto => {
         const filasDepto = grupos[depto];
         const batchFinal = (puedeEditar && horasExtraFiltro === "aprobada_jefatura" && filasDepto.length > 1)
@@ -13770,8 +13805,9 @@ async function renderHorasExtrasPanel(){
               <button class="btn primary" onclick="aprobarVariasHorasExtraFinal(JSON.parse(this.dataset.keys))" data-keys='${escapeHtml(JSON.stringify(filasDepto.map(f => f.key)))}'>✅ Aprobar los ${filasDepto.length} de este departamento (final)</button>
             </div>`
           : "";
+        const horasDepto = filasDepto.reduce((s, r) => s + (r.HORAS_EXTRA || 0), 0);
         return `
-        <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px; margin:12px 0 4px;">${escapeHtml(depto)} (${filasDepto.length})</div>
+        <div style="font-size:11px; font-weight:700; color:var(--navy-deep); text-transform:uppercase; letter-spacing:.5px; margin:12px 0 4px;">${escapeHtml(depto)} (${filasDepto.length} · ${fmtHorasReloj(horasDepto)} h)</div>
         ${batchFinal}
         ${filasDepto.map(renderFilaHorasExtra).join("")}
       `;
