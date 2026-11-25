@@ -13073,6 +13073,119 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
   </div></div>`;
 }
 
+// Resumen de horas extra APROBADAS, sumadas por empleado y con subtotal por
+// departamento — a diferencia de "Reporte de horarios para pago de
+// planilla" (Planilla → el reporte completo para pagar: días laborados,
+// ausencias, deducciones…), esto es SOLO horas extra, pensado para ver de un
+// vistazo cuánto se acumuló por equipo. Usa el mismo rango de fechas elegido
+// arriba en este panel (horasExtraRangoDesde/Hasta) — "exporta lo que estás
+// viendo" — y el mismo criterio de feriado (3x) vs normal (1.5x) que ya usa
+// el resto del sistema.
+async function exportarResumenHorasExtraPorDepartamento(){
+  if (typeof ExcelJS === "undefined"){ statusMsg("No se pudo cargar el generador de Excel.", false); return; }
+  try{
+    const [registros, empleados, puestos] = await Promise.all([
+      listarRegistrosHorasExtra(), cargarEmpleadosDB(), cargarPuestosDB(),
+    ]);
+    const empleadosPorKey = {}; empleados.forEach(e => { empleadosPorKey[e.key] = e; });
+    const puestosPorKey = {}; puestos.forEach(p => { puestosPorKey[p.key] = p; });
+
+    const aprobadas = registros.filter(r => r.ESTADO === "aprobada" && r.EMPLEADO_KEY && enRangoHorasExtra(r.FECHA));
+    if (!aprobadas.length){ statusMsg("No hay horas extra aprobadas en el rango elegido.", false); return; }
+
+    const porEmpleado = {};
+    aprobadas.forEach(r => {
+      const emp = empleadosPorKey[r.EMPLEADO_KEY];
+      if (!emp) return;
+      const esFeriado = r.ORIGEN === "feriado_sin_marca" || !!feriadoLeyEnFecha(r.FECHA);
+      if (!porEmpleado[r.EMPLEADO_KEY]){
+        porEmpleado[r.EMPLEADO_KEY] = { emp, depto: departamentoDeEmpleadoGenerico(emp, puestosPorKey) || "Sin departamento", horasNormal: 0, horasFeriado: 0, dias: 0 };
+      }
+      const acc = porEmpleado[r.EMPLEADO_KEY];
+      if (esFeriado) acc.horasFeriado += (r.HORAS_EXTRA || 0);
+      else acc.horasNormal += (r.HORAS_EXTRA || 0);
+      acc.dias++;
+    });
+
+    const porDepto = {};
+    Object.values(porEmpleado).forEach(f => { (porDepto[f.depto] = porDepto[f.depto] || []).push(f); });
+    const deptosOrdenados = Object.keys(porDepto).sort((a,b) => a.localeCompare(b, "es"));
+    deptosOrdenados.forEach(d => porDepto[d].sort((a,b) => compararPorApellido(a.emp, b.emp)));
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Empleado", "Días con horas extra", "Horas extra normal (1.5x)", "Horas extra en feriado (3x)", "Horas extra total"];
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9", GRIS_SUBTOTAL="FFEDEDED", AZUL_DEPTO="FFDCE6F1";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("HORAS EXTRA");
+    ws.columns = [{ width: 30 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 18 }];
+
+    ws.mergeCells(1, 1, 1, COLUMNAS.length);
+    const t = ws.getCell(1, 1); t.value = nombrePropiedad; t.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NEGRO} }; t.font = { color:{argb:BLANCO}, bold:true, size:13 }; t.alignment = { horizontal:"center" };
+    ws.mergeCells(2, 1, 2, COLUMNAS.length);
+    const rangoTxt = (horasExtraRangoDesde && horasExtraRangoHasta) ? `del ${fmtFechaSimple(horasExtraRangoDesde)} al ${fmtFechaSimple(horasExtraRangoHasta)}` : "todo el historial";
+    const st = ws.getCell(2, 1); st.value = `Resumen de horas extra aprobadas por departamento — ${rangoTxt}`; st.font = { italic:true, size:10 }; st.alignment = { horizontal:"center" };
+
+    let fila = 3;
+    let totalGeneralNormal = 0, totalGeneralFeriado = 0, totalGeneralDias = 0;
+
+    deptosOrdenados.forEach(depto => {
+      const filasDepto = porDepto[depto];
+      ws.mergeCells(fila, 1, fila, COLUMNAS.length);
+      const cDepto = ws.getCell(fila, 1);
+      cDepto.value = depto;
+      cDepto.fill = { type:"pattern", pattern:"solid", fgColor:{argb:AZUL_DEPTO} };
+      cDepto.font = { bold:true };
+      fila++;
+
+      const hdr = ws.getRow(fila);
+      COLUMNAS.forEach((c, i) => { const cell = hdr.getCell(i + 1); cell.value = c; cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; cell.font = { bold:true }; cell.alignment = { horizontal:"center" }; cell.border = bordeCelda; });
+      fila++;
+
+      let subtotalNormal = 0, subtotalFeriado = 0, subtotalDias = 0;
+      filasDepto.forEach(f => {
+        const row = ws.getRow(fila);
+        row.getCell(1).value = nombreCompletoEmpleado(f.emp) || f.emp.key;
+        row.getCell(2).value = f.dias;
+        row.getCell(3).value = Number(f.horasNormal.toFixed(2));
+        row.getCell(4).value = Number(f.horasFeriado.toFixed(2));
+        row.getCell(5).value = Number((f.horasNormal + f.horasFeriado).toFixed(2));
+        for (let c = 1; c <= COLUMNAS.length; c++){ row.getCell(c).border = bordeCelda; if (c > 1) row.getCell(c).alignment = { horizontal:"center" }; }
+        subtotalNormal += f.horasNormal; subtotalFeriado += f.horasFeriado; subtotalDias += f.dias;
+        fila++;
+      });
+
+      const rowSub = ws.getRow(fila);
+      rowSub.getCell(1).value = `Subtotal — ${depto}`;
+      rowSub.getCell(2).value = subtotalDias;
+      rowSub.getCell(3).value = Number(subtotalNormal.toFixed(2));
+      rowSub.getCell(4).value = Number(subtotalFeriado.toFixed(2));
+      rowSub.getCell(5).value = Number((subtotalNormal + subtotalFeriado).toFixed(2));
+      for (let c = 1; c <= COLUMNAS.length; c++){ rowSub.getCell(c).font = { bold:true }; rowSub.getCell(c).fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_SUBTOTAL} }; rowSub.getCell(c).border = bordeCelda; if (c > 1) rowSub.getCell(c).alignment = { horizontal:"center" }; }
+      fila += 2; // fila en blanco antes del siguiente departamento
+
+      totalGeneralNormal += subtotalNormal; totalGeneralFeriado += subtotalFeriado; totalGeneralDias += subtotalDias;
+    });
+
+    const rowTotal = ws.getRow(fila);
+    rowTotal.getCell(1).value = "TOTAL GENERAL";
+    rowTotal.getCell(2).value = totalGeneralDias;
+    rowTotal.getCell(3).value = Number(totalGeneralNormal.toFixed(2));
+    rowTotal.getCell(4).value = Number(totalGeneralFeriado.toFixed(2));
+    rowTotal.getCell(5).value = Number((totalGeneralNormal + totalGeneralFeriado).toFixed(2));
+    for (let c = 1; c <= COLUMNAS.length; c++){ rowTotal.getCell(c).font = { bold:true, size:12 }; rowTotal.getCell(c).fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; rowTotal.getCell(c).border = bordeCelda; if (c > 1) rowTotal.getCell(c).alignment = { horizontal:"center" }; }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const sufijoRango = (horasExtraRangoDesde && horasExtraRangoHasta) ? `${horasExtraRangoDesde}_a_${horasExtraRangoHasta}` : "historico";
+    descargarBlobComoArchivo(blob, `resumen_horas_extra_por_departamento_${sufijoRango}.xlsx`);
+    statusMsg("Resumen descargado.");
+  }catch(e){ statusMsg("No se pudo generar el resumen: " + (e.message || ""), false); }
+}
+
 async function renderHorasExtrasPanel(){
   const panel = document.getElementById("horasextras-panel");
   if (!panel) return;
@@ -13190,7 +13303,8 @@ async function renderHorasExtrasPanel(){
         <input type="date" value="${horasExtraRangoHasta || ""}" onchange="cambiarRangoHorasExtra('hasta', this.value)">
       </label>
       <button class="btn" onclick="limpiarRangoHorasExtra()">Ver todo (sin filtro)</button>
-      <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">Acota solo lo ya <b>aprobado</b> y <b>rechazado</b> de abajo — lo pendiente/por aprobar siempre se ve completo, sin importar cuándo pasó.</div>
+      <button class="btn primary" onclick="exportarResumenHorasExtraPorDepartamento()">📊 Resumen por departamento (Excel)</button>
+      <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">Acota solo lo ya <b>aprobado</b> y <b>rechazado</b> de abajo — lo pendiente/por aprobar siempre se ve completo, sin importar cuándo pasó. El resumen en Excel usa este mismo rango, y solo cuenta lo ya <b>aprobado</b>.</div>
     </div></div>`;
 
     if (puedeEditar){
@@ -18680,7 +18794,233 @@ async function exportarHorarioSemana(){
   }catch(e){ statusMsg("No se pudo exportar: " + (e.message || ""), false); }
 }
 
-function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, semanaDesdeISO, puedeGestionar){
+// Texto de un combo "Lugar — Turno" normalizado para comparar (trim, sin
+// distinguir mayúscula/minúscula, espacios de sobra colapsados) — tanto al
+// armar el mapa de combos válidos como al leer lo que la persona escribió o
+// eligió en la celda, para que una diferencia de espacios no la deje "sin
+// reconocer".
+function normalizarTextoComboHorario(texto){
+  return String(texto || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+const PLANTILLA_HORARIOS_SIN_ASIGNAR = "(sin asignar)";
+
+// Plantilla descargable para que jefatura complete el horario de su equipo
+// fuera del sistema (ej. en una reunión) y lo suba de vuelta — a diferencia
+// de exportarHorarioSemana (de solo lectura, pensada para imprimir/
+// compartir), esta sí se vuelve a leer: cada celda de día trae una lista
+// desplegable (validación de datos de Excel) con las combinaciones válidas
+// de "lugar — turno" de ESE departamento, para que no se pueda escribir
+// cualquier cosa. Es una plantilla POR DEPARTAMENTO a propósito (deptoActivo
+// obligatorio) — ver importarPlantillaHorarios para el lado que la lee.
+async function exportarPlantillaHorarios(){
+  const { empleadosVisibles, horariosVisibles, lugaresVisibles, deptoActivo, semanaDesdeISO } = horariosCacheParaModal;
+  if (typeof ExcelJS === "undefined"){ statusMsg("No se pudo cargar el generador de Excel.", false); return; }
+  if (!deptoActivo){ statusMsg("Elegí un departamento específico arriba antes de descargar la plantilla (es una plantilla por departamento).", false); return; }
+  if (!empleadosVisibles || !empleadosVisibles.length){ statusMsg("No hay empleados para exportar.", false); return; }
+  if (!lugaresVisibles.length || !horariosVisibles.length){ statusMsg("Este departamento todavía no tiene lugares de trabajo y/o turnos fijos creados — agrégalos arriba primero.", false); return; }
+  try{
+    const asignados = await listarHorariosAsignados();
+    const asignadosPorClave = {};
+    asignados.forEach(a => { if (a.LUGAR_KEY && a.HORARIO_KEY) asignadosPorClave[a.key] = a; });
+    const lugaresPorKey = {}; lugaresVisibles.forEach(l => { lugaresPorKey[l.key] = l; });
+    const horariosPorKey = {}; horariosVisibles.forEach(h => { horariosPorKey[h.key] = h; });
+
+    const dias = [];
+    for (let i = 0; i < 7; i++){
+      const d = new Date(semanaDesdeISO + "T00:00:00");
+      d.setDate(d.getDate() + i);
+      dias.push(isoDeFechaLocal(d));
+    }
+    const empleadosOrdenados = empleadosVisibles.slice().sort(compararPorApellido);
+
+    // Combos "Lugar — Turno" válidos de este departamento — una sola lista
+    // para todas las filas, porque la plantilla es de un solo departamento.
+    const combos = [PLANTILLA_HORARIOS_SIN_ASIGNAR];
+    lugaresVisibles.forEach(l => {
+      horariosVisibles.forEach(h => { combos.push(`${l.NOMBRE} — ${textoHorarioTurno12(h)}`); });
+    });
+
+    const prop = getPropiedadActual();
+    const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
+    const COLUMNAS = ["Empleado", "№ Empleado", ...dias.map(f => {
+      const dObj = new Date(f + "T00:00:00");
+      return `${DIA_SEMANA_CORTO_HORARIOS[dObj.getDay()]} ${f}`;
+    })];
+    const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9";
+    const bordeFino = { style:"thin", color:{argb:"FF000000"} };
+    const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("HORARIOS");
+    ws.columns = [{ width: 26 }, { width: 14 }, ...dias.map(() => ({ width: 30 }))];
+
+    ws.mergeCells(1, 1, 1, COLUMNAS.length);
+    const t = ws.getCell(1, 1); t.value = nombrePropiedad; t.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NEGRO} }; t.font = { color:{argb:BLANCO}, bold:true, size:13 }; t.alignment = { horizontal:"center" };
+    ws.mergeCells(2, 1, 2, COLUMNAS.length);
+    const st = ws.getCell(2, 1); st.value = `Plantilla de horarios para completar — ${deptoActivo} — semana del ${fmtFechaSimple(semanaDesdeISO)}`; st.font = { italic:true, size:10 }; st.alignment = { horizontal:"center" };
+    ws.mergeCells(3, 1, 3, COLUMNAS.length);
+    const inst = ws.getCell(3, 1);
+    inst.value = `Por cada día, elegí de la lista desplegable el lugar y turno (ej. "${combos[1] || ""}"). Dejá la celda vacía si no querés cambiar ese día. Para borrar un turno ya asignado, elegí "${PLANTILLA_HORARIOS_SIN_ASIGNAR}". No borres ni cambies la columna "№ Empleado" — es la que usa el sistema para reconocer a cada persona al subir el archivo de vuelta.`;
+    inst.font = { size: 9, color: { argb: "FF555555" } };
+    inst.alignment = { horizontal:"left", wrapText:true, vertical:"middle" };
+    ws.getRow(3).height = 30;
+
+    const filaHeaderNum = 4;
+    const hdr = ws.getRow(filaHeaderNum);
+    COLUMNAS.forEach((c, i) => { const cell = hdr.getCell(i + 1); cell.value = c; cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; cell.font = { bold:true }; cell.alignment = { horizontal:"center" }; cell.border = bordeCelda; });
+
+    // Hoja oculta con las combinaciones válidas — la validación de datos de
+    // Excel necesita un rango de celdas como fuente de la lista; con muchas
+    // combinaciones no alcanza con escribirlas sueltas en la fórmula.
+    const wsOp = wb.addWorksheet("Opciones");
+    wsOp.state = "veryHidden";
+    combos.forEach((c, i) => { wsOp.getCell(i + 1, 1).value = c; });
+    const rangoOpciones = `Opciones!$A$1:$A$${combos.length}`;
+
+    let fila = filaHeaderNum + 1;
+    empleadosOrdenados.forEach(emp => {
+      const row = ws.getRow(fila);
+      const celdaNombre = row.getCell(1);
+      celdaNombre.value = nombreCompletoEmpleado(emp) || emp.key;
+      celdaNombre.border = bordeCelda;
+      const celdaNumero = row.getCell(2);
+      celdaNumero.value = emp.NUMERO_EMPLEADO || "";
+      celdaNumero.border = bordeCelda;
+      dias.forEach((fechaISO, i) => {
+        const a = asignadosPorClave[`${HORARIO_ASIGNADO_PREFIX}${emp.key}:${fechaISO}`];
+        const lugar = a ? lugaresPorKey[a.LUGAR_KEY] : null;
+        const turno = a ? horariosPorKey[a.HORARIO_KEY] : null;
+        const cell = row.getCell(i + 3);
+        cell.value = (lugar && turno) ? `${lugar.NOMBRE} — ${textoHorarioTurno12(turno)}` : "";
+        cell.border = bordeCelda;
+        cell.alignment = { horizontal:"center", wrapText:true };
+        cell.dataValidation = {
+          type: "list",
+          allowBlank: true,
+          formulae: [rangoOpciones],
+          showErrorMessage: true,
+          errorTitle: "Opción no válida",
+          error: "Elegí una opción de la lista desplegable de esa celda.",
+        };
+      });
+      fila++;
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    descargarBlobComoArchivo(blob, `plantilla_horarios_${deptoActivo.replace(/[^a-zA-Z0-9]+/g,"_")}_${semanaDesdeISO}.xlsx`);
+    statusMsg("Plantilla descargada.");
+  }catch(e){ statusMsg("No se pudo generar la plantilla: " + (e.message || ""), false); }
+}
+
+// Lee la plantilla ya completada (ver exportarPlantillaHorarios) y rellena
+// los horarios automáticamente. Cada empleado se reconoce primero por "№
+// Empleado" (columna que la plantilla trae a propósito para esto, aunque la
+// persona haya reordenado/editado nombres), si no por nombre exacto, y si no
+// por coincidencia difusa (mismo criterio que el emparejado de colillas) —
+// una fila que no matchea a nadie se reporta, no se descarta en silencio. El
+// encabezado de cada columna de día trae la fecha ISO embebida
+// ("Lun 2026-11-23"), así no importa en qué semana real se suba ni el orden
+// de las columnas. Una celda vacía significa "no tocar ese día" — para
+// borrar un turno ya asignado hay que elegir "(sin asignar)" a propósito.
+async function importarPlantillaHorarios(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  if (typeof XLSX === "undefined"){
+    statusMsg("No se pudo cargar el lector de Excel (necesita internet la primera vez).", false);
+    inputEl.value = "";
+    return;
+  }
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    // Se busca la hoja "HORARIOS" por nombre (no "la que tenga más filas",
+    // como hace leerFilasArchivo) porque esta plantilla trae una segunda
+    // hoja ("Opciones", oculta) que en un departamento con pocos empleados y
+    // muchas combinaciones de lugar/turno puede tener más filas que la hoja
+    // real de datos.
+    const nombreHoja = wb.SheetNames.indexOf("HORARIOS") >= 0 ? "HORARIOS" : wb.SheetNames[0];
+    const hoja = wb.Sheets[nombreHoja];
+    const comoArreglo = XLSX.utils.sheet_to_json(hoja, { header: 1, defval: "" });
+    const filaEncabezado = encontrarFilaEncabezado(comoArreglo);
+    const filas = XLSX.utils.sheet_to_json(hoja, { defval: "", range: filaEncabezado });
+    if (!filas.length){ statusMsg("No se reconoció ningún empleado en ese archivo.", false); inputEl.value = ""; return; }
+
+    const encabezados = Object.keys(filas[0]);
+    const columnasDias = encabezados.filter(h => /\d{4}-\d{2}-\d{2}/.test(h));
+    if (!columnasDias.length){
+      statusMsg("No se reconocieron columnas de días en ese archivo — asegurate de subir la plantilla descargada desde acá, sin cambiar los encabezados.", false);
+      inputEl.value = "";
+      return;
+    }
+
+    const [empleados, puestos, horarios, lugares] = await Promise.all([
+      cargarEmpleadosDB(), cargarPuestosDB(), listarHorarios(), listarLugaresTrabajo(),
+    ]);
+    const activos = empleados.filter(e => !e.ARCHIVADO);
+    const puestosPorKey = {}; puestos.forEach(p => { puestosPorKey[p.key] = p; });
+    const porNumero = {};
+    activos.forEach(e => { if (e.NUMERO_EMPLEADO) porNumero[String(e.NUMERO_EMPLEADO).trim().replace(/^0+/,"")] = e; });
+    const porNombre = {};
+    activos.forEach(e => { porNombre[normalizarNombre(nombreCompletoEmpleado(e))] = e; });
+
+    let diasActualizados = 0, celdasSinReconocer = 0;
+    const empleadosNoReconocidos = [];
+    const detalleCeldasSinReconocer = [];
+    for (const fila of filas){
+      const numero = String(fila["№ Empleado"] || "").trim().replace(/^0+/,"");
+      const nombreFila = String(fila["Empleado"] || "").trim();
+      if (!nombreFila && !numero) continue; // fila en blanco al final del rango
+      let emp = numero ? porNumero[numero] : null;
+      if (!emp) emp = porNombre[normalizarNombre(nombreFila)];
+      if (!emp) emp = buscarCoincidenciaDifusa(nombreFila, activos);
+      if (!emp){
+        empleadosNoReconocidos.push(nombreFila || ("№ " + numero));
+        continue;
+      }
+      const deptoEmp = departamentoDeEmpleadoGenerico(emp, puestosPorKey) || "";
+      const lugaresDelDepto = lugares.filter(l => l.DEPARTAMENTO_MINISTERIO === deptoEmp);
+      const horariosDelDepto = horarios.filter(h => h.DEPARTAMENTO_MINISTERIO === deptoEmp);
+      const comboAClaves = {};
+      lugaresDelDepto.forEach(l => horariosDelDepto.forEach(h => {
+        comboAClaves[normalizarTextoComboHorario(`${l.NOMBRE} — ${textoHorarioTurno12(h)}`)] = { LUGAR_KEY: l.key, HORARIO_KEY: h.key };
+      }));
+      comboAClaves[normalizarTextoComboHorario(PLANTILLA_HORARIOS_SIN_ASIGNAR)] = { LUGAR_KEY: "", HORARIO_KEY: "" };
+
+      for (const col of columnasDias){
+        const valorCelda = String(fila[col] || "").trim();
+        if (!valorCelda) continue; // vacío = no tocar ese día
+        const m = col.match(/(\d{4}-\d{2}-\d{2})/);
+        if (!m) continue;
+        const fechaISO = m[1];
+        const combo = comboAClaves[normalizarTextoComboHorario(valorCelda)];
+        if (!combo){
+          celdasSinReconocer++;
+          detalleCeldasSinReconocer.push(`${nombreCompletoEmpleado(emp) || emp.key} — ${fechaISO}: "${valorCelda}"`);
+          continue;
+        }
+        await fijarHorarioAsignado(emp.key, fechaISO, combo.LUGAR_KEY, combo.HORARIO_KEY);
+        diasActualizados++;
+      }
+    }
+
+    let msg = `${diasActualizados} día(s) actualizado(s) desde el Excel.`;
+    if (empleadosNoReconocidos.length) msg += ` ${empleadosNoReconocidos.length} fila(s) sin reconocer a quién corresponde (revisá la columna "№ Empleado"/"Empleado").`;
+    if (celdasSinReconocer) msg += ` ${celdasSinReconocer} celda(s) con texto que no calzó con ninguna opción válida (se dejaron como estaban).`;
+    statusMsg(msg, true);
+    if (empleadosNoReconocidos.length || celdasSinReconocer){
+      console.warn("Importar plantilla de horarios — detalle:", { empleadosNoReconocidos, detalleCeldasSinReconocer });
+    }
+    inputEl.value = "";
+    renderHorariosPanel();
+  }catch(e){
+    statusMsg("No se pudo leer ese archivo: " + (e.message || ""), false);
+    inputEl.value = "";
+  }
+}
+
+function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, semanaDesdeISO, puedeGestionar, deptoActivo){
   const dias = [];
   for (let i = 0; i < 7; i++){
     const d = new Date(semanaDesdeISO + "T00:00:00");
@@ -18707,6 +19047,17 @@ function renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, a
       </div>
     </div>
     <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Por cada día se elige primero el <b>lugar de trabajo</b> y después el <b>turno</b> — los dos son obligatorios juntos.</div>
+    ${puedeGestionar ? (deptoActivo ? `
+    <div class="section-card" style="margin-bottom:10px; border-color:var(--leaf);"><div class="section-body" style="padding:10px;">
+      <div style="font-weight:700; margin-bottom:4px;">📋 Plantilla para completar fuera del sistema</div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Para que jefatura complete el horario de su equipo en Excel (con lista desplegable de lugar/turno ya cargada) y lo suba de vuelta — el sistema lo lee y rellena los horarios solo.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        ${empleadosOrdenados.length ? `<button class="btn" onclick="exportarPlantillaHorarios();">📥 Descargar plantilla (${escapeHtml(deptoActivo)})</button>` : ""}
+        <button class="btn" onclick="document.getElementById('horarios-plantilla-file-input').click();">📤 Subir Excel completado</button>
+        <input type="file" id="horarios-plantilla-file-input" accept=".xlsx,.xls" style="display:none;" onchange="importarPlantillaHorarios(this)">
+      </div>
+    </div></div>` : `
+    <div class="hint" style="margin-bottom:10px;">📋 Elegí un departamento específico arriba para descargar o subir la plantilla de horarios (es una plantilla por departamento).</div>`) : ""}
     ${!empleadosOrdenados.length ? `<div class="empty-state">No hay empleados activos en este alcance.</div>` : `
     <div style="overflow-x:auto;">
     <table style="border-collapse:collapse; font-size:11px;">
@@ -18858,7 +19209,7 @@ async function renderHorariosPanel(){
     html += renderSeccionLugaresTrabajo(lugaresVisibles, deptoActivo, puedeGestionar, puedeAprobar);
     html += renderSeccionTurnosFijos(horariosVisibles, deptoActivo, puedeGestionar, puedeAprobar);
     html += renderSeccionAsignacionRapida(empleadosVisibles, horariosVisibles, lugaresVisibles, deptoActivo, horariosSemanaDesde, puedeGestionar);
-    html += renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, horariosSemanaDesde, puedeGestionar);
+    html += renderSeccionAsignacionHorarios(empleadosVisibles, horarios, lugares, asignados, departamentoDeEmpleado, horariosSemanaDesde, puedeGestionar, deptoActivo);
 
     panel.innerHTML = html;
   }catch(e){
