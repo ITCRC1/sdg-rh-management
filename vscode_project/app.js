@@ -13688,13 +13688,17 @@ async function renderHorasExtrasPanel(){
             const dias = gruposSinMatch[g];
             const primero = dias[0];
             const nombreMostrar = primero.NOMBRE_ARCHIVO || (primero.CODIGO_ARCHIVO ? "Código " + primero.CODIGO_ARCHIVO : (primero.CEDULA || "(sin nombre)"));
-            return `<div class="catalog-item" style="cursor:pointer;" onclick="horasExtraGrupoSinMatchSeleccionado='${g.replace(/'/g,"\\'")}'; renderHorasExtrasPanel();">
+            const gEsc = g.replace(/'/g,"\\'");
+            return `<div class="catalog-item" style="cursor:pointer;" onclick="horasExtraGrupoSinMatchSeleccionado='${gEsc}'; renderHorasExtrasPanel();">
               <div class="row1">
                 <div class="info">
                   <div class="name">${escapeHtml(nombreMostrar)}</div>
                   <div class="meta">${dias.length} día(s) sin identificar · ${fmtHorasReloj(dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0))}h extra</div>
                 </div>
-                <div class="actions"><span class="meta">Ver →</span></div>
+                <div class="actions">
+                  <button class="del" onclick="event.stopPropagation(); eliminarGrupoSinIdentificar('${gEsc}');">🗑️ Eliminar</button>
+                  <span class="meta">Ver →</span>
+                </div>
               </div>
             </div>`;
           }).join("");
@@ -14002,6 +14006,23 @@ async function eliminarRegistroHorasExtra(key){
   try{
     await window.storage.delete(key, false);
     statusMsg("Registro eliminado.");
+    await renderHorasExtrasPanel();
+  }catch(e){ statusMsg("No se pudo eliminar: " + e.message, false); }
+}
+
+// Elimina de un tirón TODOS los días "sin identificar" de un mismo código/
+// nombre/cédula (ver horasExtraSinMatchGruposCache, armado en el mismo
+// render) — sin esto, había que entrar al detalle y borrar día por día para
+// descartar un código/nombre que nunca se va a poder identificar.
+async function eliminarGrupoSinIdentificar(grupoKey){
+  const dias = horasExtraSinMatchGruposCache[grupoKey] || [];
+  if (!dias.length){ statusMsg("Ese grupo ya no tiene días sin identificar.", false); return; }
+  const horasTotal = fmtHorasReloj(dias.reduce((s,d) => s + (d.HORAS_EXTRA||0), 0));
+  if (!confirm(`¿Eliminar los ${dias.length} día(s) sin identificar (${horasTotal}h extra) de este código/nombre? No se puede deshacer.`)) return;
+  try{
+    await Promise.all(dias.map(d => window.storage.delete(d.key, false)));
+    if (horasExtraGrupoSinMatchSeleccionado === grupoKey) horasExtraGrupoSinMatchSeleccionado = null;
+    statusMsg(`${dias.length} registro(s) eliminado(s).`);
     await renderHorasExtrasPanel();
   }catch(e){ statusMsg("No se pudo eliminar: " + e.message, false); }
 }
@@ -22026,6 +22047,29 @@ let diasLibresMesCalendario = null; // "AAAA-MM" — se fija al mes actual la pr
 let dotacionDesde = null; // ISO — rango de "Dotación por día", se fija a hoy..hoy+6 la primera vez
 let dotacionHasta = null;
 
+// Secciones largas de este panel (listas de 30-50+ filas) que arrancan
+// colapsadas a un solo encabezado para no obligar a hacer scroll por todo el
+// panel solo para llegar a lo de abajo — un clic en el encabezado las
+// despliega. Identificadas por nombre fijo, no por título visible (ese puede
+// cambiar con el conteo entre paréntesis).
+let seccionesColapsadasVacaciones = new Set(["rechazadas", "dotacion", "saldo"]);
+function toggleSeccionVacaciones(nombre){
+  if (seccionesColapsadasVacaciones.has(nombre)) seccionesColapsadasVacaciones.delete(nombre);
+  else seccionesColapsadasVacaciones.add(nombre);
+  renderDiasLibresVacacionesPanel();
+}
+// Encabezado colapsable genérico para estas secciones: mismo "section-card"
+// de siempre, pero con un +/- a la derecha del título que alterna
+// seccionesColapsadasVacaciones. `tituloHtml` ya viene escapado por el
+// llamador (puede incluir el emoji y el conteo).
+function renderEncabezadoColapsable(nombre, tituloHtml, colorTitulo){
+  const colapsada = seccionesColapsadasVacaciones.has(nombre);
+  return `<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:${colapsada ? "0" : "8px"}; cursor:pointer;" onclick="toggleSeccionVacaciones('${nombre}')">
+    <div style="font-weight:700; color:${colorTitulo};">${tituloHtml}</div>
+    <button class="btn" style="padding:2px 9px; font-size:13px; line-height:1.2;" onclick="event.stopPropagation(); toggleSeccionVacaciones('${nombre}')">${colapsada ? "+" : "−"}</button>
+  </div>`;
+}
+
 async function renderDiasLibresVacacionesPanel(){
   const panel = document.getElementById("diaslibresvacaciones-panel");
   if (!panel) return;
@@ -23245,8 +23289,10 @@ function renderListaSolicitudesRechazadas(solicitudes, empleadosPorKey, puedeApr
   if (!puedeAprobar) rechazadas = rechazadas.filter(s => s.SOLICITADO_POR === miEmail);
   rechazadas = rechazadas.sort((a,b) => (b.FECHA_INICIO||"").localeCompare(a.FECHA_INICIO||"")).slice(0, 30);
   if (!rechazadas.length) return "";
+  const colapsada = seccionesColapsadasVacaciones.has("rechazadas");
   return `<div class="section-card" style="margin-bottom:14px; border-color:#B3261E;"><div class="section-body">
-    <div style="font-weight:700; color:#B3261E; margin-bottom:4px;">🚫 Solicitudes rechazadas${puedeAprobar ? "" : " tuyas"} (${rechazadas.length})</div>
+    ${renderEncabezadoColapsable("rechazadas", `🚫 Solicitudes rechazadas${puedeAprobar ? "" : " tuyas"} (${rechazadas.length})`, "#B3261E")}
+    ${colapsada ? "" : `
     <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Si el rechazo fue por una fecha mal puesta, se puede reabrir corrigiéndola — vuelve a quedar pendiente de aprobación, no se aprueba sola.</div>
     ${rechazadas.map(s => {
       const emp = empleadosPorKey[s.EMPLEADO_KEY];
@@ -23264,6 +23310,7 @@ function renderListaSolicitudesRechazadas(solicitudes, empleadosPorKey, puedeApr
         </div>
       </div>`;
     }).join("")}
+    `}
   </div></div>`;
 }
 
@@ -23417,8 +23464,10 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
     })
     .sort((a,b) => compararPorApellido(a.emp, b.emp));
   if (!filas.length) return "";
+  const colapsada = seccionesColapsadasVacaciones.has("saldo");
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">💰 Saldo de vacaciones (hoy)</div>
+    ${renderEncabezadoColapsable("saldo", `💰 Saldo de vacaciones (hoy) (${filas.length})`, "var(--navy-deep)")}
+    ${colapsada ? "" : `
     <div style="display:grid; grid-template-columns:1fr auto${puedeAjustar ? " auto" : ""}; gap:4px 10px; align-items:center; font-size:12.5px;">
       ${filas.map(f => {
         const nombreEsc = (nombreCompletoEmpleado(f.emp) || f.emp.key).replace(/'/g, "\\'");
@@ -23428,6 +23477,7 @@ function renderTablaSaldos(empleados, todasLasSolicitudes, registrosHorasExtra, 
         return `<div style="${bordeFila}">${escapeHtml(nombreCompletoEmpleado(f.emp)||f.emp.key)}</div><div style="${bordeFila} text-align:right; font-weight:700; color:${color};" title="${f.saldo < 0 ? 'Saldo negativo: se le aprobaron/asignaron más días de los que tenía acumulados. Se recupera solo con la acumulación mensual hasta volver a 0.' : ''}">${etiqueta}</div>${puedeAjustar ? `<div style="${bordeFila}"><button class="btn" style="padding:3px 8px; font-size:10.5px;" onclick="pedirAjusteVacaciones('${f.emp.key}', '${nombreEsc}', ${f.saldo})">✏️ Ajustar</button></div>` : ""}`;
       }).join("")}
     </div>
+    `}
   </div></div>`;
 }
 
@@ -23865,8 +23915,10 @@ function renderSeccionDotacionPorDia(empleados, solicitudes, registrosHorasExtra
       ${escapeHtml(d)}
     </label>`).join("");
 
+  const colapsada = seccionesColapsadasVacaciones.has("dotacion");
   return `<div class="section-card" style="margin-bottom:14px;"><div class="section-body">
-    <div style="font-weight:700; color:var(--navy-deep); margin-bottom:8px;">👥 Dotación por día</div>
+    ${renderEncabezadoColapsable("dotacion", `👥 Dotación por día (${dias.length} día${dias.length===1?"":"s"})`, "var(--navy-deep)")}
+    ${colapsada ? "" : `
     <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">Quiénes van a estar trabajando cada día del rango, por departamento — según las vacaciones/días libres ya aprobados. Desmarcá un departamento para excluirlo, o dejá marcados solo los que te interesan.</p>
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; padding:8px; background:#F6F3EC; border-radius:6px;">
       ${checkboxesHtml}
@@ -23908,6 +23960,7 @@ function renderSeccionDotacionPorDia(empleados, solicitudes, registrosHorasExtra
     </table>
     </div>
     <div id="dotacion-status" style="font-size:12px; margin-top:6px;"></div>
+    `}
   </div></div>`;
 }
 
