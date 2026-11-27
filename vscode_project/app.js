@@ -13102,12 +13102,13 @@ async function exportarResumenHorasExtraPorDepartamento(){
       if (!emp) return;
       const esFeriado = r.ORIGEN === "feriado_sin_marca" || !!feriadoLeyEnFecha(r.FECHA);
       if (!porEmpleado[r.EMPLEADO_KEY]){
-        porEmpleado[r.EMPLEADO_KEY] = { emp, depto: departamentoDeEmpleadoGenerico(emp, puestosPorKey) || "Sin departamento", horasNormal: 0, horasFeriado: 0, dias: 0 };
+        porEmpleado[r.EMPLEADO_KEY] = { emp, depto: departamentoDeEmpleadoGenerico(emp, puestosPorKey) || "Sin departamento", horasNormal: 0, horasFeriado: 0, dias: 0, motivos: new Set() };
       }
       const acc = porEmpleado[r.EMPLEADO_KEY];
       if (esFeriado) acc.horasFeriado += (r.HORAS_EXTRA || 0);
       else acc.horasNormal += (r.HORAS_EXTRA || 0);
       acc.dias++;
+      if (r.MOTIVO_HORAS_EXTRA && r.MOTIVO_HORAS_EXTRA.trim()) acc.motivos.add(r.MOTIVO_HORAS_EXTRA.trim());
     });
 
     const porDepto = {};
@@ -13117,14 +13118,14 @@ async function exportarResumenHorasExtraPorDepartamento(){
 
     const prop = getPropiedadActual();
     const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
-    const COLUMNAS = ["Empleado", "Días con horas extra", "Horas extra normal (1.5x)", "Horas extra en feriado (3x)", "Horas extra total"];
+    const COLUMNAS = ["Empleado", "Días con horas extra", "Horas extra normal (1.5x)", "Horas extra en feriado (3x)", "Horas extra total", "Motivo(s)"];
     const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9", GRIS_SUBTOTAL="FFEDEDED", AZUL_DEPTO="FFDCE6F1";
     const bordeFino = { style:"thin", color:{argb:"FF000000"} };
     const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("HORAS EXTRA");
-    ws.columns = [{ width: 30 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 18 }];
+    ws.columns = [{ width: 30 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 18 }, { width: 45 }];
 
     ws.mergeCells(1, 1, 1, COLUMNAS.length);
     const t = ws.getCell(1, 1); t.value = nombrePropiedad; t.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NEGRO} }; t.font = { color:{argb:BLANCO}, bold:true, size:13 }; t.alignment = { horizontal:"center" };
@@ -13156,7 +13157,9 @@ async function exportarResumenHorasExtraPorDepartamento(){
         row.getCell(3).value = Number(f.horasNormal.toFixed(2));
         row.getCell(4).value = Number(f.horasFeriado.toFixed(2));
         row.getCell(5).value = Number((f.horasNormal + f.horasFeriado).toFixed(2));
-        for (let c = 1; c <= COLUMNAS.length; c++){ row.getCell(c).border = bordeCelda; if (c > 1) row.getCell(c).alignment = { horizontal:"center" }; }
+        row.getCell(6).value = f.motivos.size ? Array.from(f.motivos).join("; ") : "—";
+        for (let c = 1; c <= COLUMNAS.length; c++){ row.getCell(c).border = bordeCelda; if (c > 1 && c < 6) row.getCell(c).alignment = { horizontal:"center" }; }
+        row.getCell(6).alignment = { horizontal:"left", wrapText:true, vertical:"top" };
         subtotalNormal += f.horasNormal; subtotalFeriado += f.horasFeriado; subtotalDias += f.dias;
         fila++;
       });
