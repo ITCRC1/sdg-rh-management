@@ -16164,6 +16164,14 @@ async function construirConstanciaSalarial(key, emp, empresaInfo){
   mostrarSoloConstanciaSalarial();
 }
 
+// Datos de contacto fijos para verificar la constancia (ej. el banco que la
+// recibe llama o escribe para confirmar que es real) — a pedido explícito,
+// no vienen de la ficha del empleado ni de la empresa elegida.
+const CONTACTO_CONSTANCIA_SALARIAL = {
+  correo: "operations.corcovado@scphotel.com",
+  telefono: "8930-2150",
+};
+
 function fmtMontoConstancia(monto, simbolo){
   return `${simbolo} ${Number(monto).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -16206,6 +16214,9 @@ function renderConstanciaSalarial(){
         ${c.cedulaFirmante ? `<div style="font-size:12px; color:#555;">${escapeHtml(c.cedulaFirmante)}</div>` : ""}
         <div style="font-size:12px; color:#555;">${escapeHtml(c.puestoFirmante)}</div>
       </div>
+    </div>
+    <div style="margin-top:14px; font-size:12px; color:#555;">
+      Para verificar esta constancia: ${escapeHtml(CONTACTO_CONSTANCIA_SALARIAL.correo)} · ${escapeHtml(CONTACTO_CONSTANCIA_SALARIAL.telefono)}
     </div>
     ${(c.empresa || c.cedulaJuridica) ? `
     <div style="margin-top:24px; font-size:12px; color:#555;">
@@ -16428,6 +16439,9 @@ function renderConstanciaLaboral(){
         ${c.cedulaFirmante ? `<div style="font-size:12px; color:#555;">${escapeHtml(c.cedulaFirmante)}</div>` : ""}
         <div style="font-size:12px; color:#555;">${escapeHtml(c.puestoFirmante)}</div>
       </div>
+    </div>
+    <div style="margin-top:14px; font-size:12px; color:#555;">
+      Para verificar esta constancia: ${escapeHtml(CONTACTO_CONSTANCIA_SALARIAL.correo)} · ${escapeHtml(CONTACTO_CONSTANCIA_SALARIAL.telefono)}
     </div>
     ${(c.empresa || c.cedulaJuridica) ? `
     <div style="margin-top:24px; font-size:12px; color:#555;">
