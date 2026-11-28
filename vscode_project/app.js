@@ -13096,14 +13096,16 @@ async function renderResumenQuincenaHorasExtra(registros, empleados, esJefatura,
   </div></div>`;
 }
 
-// Resumen de horas extra APROBADAS, sumadas por empleado y con subtotal por
-// departamento — a diferencia de "Reporte de horarios para pago de
-// planilla" (Planilla → el reporte completo para pagar: días laborados,
-// ausencias, deducciones…), esto es SOLO horas extra, pensado para ver de un
-// vistazo cuánto se acumuló por equipo. Usa el mismo rango de fechas elegido
-// arriba en este panel (horasExtraRangoDesde/Hasta) — "exporta lo que estás
-// viendo" — y el mismo criterio de feriado (3x) vs normal (1.5x) que ya usa
-// el resto del sistema.
+// Resumen de horas extra APROBADAS (y también lo que todavía está POR
+// APROBAR dentro del mismo rango — pedido explícito del usuario, para poder
+// comparar de un vistazo cuánto ya se pagó contra cuánto sigue sin decidir),
+// sumadas por empleado y con subtotal por departamento — a diferencia de
+// "Reporte de horarios para pago de planilla" (Planilla → el reporte
+// completo para pagar: días laborados, ausencias, deducciones…), esto es
+// SOLO horas extra, pensado para ver de un vistazo cuánto se acumuló por
+// equipo. Usa el mismo rango de fechas elegido arriba en este panel
+// (horasExtraRangoDesde/Hasta) — "exporta lo que estás viendo" — y el mismo
+// criterio de feriado (3x) vs normal (1.5x) que ya usa el resto del sistema.
 async function exportarResumenHorasExtraPorDepartamento(){
   if (typeof ExcelJS === "undefined"){ statusMsg("No se pudo cargar el generador de Excel.", false); return; }
   try{
@@ -13114,21 +13116,37 @@ async function exportarResumenHorasExtraPorDepartamento(){
     const puestosPorKey = {}; puestos.forEach(p => { puestosPorKey[p.key] = p; });
 
     const aprobadas = registros.filter(r => r.ESTADO === "aprobada" && r.EMPLEADO_KEY && enRangoHorasExtra(r.FECHA));
-    if (!aprobadas.length){ statusMsg("No hay horas extra aprobadas en el rango elegido.", false); return; }
+    // Por aprobar DENTRO del rango elegido — a diferencia del resumen en
+    // pantalla (que siempre muestra "por aprobar" completo, sin filtrar por
+    // fecha, porque ahí importa no perder de vista nada viejo sin resolver),
+    // acá sí se filtra por el mismo rango que lo aprobado: este Excel es "lo
+    // que pasó en este rango puntual", pedido explícito del usuario para
+    // poder comparar aprobado vs. pendiente del mismo período.
+    const porAprobarEnRango = registros.filter(r => (r.ESTADO === "pendiente" || r.ESTADO === "aprobada_jefatura") && r.EMPLEADO_KEY && enRangoHorasExtra(r.FECHA));
+    if (!aprobadas.length && !porAprobarEnRango.length){ statusMsg("No hay horas extra aprobadas ni por aprobar en el rango elegido.", false); return; }
 
     const porEmpleado = {};
-    aprobadas.forEach(r => {
-      const emp = empleadosPorKey[r.EMPLEADO_KEY];
-      if (!emp) return;
-      const esFeriado = r.ORIGEN === "feriado_sin_marca" || !!feriadoLeyEnFecha(r.FECHA);
-      if (!porEmpleado[r.EMPLEADO_KEY]){
-        porEmpleado[r.EMPLEADO_KEY] = { emp, depto: departamentoDeEmpleadoGenerico(emp, puestosPorKey) || "Sin departamento", horasNormal: 0, horasFeriado: 0, dias: 0, motivos: new Set() };
+    const accesoEmpleado = (empKey) => {
+      const emp = empleadosPorKey[empKey];
+      if (!emp) return null;
+      if (!porEmpleado[empKey]){
+        porEmpleado[empKey] = { emp, depto: departamentoDeEmpleadoGenerico(emp, puestosPorKey) || "Sin departamento", horasNormal: 0, horasFeriado: 0, dias: 0, horasPorAprobar: 0, motivos: new Set() };
       }
-      const acc = porEmpleado[r.EMPLEADO_KEY];
+      return porEmpleado[empKey];
+    };
+    aprobadas.forEach(r => {
+      const acc = accesoEmpleado(r.EMPLEADO_KEY);
+      if (!acc) return;
+      const esFeriado = r.ORIGEN === "feriado_sin_marca" || !!feriadoLeyEnFecha(r.FECHA);
       if (esFeriado) acc.horasFeriado += (r.HORAS_EXTRA || 0);
       else acc.horasNormal += (r.HORAS_EXTRA || 0);
       acc.dias++;
       if (r.MOTIVO_HORAS_EXTRA && r.MOTIVO_HORAS_EXTRA.trim()) acc.motivos.add(r.MOTIVO_HORAS_EXTRA.trim());
+    });
+    porAprobarEnRango.forEach(r => {
+      const acc = accesoEmpleado(r.EMPLEADO_KEY);
+      if (!acc) return;
+      acc.horasPorAprobar += (r.HORAS_EXTRA || 0);
     });
 
     const porDepto = {};
@@ -13138,23 +13156,24 @@ async function exportarResumenHorasExtraPorDepartamento(){
 
     const prop = getPropiedadActual();
     const nombrePropiedad = prop ? prop.nombre : "SDG RH Management";
-    const COLUMNAS = ["Empleado", "Días con horas extra", "Horas extra normal (1.5x)", "Horas extra en feriado (3x)", "Horas extra total", "Motivo(s)"];
+    const COLUMNAS = ["Empleado", "Días con horas extra", "Horas extra normal (1.5x)", "Horas extra en feriado (3x)", "Horas extra total", "Horas extra por aprobar", "Motivo(s)"];
+    const COL_MOTIVO = COLUMNAS.length;
     const NEGRO="FF000000", BLANCO="FFFFFFFF", GRIS_HEADER="FFD9D9D9", GRIS_SUBTOTAL="FFEDEDED", AZUL_DEPTO="FFDCE6F1";
     const bordeFino = { style:"thin", color:{argb:"FF000000"} };
     const bordeCelda = { top:bordeFino, left:bordeFino, bottom:bordeFino, right:bordeFino };
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("HORAS EXTRA");
-    ws.columns = [{ width: 30 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 18 }, { width: 45 }];
+    ws.columns = [{ width: 30 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 18 }, { width: 20 }, { width: 45 }];
 
     ws.mergeCells(1, 1, 1, COLUMNAS.length);
     const t = ws.getCell(1, 1); t.value = nombrePropiedad; t.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NEGRO} }; t.font = { color:{argb:BLANCO}, bold:true, size:13 }; t.alignment = { horizontal:"center" };
     ws.mergeCells(2, 1, 2, COLUMNAS.length);
     const rangoTxt = (horasExtraRangoDesde && horasExtraRangoHasta) ? `del ${fmtFechaSimple(horasExtraRangoDesde)} al ${fmtFechaSimple(horasExtraRangoHasta)}` : "todo el historial";
-    const st = ws.getCell(2, 1); st.value = `Resumen de horas extra aprobadas por departamento — ${rangoTxt}`; st.font = { italic:true, size:10 }; st.alignment = { horizontal:"center" };
+    const st = ws.getCell(2, 1); st.value = `Resumen de horas extra aprobadas y por aprobar, por departamento — ${rangoTxt}`; st.font = { italic:true, size:10 }; st.alignment = { horizontal:"center" };
 
     let fila = 3;
-    let totalGeneralNormal = 0, totalGeneralFeriado = 0, totalGeneralDias = 0;
+    let totalGeneralNormal = 0, totalGeneralFeriado = 0, totalGeneralDias = 0, totalGeneralPorAprobar = 0;
 
     deptosOrdenados.forEach(depto => {
       const filasDepto = porDepto[depto];
@@ -13169,7 +13188,7 @@ async function exportarResumenHorasExtraPorDepartamento(){
       COLUMNAS.forEach((c, i) => { const cell = hdr.getCell(i + 1); cell.value = c; cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; cell.font = { bold:true }; cell.alignment = { horizontal:"center" }; cell.border = bordeCelda; });
       fila++;
 
-      let subtotalNormal = 0, subtotalFeriado = 0, subtotalDias = 0;
+      let subtotalNormal = 0, subtotalFeriado = 0, subtotalDias = 0, subtotalPorAprobar = 0;
       filasDepto.forEach(f => {
         const row = ws.getRow(fila);
         row.getCell(1).value = nombreCompletoEmpleado(f.emp) || f.emp.key;
@@ -13177,10 +13196,11 @@ async function exportarResumenHorasExtraPorDepartamento(){
         row.getCell(3).value = Number(f.horasNormal.toFixed(2));
         row.getCell(4).value = Number(f.horasFeriado.toFixed(2));
         row.getCell(5).value = Number((f.horasNormal + f.horasFeriado).toFixed(2));
-        row.getCell(6).value = f.motivos.size ? Array.from(f.motivos).join("; ") : "—";
-        for (let c = 1; c <= COLUMNAS.length; c++){ row.getCell(c).border = bordeCelda; if (c > 1 && c < 6) row.getCell(c).alignment = { horizontal:"center" }; }
-        row.getCell(6).alignment = { horizontal:"left", wrapText:true, vertical:"top" };
-        subtotalNormal += f.horasNormal; subtotalFeriado += f.horasFeriado; subtotalDias += f.dias;
+        row.getCell(6).value = Number(f.horasPorAprobar.toFixed(2));
+        row.getCell(COL_MOTIVO).value = f.motivos.size ? Array.from(f.motivos).join("; ") : "—";
+        for (let c = 1; c <= COLUMNAS.length; c++){ row.getCell(c).border = bordeCelda; if (c > 1 && c < COL_MOTIVO) row.getCell(c).alignment = { horizontal:"center" }; }
+        row.getCell(COL_MOTIVO).alignment = { horizontal:"left", wrapText:true, vertical:"top" };
+        subtotalNormal += f.horasNormal; subtotalFeriado += f.horasFeriado; subtotalDias += f.dias; subtotalPorAprobar += f.horasPorAprobar;
         fila++;
       });
 
@@ -13190,10 +13210,11 @@ async function exportarResumenHorasExtraPorDepartamento(){
       rowSub.getCell(3).value = Number(subtotalNormal.toFixed(2));
       rowSub.getCell(4).value = Number(subtotalFeriado.toFixed(2));
       rowSub.getCell(5).value = Number((subtotalNormal + subtotalFeriado).toFixed(2));
+      rowSub.getCell(6).value = Number(subtotalPorAprobar.toFixed(2));
       for (let c = 1; c <= COLUMNAS.length; c++){ rowSub.getCell(c).font = { bold:true }; rowSub.getCell(c).fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_SUBTOTAL} }; rowSub.getCell(c).border = bordeCelda; if (c > 1) rowSub.getCell(c).alignment = { horizontal:"center" }; }
       fila += 2; // fila en blanco antes del siguiente departamento
 
-      totalGeneralNormal += subtotalNormal; totalGeneralFeriado += subtotalFeriado; totalGeneralDias += subtotalDias;
+      totalGeneralNormal += subtotalNormal; totalGeneralFeriado += subtotalFeriado; totalGeneralDias += subtotalDias; totalGeneralPorAprobar += subtotalPorAprobar;
     });
 
     const rowTotal = ws.getRow(fila);
@@ -13202,6 +13223,7 @@ async function exportarResumenHorasExtraPorDepartamento(){
     rowTotal.getCell(3).value = Number(totalGeneralNormal.toFixed(2));
     rowTotal.getCell(4).value = Number(totalGeneralFeriado.toFixed(2));
     rowTotal.getCell(5).value = Number((totalGeneralNormal + totalGeneralFeriado).toFixed(2));
+    rowTotal.getCell(6).value = Number(totalGeneralPorAprobar.toFixed(2));
     for (let c = 1; c <= COLUMNAS.length; c++){ rowTotal.getCell(c).font = { bold:true, size:12 }; rowTotal.getCell(c).fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; rowTotal.getCell(c).border = bordeCelda; if (c > 1) rowTotal.getCell(c).alignment = { horizontal:"center" }; }
 
     const buffer = await wb.xlsx.writeBuffer();
