@@ -9236,10 +9236,15 @@ async function generarReporteHorarioPlanilla(){
     // su sincronización automática nunca vuelva a crear registros
     // "pendiente" en un período que ya se descargó para pagar. Usa el rango
     // de datos real (Desde/Hasta) si lo pusiste, igual que el resto de este
-    // reporte — ver el aviso de arriba sobre "corre del 27 al 12".
+    // reporte — ver el aviso de arriba sobre "corre del 27 al 12". FECHA_DESDE
+    // se guarda también (no solo FECHA_HASTA) para que "Mi información"
+    // (construirHtmlMiInformacion) pueda mostrar "horas pagadas" con este
+    // MISMO rango real, en vez de recalcular la quincena de calendario a
+    // ciegas — pedido explícito del usuario.
     try{
       const quien = (window.sdgApi && window.sdgApi.sesionActual() && window.sdgApi.sesionActual().email) || "";
       await window.storage.set("config:ultimo_periodo_planilla_pagado", JSON.stringify({
+        FECHA_DESDE: datosDesdeStr || isoDeFechaLocal(rango.inicio),
         FECHA_HASTA: datosHastaStr || isoDeFechaLocal(rango.fin),
         MES: mesStr,
         QUINCENA: rango.esPrimeraQuincena ? 1 : 2,
@@ -10541,9 +10546,20 @@ function esEmpleadoConfianza(emp){
 // descanso por empleado; en cuanto exista, esos días dejan de entrar aquí).
 // Empleados que no aparecen en el archivo para nada no se tocan — no hay
 // con qué comparar su ausencia contra este archivo en particular.
-async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
+// EXCEPCIÓN: si el hueco cae justo en el "día de salida" de una vacación/día
+// libre/permiso sin goce YA APROBADO (mismo `diasSaleAprobados` que arriba
+// autocompleta una marca suelta — ver guardarFilasHorasExtra), no se asume
+// "Ausencia": se sabe de antemano que ese día en particular es el último
+// laborado antes de salir (ver etiquetaCalendarioParaDia, etiqueta "SALE"),
+// así que aunque no haya quedado ni una marca (ej. salió sin marcar porque
+// ya sabía que no volvía al día siguiente) se crea como "Día laboral"
+// pendiente — jefatura solo lo confirma, no tiene que "reclasificar desde
+// Ausencia" algo que el propio sistema ya sabía que no lo era. Caso real:
+// MONTOYA PEREIRA ROGER ABAT, día de salida el 26/11/2026 antes de un día
+// libre aprobado el 27/11/2026, sin ninguna marca ese día.
+async function detectarAusenciasDelArchivo(acumulado, nombreArchivo, diasSaleAprobados){
   const fechasDelArchivo = [...new Set(Object.values(acumulado).map(info => info.FECHA))].filter(Boolean).sort();
-  if (!fechasDelArchivo.length) return 0;
+  if (!fechasDelArchivo.length) return { ausencias: 0, diasSalida: 0 };
   const minFecha = fechasDelArchivo[0];
   const maxFecha = fechasDelArchivo[fechasDelArchivo.length - 1];
 
@@ -10557,7 +10573,7 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
     fechasPorEmpleado.get(info.EMPLEADO_KEY).add(info.FECHA);
   });
 
-  let ausenciasDetectadas = 0;
+  let ausenciasDetectadas = 0, diasSalidaDetectados = 0;
   for (const [empKey, empleado] of empleadosEnArchivo){
     const fechasConRegistro = fechasPorEmpleado.get(empKey) || new Set();
     const ingreso = parsearFechaEmpleado(empleado && empleado.FECHA_INGRESO_EMP);
@@ -10589,8 +10605,11 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
       // registro ya existe y "existente" arriba lo salta) o que jefatura, al
       // revisarlo, decida a mano que de verdad no laboró (reclasificándolo a
       // "Ausencia" con el selector — eso sigue siendo válido, solo que ya no
-      // es la suposición automática).
+      // es la suposición automática). El día de salida de una ausencia ya
+      // aprobada (ver comentario de la función) tampoco se asume ausencia,
+      // por la misma razón.
       const esFeriado = !!feriadoLeyEnFecha(fechaStr);
+      const esDiaDeSalida = !!(diasSaleAprobados && diasSaleAprobados.has(empKey + "|" + fechaStr));
       try{
         await window.storage.set(key, JSON.stringify({
           EMPLEADO_KEY: empKey,
@@ -10599,17 +10618,17 @@ async function detectarAusenciasDelArchivo(acumulado, nombreArchivo){
           MARCAS: [],
           INCOMPLETO: false,
           MARCA_SUELTA: null,
-          TIPO_DIA: esFeriado ? "laboral" : "ausencia",
+          TIPO_DIA: (esFeriado || esDiaDeSalida) ? "laboral" : "ausencia",
           ESTADO: "pendiente",
-          ORIGEN: esFeriado ? "feriado_sin_marca" : "ausencia_detectada",
+          ORIGEN: esFeriado ? "feriado_sin_marca" : (esDiaDeSalida ? "dia_salida_sin_marca" : "ausencia_detectada"),
           ORIGEN_ARCHIVO: nombreArchivo,
           IMPORTADO_EN: new Date().toISOString(),
         }), false);
-        ausenciasDetectadas++;
+        if (esDiaDeSalida) diasSalidaDetectados++; else ausenciasDetectadas++;
       }catch(e){ /* best effort — se puede reclasificar/agregar después */ }
     }
   }
-  return ausenciasDetectadas;
+  return { ausencias: ausenciasDetectadas, diasSalida: diasSalidaDetectados };
 }
 
 function isoDeFechaLocal(d){
@@ -10985,9 +11004,9 @@ async function guardarFilasHorasExtra(rows, nombreArchivo){
     else creadas++;
   }
 
-  const ausenciasDetectadas = await detectarAusenciasDelArchivo(acumulado, nombreArchivo);
+  const { ausencias: ausenciasDetectadas, diasSalida: diasSalidaSinMarcaDetectados } = await detectarAusenciasDelArchivo(acumulado, nombreArchivo, diasSaleAprobados);
 
-  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, cols, cambiosDeHoras, confianzaOmitidos };
+  return { creadas, actualizadas, sinMatch, omitidas, sinIdentificar, ausenciasDetectadas, diasSalidaSinMarcaDetectados, cols, cambiosDeHoras, confianzaOmitidos };
 }
 
 async function importarHorasExtraArchivo(inputEl){
@@ -11056,6 +11075,7 @@ function mensajeResultadoHorasExtra(r, turnosSinMarcar, sinPar, desdeReloj){
       ? `Las marcas se leyeron bien, pero no se encontró ningún día con marcas para registrar.`
       : `${r.creadas} día(s) nuevo(s) y ${r.actualizadas} actualizado(s) quedaron pendientes de revisar.`;
     if (r.ausenciasDetectadas) msg += ` ${r.ausenciasDetectadas} día(s) sin ninguna marca dentro del rango del archivo se marcaron como ausencia pendiente — revisalos, puede que en realidad fueran descanso.`;
+    if (r.diasSalidaSinMarcaDetectados) msg += ` ${r.diasSalidaSinMarcaDetectados} día(s) de salida (antes de una ausencia ya aprobada) sin ninguna marca se marcaron como día laboral pendiente, no como ausencia.`;
     if (r.sinMatch) msg += ` ${r.sinMatch} fila(s) sin empleado identificado por número/nombre — revísalas en "Sin identificar".`;
     if (r.omitidas) msg += ` ${r.omitidas} fila(s) omitida(s) porque ya tenían una decisión (aprobada/rechazada).`;
     if (r.sinIdentificar) msg += ` ${r.sinIdentificar} fila(s) ignorada(s) por no traer número de empleado, nombre ni cédula.`;
@@ -13224,6 +13244,23 @@ async function renderHorasExtrasPanel(){
       const previa = correccionesPorRegistro[c.REGISTRO_KEY];
       if (!previa || (c.SOLICITADO_EN || "") > (previa.SOLICITADO_EN || "")) correccionesPorRegistro[c.REGISTRO_KEY] = c;
     });
+
+    // "¿Ya se pagó esto en planilla?" — mismo marcador que ya usa la
+    // limpieza masiva de "Marcas nuevas" (descartarAlertasMarcasNuevasAntesDe)
+    // y la sincronización automática del reloj (limiteSincronizacionAutomaticaISO
+    // en reloj-sync.js): la fecha hasta donde llegó el último "Reporte de
+    // horarios para pago de planilla" descargado (ver generarReporteHorarioPlanilla).
+    // Se usa acá para avisar, fila por fila, si ese día ya quedó adentro de una
+    // planilla ya pagada — así una corrección o una marca nueva no se confunde
+    // con algo simplemente pendiente de pagar.
+    let ultimoPeriodoPagadoHasta = null;
+    try{
+      const rPagado = await window.storage.get("config:ultimo_periodo_planilla_pagado", false);
+      const vPagado = rPagado && rPagado.value ? JSON.parse(rPagado.value) : null;
+      if (vPagado && /^\d{4}-\d{2}-\d{2}$/.test(vPagado.FECHA_HASTA || "")) ultimoPeriodoPagadoHasta = vPagado.FECHA_HASTA;
+    }catch(e){ /* todavía no se ha descargado ningún reporte de planilla */ }
+    const yaPagado = fechaISO => !!(ultimoPeriodoPagadoHasta && fechaISO && fechaISO <= ultimoPeriodoPagadoHasta);
+
     const res = await window.storage.list(CATALOGS.empleados.prefix, false);
     const empKeys = (res && res.keys) || [];
     const empleados = await Promise.all(empKeys.map(async k => {
@@ -13320,6 +13357,7 @@ async function renderHorasExtrasPanel(){
         <div style="font-size:13px; color:var(--navy-deep);">✅ <b>${fmtHorasReloj(horasAprobadasTotal)}</b> h aprobadas (rango elegido)</div>
       </div>
       <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">Acota solo lo ya <b>aprobado</b> y <b>rechazado</b> de abajo — lo pendiente/por aprobar siempre se ve completo, sin importar cuándo pasó. El resumen en Excel usa este mismo rango, y solo cuenta lo ya <b>aprobado</b>.</div>
+      <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">💰 Último período pagado en planilla: ${ultimoPeriodoPagadoHasta ? `hasta <b>${fmtFechaSimple(ultimoPeriodoPagadoHasta)}</b> — cualquier registro con fecha igual o anterior aparece marcado "Ya pagado" abajo` : `todavía no se ha descargado ningún "Reporte de horarios para pago de planilla" — nada aparece marcado como pagado`}.</div>
     </div></div>`;
 
     if (puedeEditar){
@@ -13563,9 +13601,11 @@ async function renderHorasExtrasPanel(){
       // aparte las fechas de la solicitud en "✅ Días libres y vacaciones
       // otorgados" (ver guardarCorreccionSolicitud), así que se avisa acá.
       const esDiaDeAusencia = r.TIPO_DIA === "vacaciones" || r.TIPO_DIA === "dia_libre" || r.TIPO_DIA === "permiso_sin_goce" || r.TIPO_DIA === "dia_viaje";
+      const esDeAntesDePagado = yaPagado(r.FECHA);
       const bloqueAlertaMarcasNuevas = r.ALERTA_MARCAS_NUEVAS
         ? `<div style="margin-top:4px; padding:6px 8px; background:#FFF4E5; border:1px solid #D9A54A; border-radius:6px; font-size:11px; color:#7a5a12;">
             ⚠️ Llegaron marcas nuevas del reloj después de esta decisión — ahora el reloj muestra: <b>${escapeHtml(r.ALERTA_MARCAS_NUEVAS_DETALLE || "(sin marcas)")}</b>${r.ALERTA_MARCAS_NUEVAS_EN ? ` (detectado ${fmtFechaSimple(r.ALERTA_MARCAS_NUEVAS_EN.slice(0,10))})` : ""}.
+            ${esDeAntesDePagado ? `<div style="margin-top:3px; font-weight:700; color:#B3261E;">💰 Este día ya quedó adentro de una planilla pagada (hasta ${fmtFechaSimple(ultimoPeriodoPagadoHasta)}) — no lo reclasifiques pensando que todavía se puede pagar normal: si de verdad corresponde un ajuste, se paga aparte en la próxima planilla.</div>` : ""}
             ${esDiaDeAusencia ? `<div style="margin-top:3px;">Este día está marcado como ${escapeHtml((TIPOS_DIA_HORARIO[r.TIPO_DIA] || {}).label || r.TIPO_DIA)} — si en realidad trabajó, reclasificalo y después corregí las fechas de su solicitud en "✅ Días libres y vacaciones otorgados" para liberarle ese día del saldo.</div>` : ""}
             ${puedeEditar ? `<div style="margin-top:3px; display:flex; gap:6px; flex-wrap:wrap;">
               <button class="btn" style="padding:2px 7px; font-size:10px;" onclick="descartarAlertaMarcasNuevas('${keyEsc}')">✔️ Revisado, quitar aviso</button>
@@ -13582,7 +13622,7 @@ async function renderHorasExtrasPanel(){
       return `<div class="catalog-item"${r.INCOMPLETO && r.ESTADO === "pendiente" ? ' style="border-color:#D9A54A;"' : ""}>
         <div class="row1">
           <div class="info">
-            <div class="name">${escapeHtml(nombre || r.CEDULA || "(sin nombre)")} — ${fmtFechaSimple(r.FECHA)}</div>
+            <div class="name">${escapeHtml(nombre || r.CEDULA || "(sin nombre)")} — ${fmtFechaSimple(r.FECHA)}${esDeAntesDePagado ? ` <span title="Ya quedó adentro de la planilla pagada hasta ${fmtFechaSimple(ultimoPeriodoPagadoHasta)}" style="font-size:10.5px; font-weight:700; color:#8a6d1f; background:#FFF4E5; border:1px solid #D9A54A; border-radius:4px; padding:1px 6px; margin-left:6px;">💰 Ya pagado</span>` : ""}</div>
             <div class="meta">${infoLinea}</div>
             ${marcasHtml}
             ${bloqueAlertaMarcasNuevas}
@@ -25874,20 +25914,21 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
   </div></div>`;
 }
 
-// Detalle día a día (no solo el total del KPI) de las horas extra de la
-// quincena en curso — para que el empleado pueda ver "cuántas horas lleva" y
-// por qué, sin tener que pedirle el dato a nadie.
+// Detalle día a día (no solo el total del KPI) de las horas extra del último
+// período real de planilla (ver obtenerUltimoPeriodoPlanillaPagado) — para
+// que el empleado pueda ver "cuántas horas lleva" y por qué, sin tener que
+// pedirle el dato a nadie.
 const ETIQUETA_ESTADO_HORAS_EXTRA_EMPLEADO = {
   pendiente: { texto: "⏳ Pendiente", color: "#8a6d1f" },
   aprobada_jefatura: { texto: "⏳ Aprobada por jefatura (falta la final)", color: "#8a6d1f" },
   aprobada: { texto: "✅ Aprobada", color: "var(--leaf)" },
   rechazada: { texto: "🚫 Rechazada", color: "#B3261E" },
 };
-function renderSeccionRegistroHorasExtraEmpleado(registrosEnRango){
+function renderSeccionRegistroHorasExtraEmpleado(registrosEnRango, desdeISO, hastaISO){
   if (!registrosEnRango.length) return "";
   const ordenados = registrosEnRango.slice().sort((a,b) => (a.FECHA||"").localeCompare(b.FECHA||""));
   return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
-    <div style="font-weight:700; margin-bottom:8px;">📋 Mi registro de horas extra (esta quincena)</div>
+    <div style="font-weight:700; margin-bottom:8px;">📋 Mi registro de horas extra (${fmtFechaSimple(desdeISO)} al ${fmtFechaSimple(hastaISO)})</div>
     <div style="display:grid; grid-template-columns:auto 1fr auto; gap:4px 10px; font-size:12.5px; align-items:center;">
       ${ordenados.map(r => {
         const et = ETIQUETA_ESTADO_HORAS_EXTRA_EMPLEADO[r.ESTADO] || { texto: r.ESTADO || "—", color: "var(--ink-soft)" };
@@ -25913,7 +25954,7 @@ function renderSeccionRelojMarcadorEmpleado(marcas, desdeISO, hastaISO){
   for (let f = desdeISO; f <= hastaISO && f <= hoyISO; f = relojSumarDias(f, 1)) dias.push(f);
   if (!dias.length) return "";
   return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
-    <div style="font-weight:700; margin-bottom:8px;">⏰ Mi reloj marcador (esta quincena)</div>
+    <div style="font-weight:700; margin-bottom:8px;">⏰ Mi reloj marcador (${fmtFechaSimple(desdeISO)} al ${fmtFechaSimple(hastaISO)})</div>
     <div style="display:grid; grid-template-columns:1fr auto; gap:4px 10px; font-size:12.5px;">
       ${dias.map(fecha => {
         const marcasDia = (porDia[fecha] || []).slice().sort((a,b) => a.ts - b.ts);
@@ -25940,11 +25981,37 @@ async function reconstruirMiInformacion(){
 }
 
 // Lo "aprobado" que ve cualquiera sobre sí mismo en Mi información es SIEMPRE
-// la quincena en curso — a propósito, sin rango editable: es el mismo número
-// con el que se arma el pago, así que no debe poder "moverse" a otro período
-// y confundirse con lo que de verdad toca pagar esta quincena (a diferencia
-// del panel de aprobación de Horas Extra, donde el rango libre sí tiene
-// sentido porque ahí se revisa/paga cualquier período, no el propio).
+// el ÚLTIMO rango que de verdad se usó para pagar — a propósito, sin rango
+// editable: es el mismo número con el que se arma el pago, así que no debe
+// poder "moverse" a otro período y confundirse con lo que de verdad toca
+// pagar (a diferencia del panel de aprobación de Horas Extra, donde el rango
+// libre sí tiene sentido porque ahí se revisa/paga cualquier período, no el
+// propio). Ese rango real es el mismo "config:ultimo_periodo_planilla_pagado"
+// que graba generarReporteHorarioPlanilla al descargar el Excel de planilla
+// (Desde/Hasta reales, no necesariamente la quincena de calendario completa —
+// pedido explícito del usuario) — si todavía no se ha descargado ningún
+// reporte para esta propiedad, se cae de vuelta a la quincena de calendario
+// en curso.
+async function obtenerUltimoPeriodoPlanillaPagado(propiedadOverride){
+  try{
+    const r = await window.storage.get("config:ultimo_periodo_planilla_pagado", false, propiedadOverride);
+    const v = r && r.value ? JSON.parse(r.value) : null;
+    if (v && /^\d{4}-\d{2}-\d{2}$/.test(v.FECHA_HASTA || "")){
+      // FECHA_DESDE puede faltar en un documento guardado antes de este
+      // cambio — se reconstruye desde MES/QUINCENA (la quincena de
+      // calendario que se eligió en ese momento) como mejor respaldo.
+      let desde = /^\d{4}-\d{2}-\d{2}$/.test(v.FECHA_DESDE || "") ? v.FECHA_DESDE : null;
+      if (!desde && v.MES && v.QUINCENA){
+        const [anio, mes1] = String(v.MES).split("-").map(Number);
+        if (anio && mes1) desde = isoDeFechaLocal(rangoQuincena(anio, mes1 - 1, v.QUINCENA !== 2).inicio);
+      }
+      if (desde) return { desde, hasta: v.FECHA_HASTA, generadoEn: v.GENERADO_EN || null, deReporte: true };
+    }
+  }catch(e){ /* todavía no se ha descargado ningún reporte de planilla */ }
+  const q = rangoQuincenaActual();
+  return { desde: isoDeFechaLocal(q.inicio), hasta: isoDeFechaLocal(q.fin), generadoEn: null, deReporte: false };
+}
+
 function enRangoMiInfo(fechaISO, desdeISO, hastaISO){
   return !!fechaISO && fechaISO >= desdeISO && fechaISO <= hastaISO;
 }
@@ -25972,9 +26039,9 @@ function cambiarMesDiasLibresEmpleado(valor){
 // pantalla.
 async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorId){
   miInfoContexto = { empKey, propiedadOverride, contenedorId: contenedorId || "miperfil-panel" };
-  const qQuincenaMiInfo = rangoQuincenaActual();
-  const miInfoRangoDesde = isoDeFechaLocal(qQuincenaMiInfo.inicio);
-  const miInfoRangoHasta = isoDeFechaLocal(qQuincenaMiInfo.fin);
+  const periodoPagoMiInfo = await obtenerUltimoPeriodoPlanillaPagado(propiedadOverride);
+  const miInfoRangoDesde = periodoPagoMiInfo.desde;
+  const miInfoRangoHasta = periodoPagoMiInfo.hasta;
   if (!empKey){
     return `<div class="empty-state">No se pudo identificar tu expediente. Contacta a Recursos Humanos.</div>`;
   }
@@ -26027,16 +26094,17 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
         pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
         aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
         // Solo lo pendiente queda sin filtrar (arriba) — las horas ya
-        // aprobadas (lo que de verdad se paga) se acotan SIEMPRE a la
-        // quincena en curso (ver enRangoMiInfo), nunca a un histórico ni a un
-        // rango que se pueda mover.
+        // aprobadas (lo que de verdad se paga) se acotan SIEMPRE al último
+        // período real de planilla (ver obtenerUltimoPeriodoPlanillaPagado/
+        // enRangoMiInfo), nunca a un histórico ni a un rango que se pueda
+        // mover.
         horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada" && enRangoMiInfo(r.FECHA, miInfoRangoDesde, miInfoRangoHasta)).reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
       };
-      // Avisos sobre la quincena en curso: si hay horas todavía sin aprobar
-      // QUE CAEN en ella (aunque la cola general no se filtre por fecha, acá
-      // sí importa avisar que este período en concreto tiene algo
-      // pendiente), o si no hay NINGÚN registro — señal de que la marcación
-      // de esta quincena quizás ni se ha importado todavía.
+      // Avisos sobre ese mismo período: si hay horas todavía sin aprobar QUE
+      // CAEN en él (aunque la cola general no se filtre por fecha, acá sí
+      // importa avisar que este período en concreto tiene algo pendiente), o
+      // si no hay NINGÚN registro — señal de que la marcación de ese período
+      // quizás ni se ha importado todavía.
       registrosEnRangoMiInfo = registrosDeEsteEmpleado.filter(r => enRangoMiInfo(r.FECHA, miInfoRangoDesde, miInfoRangoHasta));
       pendientesEnRangoMiInfo = registrosEnRangoMiInfo.filter(r => r.ESTADO === "pendiente" || r.ESTADO === "aprobada_jefatura").length;
     }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
@@ -26087,15 +26155,15 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
         <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
         <div class="kpi-card ${saldoDiasLibres < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoDiasLibres < 0 ? "🔻" : "🗓️"}</div><div class="val">${saldoDiasLibres < 0 ? Math.abs(saldoDiasLibres) : saldoDiasLibres}</div><div class="lbl">${saldoDiasLibres < 0 ? "Día(s) libres en adelanto (a recuperar)" : "Día(s) libres disponibles (mes actual)"}</div></div>
         <div class="kpi-card c-warn"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
-        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${fmtHorasReloj(resumenHorasExtra.horasAprobadas)}</div><div class="lbl">Horas pagadas esta quincena</div></div>
+        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${fmtHorasReloj(resumenHorasExtra.horasAprobadas)}</div><div class="lbl">${periodoPagoMiInfo.deReporte ? "Horas pagadas (último reporte de planilla)" : "Horas pagadas esta quincena"}<br><span style="font-weight:400;">(${periodoPagoMiInfo.deReporte ? "pagado" : "corte"} ${fmtFechaSimple(miInfoRangoDesde)} al ${fmtFechaSimple(miInfoRangoHasta)})</span></div></div>
       </div>
 
       ${miHorarioSemanaHtml}
 
-      ${pendientesEnRangoMiInfo > 0 ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ ${pendientesEnRangoMiInfo} día(s) de horas extra de esta quincena todavía están pendientes de aprobación.</div></div>` : ""}
-      ${registrosEnRangoMiInfo.length === 0 ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ No hay ningún día registrado en esta quincena — puede que la marcación todavía no se haya importado, o que no hayas tenido marca en estas fechas.</div></div>` : ""}
+      ${pendientesEnRangoMiInfo > 0 ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ ${pendientesEnRangoMiInfo} día(s) de horas extra de este período (${fmtFechaSimple(miInfoRangoDesde)} al ${fmtFechaSimple(miInfoRangoHasta)}) todavía están pendientes de aprobación.</div></div>` : ""}
+      ${registrosEnRangoMiInfo.length === 0 ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ No hay ningún día registrado en este período (${fmtFechaSimple(miInfoRangoDesde)} al ${fmtFechaSimple(miInfoRangoHasta)}) — puede que la marcación todavía no se haya importado, o que no hayas tenido marca en estas fechas.</div></div>` : ""}
 
-      ${renderSeccionRegistroHorasExtraEmpleado(registrosEnRangoMiInfo)}
+      ${renderSeccionRegistroHorasExtraEmpleado(registrosEnRangoMiInfo, miInfoRangoDesde, miInfoRangoHasta)}
 
       ${miRelojHtml}
 
