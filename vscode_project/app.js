@@ -13226,6 +13226,55 @@ async function exportarResumenHorasExtraPorDepartamento(){
     rowTotal.getCell(6).value = Number(totalGeneralPorAprobar.toFixed(2));
     for (let c = 1; c <= COLUMNAS.length; c++){ rowTotal.getCell(c).font = { bold:true, size:12 }; rowTotal.getCell(c).fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; rowTotal.getCell(c).border = bordeCelda; if (c > 1) rowTotal.getCell(c).alignment = { horizontal:"center" }; }
 
+    // Segunda pestaña: el detalle día por día que la primera (un solo total
+    // por empleado) no puede mostrar — pedido explícito del usuario, para un
+    // rango largo (ej. 20 días) donde hace falta ver justo QUÉ días tuvo
+    // horas extra cada quien, no solo el acumulado. Una fila por día con
+    // horas (aprobado o por aprobar), ordenada por departamento, empleado y
+    // fecha — los días SIN horas extra ese rango no generan fila (si querés
+    // "quién faltó marcar", ese es otro reporte: "⏱️ … sin marcar en este
+    // rango", ver diasSinMarcarPorEmpleado).
+    const ETIQUETA_ESTADO_DETALLE_EXCEL = { pendiente: "Pendiente", aprobada_jefatura: "Aprobada por jefatura (falta final)", aprobada: "Aprobada" };
+    const COLUMNAS_DETALLE = ["Fecha", "Empleado", "Departamento", "Estado", "Horas extra", "Motivo"];
+    const filasDetalle = [...aprobadas, ...porAprobarEnRango]
+      .map(r => {
+        const emp = empleadosPorKey[r.EMPLEADO_KEY];
+        if (!emp) return null;
+        const esFeriado = r.ORIGEN === "feriado_sin_marca" || !!feriadoLeyEnFecha(r.FECHA);
+        return {
+          fecha: r.FECHA,
+          nombre: nombreCompletoEmpleado(emp) || emp.key,
+          depto: departamentoDeEmpleadoGenerico(emp, puestosPorKey) || "Sin departamento",
+          estado: ETIQUETA_ESTADO_DETALLE_EXCEL[r.ESTADO] || r.ESTADO,
+          horas: r.HORAS_EXTRA || 0,
+          feriado: esFeriado,
+          motivo: r.MOTIVO_HORAS_EXTRA || "",
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.depto.localeCompare(b.depto, "es") || a.nombre.localeCompare(b.nombre, "es") || a.fecha.localeCompare(b.fecha));
+
+    const ws2 = wb.addWorksheet("DETALLE POR DÍA");
+    ws2.columns = [{ width: 14 }, { width: 30 }, { width: 22 }, { width: 28 }, { width: 14 }, { width: 45 }];
+    ws2.mergeCells(1, 1, 1, COLUMNAS_DETALLE.length);
+    const t2 = ws2.getCell(1, 1); t2.value = nombrePropiedad; t2.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NEGRO} }; t2.font = { color:{argb:BLANCO}, bold:true, size:13 }; t2.alignment = { horizontal:"center" };
+    ws2.mergeCells(2, 1, 2, COLUMNAS_DETALLE.length);
+    const st2 = ws2.getCell(2, 1); st2.value = `Detalle de horas extra por día — ${rangoTxt}`; st2.font = { italic:true, size:10 }; st2.alignment = { horizontal:"center" };
+    const hdr2 = ws2.getRow(3);
+    COLUMNAS_DETALLE.forEach((c, i) => { const cell = hdr2.getCell(i + 1); cell.value = c; cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:GRIS_HEADER} }; cell.font = { bold:true }; cell.alignment = { horizontal:"center" }; cell.border = bordeCelda; });
+    filasDetalle.forEach((f, i) => {
+      const row = ws2.getRow(4 + i);
+      row.getCell(1).value = fmtFechaSimple(f.fecha);
+      row.getCell(2).value = f.nombre;
+      row.getCell(3).value = f.depto;
+      row.getCell(4).value = f.estado;
+      row.getCell(5).value = Number(f.horas.toFixed(2));
+      row.getCell(6).value = f.feriado ? `Feriado (3x)${f.motivo ? " · " + f.motivo : ""}` : f.motivo;
+      for (let c = 1; c <= COLUMNAS_DETALLE.length; c++){ row.getCell(c).border = bordeCelda; if (c === 1 || c === 5) row.getCell(c).alignment = { horizontal:"center" }; }
+      row.getCell(6).alignment = { horizontal:"left", wrapText:true, vertical:"top" };
+    });
+    ws2.views = [{ state: "frozen", ySplit: 3 }];
+
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const sufijoRango = (horasExtraRangoDesde && horasExtraRangoHasta) ? `${horasExtraRangoDesde}_a_${horasExtraRangoHasta}` : "historico";
