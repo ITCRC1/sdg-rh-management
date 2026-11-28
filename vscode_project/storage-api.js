@@ -420,6 +420,12 @@
         pedir("/reloj/marcas?desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta))
           .then((r) => r.marcas),
       personas: () => pedir("/reloj/personas").then((r) => r.personas),
+      // Portal del Colaborador: a diferencia de marcas() (bloqueada para el
+      // rol empleado, ver rutas-reloj.js), esta trae solo las marcas propias
+      // de quien tiene la sesión abierta.
+      misMarcas: (desde, hasta) =>
+        pedir("/reloj/mis-marcas?desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta))
+          .then((r) => r.marcas),
     },
 
     // Administración (solo master)

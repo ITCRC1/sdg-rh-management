@@ -85,6 +85,72 @@ async function consultar(sql, params) {
 const router = express.Router();
 router.use(A.requiereSesion, A.exigeCambioPassword);
 
+// GET /api/reloj/mis-marcas?desde=&hasta= — Portal del Colaborador: a
+// diferencia de /marcas (bloqueada para este rol, ver el gate de abajo),
+// esta ruta SOLO existe para que un "empleado" vea sus PROPIAS marcas — nunca
+// las de nadie más. Por eso va ANTES de los gates de rol/propiedad de abajo
+// (que de lo contrario la bloquearían igual que a /marcas) y repite a mano
+// las mismas validaciones de pool/propiedad que esos gates ya hacen para el
+// resto de rutas.
+router.get("/mis-marcas", async (req, res, next) => {
+  if (req.usuario.rol !== "empleado") {
+    return res.status(403).json({ error: "Esta ruta es solo para el Portal del Colaborador.", codigo: "sin_permiso" });
+  }
+  if (!obtenerPool()) {
+    return res.status(503).json({ error: "El reloj marcador no está configurado en este servidor.", codigo: "sin_configurar" });
+  }
+  if (propiedadDe(req) !== PROPIEDAD_RELOJ) {
+    return res.status(409).json({
+      error: "El reloj marcador solo está conectado a la propiedad " + PROPIEDAD_RELOJ + ".",
+      codigo: "otra_propiedad",
+      propiedadReloj: PROPIEDAD_RELOJ,
+    });
+  }
+  try {
+    const { desde, hasta } = req.query;
+    if (!fechaValida(desde) || !fechaValida(hasta)) {
+      return res.status(400).json({ error: "Indica un rango de fechas válido (desde y hasta)." });
+    }
+    const ini = Date.parse(desde + "T00:00:00Z");
+    const fin = Date.parse(hasta + "T00:00:00Z") + 24 * 60 * 60 * 1000; // exclusivo
+    if (fin <= ini) return res.status(400).json({ error: "La fecha final debe ser igual o posterior a la inicial." });
+    if ((fin - ini) / 86400000 > MAX_DIAS_RANGO) {
+      return res.status(400).json({ error: "El rango máximo es de " + MAX_DIAS_RANGO + " días." });
+    }
+    if (!req.usuario.empleadoClave || !req.usuario.empleadoClave.startsWith(EMPLEADO_PREFIX)) {
+      return res.json({ desde, hasta, marcas: [] });
+    }
+    const miKey = req.usuario.empleadoClave.slice(EMPLEADO_PREFIX.length);
+
+    const filas = await consultar(
+      `SELECT PersonID AS codigo, PersonName AS nombre, AttendanceDateTime AS ts, DeviceName AS dispositivo
+         FROM AttendanceRecordInfo
+        WHERE AttendanceDateTime >= ? AND AttendanceDateTime < ?
+        ORDER BY AttendanceDateTime`,
+      [aUtc(ini), aUtc(fin)]
+    );
+    const { empleados } = await empleadosYPuestos();
+    const fichasDe = construirIndiceFichas(empleados);
+    const marcas = filas
+      .map((f) => ({
+        codigo: String(f.codigo),
+        nombre: String(f.nombre || "").trim(),
+        ts: aPared(f.ts),
+        dispositivo: f.dispositivo || "",
+      }))
+      // Mismo emparejado código/nombre que ya usa filtrarPorDepartamentoJefatura
+      // (ver reloj-matching.js) — acá acotado a UNA sola ficha (la propia),
+      // en vez de a un departamento entero.
+      .filter((m) => {
+        const ficha = fichasDe(m.codigo, m.nombre);
+        return !!ficha && ficha.key === miKey;
+      });
+    res.json({ desde, hasta, marcas });
+  } catch (e) {
+    errorConexion(e, res, next);
+  }
+});
+
 // Solo quien ve la planilla completa. jefatura y empleado quedan fuera: el
 // reloj trae las marcas de toda la propiedad, sin filtro por equipo.
 router.use((req, res, next) => {

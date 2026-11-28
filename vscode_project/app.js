@@ -13287,6 +13287,11 @@ async function renderHorasExtrasPanel(){
     // alguien tiene que revisar.
     const conAlertaMarcasNuevas = registros.filter(r => r.ALERTA_MARCAS_NUEVAS && coincideNombreHorasExtra(r));
     const horasAprobadasTotal = aprobadas.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
+    // Mismo criterio que el aviso de la tarjeta de rango: lo pendiente/por
+    // aprobar nunca se filtra por fecha (se quiere ver completo sin importar
+    // cuándo pasó), a diferencia de lo aprobado, que sí respeta el rango.
+    const horasPorAprobarTotal = pendientes.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0)
+      + aprobadasJefatura.reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0);
 
     const rolActual = window.sdgApi ? window.sdgApi.rol() : null;
     const puedeEditar = window.sdgApi && window.sdgApi.puedeEditar(); // master/gerente: importar, configurar, identificar sin-match
@@ -13310,6 +13315,10 @@ async function renderHorasExtrasPanel(){
       </label>
       <button class="btn" onclick="limpiarRangoHorasExtra()">Ver todo (sin filtro)</button>
       <button class="btn primary" onclick="exportarResumenHorasExtraPorDepartamento()">📊 Resumen por departamento (Excel)</button>
+      <div style="display:flex; gap:16px; flex-basis:100%; margin-top:4px;">
+        <div style="font-size:13px; color:#8a6d1f;">⏳ <b>${fmtHorasReloj(horasPorAprobarTotal)}</b> h por aprobar</div>
+        <div style="font-size:13px; color:var(--navy-deep);">✅ <b>${fmtHorasReloj(horasAprobadasTotal)}</b> h aprobadas (rango elegido)</div>
+      </div>
       <div style="font-size:11px; color:var(--ink-soft); flex-basis:100%;">Acota solo lo ya <b>aprobado</b> y <b>rechazado</b> de abajo — lo pendiente/por aprobar siempre se ve completo, sin importar cuándo pasó. El resumen en Excel usa este mismo rango, y solo cuenta lo ya <b>aprobado</b>.</div>
     </div></div>`;
 
@@ -25865,28 +25874,63 @@ function renderSeccionDocumentosPorConcepto(documentosSinFiltrar){
   </div></div>`;
 }
 
-// Rango de fechas LIBRE para "las horas extra aprobadas" en Mi información —
-// mismo criterio que el panel de aprobación (horasExtraRangoDesde/Hasta):
-// arranca en la quincena actual pero queda 100% editable, y solo acota lo ya
-// resuelto, nunca lo pendiente.
-let miInfoRangoDesde = null;
-let miInfoRangoHasta = null;
+// Detalle día a día (no solo el total del KPI) de las horas extra de la
+// quincena en curso — para que el empleado pueda ver "cuántas horas lleva" y
+// por qué, sin tener que pedirle el dato a nadie.
+const ETIQUETA_ESTADO_HORAS_EXTRA_EMPLEADO = {
+  pendiente: { texto: "⏳ Pendiente", color: "#8a6d1f" },
+  aprobada_jefatura: { texto: "⏳ Aprobada por jefatura (falta la final)", color: "#8a6d1f" },
+  aprobada: { texto: "✅ Aprobada", color: "var(--leaf)" },
+  rechazada: { texto: "🚫 Rechazada", color: "#B3261E" },
+};
+function renderSeccionRegistroHorasExtraEmpleado(registrosEnRango){
+  if (!registrosEnRango.length) return "";
+  const ordenados = registrosEnRango.slice().sort((a,b) => (a.FECHA||"").localeCompare(b.FECHA||""));
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:8px;">📋 Mi registro de horas extra (esta quincena)</div>
+    <div style="display:grid; grid-template-columns:auto 1fr auto; gap:4px 10px; font-size:12.5px; align-items:center;">
+      ${ordenados.map(r => {
+        const et = ETIQUETA_ESTADO_HORAS_EXTRA_EMPLEADO[r.ESTADO] || { texto: r.ESTADO || "—", color: "var(--ink-soft)" };
+        return `<div style="padding:4px 0; border-bottom:1px solid var(--paper-line); white-space:nowrap;">${escapeHtml(fmtFechaSimple(r.FECHA))}</div>
+          <div style="padding:4px 0; border-bottom:1px solid var(--paper-line); color:${et.color};">${et.texto}${r.MOTIVO_HORAS_EXTRA ? " · " + escapeHtml(r.MOTIVO_HORAS_EXTRA) : ""}</div>
+          <div style="padding:4px 0; border-bottom:1px solid var(--paper-line); text-align:right; font-weight:700; white-space:nowrap;">${fmtHorasReloj(r.HORAS_EXTRA||0)}h</div>`;
+      }).join("")}
+    </div>
+  </div></div>`;
+}
+
+// Marcador por día (marcó / no marcó) de la quincena en curso, con las PROPIAS
+// marcas del Reloj marcador — exclusivo del rol empleado (ver
+// /reloj/mis-marcas en rutas-reloj.js, que nunca deja ver marcas de otro).
+// `marcas` ya viene acotada a esa sola persona por el servidor; acá solo se
+// agrupa por día. Nunca se listan días futuros (no "no marcó" uno que todavía
+// no ha pasado).
+function renderSeccionRelojMarcadorEmpleado(marcas, desdeISO, hastaISO){
+  const hoyISO = isoDeFechaLocal(new Date());
+  const porDia = {};
+  (marcas || []).forEach(m => { (porDia[relojFechaDeTs(m.ts)] = porDia[relojFechaDeTs(m.ts)] || []).push(m); });
+  const dias = [];
+  for (let f = desdeISO; f <= hastaISO && f <= hoyISO; f = relojSumarDias(f, 1)) dias.push(f);
+  if (!dias.length) return "";
+  return `<div class="section-card" style="margin-top:10px;"><div class="section-body">
+    <div style="font-weight:700; margin-bottom:8px;">⏰ Mi reloj marcador (esta quincena)</div>
+    <div style="display:grid; grid-template-columns:1fr auto; gap:4px 10px; font-size:12.5px;">
+      ${dias.map(fecha => {
+        const marcasDia = (porDia[fecha] || []).slice().sort((a,b) => a.ts - b.ts);
+        const marco = marcasDia.length > 0;
+        const horas = marcasDia.map(m => relojHoraDeTs(m.ts));
+        const resumen = marco ? (horas.length > 1 ? `${horas[0]} – ${horas[horas.length-1]}` : horas[0]) : "No marcó";
+        return `<div style="padding:4px 0; border-bottom:1px solid var(--paper-line);">${escapeHtml(fmtFechaSimple(fecha))}</div>
+          <div style="padding:4px 0; border-bottom:1px solid var(--paper-line); text-align:right; font-weight:600; color:${marco ? "var(--leaf)" : "#B3261E"};">${marco ? "✅" : "❌"} ${escapeHtml(resumen)}</div>`;
+      }).join("")}
+    </div>
+  </div></div>`;
+}
+
 // Contexto de la última "Mi información" renderizada, para poder
-// recalcularla sola cuando cambia el rango sin tener que reabrir el modal o
-// re-navegar a la pestaña.
+// recalcularla sola (ej. al cambiar el mes de "Días libres otorgados") sin
+// tener que reabrir el modal o re-navegar a la pestaña.
 let miInfoContexto = null;
-
-function asegurarRangoMiInfoPorDefecto(){
-  if (miInfoRangoDesde && miInfoRangoHasta) return;
-  const q = rangoQuincenaActual();
-  miInfoRangoDesde = isoDeFechaLocal(q.inicio);
-  miInfoRangoHasta = isoDeFechaLocal(q.fin);
-}
-
-function enRangoMiInfo(fechaISO){
-  if (!miInfoRangoDesde || !miInfoRangoHasta || !fechaISO) return true;
-  return fechaISO >= miInfoRangoDesde && fechaISO <= miInfoRangoHasta;
-}
 
 async function reconstruirMiInformacion(){
   if (!miInfoContexto) return;
@@ -25895,16 +25939,14 @@ async function reconstruirMiInformacion(){
   cont.innerHTML = await construirHtmlMiInformacion(miInfoContexto.empKey, miInfoContexto.propiedadOverride, miInfoContexto.contenedorId);
 }
 
-function cambiarRangoMiInformacion(campo, valor){
-  if (campo === "desde") miInfoRangoDesde = valor || null;
-  else miInfoRangoHasta = valor || null;
-  reconstruirMiInformacion();
-}
-
-function limpiarRangoMiInformacion(){
-  miInfoRangoDesde = null;
-  miInfoRangoHasta = null;
-  reconstruirMiInformacion();
+// Lo "aprobado" que ve cualquiera sobre sí mismo en Mi información es SIEMPRE
+// la quincena en curso — a propósito, sin rango editable: es el mismo número
+// con el que se arma el pago, así que no debe poder "moverse" a otro período
+// y confundirse con lo que de verdad toca pagar esta quincena (a diferencia
+// del panel de aprobación de Horas Extra, donde el rango libre sí tiene
+// sentido porque ahí se revisa/paga cualquier período, no el propio).
+function enRangoMiInfo(fechaISO, desdeISO, hastaISO){
+  return !!fechaISO && fechaISO >= desdeISO && fechaISO <= hastaISO;
 }
 
 // Mes elegido para "📆 Días libres otorgados por mes" — "AAAA-MM"; null usa
@@ -25925,11 +25967,14 @@ function cambiarMesDiasLibresEmpleado(valor){
 // un master cuya propia ficha vive en una propiedad distinta a la que tiene
 // activa ahora mismo — para los demás roles llega undefined y no cambia nada.
 // `contenedorId` es el id del elemento donde se está pintando esto — se
-// guarda en miInfoContexto para poder recalcular solo esto cuando cambia el
-// rango de fechas, sin perder el resto del estado de la pantalla.
+// guarda en miInfoContexto para poder recalcular solo esto (ej. al cambiar el
+// mes de "Días libres otorgados"), sin perder el resto del estado de la
+// pantalla.
 async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorId){
   miInfoContexto = { empKey, propiedadOverride, contenedorId: contenedorId || "miperfil-panel" };
-  asegurarRangoMiInfoPorDefecto();
+  const qQuincenaMiInfo = rangoQuincenaActual();
+  const miInfoRangoDesde = isoDeFechaLocal(qQuincenaMiInfo.inicio);
+  const miInfoRangoHasta = isoDeFechaLocal(qQuincenaMiInfo.fin);
   if (!empKey){
     return `<div class="empty-state">No se pudo identificar tu expediente. Contacta a Recursos Humanos.</div>`;
   }
@@ -25982,16 +26027,17 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
         pendientes: registrosDeEsteEmpleado.filter(r => r.ESTADO === "pendiente").length,
         aprobadaJefatura: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada_jefatura").length,
         // Solo lo pendiente queda sin filtrar (arriba) — las horas ya
-        // aprobadas se acotan al rango elegido (ver enRangoMiInfo), en vez
-        // de mostrar un total histórico de toda la vida.
-        horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada" && enRangoMiInfo(r.FECHA)).reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
+        // aprobadas (lo que de verdad se paga) se acotan SIEMPRE a la
+        // quincena en curso (ver enRangoMiInfo), nunca a un histórico ni a un
+        // rango que se pueda mover.
+        horasAprobadas: registrosDeEsteEmpleado.filter(r => r.ESTADO === "aprobada" && enRangoMiInfo(r.FECHA, miInfoRangoDesde, miInfoRangoHasta)).reduce((s,r) => s + (r.HORAS_EXTRA || 0), 0),
       };
-      // Advertencias sobre el rango elegido: si hay horas todavía sin
-      // aprobar QUE CAEN en ese rango (aunque la cola general no se filtre
-      // por fecha, acá sí importa avisar que ese período en concreto tiene
-      // algo pendiente), o si no hay NINGÚN registro — señal de que la
-      // marcación de ese período quizás ni se ha importado todavía.
-      registrosEnRangoMiInfo = registrosDeEsteEmpleado.filter(r => enRangoMiInfo(r.FECHA));
+      // Avisos sobre la quincena en curso: si hay horas todavía sin aprobar
+      // QUE CAEN en ella (aunque la cola general no se filtre por fecha, acá
+      // sí importa avisar que este período en concreto tiene algo
+      // pendiente), o si no hay NINGÚN registro — señal de que la marcación
+      // de esta quincena quizás ni se ha importado todavía.
+      registrosEnRangoMiInfo = registrosDeEsteEmpleado.filter(r => enRangoMiInfo(r.FECHA, miInfoRangoDesde, miInfoRangoHasta));
       pendientesEnRangoMiInfo = registrosEnRangoMiInfo.filter(r => r.ESTADO === "pendiente" || r.ESTADO === "aprobada_jefatura").length;
     }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
@@ -26012,6 +26058,19 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
       miHorarioSemanaHtml = renderSeccionMiHorarioSemana(asignadosPropios, horariosMi, lugaresMi, semanaDesdeISO);
     }catch(e){ /* best effort — el resto se sigue mostrando igual */ }
 
+    // Reloj marcador propio — solo existe para el rol "empleado" (el
+    // servidor rechaza esta ruta para cualquier otro rol, ver /reloj/mis-
+    // marcas en rutas-reloj.js): master/gerente/jefatura viendo su propia
+    // "Mi información" simplemente no ven esta sección. También se omite en
+    // silencio si la propiedad no tiene el reloj conectado (409/503).
+    let miRelojHtml = "";
+    if (window.sdgApi && window.sdgApi.rol && window.sdgApi.rol() === "empleado"){
+      try{
+        const misMarcas = await window.sdgApi.reloj.misMarcas(miInfoRangoDesde, miInfoRangoHasta);
+        miRelojHtml = renderSeccionRelojMarcadorEmpleado(misMarcas, miInfoRangoDesde, miInfoRangoHasta);
+      }catch(e){ /* reloj no configurado o esta propiedad no lo tiene conectado — se omite */ }
+    }
+
     const fechaIngreso = parsearFechaEmpleado(emp.FECHA_INGRESO_EMP);
     const salarioNum = Number(String(emp.SALARIO_EMP||"").replace(/[^0-9.]/g,""));
 
@@ -26028,23 +26087,17 @@ async function construirHtmlMiInformacion(empKey, propiedadOverride, contenedorI
         <div class="kpi-card ${saldoVacaciones < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoVacaciones < 0 ? "🔻" : "🏖️"}</div><div class="val">${saldoVacaciones < 0 ? Math.abs(saldoVacaciones) : saldoVacaciones}</div><div class="lbl">${saldoVacaciones < 0 ? "Día(s) de vacaciones en adelanto (a recuperar)" : "Día(s) de vacaciones disponibles"}</div></div>
         <div class="kpi-card ${saldoDiasLibres < 0 ? "c-warn" : "c-gold"}"><div class="ic">${saldoDiasLibres < 0 ? "🔻" : "🗓️"}</div><div class="val">${saldoDiasLibres < 0 ? Math.abs(saldoDiasLibres) : saldoDiasLibres}</div><div class="lbl">${saldoDiasLibres < 0 ? "Día(s) libres en adelanto (a recuperar)" : "Día(s) libres disponibles (mes actual)"}</div></div>
         <div class="kpi-card c-warn"><div class="ic">⏳</div><div class="val">${resumenHorasExtra.pendientes + resumenHorasExtra.aprobadaJefatura}</div><div class="lbl">Horas extra por aprobar</div></div>
-        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${fmtHorasReloj(resumenHorasExtra.horasAprobadas)}</div><div class="lbl">Horas extra aprobadas (rango elegido)</div></div>
+        <div class="kpi-card c-navy"><div class="ic">✅</div><div class="val">${fmtHorasReloj(resumenHorasExtra.horasAprobadas)}</div><div class="lbl">Horas pagadas esta quincena</div></div>
       </div>
 
       ${miHorarioSemanaHtml}
 
-      <div class="section-card" style="margin-top:10px;"><div class="section-body" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Rango de horas extra — desde
-          <input type="date" value="${miInfoRangoDesde || ""}" onchange="cambiarRangoMiInformacion('desde', this.value)">
-        </label>
-        <label style="font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;">Hasta
-          <input type="date" value="${miInfoRangoHasta || ""}" onchange="cambiarRangoMiInformacion('hasta', this.value)">
-        </label>
-        <button class="btn" onclick="limpiarRangoMiInformacion()">Ver todo (sin filtro)</button>
-      </div></div>
+      ${pendientesEnRangoMiInfo > 0 ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ ${pendientesEnRangoMiInfo} día(s) de horas extra de esta quincena todavía están pendientes de aprobación.</div></div>` : ""}
+      ${registrosEnRangoMiInfo.length === 0 ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ No hay ningún día registrado en esta quincena — puede que la marcación todavía no se haya importado, o que no hayas tenido marca en estas fechas.</div></div>` : ""}
 
-      ${(miInfoRangoDesde && miInfoRangoHasta && pendientesEnRangoMiInfo > 0) ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ ${pendientesEnRangoMiInfo} día(s) de horas extra de este rango todavía están pendientes de aprobación.</div></div>` : ""}
-      ${(miInfoRangoDesde && miInfoRangoHasta && registrosEnRangoMiInfo.length === 0) ? `<div class="section-card" style="border-color:#D9A54A; margin-top:10px;"><div class="section-body" style="font-size:12.5px; color:#8a6d1f;">⚠️ No hay ningún día registrado en este rango — puede que la marcación de ese período todavía no se haya importado, o que no hayas tenido marca en esas fechas.</div></div>` : ""}
+      ${renderSeccionRegistroHorasExtraEmpleado(registrosEnRangoMiInfo)}
+
+      ${miRelojHtml}
 
       ${renderSeccionDiasLibresEmpleado(registrosDeEsteEmpleado, solicitudesPendientes, emp)}
 
